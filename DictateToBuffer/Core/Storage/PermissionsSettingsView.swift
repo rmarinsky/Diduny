@@ -60,7 +60,6 @@ struct PermissionsSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(minWidth: 400, minHeight: 450)
         .task {
             await refreshPermissions()
         }

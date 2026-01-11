@@ -18,6 +18,8 @@ final class SettingsStorage {
         case pushToTalkKey
         case meetingAudioSource
         case meetingHotkey
+        case translationHotkey
+        case translationPushToTalkKey
     }
 
     private init() {}
@@ -141,6 +143,38 @@ final class SettingsStorage {
             } else {
                 defaults.removeObject(forKey: Key.meetingHotkey.rawValue)
             }
+        }
+    }
+
+    // MARK: - Translation
+
+    var translationHotkey: KeyCombo? {
+        get {
+            guard let data = defaults.data(forKey: Key.translationHotkey.rawValue) else {
+                return KeyCombo(keyCode: 17, modifiers: UInt32(cmdKey | shiftKey)) // ⌘⇧T
+            }
+            return try? JSONDecoder().decode(KeyCombo.self, from: data)
+        }
+        set {
+            if let combo = newValue,
+               let data = try? JSONEncoder().encode(combo) {
+                defaults.set(data, forKey: Key.translationHotkey.rawValue)
+            } else {
+                defaults.removeObject(forKey: Key.translationHotkey.rawValue)
+            }
+        }
+    }
+
+    var translationPushToTalkKey: PushToTalkKey {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.translationPushToTalkKey.rawValue),
+                  let key = PushToTalkKey(rawValue: rawValue) else {
+                return .none
+            }
+            return key
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.translationPushToTalkKey.rawValue)
         }
     }
 }

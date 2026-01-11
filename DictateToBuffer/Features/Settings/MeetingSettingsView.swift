@@ -139,7 +139,6 @@ struct MeetingSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
         .onAppear {
             checkScreenRecordingPermission()
         }

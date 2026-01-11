@@ -170,7 +170,6 @@ struct AudioSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
         .onDisappear {
             cleanupTestRecording()
         }

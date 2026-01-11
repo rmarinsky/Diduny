@@ -38,6 +38,24 @@ enum MeetingRecordingState: Equatable, CustomStringConvertible {
     }
 }
 
+enum TranslationRecordingState: Equatable, CustomStringConvertible {
+    case idle
+    case recording
+    case processing
+    case success
+    case error
+
+    var description: String {
+        switch self {
+        case .idle: return "idle"
+        case .recording: return "recording"
+        case .processing: return "processing"
+        case .success: return "success"
+        case .error: return "error"
+        }
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var recordingState: RecordingState = .idle {
@@ -79,6 +97,14 @@ final class AppState: ObservableObject {
     }
     @Published var meetingRecordingStartTime: Date?
 
+    // Translation recording (EN <-> UK)
+    @Published var translationRecordingState: TranslationRecordingState = .idle {
+        didSet {
+            Log.app.debug("translationRecordingState changed: \(oldValue.description) -> \(self.translationRecordingState.description)")
+        }
+    }
+    @Published var translationRecordingStartTime: Date?
+
     var recordingDuration: TimeInterval {
         guard let startTime = recordingStartTime else { return 0 }
         return Date().timeIntervalSince(startTime)
@@ -86,6 +112,11 @@ final class AppState: ObservableObject {
 
     var meetingRecordingDuration: TimeInterval {
         guard let startTime = meetingRecordingStartTime else { return 0 }
+        return Date().timeIntervalSince(startTime)
+    }
+
+    var translationRecordingDuration: TimeInterval {
+        guard let startTime = translationRecordingStartTime else { return 0 }
         return Date().timeIntervalSince(startTime)
     }
 

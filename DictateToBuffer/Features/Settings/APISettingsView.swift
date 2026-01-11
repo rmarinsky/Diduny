@@ -56,7 +56,6 @@ struct APISettingsView: View {
 
         }
         .formStyle(.grouped)
-        .padding()
         .onAppear {
             loadKeys()
         }

@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var hotkeyService = HotkeyService()
     private lazy var pushToTalkService = PushToTalkService()
     private lazy var meetingHotkeyService = HotkeyService()
+    private lazy var translationHotkeyService = HotkeyService()
+    private lazy var translationPushToTalkService = PushToTalkService()
     @available(macOS 13.0, *)
     private lazy var meetingRecorderService = MeetingRecorderService()
 
@@ -47,10 +49,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
+        // Listen for translation hotkey changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(translationHotkeyChanged(_:)),
+            name: .translationHotkeyChanged,
+            object: nil
+        )
+
+        // Listen for translation push-to-talk key changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(translationPushToTalkKeyChanged(_:)),
+            name: .translationPushToTalkKeyChanged,
+            object: nil
+        )
+
         // Setup hotkey and push-to-talk immediately
         // Permissions will be requested on-demand when user tries to record
         setupHotkey()
         setupPushToTalk()
+        setupTranslationHotkey()
+        setupTranslationPushToTalk()
 
         // Check for API key
         if KeychainManager.shared.getSonioxAPIKey() == nil {
@@ -64,6 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         hotkeyService.unregister()
         pushToTalkService.stop()
+        translationHotkeyService.unregister()
+        translationPushToTalkService.stop()
     }
 
     // MARK: - Bindings
@@ -81,6 +103,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 self?.handleMeetingStateChange(state)
+            }
+            .store(in: &cancellables)
+
+        appState.$translationRecordingState
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                self?.handleTranslationStateChange(state)
             }
             .store(in: &cancellables)
     }
@@ -120,6 +149,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(for: .seconds(2))
                 if self.appState.meetingRecordingState == .error {
                     self.appState.meetingRecordingState = .idle
+                }
+            }
+        default:
+            break
+        }
+    }
+
+    private func handleTranslationStateChange(_ state: TranslationRecordingState) {
+        switch state {
+        case .success:
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                if self.appState.translationRecordingState == .success {
+                    self.appState.translationRecordingState = .idle
+                }
+            }
+        case .error:
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                if self.appState.translationRecordingState == .error {
+                    self.appState.translationRecordingState = .idle
                 }
             }
         default:
@@ -248,6 +298,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.toggleRecording()
             }
         }
+    }
+
+    // MARK: - Translation Hotkey
+
+    private func setupTranslationHotkey() {
+        let settings = SettingsStorage.shared
+        if let hotkey = settings.translationHotkey {
+            try? translationHotkeyService.register(keyCombo: hotkey) { [weak self] in
+                self?.toggleTranslationRecording()
+            }
+        }
+    }
+
+    @objc private func translationHotkeyChanged(_ notification: Notification) {
+        Log.app.info("Translation hotkey changed")
+
+        // Unregister old hotkey
+        translationHotkeyService.unregister()
+
+        // Register new hotkey if set
+        if let combo = notification.object as? KeyCombo {
+            Log.app.info("Registering new translation hotkey: \(combo.displayString)")
+            try? translationHotkeyService.register(keyCombo: combo) { [weak self] in
+                self?.toggleTranslationRecording()
+            }
+        }
+    }
+
+    // MARK: - Translation Push to Talk
+
+    private func setupTranslationPushToTalk() {
+        let key = SettingsStorage.shared.translationPushToTalkKey
+        translationPushToTalkService.selectedKey = key
+
+        translationPushToTalkService.onKeyDown = { [weak self] in
+            guard let self = self else { return }
+            Task {
+                await self.startTranslationRecordingIfIdle()
+            }
+        }
+
+        translationPushToTalkService.onKeyUp = { [weak self] in
+            guard let self = self else { return }
+            Task {
+                await self.stopTranslationRecordingIfRecording()
+            }
+        }
+
+        if key != .none {
+            translationPushToTalkService.start()
+        }
+    }
+
+    @objc private func translationPushToTalkKeyChanged(_ notification: Notification) {
+        guard let key = notification.object as? PushToTalkKey else { return }
+        Log.app.info("Translation push-to-talk key changed to: \(key.displayName)")
+
+        translationPushToTalkService.stop()
+        translationPushToTalkService.selectedKey = key
+
+        if key != .none {
+            translationPushToTalkService.start()
+        }
+    }
+
+    private func startTranslationRecordingIfIdle() async {
+        guard appState.translationRecordingState == .idle else {
+            Log.app.info("startTranslationRecordingIfIdle: Not idle, ignoring")
+            return
+        }
+        await startTranslationRecording()
+    }
+
+    private func stopTranslationRecordingIfRecording() async {
+        guard appState.translationRecordingState == .recording else {
+            Log.app.info("stopTranslationRecordingIfRecording: Not recording, ignoring")
+            return
+        }
+        await stopTranslationRecording()
     }
 
     private func startRecordingIfIdle() async {
@@ -556,6 +685,151 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         Log.app.info("stopMeetingRecording: END")
+    }
+
+    // MARK: - Translation Recording (EN <-> UK)
+
+    @objc func toggleTranslationRecording() {
+        Log.app.info("toggleTranslationRecording called, current state: \(self.appState.translationRecordingState)")
+        Task {
+            await performToggleTranslationRecording()
+        }
+    }
+
+    private func performToggleTranslationRecording() async {
+        switch appState.translationRecordingState {
+        case .idle:
+            await startTranslationRecording()
+        case .recording:
+            await stopTranslationRecording()
+        default:
+            Log.app.info("Translation state is \(self.appState.translationRecordingState), ignoring toggle")
+        }
+    }
+
+    private func startTranslationRecording() async {
+        Log.app.info("startTranslationRecording: BEGIN")
+
+        // Request microphone permission on-demand
+        let micGranted = await PermissionManager.shared.ensureMicrophonePermission()
+        appState.microphonePermissionGranted = micGranted
+
+        guard micGranted else {
+            Log.app.info("startTranslationRecording: Microphone permission not granted")
+            await MainActor.run {
+                appState.errorMessage = "Microphone access required"
+                appState.translationRecordingState = .error
+            }
+            return
+        }
+
+        guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
+            Log.app.info("startTranslationRecording: No API key found")
+            await MainActor.run {
+                appState.errorMessage = "Please add your Soniox API key in Settings"
+                appState.translationRecordingState = .error
+            }
+            return
+        }
+        Log.app.info("startTranslationRecording: API key found")
+
+        // Determine device
+        var device: AudioDevice?
+        if appState.useAutoDetect {
+            Log.app.info("startTranslationRecording: Using auto-detect")
+            await MainActor.run { appState.translationRecordingState = .processing }
+            device = await audioDeviceManager.autoDetectBestDevice()
+            Log.app.info("startTranslationRecording: Auto-detected device: \(device?.name ?? "none")")
+        } else if let deviceID = appState.selectedDeviceID {
+            device = audioDeviceManager.availableDevices.first { $0.id == deviceID }
+            Log.app.info("startTranslationRecording: Using selected device: \(device?.name ?? "none")")
+        }
+
+        Log.app.info("startTranslationRecording: Setting state to recording")
+        await MainActor.run {
+            appState.translationRecordingState = .recording
+            appState.translationRecordingStartTime = Date()
+        }
+
+        do {
+            Log.app.info("startTranslationRecording: Starting audio recording")
+            try await audioRecorder.startRecording(
+                device: device,
+                quality: SettingsStorage.shared.audioQuality
+            )
+            Log.app.info("startTranslationRecording: Recording started successfully")
+        } catch {
+            Log.app.info("startTranslationRecording: ERROR - \(error.localizedDescription)")
+            await MainActor.run {
+                appState.errorMessage = error.localizedDescription
+                appState.translationRecordingState = .error
+            }
+        }
+    }
+
+    private func stopTranslationRecording() async {
+        Log.app.info("stopTranslationRecording: BEGIN")
+
+        await MainActor.run {
+            appState.translationRecordingState = .processing
+        }
+
+        do {
+            Log.app.info("stopTranslationRecording: Stopping audio recorder")
+            let audioData = try await audioRecorder.stopRecording()
+            Log.app.info("stopTranslationRecording: Got audio data, size = \(audioData.count) bytes")
+
+            guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                Log.app.info("stopTranslationRecording: No API key!")
+                throw TranscriptionError.noAPIKey
+            }
+
+            Log.app.info("stopTranslationRecording: Calling translation service (EN <-> UK)")
+            transcriptionService.apiKey = apiKey
+            let text = try await transcriptionService.translateAndTranscribe(audioData: audioData)
+            Log.app.info("stopTranslationRecording: Translation received: \(text.prefix(50))...")
+
+            clipboardService.copy(text: text)
+            Log.app.info("stopTranslationRecording: Text copied to clipboard")
+
+            if SettingsStorage.shared.autoPaste {
+                Log.app.info("stopTranslationRecording: Auto-pasting")
+                do {
+                    try await clipboardService.paste()
+                } catch ClipboardError.accessibilityNotGranted {
+                    Log.app.info("stopTranslationRecording: Accessibility permission needed")
+                    PermissionManager.shared.showPermissionAlert(for: .accessibility)
+                } catch {
+                    Log.app.info("stopTranslationRecording: Paste failed - \(error.localizedDescription)")
+                }
+            }
+
+            if SettingsStorage.shared.playSoundOnCompletion {
+                Log.app.info("stopTranslationRecording: Playing sound")
+                NSSound(named: .init("Funk"))?.play()
+            }
+
+            if SettingsStorage.shared.showNotification {
+                Log.app.info("stopTranslationRecording: Showing notification")
+                NotificationManager.shared.showSuccess(text: "Translated: \(text.prefix(50))...")
+            }
+
+            await MainActor.run {
+                appState.lastTranscription = text
+                appState.translationRecordingState = .success
+                appState.translationRecordingStartTime = nil
+            }
+            Log.app.info("stopTranslationRecording: SUCCESS")
+
+        } catch {
+            Log.app.info("stopTranslationRecording: ERROR - \(error.localizedDescription)")
+            await MainActor.run {
+                appState.errorMessage = error.localizedDescription
+                appState.translationRecordingState = .error
+                appState.translationRecordingStartTime = nil
+            }
+        }
+        Log.app.info("stopTranslationRecording: END")
     }
 
     // MARK: - Device Selection (exposed for SwiftUI)

@@ -6,6 +6,7 @@ final class SonioxTranscriptionService {
 
     private let baseURL = "https://api.soniox.com/v1"
     private let defaultModel = "stt-async-preview"
+    private let translationModel = "stt-async-v3"
     private let pollingInterval: TimeInterval = 1.0
     private let maxPollingAttempts = 60 // 60 seconds max wait
 
@@ -36,6 +37,38 @@ final class SonioxTranscriptionService {
         Log.transcription.info("Step 4: Retrieving transcript...")
         let text = try await getTranscript(transcriptionId: transcriptionId, apiKey: apiKey)
         Log.transcription.info("Transcript retrieved: \(text.prefix(50))...")
+
+        return text
+    }
+
+    /// Transcribe and translate between English and Ukrainian (auto-detects language)
+    func translateAndTranscribe(audioData: Data) async throws -> String {
+        Log.transcription.info("translateAndTranscribe: BEGIN, audioData size = \(audioData.count) bytes")
+
+        guard let apiKey = apiKey, !apiKey.isEmpty else {
+            Log.transcription.info("translateAndTranscribe: No API key!")
+            throw TranscriptionError.noAPIKey
+        }
+
+        // Step 1: Upload the audio file
+        Log.transcription.info("Step 1: Uploading audio file...")
+        let fileId = try await uploadFile(audioData: audioData, apiKey: apiKey)
+        Log.transcription.info("File uploaded, fileId = \(fileId)")
+
+        // Step 2: Create transcription job with two-way translation
+        Log.transcription.info("Step 2: Creating transcription with translation...")
+        let transcriptionId = try await createTranscriptionWithTranslation(fileId: fileId, apiKey: apiKey)
+        Log.transcription.info("Transcription created, id = \(transcriptionId)")
+
+        // Step 3: Poll for completion
+        Log.transcription.info("Step 3: Polling for completion...")
+        try await waitForCompletion(transcriptionId: transcriptionId, apiKey: apiKey)
+        Log.transcription.info("Transcription completed")
+
+        // Step 4: Get the translated transcript text
+        Log.transcription.info("Step 4: Retrieving translated transcript...")
+        let text = try await getTranslatedTranscript(transcriptionId: transcriptionId, apiKey: apiKey)
+        Log.transcription.info("Translated transcript retrieved: \(text.prefix(50))...")
 
         return text
     }
@@ -122,6 +155,50 @@ final class SonioxTranscriptionService {
         return transcriptionResponse.id
     }
 
+    // MARK: - Create Transcription with Translation (EN <-> UK)
+
+    private func createTranscriptionWithTranslation(fileId: String, apiKey: String) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/transcriptions") else {
+            throw TranscriptionError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Two-way translation: English <-> Ukrainian
+        let payload: [String: Any] = [
+            "file_id": fileId,
+            "model": translationModel,
+            "language_hints": ["en", "uk"],
+            "translation": [
+                "type": "two_way",
+                "language_a": "en",
+                "language_b": "uk"
+            ]
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw TranscriptionError.invalidResponse
+        }
+
+        Log.transcription.info("createTranscriptionWithTranslation: HTTP status = \(httpResponse.statusCode)")
+
+        guard httpResponse.statusCode == 201 || httpResponse.statusCode == 200 else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            Log.transcription.info("createTranscriptionWithTranslation: Error - \(errorBody)")
+            throw TranscriptionError.apiError("Create translation failed: \(errorBody)")
+        }
+
+        let transcriptionResponse = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
+        return transcriptionResponse.id
+    }
+
     // MARK: - Step 3: Poll for Completion
 
     private func waitForCompletion(transcriptionId: String, apiKey: String) async throws {
@@ -198,6 +275,55 @@ final class SonioxTranscriptionService {
         return transcriptResponse.text
     }
 
+    // MARK: - Get Translated Transcript
+
+    private func getTranslatedTranscript(transcriptionId: String, apiKey: String) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/transcriptions/\(transcriptionId)/transcript") else {
+            throw TranscriptionError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw TranscriptionError.invalidResponse
+        }
+
+        Log.transcription.info("getTranslatedTranscript: HTTP status = \(httpResponse.statusCode)")
+
+        guard httpResponse.statusCode == 200 else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            Log.transcription.info("getTranslatedTranscript: Error - \(errorBody)")
+            throw TranscriptionError.apiError("Get translated transcript failed: \(errorBody)")
+        }
+
+        let transcriptResponse = try JSONDecoder().decode(TranslatedTranscriptResponse.self, from: data)
+
+        // Filter to only get translated tokens and concatenate their text
+        let translatedTokens = transcriptResponse.tokens.filter { $0.translation_status == "translation" }
+
+        if translatedTokens.isEmpty {
+            // If no translated tokens, return original text
+            Log.transcription.info("No translated tokens found, returning original text")
+            guard !transcriptResponse.text.isEmpty else {
+                throw TranscriptionError.emptyTranscription
+            }
+            return transcriptResponse.text
+        }
+
+        let translatedText = translatedTokens.map { $0.text }.joined()
+        Log.transcription.info("Translated text extracted: \(translatedText.prefix(50))...")
+
+        guard !translatedText.isEmpty else {
+            throw TranscriptionError.emptyTranscription
+        }
+
+        return translatedText
+    }
+
     // MARK: - Test Connection
 
     func testConnection() async throws -> Bool {
@@ -271,4 +397,21 @@ private struct TranscriptToken: Decodable {
     let confidence: Double
     let speaker: String?
     let language: String?
+}
+
+private struct TranslatedTranscriptResponse: Decodable {
+    let id: String
+    let text: String
+    let tokens: [TranslatedTranscriptToken]
+}
+
+private struct TranslatedTranscriptToken: Decodable {
+    let text: String
+    let start_ms: Int?
+    let end_ms: Int?
+    let confidence: Double?
+    let speaker: String?
+    let language: String?
+    let translation_status: String?
+    let source_language: String?
 }

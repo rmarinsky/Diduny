@@ -30,7 +30,7 @@ struct SettingsView: View {
                     Label("API", systemImage: "key")
                 }
         }
-        .frame(width: 450, height: 450)
+        .frame(width: 500, height: 650)
     }
 }
 
