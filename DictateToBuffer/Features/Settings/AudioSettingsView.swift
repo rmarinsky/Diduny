@@ -3,9 +3,8 @@ import CoreAudio
 import SwiftUI
 
 struct AudioSettingsView: View {
+    @Environment(AppState.self) var appState
     @StateObject private var deviceManager = AudioDeviceManager()
-    @State private var useAutoDetect = SettingsStorage.shared.useAutoDetect
-    @State private var selectedDeviceID: AudioDeviceID? = SettingsStorage.shared.selectedDeviceID
     @State private var audioQuality = SettingsStorage.shared.audioQuality
 
     // Test recording state
@@ -36,24 +35,22 @@ struct AudioSettingsView: View {
             Section {
                 // Auto-detect option
                 HStack {
-                    RadioButton(isSelected: useAutoDetect) {
-                        useAutoDetect = true
-                        selectedDeviceID = nil
-                        saveSelection()
+                    RadioButton(isSelected: appState.useAutoDetect) {
+                        appState.useAutoDetect = true
+                        appState.selectedDeviceID = nil
                     }
                     Text("Auto-detect best device")
-                        .foregroundColor(useAutoDetect ? .primary : .secondary)
+                        .foregroundColor(appState.useAutoDetect ? .primary : .secondary)
                     Spacer()
-                    if useAutoDetect {
+                    if appState.useAutoDetect {
                         Image(systemName: "checkmark")
                             .foregroundColor(.accentColor)
                     }
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    useAutoDetect = true
-                    selectedDeviceID = nil
-                    saveSelection()
+                    appState.useAutoDetect = true
+                    appState.selectedDeviceID = nil
                 }
 
                 Divider()
@@ -61,15 +58,14 @@ struct AudioSettingsView: View {
                 // Device list
                 ForEach(deviceManager.availableDevices) { device in
                     HStack {
-                        RadioButton(isSelected: !useAutoDetect && selectedDeviceID == device.id) {
-                            useAutoDetect = false
-                            selectedDeviceID = device.id
-                            saveSelection()
+                        RadioButton(isSelected: !appState.useAutoDetect && appState.selectedDeviceID == device.id) {
+                            appState.useAutoDetect = false
+                            appState.selectedDeviceID = device.id
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(device.name)
-                                .foregroundColor(!useAutoDetect && selectedDeviceID == device
+                                .foregroundColor(!appState.useAutoDetect && appState.selectedDeviceID == device
                                     .id ? .primary : .secondary)
 
                             if device.isDefault {
@@ -81,16 +77,15 @@ struct AudioSettingsView: View {
 
                         Spacer()
 
-                        if !useAutoDetect, selectedDeviceID == device.id {
+                        if !appState.useAutoDetect, appState.selectedDeviceID == device.id {
                             Image(systemName: "checkmark")
                                 .foregroundColor(.accentColor)
                         }
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        useAutoDetect = false
-                        selectedDeviceID = device.id
-                        saveSelection()
+                        appState.useAutoDetect = false
+                        appState.selectedDeviceID = device.id
                     }
                 }
             } header: {
@@ -192,9 +187,9 @@ struct AudioSettingsView: View {
 
     private func startTestRecording() {
         // Get the selected device
-        let device: AudioDevice? = if useAutoDetect {
+        let device: AudioDevice? = if appState.useAutoDetect {
             deviceManager.defaultDevice
-        } else if let selectedID = selectedDeviceID {
+        } else if let selectedID = appState.selectedDeviceID {
             deviceManager.availableDevices.first { $0.id == selectedID }
         } else {
             deviceManager.defaultDevice
@@ -337,10 +332,6 @@ struct AudioSettingsView: View {
         )
     }
 
-    private func saveSelection() {
-        SettingsStorage.shared.useAutoDetect = useAutoDetect
-        SettingsStorage.shared.selectedDeviceID = selectedDeviceID
-    }
 }
 
 // MARK: - Radio Button
@@ -377,5 +368,6 @@ class AudioPlayerDelegate: NSObject, AVAudioPlayerDelegate {
 
 #Preview {
     AudioSettingsView()
+        .environment(AppState())
         .frame(width: 450, height: 450)
 }

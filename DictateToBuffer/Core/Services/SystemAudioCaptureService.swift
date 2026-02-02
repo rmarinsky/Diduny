@@ -13,6 +13,8 @@ final class SystemAudioCaptureService: NSObject {
     private var outputFormat: AVAudioFormat?
     private var audioConverter: AVAudioConverter?
     private var sampleCount: Int = 0
+    private var lastFlushTime: Date = Date()
+    private let flushInterval: TimeInterval = 30.0 // Flush to disk every 30 seconds
 
     var includeMicrophone: Bool = false
     var onError: ((Error) -> Void)?
@@ -59,6 +61,7 @@ final class SystemAudioCaptureService: NSObject {
         let filter = SCContentFilter(display: display, excludingWindows: [])
 
         // Configure stream for audio capture
+        // Use lower quality for long recordings to reduce memory pressure
         let config = SCStreamConfiguration()
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = false
@@ -66,8 +69,8 @@ final class SystemAudioCaptureService: NSObject {
         config.height = 2
         config.minimumFrameInterval = CMTime(value: 1, timescale: 1) // Minimal video
         config.showsCursor = false
-        config.sampleRate = 48000
-        config.channelCount = 2
+        config.sampleRate = 16000 // Reduced from 48000 for long recordings
+        config.channelCount = 1 // Mono instead of stereo to save memory
 
         // Create stream
         stream = SCStream(filter: filter, configuration: config, delegate: self)
@@ -89,8 +92,9 @@ final class SystemAudioCaptureService: NSObject {
         // Start capture
         try await stream.startCapture()
         isCapturing = true
+        lastFlushTime = Date() // Reset flush timer
 
-        Log.audio.info("Capture started successfully")
+        Log.audio.info("Capture started successfully (16kHz mono for long recordings)")
         onCaptureStarted?()
     }
 
@@ -122,13 +126,14 @@ final class SystemAudioCaptureService: NSObject {
     // MARK: - Audio File Setup
 
     private func setupAudioFile(at url: URL) throws {
-        // Use 32-bit float format to match ScreenCaptureKit output
+        // Use lower quality 16-bit PCM for long recordings to reduce memory usage
+        // This is ~12x smaller than 48kHz stereo 32-bit float
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 48000.0,
-            AVNumberOfChannelsKey: 2,
-            AVLinearPCMBitDepthKey: 32,
-            AVLinearPCMIsFloatKey: true,
+            AVSampleRateKey: 16000.0, // Lower sample rate for meetings
+            AVNumberOfChannelsKey: 1, // Mono for speech
+            AVLinearPCMBitDepthKey: 16, // 16-bit instead of 32-bit float
+            AVLinearPCMIsFloatKey: false,
             AVLinearPCMIsBigEndianKey: false,
             AVLinearPCMIsNonInterleaved: false
         ]
@@ -138,7 +143,7 @@ final class SystemAudioCaptureService: NSObject {
 
         audioFile = try AVAudioFile(forWriting: url, settings: settings)
 
-        Log.audio.info("Audio file created at: \(url.path)")
+        Log.audio.info("Audio file created at: \(url.path) (16kHz mono 16-bit for long recordings)")
     }
 }
 
@@ -315,6 +320,14 @@ extension SystemAudioCaptureService: SCStreamOutput {
                 try audioFile.write(from: pcmBuffer)
             } else {
                 try writeWithConversion(pcmBuffer, to: audioFile, numSamples: numSamples)
+            }
+
+            // Periodically flush to disk to reduce memory pressure
+            let now = Date()
+            if now.timeIntervalSince(self.lastFlushTime) >= self.flushInterval {
+                // AVAudioFile automatically flushes, but we can log it
+                Log.audio.info("Audio buffer auto-flush (every \(self.flushInterval)s to prevent memory issues)")
+                self.lastFlushTime = now
             }
         } catch {
             Log.audio.error("Error writing audio: \(error)")

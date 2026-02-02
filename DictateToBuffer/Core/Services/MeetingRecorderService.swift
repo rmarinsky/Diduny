@@ -58,8 +58,24 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         // Start system audio capture
         systemAudioService = SystemAudioCaptureService()
         systemAudioService?.includeMicrophone = (audioSource == .systemPlusMicrophone)
+
+        // Handle stream errors (e.g., error code 2 = attemptToUpdateFilterState)
         systemAudioService?.onError = { [weak self] error in
+            Log.recording.error("System audio capture error: \(error.localizedDescription)")
+
+            // Notify about the error
+            DispatchQueue.main.async {
+                NotificationManager.shared.showError(
+                    message: "Recording interrupted: \(error.localizedDescription). Please try again with shorter recording."
+                )
+            }
+
             self?.onError?(error)
+        }
+
+        // Handle capture start
+        systemAudioService?.onCaptureStarted = { [weak self] in
+            Log.recording.info("System audio capture started successfully")
         }
 
         try await systemAudioService?.startCapture(to: outputURL)
