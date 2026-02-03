@@ -133,32 +133,67 @@ extension AppDelegate {
                 quality: SettingsStorage.shared.audioQuality
             )
             Log.app.info("startTranslationRecording: Recording started successfully")
+        } catch let error as AudioTimeoutError {
+            // Audio hardware timed out - likely coreaudiod is unresponsive or device is unavailable
+            Log.app.error("startTranslationRecording: TIMEOUT - \(error.localizedDescription)")
 
-            // Notify user if we fell back to a different microphone
-            if usedFallback, let fallbackDevice = device {
-                NotificationManager.shared.showWarning(
-                    title: "Microphone Changed",
-                    message: "Using \(fallbackDevice.name) (previous device unavailable)"
-                )
+            // End App Nap prevention
+            if let token = translationActivityToken {
+                ProcessInfo.processInfo.endActivity(token)
+                translationActivityToken = nil
             }
 
-            // Save recovery state in case of crash
-            if let path = audioRecorder.currentRecordingPath {
-                let state = RecoveryState(
-                    tempFilePath: path,
-                    startTime: Date(),
-                    recordingType: .translation
-                )
-                RecoveryStateManager.shared.saveState(state)
-            }
-        } catch {
-            Log.app.error("startTranslationRecording: ERROR - \(error.localizedDescription)")
+            // Show specific error message for timeout
             await MainActor.run {
                 appState.errorMessage = error.localizedDescription
                 appState.translationRecordingState = .error
+                appState.translationRecordingStartTime = nil
                 updateRecordingWindowForTranslation(for: .error)
                 handleTranslationStateChange(.error)
             }
+
+            // Show notification to help user understand the issue
+            NotificationManager.shared.showWarning(
+                title: "Audio System Timeout",
+                message: "The audio system is not responding. Try selecting a different microphone or restarting the app."
+            )
+            return
+        } catch {
+            // Handle any other errors during recording start
+            Log.app.error("startTranslationRecording: ERROR - \(error.localizedDescription)")
+
+            // End App Nap prevention
+            if let token = translationActivityToken {
+                ProcessInfo.processInfo.endActivity(token)
+                translationActivityToken = nil
+            }
+
+            await MainActor.run {
+                appState.errorMessage = error.localizedDescription
+                appState.translationRecordingState = .error
+                appState.translationRecordingStartTime = nil
+                updateRecordingWindowForTranslation(for: .error)
+                handleTranslationStateChange(.error)
+            }
+            return
+        }
+
+        // Notify user if we fell back to a different microphone
+        if usedFallback, let fallbackDevice = device {
+            NotificationManager.shared.showWarning(
+                title: "Microphone Changed",
+                message: "Using \(fallbackDevice.name) (previous device unavailable)"
+            )
+        }
+
+        // Save recovery state in case of crash
+        if let path = audioRecorder.currentRecordingPath {
+            let state = RecoveryState(
+                tempFilePath: path,
+                startTime: Date(),
+                recordingType: .translation
+            )
+            RecoveryStateManager.shared.saveState(state)
         }
     }
 
@@ -200,6 +235,19 @@ extension AppDelegate {
                 }
             }
 
+            // Update state to success IMMEDIATELY after text is available
+            // This ensures the UI shows checkmark right when user can work with the text
+            await MainActor.run {
+                appState.lastTranscription = text
+                appState.isEmptyTranscription = false
+                appState.translationRecordingState = .success
+                appState.translationRecordingStartTime = nil
+                updateRecordingWindowForTranslation(for: .success)
+                handleTranslationStateChange(.success)
+            }
+            Log.app.info("stopTranslationRecording: SUCCESS")
+
+            // Optional operations run after state change (non-blocking for UI)
             if SettingsStorage.shared.playSoundOnCompletion {
                 Log.app.info("stopTranslationRecording: Playing sound")
                 NSSound(named: .init("Funk"))?.play()
@@ -212,16 +260,6 @@ extension AppDelegate {
 
             // Clear recovery state on success
             RecoveryStateManager.shared.clearState()
-
-            await MainActor.run {
-                appState.lastTranscription = text
-                appState.isEmptyTranscription = false
-                appState.translationRecordingState = .success
-                appState.translationRecordingStartTime = nil
-                updateRecordingWindowForTranslation(for: .success)
-                handleTranslationStateChange(.success)
-            }
-            Log.app.info("stopTranslationRecording: SUCCESS")
 
         } catch {
             Log.app.error("stopTranslationRecording: ERROR - \(error.localizedDescription)")

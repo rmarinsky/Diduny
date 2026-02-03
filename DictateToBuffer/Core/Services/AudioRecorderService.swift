@@ -4,6 +4,17 @@ import CoreAudio
 import Foundation
 import os
 
+/// Error thrown when audio operations exceed the allowed time limit
+struct AudioTimeoutError: Error, LocalizedError {
+    let operation: String
+    let timeout: TimeInterval
+
+    var errorDescription: String? {
+        "Audio operation '\(operation)' timed out after \(Int(timeout)) seconds. " +
+            "This may indicate an audio device issue. Please try again or select a different microphone."
+    }
+}
+
 @MainActor
 final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     @Published private(set) var isRecording = false
@@ -13,6 +24,9 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     private var audioFile: AVAudioFile?
     private var recordingURL: URL?
     private var configurationObserver: NSObjectProtocol?
+
+    /// Timeout for audio hardware operations (in seconds)
+    private let audioOperationTimeout: TimeInterval = 2.0
 
     /// Returns the current recording file path, if recording
     var currentRecordingPath: String? {
@@ -55,12 +69,51 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         audioEngine = engine
 
         // Set up input device on the engine
-        if let device {
-            setEngineInputDevice(engine, deviceID: device.id)
-        }
+        // IMPORTANT: Accessing engine.inputNode can hang indefinitely if CoreAudio/coreaudiod is unresponsive
+        // We wrap this in a timeout to prevent the app from freezing
+        let deviceID = device?.id
+        let inputFormat: AVAudioFormat
+        let inputNode: AVAudioInputNode
 
-        let inputNode = engine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        do {
+            Log.audio.info("startRecording: Initializing audio engine with \(self.audioOperationTimeout)s timeout")
+
+            // Run audio hardware initialization with timeout to prevent hanging
+            let result = try await withAudioTimeout(
+                operation: "audio engine initialization",
+                timeout: audioOperationTimeout
+            ) { [engine] () async throws -> (AVAudioInputNode, AVAudioFormat) in
+                // This runs in a detached context to avoid blocking MainActor
+                // Set device on the audio unit if specified
+                if let deviceID {
+                    let node = engine.inputNode
+                    if let audioUnit = node.audioUnit {
+                        var mutableDeviceID = deviceID
+                        AudioUnitSetProperty(
+                            audioUnit,
+                            kAudioOutputUnitProperty_CurrentDevice,
+                            kAudioUnitScope_Global,
+                            0,
+                            &mutableDeviceID,
+                            UInt32(MemoryLayout<AudioDeviceID>.size)
+                        )
+                    }
+                }
+
+                // Access inputNode - this is where the hang typically occurs
+                let node = engine.inputNode
+                let format = node.outputFormat(forBus: 0)
+                return (node, format)
+            }
+
+            inputNode = result.0
+            inputFormat = result.1
+            Log.audio.info("startRecording: Audio engine initialized successfully")
+        } catch let error as AudioTimeoutError {
+            Log.audio.error("startRecording: \(error.localizedDescription)")
+            audioEngine = nil
+            throw AudioError.recordingFailed(error.localizedDescription)
+        }
 
         Log.audio.info("startRecording: Input format - sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
 
@@ -277,6 +330,38 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
         Task { @MainActor [weak self] in
             self?.audioLevel = normalizedLevel
+        }
+    }
+
+    // MARK: - Timeout Helper
+
+    /// Executes an operation with a timeout. Throws AudioTimeoutError if the operation exceeds the time limit.
+    /// Note: This uses a detached task to avoid MainActor blocking during audio hardware operations.
+    private func withAudioTimeout<T: Sendable>(
+        operation: String,
+        timeout: TimeInterval,
+        work: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            // Add the actual work task
+            group.addTask {
+                try await work()
+            }
+
+            // Add the timeout task
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                throw AudioTimeoutError(operation: operation, timeout: timeout)
+            }
+
+            // Return the first result (either success or timeout)
+            guard let result = try await group.next() else {
+                throw AudioTimeoutError(operation: operation, timeout: timeout)
+            }
+
+            // Cancel the remaining task (either the work or the timeout)
+            group.cancelAll()
+            return result
         }
     }
 }

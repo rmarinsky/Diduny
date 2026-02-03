@@ -135,6 +135,17 @@ extension AppDelegate {
                 }
             }
 
+            // Update state to success IMMEDIATELY after text is available
+            // This ensures the UI shows checkmark right when user can work with the text
+            await MainActor.run {
+                appState.lastTranscription = text
+                appState.meetingRecordingState = .success
+                appState.meetingRecordingStartTime = nil
+                handleMeetingStateChange(.success)
+            }
+            Log.app.info("stopMeetingRecording: SUCCESS")
+
+            // Optional operations run after state change (non-blocking for UI)
             if SettingsStorage.shared.playSoundOnCompletion {
                 NSSound(named: .init("Funk"))?.play()
             }
@@ -145,13 +156,6 @@ extension AppDelegate {
 
             // Clear recovery state on success
             RecoveryStateManager.shared.clearState()
-
-            await MainActor.run {
-                appState.lastTranscription = text
-                appState.meetingRecordingState = .success
-                appState.meetingRecordingStartTime = nil
-                handleMeetingStateChange(.success)
-            }
 
             // Clean up temp file
             try? FileManager.default.removeItem(at: audioURL)

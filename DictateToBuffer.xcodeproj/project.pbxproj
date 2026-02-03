@@ -397,11 +397,11 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					100AAAC123DD191E535F3CE2 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 8JL9TM5WLG;
 						ProvisioningStyle = Automatic;
 					};
 					C7E5C25C1C6C61C4EC65227A = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 8JL9TM5WLG;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -556,7 +556,7 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.dictate.buffer;
+				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.dictatetobuffer;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -571,7 +571,7 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.dictate.buffer.test;
+				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.dictatetobuffer.test;
 				PRODUCT_NAME = "DictateToBuffer Test";
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = TEST_BUILD;
@@ -613,10 +613,12 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 8JL9TM5WLG;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
@@ -653,7 +655,7 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.dictate.buffer;
+				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.dictatetobuffer;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -693,10 +695,12 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 8JL9TM5WLG;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -729,7 +733,7 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.dictate.buffer.test;
+				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.dictatetobuffer.test;
 				PRODUCT_NAME = "DictateToBuffer Test";
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = TEST_BUILD;
