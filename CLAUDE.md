@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**DictateToBuffer** is a native macOS menu bar application for voice dictation. It records audio, transcribes it using the Soniox API, and pastes the result.
+**Diduny** is a native macOS menu bar application for voice dictation. It records audio, transcribes it using the Soniox API, and pastes the result.
 
 - **Platform:** macOS 14.0+ (Sonoma)
 - **Language:** Swift / SwiftUI
@@ -12,15 +12,15 @@
 ## Key Architecture
 
 ### Entry Point & Orchestration
-- `DictateToBufferApp.swift` - SwiftUI app entry point
+- `DidunyApp.swift` - SwiftUI app entry point
 - `AppDelegate.swift` - Main orchestrator: menu bar, hotkey handling, recording flow
 - `AppState.swift` - Shared observable state (recordingState, selectedDevice, etc.)
 
 ### Recording Flow
 1. User triggers via:
-   - Hotkey (⌘⇧D)
+   - Hotkey (⌘⌥D)
    - Left-click menu bar icon
-   - Push-to-talk key (Caps Lock, Right Shift, or Right Option)
+   - Push-to-talk key (Right Option by default)
 2. `AppDelegate.toggleRecording()` → `startRecording()` or `stopRecording()`
 3. `AudioRecorderService` captures audio to WAV
 4. `SonioxTranscriptionService.transcribe()` sends to API
@@ -29,17 +29,18 @@
 ### Push-to-Talk Mode
 - Hold key to record, release to stop and transcribe
 - Options: Caps Lock (keyCode 57), Right Shift (60), Right Option (61)
+- Default: Right Option
 - Uses `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)`
 
 ### Meeting Recording (macOS 13.0+)
 - Records system audio for meetings (Zoom, Meet, Teams, etc.)
 - Uses ScreenCaptureKit for system audio capture
 - Supports long recordings (1+ hour)
-- Trigger: ⌘⇧M or Menu → Record Meeting
+- Trigger: ⌘⌥M or Menu → Record Meeting
 - Audio sources: System Only or System + Microphone
 - Requires Screen Recording permission
 
-### Services (DictateToBuffer/Core/Services/)
+### Services (Diduny/Core/Services/)
 | Service | Purpose |
 |---------|---------|
 | `AudioDeviceManager` | Lists input devices, auto-detects best microphone |
@@ -57,11 +58,11 @@
 - **Flow:** POST /files → POST /transcriptions → GET /transcriptions/{id} (poll) → GET /transcriptions/{id}/transcript
 - **Auth:** Bearer token in Authorization header
 
-### Storage (DictateToBuffer/Core/Storage/)
+### Storage (Diduny/Core/Storage/)
 - `KeychainManager` - Stores Soniox API key securely
 - `SettingsStorage` - UserDefaults for preferences (audio quality, hotkey, auto-paste, etc.)
 
-### UI (DictateToBuffer/Features/)
+### UI (Diduny/Features/)
 - `SettingsView` - TabView with General, Audio, Meetings, API tabs
 - `APISettingsView` - Soniox API key input with test connection button
 - `MeetingSettingsView` - Meeting audio source selection
@@ -83,15 +84,54 @@ MeetingRecordingState: idle → recording → processing → success/error → i
 | Change hotkey | `HotkeyService.swift`, `GeneralSettingsView.swift` |
 | Modify menu bar | `AppDelegate.setupMenu()` |
 
-## Build
+## Default Shortcuts
+- **Transcribe:** ⌘⌥D (Cmd+Opt+D)
+- **Translate:** ⌘⌥/ (Cmd+Opt+/)
+- **Meeting:** ⌘⌥M (Cmd+Opt+M)
+- **Push-to-Talk (Transcribe):** Right Option key
 
+## Build Configurations
+
+The project has three build configurations with different app names and bundle IDs:
+
+| Config | Scheme | App Name | Bundle ID | Purpose |
+|--------|--------|----------|-----------|---------|
+| Debug | Diduny DEV | Diduny DEV | ua.com.rmarinsky.diduny.dev | Local development |
+| Test | Diduny TEST | Diduny TEST | ua.com.rmarinsky.diduny.test | Testing/QA distribution |
+| Release | Diduny | Diduny | ua.com.rmarinsky.diduny | Production release |
+
+### Development Build (Xcode)
 ```bash
-# Using XcodeGen
+# Generate project first
 ./generate_project.sh
-open DictateToBuffer.xcodeproj
+open Diduny.xcodeproj
 
-# Or manual xcodebuild
-xcodebuild -scheme DictateToBuffer -configuration Debug build
+# In Xcode: Select "Diduny DEV" scheme → Run
+# This installs "Diduny DEV.app" with dev bundle ID
+```
+
+### Development Build (Script)
+```bash
+# Build and install "Diduny DEV" to /Applications
+./build_and_install.sh
+```
+
+### Test/QA Build
+```bash
+# Build "Diduny TEST" for distribution testing
+./release.sh --test --skip-notarize
+
+# Or with notarization
+./release.sh --test
+```
+
+### Production Build
+```bash
+# Build "Diduny" for production release
+./release.sh --skip-notarize
+
+# Or with notarization
+./release.sh
 ```
 
 ## Required Permissions
@@ -103,7 +143,7 @@ xcodebuild -scheme DictateToBuffer -configuration Debug build
 
 ## Logging
 App uses `NSLog()` with prefixes:
-- `[DictateToBuffer]` - AppDelegate flow
+- `[Diduny]` - AppDelegate flow
 - `[Transcription]` - Soniox API calls
 - `[AppState]` - State changes
 

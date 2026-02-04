@@ -99,7 +99,7 @@ iOSInjectionProject/
 *.wav
 *.m4a
 *.mp3
-!DictateToBuffer/Resources/*.wav
+!Diduny/Resources/*.wav
 
 # Certificates and keys (NEVER commit these)
 *.p12

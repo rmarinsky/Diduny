@@ -2,8 +2,8 @@
 
 excluded:
   - .build
-  - DictateToBuffer.xcodeproj
-  - DictateToBuffer.app
+  - Diduny.xcodeproj
+  - Diduny.app
 
 # Disable rules that conflict with API response models using snake_case
 identifier_name:

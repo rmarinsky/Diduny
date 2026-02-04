@@ -1,16 +1,20 @@
 #!/bin/bash
 
-# Build DictateToBuffer and install to /Applications
+# Build Diduny DEV and install to /Applications
+# This script builds the development version with "Diduny DEV" name
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-APP_NAME="DictateToBuffer"
-BUNDLE_ID="com.dictate.buffer"
+PROJECT_NAME="Diduny"
+SCHEME="Diduny DEV"
+CONFIG="Debug"
+APP_NAME="Diduny DEV"
+BUNDLE_ID="ua.com.rmarinsky.diduny.dev"
 BUILD_DIR="$SCRIPT_DIR/build"
-APP_PATH="$BUILD_DIR/Release/${APP_NAME}.app"
+APP_PATH="$BUILD_DIR/${CONFIG}/${APP_NAME}.app"
 INSTALL_PATH="/Applications/${APP_NAME}.app"
 
 echo "=== Clean Install: $APP_NAME ==="
@@ -41,7 +45,7 @@ echo "=== Building $APP_NAME ==="
 echo ""
 
 # Check if xcodegen is installed and project needs regenerating
-if [ ! -f "${APP_NAME}.xcodeproj/project.pbxproj" ]; then
+if [ ! -f "${PROJECT_NAME}.xcodeproj/project.pbxproj" ]; then
     echo "Xcode project not found. Generating..."
     if ! command -v xcodegen &> /dev/null; then
         echo "XcodeGen not found. Installing via Homebrew..."
@@ -56,13 +60,13 @@ echo "Cleaning previous build..."
 rm -rf "$BUILD_DIR"
 
 # Build the app
-echo "Building $APP_NAME (Release)..."
+echo "Building $APP_NAME ($CONFIG)..."
 xcodebuild \
-    -project "${APP_NAME}.xcodeproj" \
-    -scheme "$APP_NAME" \
-    -configuration Release \
+    -project "${PROJECT_NAME}.xcodeproj" \
+    -scheme "$SCHEME" \
+    -configuration "$CONFIG" \
     -derivedDataPath "$BUILD_DIR" \
-    CONFIGURATION_BUILD_DIR="$BUILD_DIR/Release" \
+    CONFIGURATION_BUILD_DIR="$BUILD_DIR/${CONFIG}" \
     clean build \
     | grep -E "^(Build|Compiling|Linking|error:|warning:|\*\*)" || true
 

@@ -11,4 +11,4 @@
 --indent 4
 
 # Exclude build artifacts
---exclude .build,DictateToBuffer.xcodeproj,DictateToBuffer.app
+--exclude .build,Diduny.xcodeproj,Diduny.app

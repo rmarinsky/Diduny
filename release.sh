@@ -1,11 +1,17 @@
 #!/bin/bash
 
-# DictateToBuffer Release Script
+# Diduny Release Script
 # Builds, signs, notarizes, and packages the app for distribution
 #
 # Usage:
-#   ./release.sh                    # Interactive mode (will prompt for credentials)
-#   ./release.sh --skip-notarize    # Build and package without notarization
+#   ./release.sh                    # Build PROD (Diduny) - Interactive notarization
+#   ./release.sh --test             # Build TEST (Diduny TEST) - Interactive notarization
+#   ./release.sh --skip-notarize    # Build PROD without notarization
+#   ./release.sh --test --skip-notarize  # Build TEST without notarization
+#
+# Build Types:
+#   PROD (default): App name "Diduny", bundle ID "ua.com.rmarinsky.diduny"
+#   TEST (--test):  App name "Diduny TEST", bundle ID "ua.com.rmarinsky.diduny.test"
 #
 # Prerequisites:
 #   1. Apple Developer Program membership
@@ -19,14 +25,14 @@
 
 set -e
 
-# Configuration
-SCHEME="DictateToBuffer"
+# Default configuration (PROD)
+BUILD_TYPE="prod"
+SCHEME="Diduny"
+CONFIG="Release"
+APP_NAME="Diduny"
+
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${PROJECT_DIR}/build"
-ARCHIVE_PATH="${BUILD_DIR}/${SCHEME}.xcarchive"
-EXPORT_PATH="${BUILD_DIR}/export"
-APP_PATH="${EXPORT_PATH}/${SCHEME}.app"
-DMG_PATH="${BUILD_DIR}/${SCHEME}.dmg"
 TEAM_ID="${TEAM_ID:-8JL9TM5WLG}"
 
 # Colors for output
@@ -42,17 +48,34 @@ for arg in "$@"; do
     case $arg in
         --skip-notarize)
             SKIP_NOTARIZE=true
-            shift
+            ;;
+        --test)
+            BUILD_TYPE="test"
+            SCHEME="Diduny TEST"
+            CONFIG="Test"
+            APP_NAME="Diduny TEST"
             ;;
     esac
 done
 
+# Set paths based on configuration
+ARCHIVE_PATH="${BUILD_DIR}/${APP_NAME}.xcarchive"
+EXPORT_PATH="${BUILD_DIR}/export"
+APP_PATH="${EXPORT_PATH}/${APP_NAME}.app"
+DMG_PATH="${BUILD_DIR}/${APP_NAME}.dmg"
+
 echo -e "${BLUE}"
 echo "╔═══════════════════════════════════════════════════════════╗"
-echo "║           DictateToBuffer Release Builder                 ║"
-echo "║                 ua.com.rmarinsky                          ║"
+echo "║                 Diduny Release Builder                    ║"
+echo "║                   ua.com.rmarinsky                        ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
+echo ""
+echo -e "  ${BLUE}Build Type:${NC}    ${BUILD_TYPE^^}"
+echo -e "  ${BLUE}Scheme:${NC}        ${SCHEME}"
+echo -e "  ${BLUE}Configuration:${NC} ${CONFIG}"
+echo -e "  ${BLUE}App Name:${NC}      ${APP_NAME}"
+echo ""
 
 # Step 1: Clean previous build
 echo -e "${YELLOW}[1/6] Cleaning previous build...${NC}"
@@ -71,7 +94,7 @@ fi
 # Step 3: Build archive
 echo -e "${YELLOW}[3/6] Building release archive...${NC}"
 xcodebuild -scheme "${SCHEME}" \
-    -configuration Release \
+    -configuration "${CONFIG}" \
     -archivePath "${ARCHIVE_PATH}" \
     archive \
     DEVELOPMENT_TEAM="${TEAM_ID}" \
@@ -117,7 +140,7 @@ if [ "$SKIP_NOTARIZE" = false ]; then
 
     # Create ZIP for notarization
     echo "Creating ZIP for notarization..."
-    ZIP_PATH="${BUILD_DIR}/${SCHEME}.zip"
+    ZIP_PATH="${BUILD_DIR}/${APP_NAME}.zip"
     ditto -c -k --keepParent "${APP_PATH}" "${ZIP_PATH}"
 
     # Submit for notarization
@@ -152,7 +175,7 @@ cp -R "${APP_PATH}" "${DMG_TEMP}/"
 ln -s /Applications "${DMG_TEMP}/Applications"
 
 # Create DMG
-hdiutil create -volname "${SCHEME}" \
+hdiutil create -volname "${APP_NAME}" \
     -srcfolder "${DMG_TEMP}" \
     -ov -format UDZO \
     "${DMG_PATH}"
@@ -173,9 +196,10 @@ echo "║                    BUILD COMPLETE                         ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo ""
-echo -e "  ${BLUE}App:${NC}     ${APP_PATH}"
-echo -e "  ${BLUE}DMG:${NC}     ${DMG_PATH}"
-echo -e "  ${BLUE}Version:${NC} ${VERSION} (${BUILD})"
+echo -e "  ${BLUE}Build Type:${NC} ${BUILD_TYPE^^}"
+echo -e "  ${BLUE}App:${NC}        ${APP_PATH}"
+echo -e "  ${BLUE}DMG:${NC}        ${DMG_PATH}"
+echo -e "  ${BLUE}Version:${NC}    ${VERSION} (${BUILD})"
 echo ""
 
 if [ "$SKIP_NOTARIZE" = false ]; then
