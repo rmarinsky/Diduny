@@ -5,11 +5,10 @@ import ScreenCaptureKit
 
 @available(macOS 13.0, *)
 final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
-    private var systemAudioService: SystemAudioCaptureService?
-    private var audioEngine: AVAudioEngine?
-    private var mixerNode: AVAudioMixerNode?
-    private var audioFile: AVAudioFile?
+    // MARK: - Properties
 
+    private var systemAudioService: SystemAudioCaptureService?
+    private var audioMixer: AudioMixerService?
     private var outputURL: URL?
     private var startTime: Date?
 
@@ -21,11 +20,21 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
     }
 
     var audioSource: MeetingAudioSource = .systemOnly
+    var microphoneDevice: AudioDevice?
     var onError: ((Error) -> Void)?
     var onRecordingStarted: (() -> Void)?
     var onRecordingStopped: ((URL?) -> Void)?
 
+    /// Called when microphone has been silent for a while (fallback info)
+    var onMicrophoneSilent: (() -> Void)?
+
+    /// Called when system audio has been silent for a while (fallback info)
+    var onSystemAudioSilent: (() -> Void)?
+
     var recordingDuration: TimeInterval {
+        if let mixer = audioMixer {
+            return mixer.recordingDuration
+        }
         guard let start = startTime else { return 0 }
         return Date().timeIntervalSince(start)
     }
@@ -47,7 +56,8 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         Log.recording.info("Starting meeting recording, source: \(self.audioSource.displayName)")
 
         // Create output file URL
-        let fileName = "meeting_\(Date().timeIntervalSince1970).wav"
+        let fileExtension = "wav" // WAV format - reliable and Soniox handles it well
+        let fileName = "meeting_\(Date().timeIntervalSince1970).\(fileExtension)"
         let tempDir = FileManager.default.temporaryDirectory
         outputURL = tempDir.appendingPathComponent(fileName)
 
@@ -55,29 +65,12 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
             throw MeetingRecorderError.fileCreationFailed
         }
 
-        // Start system audio capture
-        systemAudioService = SystemAudioCaptureService()
-        systemAudioService?.includeMicrophone = (audioSource == .systemPlusMicrophone)
-
-        // Handle stream errors (e.g., error code 2 = attemptToUpdateFilterState)
-        systemAudioService?.onError = { [weak self] error in
-            Log.recording.error("System audio capture error: \(error.localizedDescription)")
-            self?.onError?(error)
-        }
-
-        // Handle capture start
-        systemAudioService?.onCaptureStarted = { [weak self] in
-            Log.recording.info("System audio capture started successfully")
-        }
-
-        try await systemAudioService?.startCapture(to: outputURL)
-
-        // If we need microphone too, we'll mix it
-        if audioSource == .systemPlusMicrophone {
-            // Note: For proper mixing, we'd need a more complex setup
-            // For now, ScreenCaptureKit captures system audio
-            // Microphone mixing would require AVAudioEngine
-            Log.recording.info("Microphone mixing requested - using system audio capture with app audio included")
+        // Choose recording strategy based on audio source
+        switch audioSource {
+        case .systemOnly:
+            try await startSystemOnlyRecording(to: outputURL)
+        case .systemPlusMicrophone:
+            try await startMixedRecording(to: outputURL)
         }
 
         isRecording = true
@@ -85,6 +78,101 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
 
         Log.recording.info("Recording started")
         onRecordingStarted?()
+    }
+
+    // MARK: - System Only Recording (Simplified Path)
+
+    private func startSystemOnlyRecording(to url: URL) async throws {
+        Log.recording.info("Using system-only recording mode (direct file writing)")
+
+        // For system-only, use SystemAudioCaptureService directly (proven to work)
+        systemAudioService = SystemAudioCaptureService()
+        systemAudioService?.useCallbackMode = false // Write directly to file
+
+        systemAudioService?.onError = { [weak self] error in
+            Log.recording.error("System audio capture error: \(error.localizedDescription)")
+            self?.onError?(error)
+        }
+
+        systemAudioService?.onCaptureStarted = {
+            Log.recording.info("System audio capture started successfully")
+        }
+
+        // Start system audio capture - writes directly to the output file
+        try await systemAudioService?.startCapture(to: url)
+
+        Log.recording.info("System-only recording started")
+    }
+
+    // MARK: - Mixed Recording (System + Microphone)
+
+    private func startMixedRecording(to url: URL) async throws {
+        Log.recording.info("Using mixed recording mode (system + microphone, AAC output)")
+
+        // Check microphone permission
+        let micPermission = AVCaptureDevice.authorizationStatus(for: .audio)
+        if micPermission == .notDetermined {
+            let granted = await AVCaptureDevice.requestAccess(for: .audio)
+            if !granted {
+                Log.recording.warning("Microphone permission denied, falling back to system-only")
+                // Fallback to system-only - this is OK, not an error
+                try await startSystemOnlyRecording(to: url)
+                return
+            }
+        } else if micPermission != .authorized {
+            Log.recording.warning("Microphone permission not authorized, falling back to system-only")
+            // Fallback to system-only - this is OK, not an error
+            try await startSystemOnlyRecording(to: url)
+            return
+        }
+
+        // Create mixer with microphone support
+        audioMixer = AudioMixerService()
+
+        audioMixer?.onError = { [weak self] error in
+            Log.recording.error("Audio mixer error: \(error.localizedDescription)")
+            self?.onError?(error)
+        }
+
+        audioMixer?.onMicrophoneSilent = { [weak self] in
+            // This is informational only - recording continues
+            Log.recording.info("Microphone is silent - user may not be speaking (this is OK)")
+            self?.onMicrophoneSilent?()
+        }
+
+        audioMixer?.onSystemAudioSilent = { [weak self] in
+            // This is informational only - recording continues
+            Log.recording.info("System audio is silent - meeting may be muted (this is OK)")
+            self?.onSystemAudioSilent?()
+        }
+
+        // Start system audio capture in callback mode
+        systemAudioService = SystemAudioCaptureService()
+        systemAudioService?.useCallbackMode = true
+        systemAudioService?.onAudioBuffer = { [weak self] sampleBuffer in
+            self?.audioMixer?.feedSystemAudio(sampleBuffer)
+        }
+
+        systemAudioService?.onError = { error in
+            Log.recording.error("System audio capture error: \(error.localizedDescription)")
+            // Don't stop recording - microphone still works
+            // Just log and continue
+        }
+
+        // Start mixer with microphone (use selected device if available)
+        try await audioMixer?.startRecording(to: url, includeMicrophone: true, microphoneDevice: microphoneDevice)
+
+        // Then start system audio capture
+        let dummyURL = FileManager.default.temporaryDirectory.appendingPathComponent("dummy.wav")
+        do {
+            try await systemAudioService?.startCapture(to: dummyURL)
+        } catch {
+            // System audio failed but microphone is still recording
+            Log.recording.warning("System audio capture failed, continuing with microphone only: \(error)")
+            // Recording continues with just microphone - this is acceptable
+        }
+
+        Log.recording.info("Mixed recording started (system + microphone)")
     }
 
     // MARK: - Stop Recording
@@ -97,13 +185,37 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
 
         Log.recording.info("Stopping meeting recording...")
 
-        let savedURL = try await systemAudioService?.stopCapture()
-        systemAudioService = nil
+        var savedURL: URL?
 
+        // Stop based on which mode we're using
+        if audioMixer != nil {
+            // Mixed mode: stop mixer first, then system audio
+            savedURL = try await audioMixer?.stopRecording()
+            audioMixer = nil
+            _ = try? await systemAudioService?.stopCapture()
+        } else {
+            // System-only mode: just stop system audio capture
+            savedURL = try await systemAudioService?.stopCapture()
+        }
+
+        systemAudioService = nil
         isRecording = false
+
+        let duration = startTime.map { Date().timeIntervalSince($0) } ?? 0
         startTime = nil
 
-        Log.recording.info("Recording stopped, duration: \(self.recordingDuration) seconds")
+        Log.recording.info("Recording stopped, duration: \(String(format: "%.2f", duration)) seconds")
+
+        // Get file size for logging
+        if let url = savedURL {
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+               let fileSize = attrs[.size] as? Int64
+            {
+                let sizeMB = Double(fileSize) / 1_000_000.0
+                Log.recording.info("Output file size: \(String(format: "%.2f", sizeMB)) MB")
+            }
+        }
+
         onRecordingStopped?(savedURL)
 
         return savedURL
@@ -114,6 +226,18 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
     func getRecordingData() throws -> Data? {
         guard let url = outputURL else { return nil }
         return try Data(contentsOf: url)
+    }
+
+    // MARK: - Silence Status (for UI feedback)
+
+    /// Returns true if microphone has been silent for a while (only valid during recording)
+    var isMicrophoneSilent: Bool {
+        audioMixer?.isMicrophoneSilent ?? true
+    }
+
+    /// Returns true if system audio has been silent for a while (only valid during recording)
+    var isSystemAudioSilent: Bool {
+        audioMixer?.isSystemAudioSilent ?? true
     }
 }
 

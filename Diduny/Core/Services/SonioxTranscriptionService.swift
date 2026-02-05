@@ -5,8 +5,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
     var apiKey: String?
 
     private let baseURL = "https://api.soniox.com/v1"
-    private let defaultModel = "stt-async-preview"
-    private let translationModel = "stt-async-v3"
+    private let model = "stt-async-v4"
     private let pollingInterval: TimeInterval = 1.0
     private let maxPollingAttempts = 60 // 60 seconds max wait
 
@@ -84,7 +83,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         return text
     }
 
-    /// Transcribe meeting audio without voice note processing context
+    /// Transcribe meeting audio with speaker diarization
     func transcribeMeeting(audioData: Data) async throws -> String {
         Log.transcription.info("transcribeMeeting: BEGIN, audioData size = \(audioData.count) bytes")
 
@@ -98,12 +97,10 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         let fileId = try await uploadFile(audioData: audioData, apiKey: apiKey)
         Log.transcription.info("File uploaded, fileId = \(fileId)")
 
-        // Step 2: Create transcription job WITHOUT context (plain transcription for meetings)
-        Log.transcription.info("Step 2: Creating transcription job (no context)...")
-        let transcriptionId = try await createTranscription(
+        // Step 2: Create transcription job with speaker diarization
+        Log.transcription.info("Step 2: Creating transcription job with diarization...")
+        let transcriptionId = try await createTranscriptionWithDiarization(
             fileId: fileId,
-            language: nil,
-            context: nil,
             apiKey: apiKey
         )
         Log.transcription.info("Transcription created, id = \(transcriptionId)")
@@ -113,10 +110,10 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         try await waitForCompletion(transcriptionId: transcriptionId, apiKey: apiKey)
         Log.transcription.info("Transcription completed")
 
-        // Step 4: Get the transcript text
-        Log.transcription.info("Step 4: Retrieving transcript...")
-        let text = try await getTranscript(transcriptionId: transcriptionId, apiKey: apiKey)
-        Log.transcription.info("Transcript retrieved: \(text.prefix(50))...")
+        // Step 4: Get the diarized transcript with timestamps
+        Log.transcription.info("Step 4: Retrieving diarized transcript...")
+        let text = try await getDiarizedTranscript(transcriptionId: transcriptionId, apiKey: apiKey)
+        Log.transcription.info("Diarized transcript retrieved: \(text.prefix(100))...")
 
         return text
     }
@@ -166,11 +163,15 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
+        // Detect audio format from data header
+        let (filename, contentType) = detectAudioFormat(audioData)
+        Log.transcription.info("Detected audio format: \(contentType), filename: \(filename)")
+
         // Build multipart body
         var body = Data()
         body.append(Data("--\(boundary)\r\n".utf8))
-        body.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"recording.wav\"\r\n".utf8))
-        body.append(Data("Content-Type: audio/wav\r\n\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".utf8))
+        body.append(Data("Content-Type: \(contentType)\r\n\r\n".utf8))
         body.append(audioData)
         body.append(Data("\r\n--\(boundary)--\r\n".utf8))
 
@@ -213,7 +214,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
         var payload: [String: Any] = [
             "file_id": fileId,
-            "model": defaultModel
+            "model": model
         ]
 
         if let lang = language {
@@ -244,6 +245,48 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         return transcriptionResponse.id
     }
 
+    // MARK: - Create Transcription with Diarization
+
+    private func createTranscriptionWithDiarization(
+        fileId: String,
+        apiKey: String
+    ) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/transcriptions") else {
+            throw TranscriptionError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Enable speaker diarization for meeting transcription
+        let payload: [String: Any] = [
+            "file_id": fileId,
+            "model": model,
+            "enable_speaker_diarization": true
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw TranscriptionError.invalidResponse
+        }
+
+        Log.transcription.info("createTranscriptionWithDiarization: HTTP status = \(httpResponse.statusCode)")
+
+        guard httpResponse.statusCode == 201 || httpResponse.statusCode == 200 else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            Log.transcription.error("createTranscriptionWithDiarization: Error - \(errorBody)")
+            throw TranscriptionError.apiError("Create diarized transcription failed: \(errorBody)")
+        }
+
+        let transcriptionResponse = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
+        return transcriptionResponse.id
+    }
+
     // MARK: - Create Transcription with Translation (EN <-> UK)
 
     private func createTranscriptionWithTranslation(fileId: String, apiKey: String) async throws -> String {
@@ -259,7 +302,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         // Two-way translation: English <-> Ukrainian with voice note context
         let payload: [String: Any] = [
             "file_id": fileId,
-            "model": translationModel,
+            "model": model,
             "language_hints": ["en", "uk"],
             "context": voiceNoteContext,
             "translation": [
@@ -366,6 +409,92 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         return transcriptResponse.text
     }
 
+    // MARK: - Get Diarized Transcript
+
+    private func getDiarizedTranscript(transcriptionId: String, apiKey: String) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/transcriptions/\(transcriptionId)/transcript") else {
+            throw TranscriptionError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw TranscriptionError.invalidResponse
+        }
+
+        Log.transcription.info("getDiarizedTranscript: HTTP status = \(httpResponse.statusCode)")
+
+        guard httpResponse.statusCode == 200 else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            Log.transcription.error("getDiarizedTranscript: Error - \(errorBody)")
+            throw TranscriptionError.apiError("Get diarized transcript failed: \(errorBody)")
+        }
+
+        let transcriptResponse = try JSONDecoder().decode(TranscriptResponse.self, from: data)
+
+        guard !transcriptResponse.tokens.isEmpty else {
+            // Fallback to plain text if no tokens
+            guard !transcriptResponse.text.isEmpty else {
+                throw TranscriptionError.emptyTranscription
+            }
+            return transcriptResponse.text
+        }
+
+        // Format tokens into diarized output with timestamps
+        return formatDiarizedTranscript(tokens: transcriptResponse.tokens)
+    }
+
+    // MARK: - Format Diarized Transcript
+
+    private func formatDiarizedTranscript(tokens: [TranscriptToken]) -> String {
+        var result = ""
+        var currentSpeaker: String?
+        var currentSegmentStart: Int?
+        var currentSegmentText = ""
+
+        for token in tokens {
+            let speaker = token.speaker ?? "Unknown"
+
+            // If speaker changed or this is the first token, start a new segment
+            if speaker != currentSpeaker {
+                // Output the previous segment if exists
+                if let start = currentSegmentStart, !currentSegmentText.isEmpty {
+                    let timestamp = formatTimestamp(milliseconds: start)
+                    let speakerLabel = currentSpeaker ?? "Unknown"
+                    result += "[\(timestamp)] \(speakerLabel): \(currentSegmentText.trimmingCharacters(in: .whitespaces))\n\n"
+                }
+
+                // Start new segment
+                currentSpeaker = speaker
+                currentSegmentStart = token.start_ms
+                currentSegmentText = token.text
+            } else {
+                // Same speaker, append text
+                currentSegmentText += token.text
+            }
+        }
+
+        // Output the last segment
+        if let start = currentSegmentStart, !currentSegmentText.isEmpty {
+            let timestamp = formatTimestamp(milliseconds: start)
+            let speakerLabel = currentSpeaker ?? "Unknown"
+            result += "[\(timestamp)] \(speakerLabel): \(currentSegmentText.trimmingCharacters(in: .whitespaces))\n"
+        }
+
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func formatTimestamp(milliseconds: Int) -> String {
+        let totalSeconds = milliseconds / 1000
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+
     // MARK: - Get Translated Transcript
 
     private func getTranslatedTranscript(transcriptionId: String, apiKey: String) async throws -> String {
@@ -413,6 +542,50 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         }
 
         return translatedText
+    }
+
+    // MARK: - Audio Format Detection
+
+    /// Detects audio format from data header and returns appropriate filename and content type
+    private func detectAudioFormat(_ data: Data) -> (filename: String, contentType: String) {
+        guard data.count >= 12 else {
+            // Default to WAV if data is too small to detect
+            return ("recording.wav", "audio/wav")
+        }
+
+        let bytes = [UInt8](data.prefix(12))
+
+        // Check for WAV (RIFF....WAVE)
+        if bytes[0] == 0x52, bytes[1] == 0x49, bytes[2] == 0x46, bytes[3] == 0x46, // "RIFF"
+           bytes[8] == 0x57, bytes[9] == 0x41, bytes[10] == 0x56, bytes[11] == 0x45
+        { // "WAVE"
+            return ("recording.wav", "audio/wav")
+        }
+
+        // Check for M4A/AAC (ftyp box)
+        if bytes[4] == 0x66, bytes[5] == 0x74, bytes[6] == 0x79, bytes[7] == 0x70 { // "ftyp"
+            return ("recording.m4a", "audio/mp4")
+        }
+
+        // Check for MP3 (ID3 tag or sync word)
+        if (bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) || // "ID3"
+            (bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0)
+        { // MP3 sync
+            return ("recording.mp3", "audio/mpeg")
+        }
+
+        // Check for FLAC
+        if bytes[0] == 0x66, bytes[1] == 0x4C, bytes[2] == 0x61, bytes[3] == 0x43 { // "fLaC"
+            return ("recording.flac", "audio/flac")
+        }
+
+        // Check for OGG
+        if bytes[0] == 0x4F, bytes[1] == 0x67, bytes[2] == 0x67, bytes[3] == 0x53 { // "OggS"
+            return ("recording.ogg", "audio/ogg")
+        }
+
+        // Default to WAV (Soniox will auto-detect anyway)
+        return ("recording.wav", "audio/wav")
     }
 
     // MARK: - Test Connection

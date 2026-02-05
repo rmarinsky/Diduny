@@ -35,7 +35,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
     // MARK: - Public Methods
 
-    func startRecording(device: AudioDevice?, quality: AudioQuality) async throws {
+    func startRecording(device: AudioDevice?) async throws {
         Log.audio.info("startRecording: BEGIN, isRecording=\(self.isRecording)")
         guard !isRecording else {
             Log.audio.warning("startRecording: Already recording, returning")

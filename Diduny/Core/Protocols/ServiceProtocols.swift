@@ -4,11 +4,12 @@ import Foundation
 
 // MARK: - Audio Recording Protocol
 
+@MainActor
 protocol AudioRecorderProtocol: AnyObject {
     var isRecording: Bool { get }
     var audioLevel: Float { get }
     var currentRecordingPath: String? { get }
-    func startRecording(device: AudioDevice?, quality: AudioQuality) async throws
+    func startRecording(device: AudioDevice?) async throws
     func stopRecording() async throws -> Data
     func cancelRecording()
 }

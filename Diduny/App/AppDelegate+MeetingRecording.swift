@@ -68,10 +68,19 @@ extension AppDelegate {
         await MainActor.run {
             appState.meetingRecordingState = .recording
             appState.meetingRecordingStartTime = Date()
+            handleMeetingStateChange(.recording)
         }
 
         do {
             meetingRecorderService.audioSource = SettingsStorage.shared.meetingAudioSource
+
+            // Set microphone device for mixed recording
+            if let deviceID = appState.selectedDeviceID {
+                meetingRecorderService.microphoneDevice = audioDeviceManager.device(for: deviceID)
+            } else if appState.useAutoDetect {
+                meetingRecorderService.microphoneDevice = await audioDeviceManager.autoDetectBestDevice()
+            }
+
             try await meetingRecorderService.startRecording()
             Log.app.info("Meeting recording started")
 
@@ -101,6 +110,7 @@ extension AppDelegate {
 
         await MainActor.run {
             appState.meetingRecordingState = .processing
+            handleMeetingStateChange(.processing)
         }
 
         do {

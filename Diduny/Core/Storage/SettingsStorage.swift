@@ -9,7 +9,6 @@ final class SettingsStorage {
     private enum Key: String {
         case useAutoDetect
         case selectedDeviceID
-        case audioQuality
         case autoPaste
         case playSoundOnCompletion
         case launchAtLogin
@@ -39,20 +38,6 @@ final class SettingsStorage {
                 defaults.removeObject(forKey: Key.selectedDeviceID.rawValue)
             }
         }
-    }
-
-    // MARK: - Audio Quality
-
-    var audioQuality: AudioQuality {
-        get {
-            guard let rawValue = defaults.string(forKey: Key.audioQuality.rawValue),
-                  let quality = AudioQuality(rawValue: rawValue)
-            else {
-                return .medium
-            }
-            return quality
-        }
-        set { defaults.set(newValue.rawValue, forKey: Key.audioQuality.rawValue) }
     }
 
     // MARK: - Behavior
@@ -95,7 +80,7 @@ final class SettingsStorage {
             guard let rawValue = defaults.string(forKey: Key.meetingAudioSource.rawValue),
                   let source = MeetingAudioSource(rawValue: rawValue)
             else {
-                return .systemOnly
+                return .systemPlusMicrophone
             }
             return source
         }

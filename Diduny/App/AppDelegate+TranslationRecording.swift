@@ -68,7 +68,6 @@ extension AppDelegate {
 
         // Determine device with fallback to system default
         var device: AudioDevice?
-        var usedFallback = false
 
         if appState.useAutoDetect {
             Log.app.info("startTranslationRecording: Using auto-detect")
@@ -86,7 +85,6 @@ extension AppDelegate {
                 // Selected device is no longer available - fallback to system default
                 Log.app.warning("startTranslationRecording: Selected device (ID: \(deviceID)) not available, falling back to default")
                 device = audioDeviceManager.getCurrentDefaultDevice()
-                usedFallback = true
                 Log.app.info("startTranslationRecording: Fallback to default device: \(device?.name ?? "none")")
             }
         } else {
@@ -108,7 +106,6 @@ extension AppDelegate {
             }
             // Last resort: pick first available device
             device = audioDeviceManager.availableDevices.first
-            usedFallback = true
             Log.app.info("startTranslationRecording: Using first available device: \(device?.name ?? "none")")
         }
 
@@ -123,15 +120,12 @@ extension AppDelegate {
         await MainActor.run {
             appState.translationRecordingState = .recording
             appState.translationRecordingStartTime = Date()
-            updateRecordingWindowForTranslation(for: .recording)
+            handleTranslationStateChange(.recording)
         }
 
         do {
             Log.app.info("startTranslationRecording: Starting audio recording")
-            try await audioRecorder.startRecording(
-                device: device,
-                quality: SettingsStorage.shared.audioQuality
-            )
+            try await audioRecorder.startRecording(device: device)
             Log.app.info("startTranslationRecording: Recording started successfully")
         } catch let error as AudioTimeoutError {
             // Audio hardware timed out - likely coreaudiod is unresponsive or device is unavailable
@@ -148,7 +142,6 @@ extension AppDelegate {
                 appState.errorMessage = error.localizedDescription
                 appState.translationRecordingState = .error
                 appState.translationRecordingStartTime = nil
-                updateRecordingWindowForTranslation(for: .error)
                 handleTranslationStateChange(.error)
             }
 
@@ -167,7 +160,6 @@ extension AppDelegate {
                 appState.errorMessage = error.localizedDescription
                 appState.translationRecordingState = .error
                 appState.translationRecordingStartTime = nil
-                updateRecordingWindowForTranslation(for: .error)
                 handleTranslationStateChange(.error)
             }
             return
@@ -189,7 +181,7 @@ extension AppDelegate {
 
         await MainActor.run {
             appState.translationRecordingState = .processing
-            updateRecordingWindowForTranslation(for: .processing)
+            handleTranslationStateChange(.processing)
         }
 
         do {
@@ -229,7 +221,6 @@ extension AppDelegate {
                 appState.isEmptyTranscription = false
                 appState.translationRecordingState = .success
                 appState.translationRecordingStartTime = nil
-                updateRecordingWindowForTranslation(for: .success)
                 handleTranslationStateChange(.success)
             }
             Log.app.info("stopTranslationRecording: SUCCESS")
@@ -254,7 +245,6 @@ extension AppDelegate {
                 appState.isEmptyTranscription = isEmptyTranscription
                 appState.translationRecordingState = .error
                 appState.translationRecordingStartTime = nil
-                updateRecordingWindowForTranslation(for: .error)
                 handleTranslationStateChange(.error)
             }
         }

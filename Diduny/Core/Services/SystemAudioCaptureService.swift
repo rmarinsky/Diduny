@@ -20,6 +20,12 @@ final class SystemAudioCaptureService: NSObject {
     var onError: ((Error) -> Void)?
     var onCaptureStarted: (() -> Void)?
 
+    /// Callback mode: when set, raw sample buffers are forwarded instead of writing to file
+    var onAudioBuffer: ((CMSampleBuffer) -> Void)?
+
+    /// Whether to use callback mode (forwarding buffers) instead of file writing
+    var useCallbackMode: Bool = false
+
     // MARK: - Permission Check
 
     static func checkPermission() async -> Bool {
@@ -86,8 +92,10 @@ final class SystemAudioCaptureService: NSObject {
             sampleHandlerQueue: DispatchQueue(label: "ua.com.rmarinsky.diduny.systemaudio")
         )
 
-        // Setup audio file for recording
-        try setupAudioFile(at: outputURL)
+        // Setup audio file for recording (only if not in callback mode)
+        if !useCallbackMode {
+            try setupAudioFile(at: outputURL)
+        }
 
         // Start capture
         try await stream.startCapture()
@@ -164,6 +172,14 @@ extension SystemAudioCaptureService: SCStreamDelegate {
 extension SystemAudioCaptureService: SCStreamOutput {
     func stream(_: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio else { return }
+
+        // Callback mode: forward buffer to mixer
+        if useCallbackMode {
+            onAudioBuffer?(sampleBuffer)
+            return
+        }
+
+        // File writing mode
         guard let audioFile else { return }
 
         guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),

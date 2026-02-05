@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		0FFD1A4567A90C61047FD763 /* SettingsStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91E893AF3E6C20B492D3CB7 /* SettingsStorage.swift */; };
 		107FDBF081DEEF30BD2A922D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F0D8B455676B571AEC778E72 /* Assets.xcassets */; };
-		19C4BDCB7945740035614D47 /* RecordingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61D9732BB16D36F6564A4C9A /* RecordingIndicatorView.swift */; };
+		247C7BD6AD352D40A40CCFD0 /* DynamicNotchKit in Frameworks */ = {isa = PBXBuildFile; productRef = B431F17EA826367ED3C4D989 /* DynamicNotchKit */; };
 		3230AC685182CD2F888DF3BC /* MeetingAudioSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3193B0160E38FA4135969F79 /* MeetingAudioSource.swift */; };
 		37B4946599B2FDB08DEB48E7 /* DidunyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE5770AB5E9601E0DB6B878 /* DidunyApp.swift */; };
 		3857104F9A2310C3DA6E8290 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 924F66A90537891F57F1CF0D /* PermissionManager.swift */; };
@@ -23,12 +23,14 @@
 		64D6EF9C214D33A864FE9D75 /* APISettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2A56895EB9FB8DD4C00BE7 /* APISettingsView.swift */; };
 		78E2E9B4903AA5A8A50AA6FC /* AppDelegate+Hotkeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2CC58C907B4985941DCDA9 /* AppDelegate+Hotkeys.swift */; };
 		86207F57859F544F066B0140 /* PushToTalkKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67216EAEE79FD497A77BD7D6 /* PushToTalkKey.swift */; };
+		8CAA1C227A9788C6A9687E7D /* NotchContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 622FD84CF56FC17420114B9C /* NotchContentView.swift */; };
 		8E61D4628397B11E5BCEE03D /* SystemAudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70DDD786E73A1532AE91FC20 /* SystemAudioCaptureService.swift */; };
 		8F7F926DB1CF87A2F8800B51 /* AudioSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D052DF5E0E01BC0AD2742150 /* AudioSettingsView.swift */; };
 		948ADBEBD5ED5D02955F7E28 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BBD93A73F0292748E989CA5 /* AudioRecorderService.swift */; };
-		98C524C05EEE34ABC414DA6B /* AppDelegate+RecordingWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0487CAC02B48A9A235328FCF /* AppDelegate+RecordingWindow.swift */; };
+		9876807751B2F948878C2BDF /* NotchManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38BE9CBB73A253BFF5530CBD /* NotchManager.swift */; };
 		9FD5B6627D4A5BE503A607FF /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91E1CBBAFEDD499C3BD8C811 /* AppState.swift */; };
 		A09E73F9CCF5D1023A1E3D2F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52166362DE73BAC6891FA206 /* AppDelegate.swift */; };
+		AA8C95710FD8D22B9FF8242A /* AudioMixerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE04DF44C896CD368ED16901 /* AudioMixerService.swift */; };
 		C24B6F611448AF8CAD8E3DB9 /* MeetingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA64DC6EAB5D1FB38CF7F517 /* MeetingSettingsView.swift */; };
 		C5FA530A98A4A76DD9DEA952 /* AppDelegate+MeetingRecording.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18174CC5740A330799589646 /* AppDelegate+MeetingRecording.swift */; };
 		C6297FB1BED3D932E43C6C7E /* ClipboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 459B59FAABA91EB9AD4EB4EF /* ClipboardService.swift */; };
@@ -38,7 +40,6 @@
 		CC8A0AB7ADA44B998EC3E45D /* ServiceProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26809CA162E096F4EA668768 /* ServiceProtocols.swift */; };
 		D52AFEB3B25B529860D14116 /* AudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118CE8BCA0160E31FD916B10 /* AudioDevice.swift */; };
 		D6203B3BADF3AA7E40186F11 /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491E26240E167BDB5DCACEE /* HotkeyService.swift */; };
-		DAFF28D8376EFB3C3F430CC8 /* AudioQuality.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBE3FF1FB6842E6AAD7EE984 /* AudioQuality.swift */; };
 		DB3964EFB7C60E392C41A920 /* MenuBarIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B43D2844894F848F20BFDEB /* MenuBarIconView.swift */; };
 		DEE6BFC7FC33767EDB94BFDE /* RecoveryStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2133D27EF1A261954A78BEB /* RecoveryStateManager.swift */; };
 		E4DA7F7432AC5A880F8D5CE8 /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B850C5D55AE7652A88CE36F5 /* GeneralSettingsView.swift */; };
@@ -50,7 +51,6 @@
 
 /* Begin PBXFileReference section */
 		01E272A8E12D4EEF5D724E91 /* AppDelegate+TranslationRecording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+TranslationRecording.swift"; sourceTree = "<group>"; };
-		0487CAC02B48A9A235328FCF /* AppDelegate+RecordingWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+RecordingWindow.swift"; sourceTree = "<group>"; };
 		0491E26240E167BDB5DCACEE /* HotkeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyService.swift; sourceTree = "<group>"; };
 		06C864D23789DFC70C7FE0D3 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
 		0B43D2844894F848F20BFDEB /* MenuBarIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconView.swift; sourceTree = "<group>"; };
@@ -62,13 +62,14 @@
 		26809CA162E096F4EA668768 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
 		26B3B34E40EA2C4BC6947F32 /* PERMISSIONS_UPDATE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PERMISSIONS_UPDATE.md; sourceTree = "<group>"; };
 		3193B0160E38FA4135969F79 /* MeetingAudioSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingAudioSource.swift; sourceTree = "<group>"; };
+		38BE9CBB73A253BFF5530CBD /* NotchManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchManager.swift; sourceTree = "<group>"; };
 		3E35E1F13A5F9761C79FB488 /* AppDelegate+Recording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+Recording.swift"; sourceTree = "<group>"; };
 		459B59FAABA91EB9AD4EB4EF /* ClipboardService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardService.swift; sourceTree = "<group>"; };
 		4C5A21F6255692712508A475 /* Diduny.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Diduny.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CDE81820CACD577C91281C9 /* PushToTalkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushToTalkService.swift; sourceTree = "<group>"; };
 		52166362DE73BAC6891FA206 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		52C8A25D3FCD6DE742A1274E /* PermissionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsSettingsView.swift; sourceTree = "<group>"; };
-		61D9732BB16D36F6564A4C9A /* RecordingIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingIndicatorView.swift; sourceTree = "<group>"; };
+		622FD84CF56FC17420114B9C /* NotchContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchContentView.swift; sourceTree = "<group>"; };
 		67216EAEE79FD497A77BD7D6 /* PushToTalkKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushToTalkKey.swift; sourceTree = "<group>"; };
 		6BBD93A73F0292748E989CA5 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		70DDD786E73A1532AE91FC20 /* SystemAudioCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioCaptureService.swift; sourceTree = "<group>"; };
@@ -86,8 +87,8 @@
 		C1AFB9C5F772A874A404885C /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		CB2A56895EB9FB8DD4C00BE7 /* APISettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APISettingsView.swift; sourceTree = "<group>"; };
 		D052DF5E0E01BC0AD2742150 /* AudioSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSettingsView.swift; sourceTree = "<group>"; };
+		DE04DF44C896CD368ED16901 /* AudioMixerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMixerService.swift; sourceTree = "<group>"; };
 		E2133D27EF1A261954A78BEB /* RecoveryStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryStateManager.swift; sourceTree = "<group>"; };
-		EBE3FF1FB6842E6AAD7EE984 /* AudioQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioQuality.swift; sourceTree = "<group>"; };
 		F0D8B455676B571AEC778E72 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F4E5B531DCAD149223A50A75 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		F54AB0D8602B537FB2845507 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -101,6 +102,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E6C0A2BB2B96403F5AD765B3 /* KeyboardShortcuts in Frameworks */,
+				247C7BD6AD352D40A40CCFD0 /* DynamicNotchKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -118,14 +120,6 @@
 			path = Diduny;
 			sourceTree = "<group>";
 		};
-		1659BD0A2B0A1C075D4FEAD3 /* Recording */ = {
-			isa = PBXGroup;
-			children = (
-				61D9732BB16D36F6564A4C9A /* RecordingIndicatorView.swift */,
-			);
-			path = Recording;
-			sourceTree = "<group>";
-		};
 		166821B9EBE984E0D67F7515 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -134,11 +128,19 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		1D2A9DD81BDB6D428A219153 /* Notch */ = {
+			isa = PBXGroup;
+			children = (
+				622FD84CF56FC17420114B9C /* NotchContentView.swift */,
+				38BE9CBB73A253BFF5530CBD /* NotchManager.swift */,
+			);
+			path = Notch;
+			sourceTree = "<group>";
+		};
 		3C2D0D3FFD55601BC3148762 /* Models */ = {
 			isa = PBXGroup;
 			children = (
 				118CE8BCA0160E31FD916B10 /* AudioDevice.swift */,
-				EBE3FF1FB6842E6AAD7EE984 /* AudioQuality.swift */,
 				BECAEC93BAEBC7FB0CE79126 /* Errors.swift */,
 				3193B0160E38FA4135969F79 /* MeetingAudioSource.swift */,
 				67216EAEE79FD497A77BD7D6 /* PushToTalkKey.swift */,
@@ -160,6 +162,7 @@
 			isa = PBXGroup;
 			children = (
 				8D1A1D461E4C3229A9A8A486 /* AudioDeviceManager.swift */,
+				DE04DF44C896CD368ED16901 /* AudioMixerService.swift */,
 				6BBD93A73F0292748E989CA5 /* AudioRecorderService.swift */,
 				459B59FAABA91EB9AD4EB4EF /* ClipboardService.swift */,
 				0491E26240E167BDB5DCACEE /* HotkeyService.swift */,
@@ -192,7 +195,7 @@
 			isa = PBXGroup;
 			children = (
 				6C36C552190EC6F27298225F /* MenuBar */,
-				1659BD0A2B0A1C075D4FEAD3 /* Recording */,
+				1D2A9DD81BDB6D428A219153 /* Notch */,
 				8F1DB771BE47D76906F11C84 /* Settings */,
 			);
 			path = Features;
@@ -269,7 +272,6 @@
 				7D2CC58C907B4985941DCDA9 /* AppDelegate+Hotkeys.swift */,
 				18174CC5740A330799589646 /* AppDelegate+MeetingRecording.swift */,
 				3E35E1F13A5F9761C79FB488 /* AppDelegate+Recording.swift */,
-				0487CAC02B48A9A235328FCF /* AppDelegate+RecordingWindow.swift */,
 				01E272A8E12D4EEF5D724E91 /* AppDelegate+TranslationRecording.swift */,
 				91E1CBBAFEDD499C3BD8C811 /* AppState.swift */,
 				BDE5770AB5E9601E0DB6B878 /* DidunyApp.swift */,
@@ -295,6 +297,7 @@
 			name = Diduny;
 			packageProductDependencies = (
 				2E72BE3A05C906A8B16DBE4E /* KeyboardShortcuts */,
+				B431F17EA826367ED3C4D989 /* DynamicNotchKit */,
 			);
 			productName = Diduny;
 			productReference = 4C5A21F6255692712508A475 /* Diduny.app */;
@@ -326,6 +329,7 @@
 			mainGroup = B6C1477395B1431F550CF057;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				EEB3C042DE7A825E199A8D2F /* XCRemoteSwiftPackageReference "DynamicNotchKit" */,
 				44A6802ED268E042B3E340B9 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -358,13 +362,12 @@
 				78E2E9B4903AA5A8A50AA6FC /* AppDelegate+Hotkeys.swift in Sources */,
 				C5FA530A98A4A76DD9DEA952 /* AppDelegate+MeetingRecording.swift in Sources */,
 				5453778FD073ED02C9FE02E8 /* AppDelegate+Recording.swift in Sources */,
-				98C524C05EEE34ABC414DA6B /* AppDelegate+RecordingWindow.swift in Sources */,
 				5007F0585DD384082AB30B8F /* AppDelegate+TranslationRecording.swift in Sources */,
 				A09E73F9CCF5D1023A1E3D2F /* AppDelegate.swift in Sources */,
 				9FD5B6627D4A5BE503A607FF /* AppState.swift in Sources */,
 				D52AFEB3B25B529860D14116 /* AudioDevice.swift in Sources */,
 				C8BEA1A38683AA8F1AA4D84E /* AudioDeviceManager.swift in Sources */,
-				DAFF28D8376EFB3C3F430CC8 /* AudioQuality.swift in Sources */,
+				AA8C95710FD8D22B9FF8242A /* AudioMixerService.swift in Sources */,
 				948ADBEBD5ED5D02955F7E28 /* AudioRecorderService.swift in Sources */,
 				8F7F926DB1CF87A2F8800B51 /* AudioSettingsView.swift in Sources */,
 				C6297FB1BED3D932E43C6C7E /* ClipboardService.swift in Sources */,
@@ -379,11 +382,12 @@
 				C24B6F611448AF8CAD8E3DB9 /* MeetingSettingsView.swift in Sources */,
 				EBD6CE2EED71E6F9BC63E53E /* MenuBarContentView.swift in Sources */,
 				DB3964EFB7C60E392C41A920 /* MenuBarIconView.swift in Sources */,
+				8CAA1C227A9788C6A9687E7D /* NotchContentView.swift in Sources */,
+				9876807751B2F948878C2BDF /* NotchManager.swift in Sources */,
 				3857104F9A2310C3DA6E8290 /* PermissionManager.swift in Sources */,
 				CAA3AF319715F9DD611CCC8B /* PermissionsSettingsView.swift in Sources */,
 				86207F57859F544F066B0140 /* PushToTalkKey.swift in Sources */,
 				497E932204DB8D119B40EAA5 /* PushToTalkService.swift in Sources */,
-				19C4BDCB7945740035614D47 /* RecordingIndicatorView.swift in Sources */,
 				DEE6BFC7FC33767EDB94BFDE /* RecoveryStateManager.swift in Sources */,
 				CC8A0AB7ADA44B998EC3E45D /* ServiceProtocols.swift in Sources */,
 				0FFD1A4567A90C61047FD763 /* SettingsStorage.swift in Sources */,
@@ -464,7 +468,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.3.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -542,7 +546,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.3.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -608,7 +612,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.3.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -670,6 +674,14 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+		EEB3C042DE7A825E199A8D2F /* XCRemoteSwiftPackageReference "DynamicNotchKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/MrKai77/DynamicNotchKit";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -677,6 +689,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 44A6802ED268E042B3E340B9 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
 			productName = KeyboardShortcuts;
+		};
+		B431F17EA826367ED3C4D989 /* DynamicNotchKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EEB3C042DE7A825E199A8D2F /* XCRemoteSwiftPackageReference "DynamicNotchKit" */;
+			productName = DynamicNotchKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

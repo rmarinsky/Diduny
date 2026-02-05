@@ -7,8 +7,6 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Properties
 
-    var recordingWindow: NSWindow?
-
     let appState = AppState()
 
     // App Nap prevention tokens
@@ -155,7 +153,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func handleRecordingStateChange(_ state: RecordingState) {
         switch state {
+        case .recording:
+            NotchManager.shared.startRecording(mode: .voice)
+        case .processing:
+            NotchManager.shared.startProcessing(mode: .voice)
         case .success:
+            if let text = appState.lastTranscription {
+                NotchManager.shared.showSuccess(text: text)
+            }
             Task {
                 try? await Task.sleep(for: .seconds(1.5))
                 if self.appState.recordingState == .success {
@@ -163,20 +168,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         case .error:
+            NotchManager.shared.showError(message: appState.errorMessage ?? "Error")
             Task {
                 try? await Task.sleep(for: .seconds(2))
                 if self.appState.recordingState == .error {
                     self.appState.recordingState = .idle
                 }
             }
-        default:
+        case .idle:
             break
         }
     }
 
     func handleMeetingStateChange(_ state: MeetingRecordingState) {
         switch state {
+        case .recording:
+            NotchManager.shared.startRecording(mode: .meeting)
+        case .processing:
+            NotchManager.shared.startProcessing(mode: .meeting)
         case .success:
+            if let text = appState.lastTranscription {
+                NotchManager.shared.showSuccess(text: text)
+            }
             Task {
                 try? await Task.sleep(for: .seconds(2))
                 if self.appState.meetingRecordingState == .success {
@@ -184,20 +197,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         case .error:
+            NotchManager.shared.showError(message: appState.errorMessage ?? "Error")
             Task {
                 try? await Task.sleep(for: .seconds(2))
                 if self.appState.meetingRecordingState == .error {
                     self.appState.meetingRecordingState = .idle
                 }
             }
-        default:
+        case .idle:
             break
         }
     }
 
     func handleTranslationStateChange(_ state: TranslationRecordingState) {
         switch state {
+        case .recording:
+            NotchManager.shared.startRecording(mode: .translation)
+        case .processing:
+            NotchManager.shared.startProcessing(mode: .translation)
         case .success:
+            if let text = appState.lastTranscription {
+                NotchManager.shared.showSuccess(text: text)
+            }
             Task {
                 try? await Task.sleep(for: .seconds(1.5))
                 if self.appState.translationRecordingState == .success {
@@ -205,13 +226,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         case .error:
+            NotchManager.shared.showError(message: appState.errorMessage ?? "Error")
             Task {
                 try? await Task.sleep(for: .seconds(2))
                 if self.appState.translationRecordingState == .error {
                     self.appState.translationRecordingState = .idle
                 }
             }
-        default:
+        case .idle:
             break
         }
     }

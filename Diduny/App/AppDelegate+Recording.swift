@@ -71,7 +71,6 @@ extension AppDelegate {
 
         // Determine device with fallback to system default
         var device: AudioDevice?
-        var usedFallback = false
 
         if appState.useAutoDetect {
             Log.app.info("startRecording: Using auto-detect")
@@ -89,7 +88,6 @@ extension AppDelegate {
                 // Selected device is no longer available - fallback to system default
                 Log.app.warning("startRecording: Selected device (ID: \(deviceID)) not available, falling back to default")
                 device = audioDeviceManager.getCurrentDefaultDevice()
-                usedFallback = true
                 Log.app.info("startRecording: Fallback to default device: \(device?.name ?? "none")")
             }
         } else {
@@ -111,7 +109,6 @@ extension AppDelegate {
             }
             // Last resort: pick first available device
             device = audioDeviceManager.availableDevices.first
-            usedFallback = true
             Log.app.info("startRecording: Using first available device: \(device?.name ?? "none")")
         }
 
@@ -126,15 +123,12 @@ extension AppDelegate {
         await MainActor.run {
             appState.recordingState = .recording
             appState.recordingStartTime = Date()
-            updateRecordingWindow(for: .recording)
+            handleRecordingStateChange(.recording)
         }
 
         do {
             Log.app.info("startRecording: Starting audio recording")
-            try await audioRecorder.startRecording(
-                device: device,
-                quality: SettingsStorage.shared.audioQuality
-            )
+            try await audioRecorder.startRecording(device: device)
             Log.app.info("startRecording: Recording started successfully")
         } catch let error as AudioTimeoutError {
             // Audio hardware timed out - likely coreaudiod is unresponsive or device is unavailable
@@ -151,7 +145,6 @@ extension AppDelegate {
                 appState.errorMessage = error.localizedDescription
                 appState.recordingState = .error
                 appState.recordingStartTime = nil
-                updateRecordingWindow(for: .error)
                 handleRecordingStateChange(.error)
             }
 
@@ -170,7 +163,6 @@ extension AppDelegate {
                 appState.errorMessage = error.localizedDescription
                 appState.recordingState = .error
                 appState.recordingStartTime = nil
-                updateRecordingWindow(for: .error)
                 handleRecordingStateChange(.error)
             }
             return
@@ -192,7 +184,7 @@ extension AppDelegate {
 
         await MainActor.run {
             appState.recordingState = .processing
-            updateRecordingWindow(for: .processing)
+            handleRecordingStateChange(.processing)
         }
 
         do {
@@ -232,7 +224,6 @@ extension AppDelegate {
                 appState.isEmptyTranscription = false
                 appState.recordingState = .success
                 appState.recordingStartTime = nil
-                updateRecordingWindow(for: .success)
                 handleRecordingStateChange(.success)
             }
             Log.app.info("stopRecording: SUCCESS")
@@ -257,7 +248,6 @@ extension AppDelegate {
                 appState.isEmptyTranscription = isEmptyTranscription
                 appState.recordingState = .error
                 appState.recordingStartTime = nil
-                updateRecordingWindow(for: .error)
                 handleRecordingStateChange(.error)
             }
         }

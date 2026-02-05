@@ -163,7 +163,9 @@ final class PermissionManager {
         guard #available(macOS 13.0, *) else {
             return false
         }
-        return await SystemAudioCaptureService.checkPermission()
+        let granted = await SystemAudioCaptureService.checkPermission()
+        status.screenRecording = granted
+        return granted
     }
 
     /// Request screen recording permission - this triggers the system permission dialog
@@ -174,11 +176,20 @@ final class PermissionManager {
             return false
         }
 
+        // Skip if already granted
+        if status.screenRecording {
+            Log.permissions.info("Screen recording permission already granted")
+            return true
+        }
+
         Log.permissions.info("Requesting screen recording permission...")
 
         // Calling SCShareableContent.excludingDesktopWindows triggers the permission dialog
         // if permission hasn't been determined yet
         let granted = await SystemAudioCaptureService.requestPermission()
+
+        // Update cached status
+        status.screenRecording = granted
 
         if granted {
             Log.permissions.info("Screen recording permission granted")

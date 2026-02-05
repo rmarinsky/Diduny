@@ -5,7 +5,6 @@ import SwiftUI
 struct AudioSettingsView: View {
     @Environment(AppState.self) var appState
     @StateObject private var deviceManager = AudioDeviceManager()
-    @State private var audioQuality = SettingsStorage.shared.audioQuality
 
     // Test recording state
     @State private var isTestRecording = false
@@ -19,19 +18,6 @@ struct AudioSettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                Picker("Quality", selection: $audioQuality) {
-                    ForEach(AudioQuality.allCases, id: \.self) { quality in
-                        Text(quality.displayName).tag(quality)
-                    }
-                }
-                .onChange(of: audioQuality) { _, newValue in
-                    SettingsStorage.shared.audioQuality = newValue
-                }
-            } header: {
-                Text("Audio Quality")
-            }
-
             Section {
                 // Auto-detect option
                 HStack {
@@ -210,10 +196,10 @@ struct AudioSettingsView: View {
             return
         }
 
-        // Configure audio settings
+        // Configure audio settings - use device native sample rate for best compatibility
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
-            AVSampleRateKey: audioQuality.sampleRate,
+            AVSampleRateKey: 44100.0, // Standard sample rate, device will use native if different
             AVNumberOfChannelsKey: 1,
             AVLinearPCMBitDepthKey: 16,
             AVLinearPCMIsFloatKey: false,
