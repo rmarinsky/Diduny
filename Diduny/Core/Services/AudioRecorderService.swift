@@ -26,7 +26,8 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     private var configurationObserver: NSObjectProtocol?
 
     /// Timeout for audio hardware operations (in seconds)
-    private let audioOperationTimeout: TimeInterval = 2.0
+    /// Increased to 5s to support older Intel Macs which can be slower
+    private let audioOperationTimeout: TimeInterval = 5.0
 
     /// Returns the current recording file path, if recording
     var currentRecordingPath: String? {
@@ -117,6 +118,13 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
         Log.audio.info("startRecording: Input format - sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
 
+        // Validate audio format - on some Intel Macs, the format can be invalid
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            Log.audio.error("startRecording: Invalid audio format - sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
+            audioEngine = nil
+            throw AudioError.recordingFailed("Invalid audio format. Please try selecting a different microphone in Settings.")
+        }
+
         // Create temporary file URL
         let tempDir = FileManager.default.temporaryDirectory
         let fileName = "diduny_\(UUID().uuidString).wav"
@@ -174,6 +182,14 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         do {
             try engine.start()
             Log.audio.info("startRecording: Audio engine started")
+
+            // Verify engine is actually running
+            guard engine.isRunning else {
+                Log.audio.error("startRecording: Engine started but isRunning=false")
+                inputNode.removeTap(onBus: 0)
+                throw AudioError.recordingFailed("Audio engine failed to start. Please try a different microphone.")
+            }
+            Log.audio.info("startRecording: Engine verified running")
         } catch {
             Log.audio.error("startRecording: Failed to start engine: \(error.localizedDescription)")
             inputNode.removeTap(onBus: 0)

@@ -120,16 +120,23 @@ extension AppDelegate {
             reason: "Voice recording in progress"
         )
 
+        // Show processing state while initializing audio (before we confirm it works)
         await MainActor.run {
-            appState.recordingState = .recording
-            appState.recordingStartTime = Date()
-            handleRecordingStateChange(.recording)
+            appState.recordingState = .processing
+            handleRecordingStateChange(.processing)
         }
 
         do {
             Log.app.info("startRecording: Starting audio recording")
             try await audioRecorder.startRecording(device: device)
             Log.app.info("startRecording: Recording started successfully")
+
+            // Only set recording state AFTER audio engine is confirmed working
+            await MainActor.run {
+                appState.recordingState = .recording
+                appState.recordingStartTime = Date()
+                handleRecordingStateChange(.recording)
+            }
         } catch let error as AudioTimeoutError {
             // Audio hardware timed out - likely coreaudiod is unresponsive or device is unavailable
             Log.app.error("startRecording: TIMEOUT - \(error.localizedDescription)")
