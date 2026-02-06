@@ -43,6 +43,9 @@ extension AppDelegate {
         // Clear recovery state
         RecoveryStateManager.shared.clearState()
 
+        // Reset push-to-talk hands-free mode if active
+        pushToTalkService.resetHandsFreeMode()
+
         // Reset state to idle
         await MainActor.run {
             appState.recordingState = .idle

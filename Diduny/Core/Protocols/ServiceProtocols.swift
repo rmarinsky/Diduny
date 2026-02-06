@@ -60,8 +60,12 @@ protocol PushToTalkServiceProtocol: AnyObject {
     var selectedKey: PushToTalkKey { get set }
     var onKeyDown: (() -> Void)? { get set }
     var onKeyUp: (() -> Void)? { get set }
+    /// Called when recording should toggle (for hands-free mode)
+    var onToggle: (() -> Void)? { get set }
     func start()
     func stop()
+    /// Reset hands-free mode (call when recording is cancelled externally)
+    func resetHandsFreeMode()
 }
 
 // MARK: - Meeting Recorder Service Protocol

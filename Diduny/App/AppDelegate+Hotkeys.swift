@@ -36,6 +36,14 @@ extension AppDelegate {
             }
         }
 
+        // Toggle handler for hands-free mode
+        pushToTalkService.onToggle = { [weak self] in
+            guard let self else { return }
+            Task {
+                await self.performToggleRecording()
+            }
+        }
+
         if key != .none {
             pushToTalkService.start()
         }
@@ -70,6 +78,14 @@ extension AppDelegate {
             guard let self else { return }
             Task {
                 await self.stopTranslationRecordingIfRecording()
+            }
+        }
+
+        // Toggle handler for hands-free mode
+        translationPushToTalkService.onToggle = { [weak self] in
+            guard let self else { return }
+            Task {
+                await self.performToggleTranslationRecording()
             }
         }
 

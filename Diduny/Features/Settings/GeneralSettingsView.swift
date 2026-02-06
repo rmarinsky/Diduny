@@ -8,6 +8,7 @@ struct GeneralSettingsView: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var pushToTalkKey = SettingsStorage.shared.pushToTalkKey
     @State private var translationPushToTalkKey = SettingsStorage.shared.translationPushToTalkKey
+    @State private var handsFreeModeEnabled = SettingsStorage.shared.handsFreeModeEnabled
 
     var body: some View {
         Form {
@@ -33,12 +34,34 @@ struct GeneralSettingsView: View {
 
             Section {
                 pushToTalkSection
+
+                Divider()
+                    .padding(.vertical, 4)
+
+                Toggle("Enable hands-free mode", isOn: $handsFreeModeEnabled)
+                    .onChange(of: handsFreeModeEnabled) { _, newValue in
+                        SettingsStorage.shared.handsFreeModeEnabled = newValue
+                    }
+
+                if handsFreeModeEnabled {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Brief tap: toggle recording on/off")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("Long press (>0.5s): hold to record")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.leading, 20)
+                }
             } header: {
                 Text("Push to Talk")
             } footer: {
-                Text("Hold the key to record, release to stop and transcribe.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                if !handsFreeModeEnabled {
+                    Text("Hold the key to record, release to stop and transcribe.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
 
             Section {

@@ -15,6 +15,7 @@ final class SettingsStorage {
         case pushToTalkKey
         case meetingAudioSource
         case translationPushToTalkKey
+        case handsFreeModeEnabled
     }
 
     private init() {}
@@ -98,5 +99,13 @@ final class SettingsStorage {
         set {
             defaults.set(newValue.rawValue, forKey: Key.translationPushToTalkKey.rawValue)
         }
+    }
+
+    // MARK: - Hands-Free Mode
+
+    /// When enabled, brief press enters hands-free mode (toggle), long press is push-to-talk
+    var handsFreeModeEnabled: Bool {
+        get { defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue) }
+        set { defaults.set(newValue, forKey: Key.handsFreeModeEnabled.rawValue) }
     }
 }
