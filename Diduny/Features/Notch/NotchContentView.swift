@@ -77,7 +77,7 @@ struct NotchExpandedView: View {
         .frame(height: 20)
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
-        .animation(.easeInOut(duration: 0.25), value: manager.state)
+        .animation(.easeInOut(duration: 0.35), value: manager.state)
     }
 }
 
@@ -173,8 +173,8 @@ private struct SuccessExpandedView: View {
 
     private var preview: String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.count > 40 {
-            return String(trimmed.prefix(40)) + "..."
+        if trimmed.count > 35 {
+            return String(trimmed.prefix(35)) + "..."
         }
         return trimmed
     }
@@ -184,7 +184,7 @@ private struct SuccessExpandedView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.green)
-                .scaleEffect(appeared ? 1.0 : 0.5)
+                .scaleEffect(appeared ? 1.0 : 0.3)
                 .opacity(appeared ? 1.0 : 0.0)
 
             Text(preview)
@@ -192,9 +192,19 @@ private struct SuccessExpandedView: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .opacity(appeared ? 1.0 : 0.0)
+                .offset(x: appeared ? 0 : -5)
+
+            Spacer()
+
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 18, height: 18)
+                .scaleEffect(appeared ? 1.0 : 0.5)
+                .opacity(appeared ? 1.0 : 0.0)
         }
         .onAppear {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                 appeared = true
             }
         }
@@ -206,8 +216,8 @@ private struct ErrorExpandedView: View {
     @State private var appeared = false
 
     private var shortMessage: String {
-        if message.count > 45 {
-            return String(message.prefix(45)) + "..."
+        if message.count > 40 {
+            return String(message.prefix(40)) + "..."
         }
         return message
     }
@@ -217,7 +227,7 @@ private struct ErrorExpandedView: View {
             Image(systemName: "xmark.circle.fill")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.red)
-                .scaleEffect(appeared ? 1.0 : 0.5)
+                .scaleEffect(appeared ? 1.0 : 0.3)
                 .opacity(appeared ? 1.0 : 0.0)
 
             Text(shortMessage)
@@ -225,9 +235,19 @@ private struct ErrorExpandedView: View {
                 .foregroundStyle(.red)
                 .lineLimit(1)
                 .opacity(appeared ? 1.0 : 0.0)
+                .offset(x: appeared ? 0 : -5)
+
+            Spacer()
+
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 18, height: 18)
+                .scaleEffect(appeared ? 1.0 : 0.5)
+                .opacity(appeared ? 0.6 : 0.0)
         }
         .onAppear {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                 appeared = true
             }
         }
