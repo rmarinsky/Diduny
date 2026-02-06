@@ -19,40 +19,16 @@ struct AudioSettingsView: View {
     var body: some View {
         Form {
             Section {
-                // Auto-detect option
-                HStack {
-                    RadioButton(isSelected: appState.useAutoDetect) {
-                        appState.useAutoDetect = true
-                        appState.selectedDeviceID = nil
-                    }
-                    Text("Auto-detect best device")
-                        .foregroundColor(appState.useAutoDetect ? .primary : .secondary)
-                    Spacer()
-                    if appState.useAutoDetect {
-                        Image(systemName: "checkmark")
-                            .foregroundColor(.accentColor)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    appState.useAutoDetect = true
-                    appState.selectedDeviceID = nil
-                }
-
-                Divider()
-
                 // Device list
                 ForEach(deviceManager.availableDevices) { device in
                     HStack {
-                        RadioButton(isSelected: !appState.useAutoDetect && appState.selectedDeviceID == device.id) {
-                            appState.useAutoDetect = false
+                        RadioButton(isSelected: appState.selectedDeviceID == device.id) {
                             appState.selectedDeviceID = device.id
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(device.name)
-                                .foregroundColor(!appState.useAutoDetect && appState.selectedDeviceID == device
-                                    .id ? .primary : .secondary)
+                                .foregroundColor(appState.selectedDeviceID == device.id ? .primary : .secondary)
 
                             if device.isDefault {
                                 Text("System Default")
@@ -63,14 +39,13 @@ struct AudioSettingsView: View {
 
                         Spacer()
 
-                        if !appState.useAutoDetect, appState.selectedDeviceID == device.id {
+                        if appState.selectedDeviceID == device.id {
                             Image(systemName: "checkmark")
                                 .foregroundColor(.accentColor)
                         }
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        appState.useAutoDetect = false
                         appState.selectedDeviceID = device.id
                     }
                 }
@@ -173,9 +148,7 @@ struct AudioSettingsView: View {
 
     private func startTestRecording() {
         // Get the selected device
-        let device: AudioDevice? = if appState.useAutoDetect {
-            deviceManager.defaultDevice
-        } else if let selectedID = appState.selectedDeviceID {
+        let device: AudioDevice? = if let selectedID = appState.selectedDeviceID {
             deviceManager.availableDevices.first { $0.id == selectedID }
         } else {
             deviceManager.defaultDevice

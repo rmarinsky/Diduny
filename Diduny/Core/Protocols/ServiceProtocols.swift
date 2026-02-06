@@ -47,7 +47,6 @@ protocol AudioDeviceManagerProtocol: AnyObject {
     var availableDevices: [AudioDevice] { get }
     var defaultDevice: AudioDevice? { get }
     func refreshDevices()
-    func autoDetectBestDevice() async -> AudioDevice?
     func isDeviceAvailable(_ deviceID: AudioDeviceID) -> Bool
     func device(for deviceID: AudioDeviceID) -> AudioDevice?
     func getCurrentDefaultDevice() -> AudioDevice?

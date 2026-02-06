@@ -13,7 +13,6 @@ struct DidunyApp: App {
                 onToggleRecording: { appDelegate.toggleRecording() },
                 onToggleTranslationRecording: { appDelegate.toggleTranslationRecording() },
                 onToggleMeetingRecording: { appDelegate.toggleMeetingRecording() },
-                onSelectAutoDetect: { appDelegate.selectAutoDetect() },
                 onSelectDevice: { device in appDelegate.selectDevice(device) }
             )
             .environment(appDelegate.appState)

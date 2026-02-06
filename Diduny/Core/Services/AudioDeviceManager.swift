@@ -82,31 +82,6 @@ final class AudioDeviceManager: ObservableObject, AudioDeviceManagerProtocol {
         return (defaultDevice, selectedID != nil)
     }
 
-    func autoDetectBestDevice() async -> AudioDevice? {
-        let devices = availableDevices
-        guard !devices.isEmpty else { return nil }
-
-        // Sample all devices simultaneously
-        let results = await withTaskGroup(of: (AudioDeviceID, Float).self) { group in
-            for device in devices {
-                group.addTask {
-                    let level = await self.measureSignalLevel(deviceID: device.id)
-                    return (device.id, level)
-                }
-            }
-
-            var results: [AudioDeviceID: Float] = [:]
-            for await (deviceID, level) in group {
-                results[deviceID] = level
-            }
-            return results
-        }
-
-        // Find device with highest signal
-        let bestDeviceID = results.max(by: { $0.value < $1.value })?.key
-        return devices.first { $0.id == bestDeviceID }
-    }
-
     // MARK: - Private Methods
 
     private func getInputDevices() -> [AudioDevice] {
@@ -252,47 +227,6 @@ final class AudioDeviceManager: ObservableObject, AudioDeviceManagerProtocol {
 
         let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &dataSize, &sampleRate)
         return status == noErr ? sampleRate : nil
-    }
-
-    private func measureSignalLevel(deviceID _: AudioDeviceID, duration: TimeInterval = 1.0) async -> Float {
-        let audioEngine = AVAudioEngine()
-        let inputNode = audioEngine.inputNode
-
-        let format = inputNode.outputFormat(forBus: 0)
-        let sampleCount = Int(format.sampleRate * duration)
-
-        var samples: [Float] = []
-        samples.reserveCapacity(sampleCount)
-
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            let channelData = buffer.floatChannelData?[0]
-            let frameLength = Int(buffer.frameLength)
-
-            if let data = channelData {
-                for i in 0 ..< frameLength {
-                    samples.append(data[i])
-                }
-            }
-        }
-
-        do {
-            try audioEngine.start()
-
-            // Wait for the specified duration
-            try? await Task.sleep(for: .seconds(duration))
-
-            audioEngine.stop()
-            inputNode.removeTap(onBus: 0)
-
-            if !samples.isEmpty {
-                let sumOfSquares = samples.reduce(0) { $0 + $1 * $1 }
-                return sqrt(sumOfSquares / Float(samples.count))
-            }
-
-            return 0
-        } catch {
-            return 0
-        }
     }
 
     private func setupDeviceChangeListener() {

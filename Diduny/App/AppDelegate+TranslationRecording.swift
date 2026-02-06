@@ -97,12 +97,7 @@ extension AppDelegate {
         // Determine device with fallback to system default
         var device: AudioDevice?
 
-        if appState.useAutoDetect {
-            Log.app.info("startTranslationRecording: Using auto-detect")
-            await MainActor.run { appState.translationRecordingState = .processing }
-            device = await audioDeviceManager.autoDetectBestDevice()
-            Log.app.info("startTranslationRecording: Auto-detected device: \(device?.name ?? "none")")
-        } else if let deviceID = appState.selectedDeviceID {
+        if let deviceID = appState.selectedDeviceID {
             // Refresh device list to ensure we have current state
             audioDeviceManager.refreshDevices()
 
@@ -122,7 +117,7 @@ extension AppDelegate {
         }
 
         // If still no device available, try last resort or show error
-        if device == nil && !appState.useAutoDetect {
+        if device == nil {
             if audioDeviceManager.availableDevices.isEmpty {
                 Log.app.error("startTranslationRecording: No audio input devices available")
                 await MainActor.run {

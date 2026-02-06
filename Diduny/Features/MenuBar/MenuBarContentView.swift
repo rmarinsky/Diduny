@@ -8,7 +8,6 @@ struct MenuBarContentView: View {
     var onToggleRecording: @MainActor () -> Void
     var onToggleTranslationRecording: @MainActor () -> Void
     var onToggleMeetingRecording: @MainActor () -> Void
-    var onSelectAutoDetect: @MainActor () -> Void
     var onSelectDevice: @MainActor (AudioDevice) -> Void
 
     var body: some View {
@@ -52,24 +51,13 @@ struct MenuBarContentView: View {
 
             // Audio device menu
             Menu("Audio Device") {
-                Button(action: onSelectAutoDetect) {
-                    HStack {
-                        Text("Auto-detect")
-                        if appState.useAutoDetect {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-
-                Divider()
-
                 ForEach(audioDeviceManager.availableDevices, id: \.id) { device in
                     Button {
                         onSelectDevice(device)
                     } label: {
                         HStack {
                             Text(device.name)
-                            if !appState.useAutoDetect, appState.selectedDeviceID == device.id {
+                            if appState.selectedDeviceID == device.id {
                                 Image(systemName: "checkmark")
                             }
                         }

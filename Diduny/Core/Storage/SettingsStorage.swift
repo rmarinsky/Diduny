@@ -8,7 +8,6 @@ final class SettingsStorage {
     private let defaults = UserDefaults.standard
 
     private enum Key: String {
-        case useAutoDetect
         case selectedDeviceID
         case autoPaste
         case playSoundOnCompletion
@@ -21,11 +20,6 @@ final class SettingsStorage {
     private init() {}
 
     // MARK: - Audio Device
-
-    var useAutoDetect: Bool {
-        get { defaults.bool(forKey: Key.useAutoDetect.rawValue) }
-        set { defaults.set(newValue, forKey: Key.useAutoDetect.rawValue) }
-    }
 
     var selectedDeviceID: AudioDeviceID? {
         get {

@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		0FFD1A4567A90C61047FD763 /* SettingsStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91E893AF3E6C20B492D3CB7 /* SettingsStorage.swift */; };
 		107FDBF081DEEF30BD2A922D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F0D8B455676B571AEC778E72 /* Assets.xcassets */; };
-		1A2B3C4D5E6F7890ABCDEF01 /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = 1A2B3C4D5E6F7890ABCDEF02 /* LaunchAtLogin */; };
 		247C7BD6AD352D40A40CCFD0 /* DynamicNotchKit in Frameworks */ = {isa = PBXBuildFile; productRef = B431F17EA826367ED3C4D989 /* DynamicNotchKit */; };
 		3230AC685182CD2F888DF3BC /* MeetingAudioSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3193B0160E38FA4135969F79 /* MeetingAudioSource.swift */; };
 		37B4946599B2FDB08DEB48E7 /* DidunyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE5770AB5E9601E0DB6B878 /* DidunyApp.swift */; };
@@ -23,6 +22,7 @@
 		56700AFF9E4935DDDDA72D7D /* MeetingRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE81A3506184A31D459CC1DA /* MeetingRecorderService.swift */; };
 		64D6EF9C214D33A864FE9D75 /* APISettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2A56895EB9FB8DD4C00BE7 /* APISettingsView.swift */; };
 		78E2E9B4903AA5A8A50AA6FC /* AppDelegate+Hotkeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2CC58C907B4985941DCDA9 /* AppDelegate+Hotkeys.swift */; };
+		8089B2EF55ADCDC2F120C765 /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = 57D44526E8ECA54C87677F5B /* LaunchAtLogin */; };
 		86207F57859F544F066B0140 /* PushToTalkKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67216EAEE79FD497A77BD7D6 /* PushToTalkKey.swift */; };
 		8CAA1C227A9788C6A9687E7D /* NotchContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 622FD84CF56FC17420114B9C /* NotchContentView.swift */; };
 		8E61D4628397B11E5BCEE03D /* SystemAudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70DDD786E73A1532AE91FC20 /* SystemAudioCaptureService.swift */; };
@@ -104,7 +104,7 @@
 			files = (
 				E6C0A2BB2B96403F5AD765B3 /* KeyboardShortcuts in Frameworks */,
 				247C7BD6AD352D40A40CCFD0 /* DynamicNotchKit in Frameworks */,
-				1A2B3C4D5E6F7890ABCDEF01 /* LaunchAtLogin in Frameworks */,
+				8089B2EF55ADCDC2F120C765 /* LaunchAtLogin in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -300,7 +300,7 @@
 			packageProductDependencies = (
 				2E72BE3A05C906A8B16DBE4E /* KeyboardShortcuts */,
 				B431F17EA826367ED3C4D989 /* DynamicNotchKit */,
-				1A2B3C4D5E6F7890ABCDEF02 /* LaunchAtLogin */,
+				57D44526E8ECA54C87677F5B /* LaunchAtLogin */,
 			);
 			productName = Diduny;
 			productReference = 4C5A21F6255692712508A475 /* Diduny.app */;
@@ -334,7 +334,7 @@
 			packageReferences = (
 				EEB3C042DE7A825E199A8D2F /* XCRemoteSwiftPackageReference "DynamicNotchKit" */,
 				44A6802ED268E042B3E340B9 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
-				1A2B3C4D5E6F7890ABCDEF03 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */,
+				40D87DB8B850A83EB00FF9EE /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -670,6 +670,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		40D87DB8B850A83EB00FF9EE /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/LaunchAtLogin-Modern";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 		44A6802ED268E042B3E340B9 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
@@ -686,14 +694,6 @@
 				minimumVersion = 1.0.0;
 			};
 		};
-		1A2B3C4D5E6F7890ABCDEF03 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sindresorhus/LaunchAtLogin-Modern";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.0.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -702,15 +702,15 @@
 			package = 44A6802ED268E042B3E340B9 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
 			productName = KeyboardShortcuts;
 		};
+		57D44526E8ECA54C87677F5B /* LaunchAtLogin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 40D87DB8B850A83EB00FF9EE /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */;
+			productName = LaunchAtLogin;
+		};
 		B431F17EA826367ED3C4D989 /* DynamicNotchKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = EEB3C042DE7A825E199A8D2F /* XCRemoteSwiftPackageReference "DynamicNotchKit" */;
 			productName = DynamicNotchKit;
-		};
-		1A2B3C4D5E6F7890ABCDEF02 /* LaunchAtLogin */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 1A2B3C4D5E6F7890ABCDEF03 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */;
-			productName = LaunchAtLogin;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

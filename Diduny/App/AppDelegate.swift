@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import Combine
 import os
 import SwiftUI
 
@@ -8,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Properties
 
     let appState = AppState()
+    private var cancellables = Set<AnyCancellable>()
 
     // App Nap prevention tokens
     var recordingActivityToken: NSObjectProtocol?
@@ -29,6 +31,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_: Notification) {
+        // Auto-select system default device if none selected
+        if appState.selectedDeviceID == nil, let defaultDevice = audioDeviceManager.defaultDevice {
+            appState.selectedDeviceID = defaultDevice.id
+        }
+
+        // Watch for device changes and auto-select default if selected device is disconnected
+        audioDeviceManager.$availableDevices
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] devices in
+                guard let self else { return }
+                // If selected device is no longer available, switch to default
+                if let selectedID = self.appState.selectedDeviceID,
+                   !devices.contains(where: { $0.id == selectedID }) {
+                    self.appState.selectedDeviceID = self.audioDeviceManager.defaultDevice?.id
+                }
+                // If no device selected and devices are available, select default
+                if self.appState.selectedDeviceID == nil, let defaultDevice = self.audioDeviceManager.defaultDevice {
+                    self.appState.selectedDeviceID = defaultDevice.id
+                }
+            }
+            .store(in: &cancellables)
 
         // Listen for push-to-talk key changes
         NotificationCenter.default.addObserver(
@@ -240,13 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Device Selection (exposed for SwiftUI)
 
-    func selectAutoDetect() {
-        appState.useAutoDetect = true
-        appState.selectedDeviceID = nil
-    }
-
     func selectDevice(_ device: AudioDevice) {
-        appState.useAutoDetect = false
         appState.selectedDeviceID = device.id
     }
 

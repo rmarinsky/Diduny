@@ -86,12 +86,6 @@ final class AppState {
         }
     }
 
-    var useAutoDetect: Bool {
-        didSet {
-            SettingsStorage.shared.useAutoDetect = useAutoDetect
-        }
-    }
-
     var selectedDeviceID: AudioDeviceID? {
         didSet {
             SettingsStorage.shared.selectedDeviceID = selectedDeviceID
@@ -143,11 +137,10 @@ final class AppState {
 
     init() {
         let settings = SettingsStorage.shared
-        useAutoDetect = settings.useAutoDetect
         selectedDeviceID = settings.selectedDeviceID
         Log.app
             .debug(
-                "Initialized: useAutoDetect=\(self.useAutoDetect), selectedDeviceID=\(String(describing: self.selectedDeviceID))"
+                "Initialized: selectedDeviceID=\(String(describing: self.selectedDeviceID))"
             )
     }
 }

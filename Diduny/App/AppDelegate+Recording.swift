@@ -101,12 +101,7 @@ extension AppDelegate {
         // Determine device with fallback to system default
         var device: AudioDevice?
 
-        if appState.useAutoDetect {
-            Log.app.info("startRecording: Using auto-detect")
-            await MainActor.run { appState.recordingState = .processing }
-            device = await audioDeviceManager.autoDetectBestDevice()
-            Log.app.info("startRecording: Auto-detected device: \(device?.name ?? "none")")
-        } else if let deviceID = appState.selectedDeviceID {
+        if let deviceID = appState.selectedDeviceID {
             // Validate selected device is still available using hardware-level check
             let (validDevice, didFallback) = audioDeviceManager.getValidDevice(selectedID: deviceID)
             device = validDevice
@@ -131,7 +126,7 @@ extension AppDelegate {
         }
 
         // If still no device available, try last resort or show error
-        if device == nil && !appState.useAutoDetect {
+        if device == nil {
             if audioDeviceManager.availableDevices.isEmpty {
                 Log.app.error("startRecording: No audio input devices available")
                 await MainActor.run {
