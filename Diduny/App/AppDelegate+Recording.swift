@@ -47,6 +47,7 @@ extension AppDelegate {
         await MainActor.run {
             appState.recordingState = .idle
             appState.recordingStartTime = nil
+            appState.deviceFallbackWarning = nil
             handleRecordingStateChange(.idle)
         }
 
@@ -106,17 +107,22 @@ extension AppDelegate {
             device = await audioDeviceManager.autoDetectBestDevice()
             Log.app.info("startRecording: Auto-detected device: \(device?.name ?? "none")")
         } else if let deviceID = appState.selectedDeviceID {
-            // Refresh device list to ensure we have current state
-            audioDeviceManager.refreshDevices()
+            // Validate selected device is still available using hardware-level check
+            let (validDevice, didFallback) = audioDeviceManager.getValidDevice(selectedID: deviceID)
+            device = validDevice
 
-            if audioDeviceManager.isDeviceAvailable(deviceID) {
-                device = audioDeviceManager.device(for: deviceID)
-                Log.app.info("startRecording: Using selected device: \(device?.name ?? "none")")
+            if didFallback {
+                // Device changed - notify user
+                Log.app.warning("startRecording: Selected device (ID: \(deviceID)) unavailable, using \(device?.name ?? "default")")
+
+                // Show warning notification to user
+                if let fallbackName = device?.name {
+                    await MainActor.run {
+                        appState.deviceFallbackWarning = "Using \(fallbackName)"
+                    }
+                }
             } else {
-                // Selected device is no longer available - fallback to system default
-                Log.app.warning("startRecording: Selected device (ID: \(deviceID)) not available, falling back to default")
-                device = audioDeviceManager.getCurrentDefaultDevice()
-                Log.app.info("startRecording: Fallback to default device: \(device?.name ?? "none")")
+                Log.app.info("startRecording: Using selected device: \(device?.name ?? "none")")
             }
         } else {
             // No device selected - use system default
@@ -257,6 +263,7 @@ extension AppDelegate {
             await MainActor.run {
                 appState.lastTranscription = text
                 appState.isEmptyTranscription = false
+                appState.deviceFallbackWarning = nil
                 appState.recordingState = .success
                 appState.recordingStartTime = nil
                 handleRecordingStateChange(.success)
@@ -281,6 +288,7 @@ extension AppDelegate {
             await MainActor.run {
                 appState.errorMessage = error.localizedDescription
                 appState.isEmptyTranscription = isEmptyTranscription
+                appState.deviceFallbackWarning = nil
                 appState.recordingState = .error
                 appState.recordingStartTime = nil
                 handleRecordingStateChange(.error)

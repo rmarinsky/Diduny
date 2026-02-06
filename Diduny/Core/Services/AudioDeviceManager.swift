@@ -43,6 +43,45 @@ final class AudioDeviceManager: ObservableObject, AudioDeviceManagerProtocol {
         return defaultDevice
     }
 
+    /// Check if device is alive using CoreAudio property
+    /// This is more reliable than checking the cached device list
+    func isDeviceAlive(_ deviceID: AudioDeviceID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsAlive,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var isAlive: UInt32 = 0
+        var propertySize = UInt32(MemoryLayout<UInt32>.size)
+
+        let status = AudioObjectGetPropertyData(
+            deviceID,
+            &address,
+            0,
+            nil,
+            &propertySize,
+            &isAlive
+        )
+
+        return status == noErr && isAlive == 1
+    }
+
+    /// Get a valid device, falling back to default if selected is unavailable
+    /// Returns tuple with device and whether fallback was used
+    func getValidDevice(selectedID: AudioDeviceID?) -> (device: AudioDevice?, didFallback: Bool) {
+        // First try the selected device
+        if let selectedID = selectedID,
+           isDeviceAlive(selectedID),
+           let device = device(for: selectedID) {
+            return (device, false)
+        }
+
+        // Fallback to default device
+        refreshDevices()
+        return (defaultDevice, selectedID != nil)
+    }
+
     func autoDetectBestDevice() async -> AudioDevice? {
         let devices = availableDevices
         guard !devices.isEmpty else { return nil }

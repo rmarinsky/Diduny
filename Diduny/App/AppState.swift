@@ -77,6 +77,15 @@ final class AppState {
 
     var isEmptyTranscription: Bool = false
 
+    /// Warning message shown when selected device is unavailable and fallback was used
+    var deviceFallbackWarning: String? {
+        didSet {
+            if let warning = deviceFallbackWarning {
+                Log.app.debug("deviceFallbackWarning set: \(warning)")
+            }
+        }
+    }
+
     var useAutoDetect: Bool {
         didSet {
             SettingsStorage.shared.useAutoDetect = useAutoDetect
