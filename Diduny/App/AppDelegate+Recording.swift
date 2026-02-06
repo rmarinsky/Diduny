@@ -20,9 +20,37 @@ extension AppDelegate {
         case .recording:
             Log.app.info("State is recording, stopping recording...")
             await stopRecording()
+        case .processing:
+            Log.app.info("State is processing, canceling...")
+            await cancelRecording()
         default:
             Log.app.info("State is \(self.appState.recordingState), ignoring toggle")
         }
+    }
+
+    func cancelRecording() async {
+        Log.app.info("cancelRecording: BEGIN")
+
+        // Cancel audio recorder
+        audioRecorder.cancelRecording()
+
+        // End App Nap prevention
+        if let token = recordingActivityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            recordingActivityToken = nil
+        }
+
+        // Clear recovery state
+        RecoveryStateManager.shared.clearState()
+
+        // Reset state to idle
+        await MainActor.run {
+            appState.recordingState = .idle
+            appState.recordingStartTime = nil
+            handleRecordingStateChange(.idle)
+        }
+
+        Log.app.info("cancelRecording: END")
     }
 
     func startRecordingIfIdle() async {

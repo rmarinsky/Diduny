@@ -17,9 +17,38 @@ extension AppDelegate {
             await startMeetingRecording()
         case .recording:
             await stopMeetingRecording()
+        case .processing:
+            Log.app.info("Meeting state is processing, canceling...")
+            await cancelMeetingRecording()
         default:
             Log.app.info("Meeting state is \(self.appState.meetingRecordingState), ignoring toggle")
         }
+    }
+
+    @available(macOS 13.0, *)
+    func cancelMeetingRecording() async {
+        Log.app.info("cancelMeetingRecording: BEGIN")
+
+        // Cancel meeting recorder
+        meetingRecorderService.cancelRecording()
+
+        // End App Nap prevention
+        if let token = meetingActivityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            meetingActivityToken = nil
+        }
+
+        // Clear recovery state
+        RecoveryStateManager.shared.clearState()
+
+        // Reset state to idle
+        await MainActor.run {
+            appState.meetingRecordingState = .idle
+            appState.meetingRecordingStartTime = nil
+            handleMeetingStateChange(.idle)
+        }
+
+        Log.app.info("cancelMeetingRecording: END")
     }
 
     func startMeetingRecording() async {
@@ -65,10 +94,10 @@ extension AppDelegate {
             reason: "Meeting recording in progress"
         )
 
+        // Show processing state while initializing (before we confirm it works)
         await MainActor.run {
-            appState.meetingRecordingState = .recording
-            appState.meetingRecordingStartTime = Date()
-            handleMeetingStateChange(.recording)
+            appState.meetingRecordingState = .processing
+            handleMeetingStateChange(.processing)
         }
 
         do {
@@ -83,6 +112,13 @@ extension AppDelegate {
 
             try await meetingRecorderService.startRecording()
             Log.app.info("Meeting recording started")
+
+            // Only set recording state AFTER confirmed working
+            await MainActor.run {
+                appState.meetingRecordingState = .recording
+                appState.meetingRecordingStartTime = Date()
+                handleMeetingStateChange(.recording)
+            }
 
             // Save recovery state in case of crash
             if let path = meetingRecorderService.currentRecordingPath {

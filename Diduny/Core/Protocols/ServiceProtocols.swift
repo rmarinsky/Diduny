@@ -73,4 +73,5 @@ protocol MeetingRecorderServiceProtocol: AnyObject {
     var recordingDuration: TimeInterval { get }
     func startRecording() async throws
     func stopRecording() async throws -> URL?
+    func cancelRecording()
 }

@@ -17,9 +17,37 @@ extension AppDelegate {
             await startTranslationRecording()
         case .recording:
             await stopTranslationRecording()
+        case .processing:
+            Log.app.info("Translation state is processing, canceling...")
+            await cancelTranslationRecording()
         default:
             Log.app.info("Translation state is \(self.appState.translationRecordingState), ignoring toggle")
         }
+    }
+
+    func cancelTranslationRecording() async {
+        Log.app.info("cancelTranslationRecording: BEGIN")
+
+        // Cancel audio recorder
+        audioRecorder.cancelRecording()
+
+        // End App Nap prevention
+        if let token = translationActivityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            translationActivityToken = nil
+        }
+
+        // Clear recovery state
+        RecoveryStateManager.shared.clearState()
+
+        // Reset state to idle
+        await MainActor.run {
+            appState.translationRecordingState = .idle
+            appState.translationRecordingStartTime = nil
+            handleTranslationStateChange(.idle)
+        }
+
+        Log.app.info("cancelTranslationRecording: END")
     }
 
     func startTranslationRecordingIfIdle() async {
@@ -109,7 +137,7 @@ extension AppDelegate {
             Log.app.info("startTranslationRecording: Using first available device: \(device?.name ?? "none")")
         }
 
-        Log.app.info("startTranslationRecording: Setting state to recording")
+        Log.app.info("startTranslationRecording: Setting state to processing")
 
         // Prevent App Nap during translation recording
         translationActivityToken = ProcessInfo.processInfo.beginActivity(
@@ -117,16 +145,23 @@ extension AppDelegate {
             reason: "Translation recording in progress"
         )
 
+        // Show processing state while initializing audio (before we confirm it works)
         await MainActor.run {
-            appState.translationRecordingState = .recording
-            appState.translationRecordingStartTime = Date()
-            handleTranslationStateChange(.recording)
+            appState.translationRecordingState = .processing
+            handleTranslationStateChange(.processing)
         }
 
         do {
             Log.app.info("startTranslationRecording: Starting audio recording")
             try await audioRecorder.startRecording(device: device)
             Log.app.info("startTranslationRecording: Recording started successfully")
+
+            // Only set recording state AFTER audio engine is confirmed working
+            await MainActor.run {
+                appState.translationRecordingState = .recording
+                appState.translationRecordingStartTime = Date()
+                handleTranslationStateChange(.recording)
+            }
         } catch let error as AudioTimeoutError {
             // Audio hardware timed out - likely coreaudiod is unresponsive or device is unavailable
             Log.app.error("startTranslationRecording: TIMEOUT - \(error.localizedDescription)")

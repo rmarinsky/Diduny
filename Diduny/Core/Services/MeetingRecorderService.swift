@@ -175,6 +175,41 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         Log.recording.info("Mixed recording started (system + microphone)")
     }
 
+    // MARK: - Cancel Recording
+
+    func cancelRecording() {
+        guard isRecording else { return }
+
+        Log.recording.info("Canceling meeting recording...")
+
+        // Stop system audio capture
+        if let service = systemAudioService {
+            Task {
+                _ = try? await service.stopCapture()
+            }
+        }
+        systemAudioService = nil
+
+        // Stop audio mixer if present
+        if audioMixer != nil {
+            Task {
+                _ = try? await audioMixer?.stopRecording()
+            }
+        }
+        audioMixer = nil
+
+        // Clean up output file
+        if let url = outputURL {
+            try? FileManager.default.removeItem(at: url)
+            outputURL = nil
+        }
+
+        isRecording = false
+        startTime = nil
+
+        Log.recording.info("Meeting recording canceled")
+    }
+
     // MARK: - Stop Recording
 
     func stopRecording() async throws -> URL? {

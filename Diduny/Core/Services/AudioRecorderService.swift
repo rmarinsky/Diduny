@@ -155,6 +155,9 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         // Install tap on input node to capture audio
         // IMPORTANT: This callback runs on a realtime audio thread, NOT the main thread
         // Write directly in the input format - no conversion needed
+        // NOTE: installTap is synchronous and must be called on the main thread.
+        // Do NOT wrap this in withAudioTimeout as it causes threading issues on Intel Macs.
+        Log.audio.info("startRecording: Installing tap on input node...")
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             // Update audio level from buffer (thread-safe method)
             self?.updateAudioLevelFromBuffer(buffer)
@@ -166,6 +169,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
                 Log.audio.error("Failed to write audio buffer: \(error.localizedDescription)")
             }
         }
+        Log.audio.info("startRecording: Tap installed successfully")
 
         // Observe configuration changes for handling device switching
         configurationObserver = NotificationCenter.default.addObserver(
@@ -179,7 +183,10 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         }
 
         // Start the engine
+        // NOTE: Do NOT wrap in withAudioTimeout - it causes threading issues/deadlocks on Intel Macs
+        // because TaskGroup runs on background threads while AVAudioEngine needs main thread
         do {
+            Log.audio.info("startRecording: Starting audio engine...")
             try engine.start()
             Log.audio.info("startRecording: Audio engine started")
 
@@ -193,6 +200,11 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         } catch {
             Log.audio.error("startRecording: Failed to start engine: \(error.localizedDescription)")
             inputNode.removeTap(onBus: 0)
+            if let observer = configurationObserver {
+                NotificationCenter.default.removeObserver(observer)
+                configurationObserver = nil
+            }
+            audioEngine = nil
             throw AudioError.recordingFailed("Failed to start audio engine: \(error.localizedDescription)")
         }
 
