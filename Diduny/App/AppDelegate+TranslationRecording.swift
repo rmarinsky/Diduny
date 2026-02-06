@@ -28,6 +28,9 @@ extension AppDelegate {
     func cancelTranslationRecording() async {
         Log.app.info("cancelTranslationRecording: BEGIN")
 
+        // Deactivate escape cancel handler
+        EscapeCancelService.shared.deactivate()
+
         // Cancel audio recorder
         audioRecorder.cancelRecording()
 
@@ -160,6 +163,11 @@ extension AppDelegate {
                 appState.translationRecordingStartTime = Date()
                 handleTranslationStateChange(.recording)
             }
+
+            // Activate escape cancel handler
+            await MainActor.run {
+                setupTranslationEscapeCancelHandler()
+            }
         } catch let error as AudioTimeoutError {
             // Audio hardware timed out - likely coreaudiod is unresponsive or device is unavailable
             Log.app.error("startTranslationRecording: TIMEOUT - \(error.localizedDescription)")
@@ -211,6 +219,9 @@ extension AppDelegate {
 
     func stopTranslationRecording() async {
         Log.app.info("stopTranslationRecording: BEGIN")
+
+        // Deactivate escape cancel handler
+        EscapeCancelService.shared.deactivate()
 
         await MainActor.run {
             appState.translationRecordingState = .processing
@@ -289,5 +300,37 @@ extension AppDelegate {
         }
 
         Log.app.info("stopTranslationRecording: END")
+    }
+
+    // MARK: - Escape Cancel Handler
+
+    private func setupTranslationEscapeCancelHandler() {
+        let escapeService = EscapeCancelService.shared
+
+        // On first escape: show confirmation notification
+        escapeService.onFirstEscape = { [weak self] in
+            NotchManager.shared.showInfo(
+                message: "Press ESC again to cancel",
+                duration: 1.5
+            )
+
+            // Resume showing recording state after info disappears
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(1.6))
+                guard let self,
+                      self.appState.translationRecordingState == .recording else { return }
+                NotchManager.shared.startRecording(mode: .translation)
+            }
+        }
+
+        // On second escape (confirmed cancel): cancel recording
+        escapeService.onCancel = { [weak self] in
+            Task { @MainActor in
+                await self?.cancelTranslationRecording()
+                NotchManager.shared.showInfo(message: "Recording cancelled")
+            }
+        }
+
+        escapeService.activate()
     }
 }

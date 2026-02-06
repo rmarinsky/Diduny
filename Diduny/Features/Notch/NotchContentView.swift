@@ -62,6 +62,10 @@ struct NotchExpandedView: View {
                 ErrorExpandedView(message: message)
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
 
+            case let .info(message):
+                InfoExpandedView(message: message)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+
             case let .recording(mode):
                 RecordingExpandedView(mode: mode)
                     .transition(.opacity)
@@ -245,6 +249,42 @@ private struct ErrorExpandedView: View {
                 .frame(width: 18, height: 18)
                 .scaleEffect(appeared ? 1.0 : 0.5)
                 .opacity(appeared ? 0.6 : 0.0)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                appeared = true
+            }
+        }
+    }
+}
+
+private struct InfoExpandedView: View {
+    let message: String
+    @State private var appeared = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "escape")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.orange)
+                .scaleEffect(appeared ? 1.0 : 0.3)
+                .opacity(appeared ? 1.0 : 0.0)
+
+            Text(message)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .opacity(appeared ? 1.0 : 0.0)
+                .offset(x: appeared ? 0 : -5)
+
+            Spacer()
+
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 18, height: 18)
+                .scaleEffect(appeared ? 1.0 : 0.5)
+                .opacity(appeared ? 0.8 : 0.0)
         }
         .onAppear {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {

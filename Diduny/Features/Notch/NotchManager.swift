@@ -7,6 +7,7 @@ enum NotchState: Equatable {
     case processing(mode: RecordingMode)
     case success(text: String)
     case error(message: String)
+    case info(message: String)
 }
 
 enum RecordingMode: Equatable {
@@ -74,6 +75,14 @@ final class NotchManager: ObservableObject {
         state = .error(message: message)
         showExpanded()
         scheduleAutoDismiss(delay: 3.0)
+    }
+
+    /// Show informational message (e.g., "Press ESC again to cancel")
+    func showInfo(message: String, duration: TimeInterval = 1.5) {
+        autoDismissTask?.cancel()
+        state = .info(message: message)
+        showExpanded()
+        scheduleAutoDismiss(delay: duration)
     }
 
     func hide() {

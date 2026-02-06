@@ -29,6 +29,9 @@ extension AppDelegate {
     func cancelMeetingRecording() async {
         Log.app.info("cancelMeetingRecording: BEGIN")
 
+        // Deactivate escape cancel handler
+        EscapeCancelService.shared.deactivate()
+
         // Cancel meeting recorder
         meetingRecorderService.cancelRecording()
 
@@ -120,6 +123,11 @@ extension AppDelegate {
                 handleMeetingStateChange(.recording)
             }
 
+            // Activate escape cancel handler
+            await MainActor.run {
+                setupMeetingEscapeCancelHandler()
+            }
+
             // Save recovery state in case of crash
             if let path = meetingRecorderService.currentRecordingPath {
                 let state = RecoveryState(
@@ -143,6 +151,9 @@ extension AppDelegate {
         Log.app.info("stopMeetingRecording: BEGIN")
 
         guard #available(macOS 13.0, *) else { return }
+
+        // Deactivate escape cancel handler
+        EscapeCancelService.shared.deactivate()
 
         await MainActor.run {
             appState.meetingRecordingState = .processing
@@ -219,5 +230,38 @@ extension AppDelegate {
         }
 
         Log.app.info("stopMeetingRecording: END")
+    }
+
+    // MARK: - Escape Cancel Handler
+
+    private func setupMeetingEscapeCancelHandler() {
+        let escapeService = EscapeCancelService.shared
+
+        // On first escape: show confirmation notification
+        escapeService.onFirstEscape = { [weak self] in
+            NotchManager.shared.showInfo(
+                message: "Press ESC again to cancel",
+                duration: 1.5
+            )
+
+            // Resume showing recording state after info disappears
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(1.6))
+                guard let self,
+                      self.appState.meetingRecordingState == .recording else { return }
+                NotchManager.shared.startRecording(mode: .meeting)
+            }
+        }
+
+        // On second escape (confirmed cancel): cancel recording
+        escapeService.onCancel = { [weak self] in
+            guard #available(macOS 13.0, *) else { return }
+            Task { @MainActor in
+                await self?.cancelMeetingRecording()
+                NotchManager.shared.showInfo(message: "Recording cancelled")
+            }
+        }
+
+        escapeService.activate()
     }
 }
