@@ -183,6 +183,8 @@ final class PushToTalkService: PushToTalkServiceProtocol {
             return keyCode == 60 && flags.contains(.shift)
         case .rightOption:
             return keyCode == 61 && flags.contains(.option)
+        case .rightCommand:
+            return keyCode == 54 && flags.contains(.command)
         }
     }
 
@@ -196,6 +198,8 @@ final class PushToTalkService: PushToTalkServiceProtocol {
             keyCode == 60
         case .rightOption:
             keyCode == 61
+        case .rightCommand:
+            keyCode == 54
         }
     }
 }

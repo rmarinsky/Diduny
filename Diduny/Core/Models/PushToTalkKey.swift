@@ -1,10 +1,13 @@
 import Foundation
 
-enum PushToTalkKey: String, Codable, CaseIterable {
+enum PushToTalkKey: String, Codable, CaseIterable, Identifiable {
     case none
     case capsLock
     case rightShift
     case rightOption
+    case rightCommand
+
+    var id: String { rawValue }
 
     var displayName: String {
         switch self {
@@ -16,6 +19,8 @@ enum PushToTalkKey: String, Codable, CaseIterable {
             "Right Shift"
         case .rightOption:
             "Right Option"
+        case .rightCommand:
+            "Right Command"
         }
     }
 
@@ -29,6 +34,18 @@ enum PushToTalkKey: String, Codable, CaseIterable {
             "⇧"
         case .rightOption:
             "⌥"
+        case .rightCommand:
+            "⌘"
+        }
+    }
+
+    /// Label for picker display (symbol + name)
+    var pickerLabel: String {
+        switch self {
+        case .none:
+            "Disabled"
+        default:
+            "\(symbol) \(displayName)"
         }
     }
 }

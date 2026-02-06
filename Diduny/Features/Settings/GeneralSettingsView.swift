@@ -23,45 +23,37 @@ struct GeneralSettingsView: View {
             }
 
             Section {
-                translationPushToTalkSection
+                Picker("Key:", selection: $pushToTalkKey) {
+                    ForEach(PushToTalkKey.allCases) { key in
+                        Text(key.pickerLabel).tag(key)
+                    }
+                }
+                .onChange(of: pushToTalkKey) { _, newValue in
+                    SettingsStorage.shared.pushToTalkKey = newValue
+                    NotificationCenter.default.post(name: .pushToTalkKeyChanged, object: newValue)
+                }
+
+                recordingModeSection
             } header: {
-                Text("Translation Push to Talk")
-            } footer: {
-                Text("Hold the key to record, release to translate (EN ↔ UK).")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Text("Push to Talk")
             }
 
             Section {
-                pushToTalkSection
-
-                Divider()
-                    .padding(.vertical, 4)
-
-                Toggle("Enable hands-free mode", isOn: $handsFreeModeEnabled)
-                    .onChange(of: handsFreeModeEnabled) { _, newValue in
-                        SettingsStorage.shared.handsFreeModeEnabled = newValue
+                Picker("Key:", selection: $translationPushToTalkKey) {
+                    ForEach(PushToTalkKey.allCases) { key in
+                        Text(key.pickerLabel).tag(key)
                     }
-
-                if handsFreeModeEnabled {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Brief tap: toggle recording on/off")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("Long press (>0.5s): hold to record")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.leading, 20)
+                }
+                .onChange(of: translationPushToTalkKey) { _, newValue in
+                    SettingsStorage.shared.translationPushToTalkKey = newValue
+                    NotificationCenter.default.post(name: .translationPushToTalkKeyChanged, object: newValue)
                 }
             } header: {
-                Text("Push to Talk")
+                Text("Translation Push to Talk")
             } footer: {
-                if !handsFreeModeEnabled {
-                    Text("Hold the key to record, release to stop and transcribe.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                Text("Uses the same recording mode as Push to Talk above.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Section {
@@ -108,58 +100,59 @@ struct GeneralSettingsView: View {
         }
     }
 
-    // MARK: - Translation Push to Talk
+    // MARK: - Recording Mode
 
-    private var translationPushToTalkSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(PushToTalkKey.allCases, id: \.self) { key in
-                HStack {
-                    Image(systemName: translationPushToTalkKey == key ? "circle.inset.filled" : "circle")
-                        .foregroundColor(translationPushToTalkKey == key ? .accentColor : .secondary)
+    private var recordingModeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recording Mode:")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
 
-                    Text(key.displayName)
+            // Hold to record option
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: handsFreeModeEnabled ? "circle" : "circle.inset.filled")
+                    .foregroundColor(handsFreeModeEnabled ? .secondary : .accentColor)
+                    .font(.system(size: 14))
 
-                    if !key.symbol.isEmpty {
-                        Text(key.symbol)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Hold to record")
+                        .fontWeight(handsFreeModeEnabled ? .regular : .medium)
+                    Text("Hold key down while speaking, release to transcribe")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    translationPushToTalkKey = key
-                    SettingsStorage.shared.translationPushToTalkKey = key
-                    NotificationCenter.default.post(name: .translationPushToTalkKeyChanged, object: key)
+
+                Spacer()
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                handsFreeModeEnabled = false
+                SettingsStorage.shared.handsFreeModeEnabled = false
+            }
+
+            // Toggle mode option
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: handsFreeModeEnabled ? "circle.inset.filled" : "circle")
+                    .foregroundColor(handsFreeModeEnabled ? .accentColor : .secondary)
+                    .font(.system(size: 14))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Toggle mode")
+                        .fontWeight(handsFreeModeEnabled ? .medium : .regular)
+                    Text("Tap to start recording, tap again to stop")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
+
+                Spacer()
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                handsFreeModeEnabled = true
+                SettingsStorage.shared.handsFreeModeEnabled = true
             }
         }
-    }
-
-    private var pushToTalkSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(PushToTalkKey.allCases, id: \.self) { key in
-                HStack {
-                    Image(systemName: pushToTalkKey == key ? "circle.inset.filled" : "circle")
-                        .foregroundColor(pushToTalkKey == key ? .accentColor : .secondary)
-
-                    Text(key.displayName)
-
-                    if !key.symbol.isEmpty {
-                        Text(key.symbol)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    pushToTalkKey = key
-                    SettingsStorage.shared.pushToTalkKey = key
-                    NotificationCenter.default.post(name: .pushToTalkKeyChanged, object: key)
-                }
-            }
-        }
+        .padding(.top, 4)
     }
 }
 
@@ -170,5 +163,5 @@ extension Notification.Name {
 
 #Preview {
     GeneralSettingsView()
-        .frame(width: 450, height: 400)
+        .frame(width: 450, height: 500)
 }
