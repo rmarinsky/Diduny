@@ -138,27 +138,31 @@ final class PushToTalkService: PushToTalkServiceProtocol {
             isKeyPressed = true
 
             // Check for double-tap (toggle mode enabled)
-            if isToggleModeEnabled, let lastUp = lastKeyUpTime {
-                let timeSinceLastUp = eventTime - lastUp
+            if isToggleModeEnabled {
+                if let lastUp = lastKeyUpTime {
+                    let timeSinceLastUp = eventTime - lastUp
 
-                if timeSinceLastUp < doubleTapThreshold {
-                    // Double-tap detected
-                    if isHandsFreeMode {
-                        // Already in hands-free mode: stop recording
-                        isHandsFreeMode = false
-                        Log.app.info("Double-tap detected - stopping recording (toggle off)")
-                        onToggle?()
-                    } else {
-                        // Enter hands-free mode: start recording via toggle
-                        isHandsFreeMode = true
-                        Log.app.info("Double-tap detected - starting recording (toggle on)")
-                        onToggle?()
+                    if timeSinceLastUp < doubleTapThreshold {
+                        // Double-tap detected
+                        if isHandsFreeMode {
+                            // Already in toggle mode: stop recording
+                            isHandsFreeMode = false
+                            Log.app.info("Double-tap detected - stopping recording (toggle off)")
+                            onToggle?()
+                        } else {
+                            // Enter toggle mode: start recording
+                            isHandsFreeMode = true
+                            Log.app.info("Double-tap detected - starting recording (toggle on)")
+                            onToggle?()
+                        }
                     }
-                    return
+                    // Single tap in toggle mode: do nothing
                 }
+                // First tap or single tap: do nothing, wait for potential double-tap
+                return
             }
 
-            // Normal press: start recording (push-to-talk)
+            // Hold-to-record mode: start recording on key down
             Log.app.info("\(self.selectedKey.displayName) pressed - starting recording")
             onKeyDown?()
 
@@ -167,13 +171,12 @@ final class PushToTalkService: PushToTalkServiceProtocol {
             isKeyPressed = false
             lastKeyUpTime = eventTime
 
-            if isHandsFreeMode {
-                // In hands-free mode: don't stop recording on release
-                Log.app.info("\(self.selectedKey.displayName) released - hands-free mode active, continuing")
+            if isToggleModeEnabled {
+                // In toggle mode: don't stop on release
                 return
             }
 
-            // Normal release: stop recording
+            // Hold-to-record mode: stop recording on release
             Log.app.info("\(self.selectedKey.displayName) released - stopping recording")
             onKeyUp?()
         }
