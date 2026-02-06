@@ -12,6 +12,9 @@ packages:
   DynamicNotchKit:
     url: https://github.com/MrKai77/DynamicNotchKit
     from: 1.0.0
+  LaunchAtLogin:
+    url: https://github.com/sindresorhus/LaunchAtLogin-Modern
+    from: 1.0.0
 
 configs:
   Debug: debug
@@ -50,6 +53,7 @@ targets:
     dependencies:
       - package: KeyboardShortcuts
       - package: DynamicNotchKit
+      - package: LaunchAtLogin
     settings:
       base:
         INFOPLIST_FILE: Diduny/Resources/Info.plist
