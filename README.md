@@ -1,6 +1,12 @@
-# Diduny
+<p align="center">
+  <img src="icons/transparent/App Store.png" width="128" height="128" alt="Diduny Icon">
+</p>
 
-A native macOS menu bar app for voice dictation. Record your voice, get it transcribed via Soniox API, and automatically paste the text.
+<h1 align="center">Diduny</h1>
+
+<p align="center">
+  A native macOS menu bar app for voice dictation. Record your voice, get it transcribed via Soniox API, and automatically paste the text.
+</p>
 
 ## Features
 
