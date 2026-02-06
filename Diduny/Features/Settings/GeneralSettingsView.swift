@@ -1,11 +1,11 @@
 import KeyboardShortcuts
-import ServiceManagement
+import LaunchAtLogin
 import SwiftUI
 
 struct GeneralSettingsView: View {
     @State private var autoPaste = SettingsStorage.shared.autoPaste
     @State private var playSound = SettingsStorage.shared.playSoundOnCompletion
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var pushToTalkKey = SettingsStorage.shared.pushToTalkKey
     @State private var translationPushToTalkKey = SettingsStorage.shared.translationPushToTalkKey
 
@@ -54,17 +54,7 @@ struct GeneralSettingsView: View {
 
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, newValue in
-                        do {
-                            if newValue {
-                                try SMAppService.mainApp.register()
-                            } else {
-                                try SMAppService.mainApp.unregister()
-                            }
-                        } catch {
-                            Log.app.error("Failed to update launch at login: \(error.localizedDescription)")
-                            // Revert toggle on failure
-                            launchAtLogin = !newValue
-                        }
+                        LaunchAtLogin.isEnabled = newValue
                     }
             } header: {
                 Text("Behavior")

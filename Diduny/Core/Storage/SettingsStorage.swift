@@ -1,5 +1,6 @@
 import CoreAudio
 import Foundation
+import LaunchAtLogin
 
 final class SettingsStorage {
     static let shared = SettingsStorage()
@@ -53,8 +54,8 @@ final class SettingsStorage {
     }
 
     var launchAtLogin: Bool {
-        get { defaults.bool(forKey: Key.launchAtLogin.rawValue) }
-        set { defaults.set(newValue, forKey: Key.launchAtLogin.rawValue) }
+        get { LaunchAtLogin.isEnabled }
+        set { LaunchAtLogin.isEnabled = newValue }
     }
 
     // MARK: - Push to Talk
