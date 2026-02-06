@@ -10,9 +10,9 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     private var isReady = false
     private var startTime: Date?
 
-    // Hands-free mode tracking
-    private var keyPressEventTime: TimeInterval?
-    private let briefPressThreshold: TimeInterval = 0.5
+    // Double-tap detection for toggle mode
+    private var lastKeyUpTime: TimeInterval?
+    private let doubleTapThreshold: TimeInterval = 0.4
     private var isHandsFreeMode = false
 
     var selectedKey: PushToTalkKey = .none
@@ -22,8 +22,8 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     /// Called when recording should toggle (for hands-free mode)
     var onToggle: (() -> Void)?
 
-    /// Whether hands-free mode is currently enabled (from settings)
-    private var isHandsFreeModeEnabled: Bool {
+    /// Whether toggle mode is enabled (from settings)
+    private var isToggleModeEnabled: Bool {
         SettingsStorage.shared.handsFreeModeEnabled
     }
 
@@ -36,7 +36,7 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         isReady = false
         startTime = Date()
         isHandsFreeMode = false
-        keyPressEventTime = nil
+        lastKeyUpTime = nil
 
         // Monitor flags changed events globally
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
@@ -72,14 +72,14 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         isReady = false
         startTime = nil
         isHandsFreeMode = false
-        keyPressEventTime = nil
+        lastKeyUpTime = nil
         Log.app.info("Stopped monitoring")
     }
 
     /// Reset hands-free mode (call when recording is cancelled externally)
     func resetHandsFreeMode() {
         isHandsFreeMode = false
-        keyPressEventTime = nil
+        lastKeyUpTime = nil
     }
 
     private func handleFlagsChanged(_ event: NSEvent) {
@@ -94,21 +94,21 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
         let isPressed = isKeyCurrentlyPressed(keyCode: keyCode, flags: flags)
 
-        // Special handling for Caps Lock (toggle key)
+        // Special handling for Caps Lock (toggle key by nature)
         if selectedKey == .capsLock {
-            handleCapsLockEvent(keyCode: keyCode, eventTime: eventTime)
+            handleCapsLockEvent(keyCode: keyCode)
             return
         }
 
-        // Handle modifier keys with hands-free support
+        // Handle modifier keys with double-tap detection
         handleModifierKeyEvent(isPressed: isPressed, eventTime: eventTime)
     }
 
-    private func handleCapsLockEvent(keyCode: UInt16, eventTime _: TimeInterval) {
+    private func handleCapsLockEvent(keyCode: UInt16) {
         guard keyCode == 57 else { return }
 
-        if isHandsFreeModeEnabled {
-            // Caps Lock in hands-free mode: each press toggles
+        if isToggleModeEnabled {
+            // Caps Lock in toggle mode: each press toggles
             if !isKeyPressed {
                 isKeyPressed = true
                 Log.app.info("Caps Lock pressed - toggling recording")
@@ -136,40 +136,46 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         if isPressed {
             // Key down
             isKeyPressed = true
-            keyPressEventTime = eventTime
 
-            if isHandsFreeModeEnabled, isHandsFreeMode {
-                // In hands-free mode: toggle recording on key down
-                isHandsFreeMode = false
-                Log.app.info("Hands-free toggle - stopping recording")
-                onToggle?()
-                return
+            // Check for double-tap (toggle mode enabled)
+            if isToggleModeEnabled, let lastUp = lastKeyUpTime {
+                let timeSinceLastUp = eventTime - lastUp
+
+                if timeSinceLastUp < doubleTapThreshold {
+                    // Double-tap detected
+                    if isHandsFreeMode {
+                        // Already in hands-free mode: stop recording
+                        isHandsFreeMode = false
+                        Log.app.info("Double-tap detected - stopping recording (toggle off)")
+                        onToggle?()
+                    } else {
+                        // Enter hands-free mode: start recording via toggle
+                        isHandsFreeMode = true
+                        Log.app.info("Double-tap detected - starting recording (toggle on)")
+                        onToggle?()
+                    }
+                    return
+                }
             }
 
-            // Start recording on key down
+            // Normal press: start recording (push-to-talk)
             Log.app.info("\(self.selectedKey.displayName) pressed - starting recording")
             onKeyDown?()
 
         } else {
             // Key up
             isKeyPressed = false
+            lastKeyUpTime = eventTime
 
-            if isHandsFreeModeEnabled, let pressTime = keyPressEventTime {
-                let pressDuration = eventTime - pressTime
-
-                if pressDuration < briefPressThreshold {
-                    // Brief press: enter hands-free mode
-                    isHandsFreeMode = true
-                    Log.app.info("Brief press detected (\(String(format: "%.2f", pressDuration))s) - entering hands-free mode")
-                    // Don't stop recording - user will toggle with next press
-                    return
-                }
+            if isHandsFreeMode {
+                // In hands-free mode: don't stop recording on release
+                Log.app.info("\(self.selectedKey.displayName) released - hands-free mode active, continuing")
+                return
             }
 
-            // Long press or hands-free disabled: stop recording
+            // Normal release: stop recording
             Log.app.info("\(self.selectedKey.displayName) released - stopping recording")
             onKeyUp?()
-            keyPressEventTime = nil
         }
     }
 

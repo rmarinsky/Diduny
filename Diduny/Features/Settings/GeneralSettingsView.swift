@@ -139,7 +139,7 @@ struct GeneralSettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Toggle mode")
                         .fontWeight(handsFreeModeEnabled ? .medium : .regular)
-                    Text("Tap to start recording, tap again to stop")
+                    Text("Double-tap to start, double-tap again to stop")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
