@@ -126,30 +126,15 @@ echo -e "${GREEN}✓ App exported${NC}"
 if [ "$SKIP_NOTARIZE" = false ]; then
     echo -e "${YELLOW}[5/6] Notarizing with Apple...${NC}"
 
-    # Check for credentials
-    if [ -z "$APPLE_ID" ]; then
-        echo -n "Enter your Apple ID (email): "
-        read APPLE_ID
-    fi
-
-    if [ -z "$APP_PASSWORD" ]; then
-        echo -e "${BLUE}Note: Use an app-specific password from https://appleid.apple.com${NC}"
-        echo -n "Enter app-specific password: "
-        read -s APP_PASSWORD
-        echo ""
-    fi
-
     # Create ZIP for notarization
     echo "Creating ZIP for notarization..."
     ZIP_PATH="${BUILD_DIR}/${APP_NAME}.zip"
     ditto -c -k --keepParent "${APP_PATH}" "${ZIP_PATH}"
 
-    # Submit for notarization
+    # Submit for notarization using keychain profile
     echo "Submitting to Apple notarization service..."
     xcrun notarytool submit "${ZIP_PATH}" \
-        --apple-id "${APPLE_ID}" \
-        --password "${APP_PASSWORD}" \
-        --team-id "${TEAM_ID}" \
+        --keychain-profile "Diduny" \
         --wait
 
     # Staple the notarization ticket
