@@ -23,7 +23,7 @@ configs:
 
 settings:
   base:
-    MARKETING_VERSION: "1.6.0"
+    MARKETING_VERSION: "1.6.1"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: "8JL9TM5WLG"
     CODE_SIGN_STYLE: Automatic

@@ -1,8 +1,18 @@
 <p align="center">
+  <a href="https://stand-with-ukraine.pp.ua">
+    <img src="https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/banner-direct-single.svg" alt="Stand With Ukraine">
+  </a>
+</p>
+
+<p align="center">
   <img src="icons/transparent/App Store.png" width="128" height="128" alt="Diduny Icon">
 </p>
 
 <h1 align="center">Diduny</h1>
+
+<p align="center">
+  <a href="https://stand-with-ukraine.pp.ua"><img src="https://img.shields.io/badge/made_in-ukraine-ffd700.svg?labelColor=0057b7" alt="Made in Ukraine"></a>
+</p>
 
 <p align="center">
   A native macOS menu bar app for voice dictation. Record your voice, get it transcribed via Soniox API, and automatically paste the text.

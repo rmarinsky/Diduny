@@ -176,9 +176,9 @@ extension AppDelegate {
         let rtService = realtimeTranscriptionService
 
         // Clear mic buffer
-        micBufferLock.lock()
-        micAudioBuffer = Data()
-        micBufferLock.unlock()
+        micBufferLock.withLock {
+            micAudioBuffer = Data()
+        }
 
         // Wire raw PCM audio from system capture to WebSocket,
         // mixing in microphone audio before sending
