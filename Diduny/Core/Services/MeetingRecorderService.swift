@@ -14,6 +14,11 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
 
     private(set) var isRecording = false
 
+    /// Exposes the system audio capture service for real-time streaming
+    var systemAudioCaptureService: SystemAudioCaptureService? {
+        systemAudioService
+    }
+
     /// Returns the current recording file path, if recording
     var currentRecordingPath: String? {
         outputURL?.path

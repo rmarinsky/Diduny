@@ -74,8 +74,25 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("Behavior")
             }
+
+            Section {
+                Button("Show Welcome Tour") {
+                    showOnboarding()
+                }
+                .buttonStyle(.link)
+            } header: {
+                Text("Help")
+            }
         }
         .formStyle(.grouped)
+    }
+
+    private func showOnboarding() {
+        // Show onboarding from settings (without resetting user's completion status)
+        OnboardingManager.shared.showFromSettings()
+        OnboardingWindowController.shared.showOnboarding {
+            // Onboarding completed
+        }
     }
 
     private var hotkeySection: some View {

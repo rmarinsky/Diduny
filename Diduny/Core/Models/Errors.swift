@@ -46,6 +46,23 @@ enum AudioError: LocalizedError {
     }
 }
 
+enum RealtimeTranscriptionError: LocalizedError {
+    case connectionFailed(String)
+    case webSocketError(Error)
+    case apiKeyMissing
+
+    var errorDescription: String? {
+        switch self {
+        case let .connectionFailed(reason):
+            "Real-time connection failed: \(reason)"
+        case let .webSocketError(error):
+            "WebSocket error: \(error.localizedDescription)"
+        case .apiKeyMissing:
+            "API key required for real-time transcription"
+        }
+    }
+}
+
 enum KeychainError: LocalizedError {
     case saveFailed
     case readFailed

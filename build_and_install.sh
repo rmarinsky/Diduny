@@ -31,12 +31,11 @@ if [ -d "$INSTALL_PATH" ]; then
     rm -rf "$INSTALL_PATH"
 fi
 
-# Step 3: Reset permissions (Accessibility and Screen Recording)
-echo "Resetting Accessibility permissions for $BUNDLE_ID..."
-tccutil reset Accessibility "$BUNDLE_ID" 2>/dev/null || true
-
-echo "Resetting Screen Recording permissions for $BUNDLE_ID..."
-tccutil reset ScreenCapture "$BUNDLE_ID" 2>/dev/null || true
+# Note: Permissions are preserved to avoid re-granting during development
+# To reset permissions manually, run:
+#   tccutil reset Accessibility "$BUNDLE_ID"
+#   tccutil reset ScreenCapture "$BUNDLE_ID"
+#   tccutil reset Microphone "$BUNDLE_ID"
 
 echo "Clean-up complete."
 echo ""

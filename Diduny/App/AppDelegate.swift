@@ -27,6 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var translationPushToTalkService = PushToTalkService()
     @available(macOS 13.0, *)
     lazy var meetingRecorderService = MeetingRecorderService()
+    @available(macOS 13.0, *)
+    lazy var realtimeTranscriptionService = SonioxRealtimeService()
+    var micEngine: AVAudioEngine?
+    let micBufferLock = NSLock()
+    var micAudioBuffer = Data()
 
     // MARK: - Lifecycle
 
@@ -69,8 +74,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
-        // Setup hotkeys and push-to-talk immediately
-        // Permissions will be requested on-demand when user tries to record
+        // Check if onboarding needs to be shown
+        // Uses shouldShowOnboarding which skips for existing users with mic access
+        if OnboardingManager.shared.shouldShowOnboarding {
+            // Setup defaults for new users
+            OnboardingManager.shared.setupDefaultsForNewUser()
+
+            // Show onboarding window
+            OnboardingWindowController.shared.showOnboarding { [weak self] in
+                // Setup after onboarding completes
+                self?.setupAfterOnboarding()
+            }
+        } else {
+            // Normal startup
+            setupAfterOnboarding()
+        }
+    }
+
+    /// Setup that runs after onboarding completes (or if already completed)
+    private func setupAfterOnboarding() {
+        // Setup hotkeys and push-to-talk
         setupHotkeys()
         setupPushToTalk()
         setupTranslationPushToTalk()
@@ -78,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Check for orphaned recordings from previous crash
         checkForOrphanedRecordings()
 
-        // Check for API key
+        // Check for API key - only prompt if not set during onboarding
         if KeychainManager.shared.getSonioxAPIKey() == nil {
             Task {
                 try? await Task.sleep(for: .milliseconds(500))

@@ -60,7 +60,8 @@ final class SettingsStorage {
             guard let rawValue = defaults.string(forKey: Key.pushToTalkKey.rawValue),
                   let key = PushToTalkKey(rawValue: rawValue)
             else {
-                return .rightOption
+                // Default to Right Shift for double-tap mode
+                return .rightShift
             }
             return key
         }
@@ -101,11 +102,19 @@ final class SettingsStorage {
         }
     }
 
-    // MARK: - Hands-Free Mode
+    // MARK: - Hands-Free Mode (Double-Tap Toggle)
 
-    /// When enabled, brief press enters hands-free mode (toggle), long press is push-to-talk
+    /// When enabled, double-tap starts/stops recording (toggle mode)
+    /// When disabled, hold-to-record mode is used
     var handsFreeModeEnabled: Bool {
-        get { defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue) }
+        get {
+            // Default to true (double-tap mode enabled)
+            // Use object check to distinguish "not set" from "set to false"
+            if defaults.object(forKey: Key.handsFreeModeEnabled.rawValue) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue)
+        }
         set { defaults.set(newValue, forKey: Key.handsFreeModeEnabled.rawValue) }
     }
 }

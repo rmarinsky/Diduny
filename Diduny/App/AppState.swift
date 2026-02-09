@@ -107,6 +107,7 @@ final class AppState {
     }
 
     var meetingRecordingStartTime: Date?
+    var liveTranscriptStore: LiveTranscriptStore?
 
     // Translation recording (EN <-> UK)
     var translationRecordingState: TranslationRecordingState = .idle {

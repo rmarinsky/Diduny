@@ -30,6 +30,11 @@ struct SettingsView: View {
                 .tabItem {
                     Label("API", systemImage: "key")
                 }
+
+            AboutSettingsView()
+                .tabItem {
+                    Label("About", systemImage: "info.circle")
+                }
         }
         .frame(width: 600, height: 650)
         .onAppear {

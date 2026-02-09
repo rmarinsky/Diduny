@@ -6,6 +6,7 @@ enum PushToTalkKey: String, Codable, CaseIterable, Identifiable {
     case rightShift
     case rightOption
     case rightCommand
+    case rightControl
 
     var id: String { rawValue }
 
@@ -21,6 +22,8 @@ enum PushToTalkKey: String, Codable, CaseIterable, Identifiable {
             "Right Option"
         case .rightCommand:
             "Right Command"
+        case .rightControl:
+            "Right Control"
         }
     }
 
@@ -36,6 +39,8 @@ enum PushToTalkKey: String, Codable, CaseIterable, Identifiable {
             "⌥"
         case .rightCommand:
             "⌘"
+        case .rightControl:
+            "⌃"
         }
     }
 

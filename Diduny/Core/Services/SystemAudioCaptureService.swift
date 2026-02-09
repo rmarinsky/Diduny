@@ -26,6 +26,10 @@ final class SystemAudioCaptureService: NSObject {
     /// Whether to use callback mode (forwarding buffers) instead of file writing
     var useCallbackMode: Bool = false
 
+    /// Secondary callback for raw PCM data (fires in both file-write and callback modes)
+    var onRawAudioData: ((Data) -> Void)?
+    private var rawAudioCallbackCount = 0
+
     // MARK: - Permission Check
 
     static func checkPermission() async -> Bool {
@@ -173,6 +177,19 @@ extension SystemAudioCaptureService: SCStreamOutput {
     func stream(_: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio else { return }
 
+        // Stream raw PCM data to real-time transcription (fires in both modes)
+        if let onRawAudioData {
+            if let data = extractRawPCMData(from: sampleBuffer) {
+                rawAudioCallbackCount += 1
+                if rawAudioCallbackCount <= 5 || rawAudioCallbackCount % 200 == 0 {
+                    NSLog("[AudioCapture] onRawAudioData callback #%d, data size=%d bytes", rawAudioCallbackCount, data.count)
+                }
+                onRawAudioData(data)
+            }
+        } else if sampleCount <= 3 {
+            NSLog("[AudioCapture] onRawAudioData is nil — real-time streaming not wired")
+        }
+
         // Callback mode: forward buffer to mixer
         if useCallbackMode {
             onAudioBuffer?(sampleBuffer)
@@ -248,6 +265,42 @@ extension SystemAudioCaptureService: SCStreamOutput {
 
         copyAudioData(to: pcmBuffer, from: dataPointer, asbd: asbd, numSamples: numSamples)
         return pcmBuffer
+    }
+
+    private func extractRawPCMData(from sampleBuffer: CMSampleBuffer) -> Data? {
+        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return nil }
+
+        var totalLength = 0
+        var dataPointer: UnsafeMutablePointer<Int8>?
+        let status = CMBlockBufferGetDataPointer(
+            blockBuffer,
+            atOffset: 0,
+            lengthAtOffsetOut: nil,
+            totalLengthOut: &totalLength,
+            dataPointerOut: &dataPointer
+        )
+
+        guard status == kCMBlockBufferNoErr, let ptr = dataPointer, totalLength > 0 else {
+            return nil
+        }
+
+        // ScreenCaptureKit outputs 32-bit float PCM, but Soniox expects s16le (16-bit signed int).
+        // Convert float32 samples to int16 samples.
+        let floatCount = totalLength / MemoryLayout<Float>.size
+        guard floatCount > 0 else { return nil }
+
+        let floatPointer = UnsafeRawPointer(ptr).bindMemory(to: Float.self, capacity: floatCount)
+
+        var int16Data = Data(count: floatCount * MemoryLayout<Int16>.size)
+        int16Data.withUnsafeMutableBytes { rawBuffer in
+            let int16Buffer = rawBuffer.bindMemory(to: Int16.self)
+            for i in 0 ..< floatCount {
+                let clamped = max(-1.0, min(1.0, floatPointer[i]))
+                int16Buffer[i] = Int16(clamped * Float(Int16.max))
+            }
+        }
+
+        return int16Data
     }
 
     private func getDataPointer(from blockBuffer: CMBlockBuffer) -> UnsafeMutablePointer<Int8>? {
