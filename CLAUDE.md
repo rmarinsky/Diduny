@@ -54,6 +54,7 @@
 | `MeetingRecorderService` | Orchestrate meeting recording with system audio capture |
 
 ### Whisper Local Transcription (Diduny/Core/Whisper/)
+
 | Component | Purpose |
 |-----------|---------|
 | `WhisperBridge.h` | Bridging header importing whisper.h C API |

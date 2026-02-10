@@ -287,6 +287,7 @@ extension AppDelegate {
 
         // Track audioURL for library save in error path
         var capturedAudioURL: URL?
+        let stopTime = Date()
 
         do {
             guard let audioURL = try await meetingRecorderService.stopRecording() else {
@@ -344,7 +345,7 @@ extension AppDelegate {
             Log.app.info("stopMeetingRecording: SUCCESS")
 
             // Save to recordings library (copies file before we delete temp)
-            let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+            let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             RecordingsLibraryStorage.shared.saveRecording(
                 audioURL: audioURL,
                 type: .meeting,
@@ -368,7 +369,7 @@ extension AppDelegate {
 
             // Save recording without transcription so user can process later
             if let audioURL = capturedAudioURL {
-                let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+                let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                 RecordingsLibraryStorage.shared.saveRecording(
                     audioURL: audioURL,
                     type: .meeting,

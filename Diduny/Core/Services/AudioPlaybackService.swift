@@ -15,7 +15,7 @@ final class AudioPlaybackService: NSObject {
     private var player: AVAudioPlayer?
     private var timer: Timer?
 
-    private override init() {
+    override private init() {
         super.init()
     }
 
@@ -109,6 +109,7 @@ extension AudioPlaybackService: AVAudioPlayerDelegate {
         Task { @MainActor in
             stopTimer()
             isPlaying = false
+            player?.currentTime = 0
             currentTime = 0
         }
     }

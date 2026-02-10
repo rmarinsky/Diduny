@@ -225,6 +225,7 @@ final class WhisperModelManager: NSObject {
     }
 
     func deleteModel(_ model: WhisperModel) {
+        cancelDownload(model)
         let path = modelPath(for: model)
         try? FileManager.default.removeItem(atPath: path)
         downloadedModels.remove(model.name)

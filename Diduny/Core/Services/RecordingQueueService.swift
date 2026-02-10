@@ -26,8 +26,13 @@ final class RecordingQueueService {
     ) {
         guard !ids.isEmpty else { return }
 
-        // Mark all as processing in storage
+        // Reset any items left in processing state from cancelled task
         let storage = RecordingsLibraryStorage.shared
+        for recording in storage.recordings where recording.status == .processing {
+            storage.updateRecording(id: recording.id, status: .unprocessed)
+        }
+
+        // Mark all as processing in storage
         for id in ids {
             storage.updateRecording(id: id, status: .processing)
         }
@@ -61,6 +66,11 @@ final class RecordingQueueService {
     func cancelAll() {
         processingTask?.cancel()
         processingTask = nil
+        // Reset any recordings left in processing state
+        let storage = RecordingsLibraryStorage.shared
+        for recording in storage.recordings where recording.status == .processing {
+            storage.updateRecording(id: recording.id, status: .unprocessed)
+        }
         isProcessing = false
         currentRecordingId = nil
         queueCount = 0

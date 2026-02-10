@@ -120,8 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let needsSoniox = SettingsStorage.shared.transcriptionProvider == .soniox
             || SettingsStorage.shared.translationProvider == .soniox
         if needsSoniox,
-           KeychainManager.shared.getSonioxAPIKey() == nil
-        {
+           KeychainManager.shared.getSonioxAPIKey() == nil {
             Task {
                 try? await Task.sleep(for: .milliseconds(500))
                 openSettings()
@@ -170,19 +169,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let audioData = try Data(contentsOf: URL(fileURLWithPath: state.tempFilePath))
                 Log.app.info("Recovered audio data: \(audioData.count) bytes")
 
-                var service = activeTranscriptionService
-                if SettingsStorage.shared.transcriptionProvider == .soniox {
-                    guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                        throw TranscriptionError.noAPIKey
-                    }
-                    service.apiKey = apiKey
-                }
-
                 let text: String
                 switch state.recordingType {
                 case .voice, .meeting:
+                    var service = activeTranscriptionService
+                    if SettingsStorage.shared.transcriptionProvider == .soniox {
+                        guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                            throw TranscriptionError.noAPIKey
+                        }
+                        service.apiKey = apiKey
+                    }
                     text = try await service.transcribe(audioData: audioData)
                 case .translation:
+                    var service = activeTranslationService
+                    if SettingsStorage.shared.translationProvider == .soniox {
+                        guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                            throw TranscriptionError.noAPIKey
+                        }
+                        service.apiKey = apiKey
+                    }
                     text = try await service.translateAndTranscribe(audioData: audioData)
                 }
 

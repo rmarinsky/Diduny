@@ -39,8 +39,10 @@ enum AudioConverter {
             throw WhisperError.audioConversionFailed
         }
 
-        // If source is already 16kHz mono, read directly
-        if sourceFormat.sampleRate == whisperSampleRate, sourceFormat.channelCount == 1 {
+        // If source is already 16kHz mono Float32, read directly
+        if sourceFormat.sampleRate == whisperSampleRate,
+           sourceFormat.channelCount == 1,
+           sourceFormat.commonFormat == .pcmFormatFloat32 {
             guard let buffer = AVAudioPCMBuffer(
                 pcmFormat: sourceFormat,
                 frameCapacity: sourceFrameCount
@@ -59,7 +61,7 @@ enum AudioConverter {
 
         // Calculate output frame count
         let ratio = whisperSampleRate / sourceFormat.sampleRate
-        let outputFrameCount = AVAudioFrameCount(Double(sourceFrameCount) * ratio)
+        let outputFrameCount = AVAudioFrameCount(ceil(Double(sourceFrameCount) * ratio))
 
         guard let outputBuffer = AVAudioPCMBuffer(
             pcmFormat: targetFormat,

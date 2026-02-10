@@ -38,20 +38,15 @@ actor WhisperContext {
         params.no_timestamps = true
         params.single_segment = false
 
-        if let language {
-            language.withCString { cStr in
-                params.language = cStr
-            }
-        } else {
-            "auto".withCString { cStr in
-                params.language = cStr
-            }
-        }
+        let languageCString = Array((language ?? "auto").utf8CString)
 
         Log.whisper.info("Starting transcription: \(samples.count) samples, threads=\(threadCount)")
 
-        let result = samples.withUnsafeBufferPointer { buffer in
-            whisper_full(context, params, buffer.baseAddress, Int32(buffer.count))
+        let result = languageCString.withUnsafeBufferPointer { langBuf in
+            params.language = langBuf.baseAddress
+            return samples.withUnsafeBufferPointer { buffer in
+                whisper_full(context, params, buffer.baseAddress, Int32(buffer.count))
+            }
         }
 
         guard result == 0 else {

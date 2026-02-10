@@ -101,7 +101,7 @@ extension AppDelegate {
                 }
                 return
             }
-            Log.app.info("startTranslationRecording: API key found (\(apiKey.prefix(4))...)")
+            Log.app.info("startTranslationRecording: Soniox API key found")
         case .whisperLocal:
             guard WhisperModelManager.shared.selectedModel() != nil else {
                 Log.app.warning("startTranslationRecording: No Whisper model selected")

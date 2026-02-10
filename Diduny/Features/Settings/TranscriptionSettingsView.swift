@@ -43,8 +43,8 @@ struct TranscriptionSettingsView: View {
             // Transcription provider
             Section("Transcription") {
                 Picker("Provider", selection: $transcriptionProvider) {
-                    ForEach(TranscriptionProvider.allCases) { p in
-                        Text(p.displayName).tag(p)
+                    ForEach(TranscriptionProvider.allCases) { provider in
+                        Text(provider.displayName).tag(provider)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -56,8 +56,8 @@ struct TranscriptionSettingsView: View {
             // Translation provider
             Section("Translation") {
                 Picker("Provider", selection: $translationProvider) {
-                    ForEach(TranscriptionProvider.allCases) { p in
-                        Text(p.displayName).tag(p)
+                    ForEach(TranscriptionProvider.allCases) { provider in
+                        Text(provider.displayName).tag(provider)
                     }
                 }
                 .pickerStyle(.segmented)
