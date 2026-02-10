@@ -26,9 +26,9 @@ struct SettingsView: View {
                     Label("Permissions", systemImage: "lock.shield")
                 }
 
-            APISettingsView()
+            TranscriptionSettingsView()
                 .tabItem {
-                    Label("API", systemImage: "key")
+                    Label("Transcription", systemImage: "waveform")
                 }
 
             AboutSettingsView()

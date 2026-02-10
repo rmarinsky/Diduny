@@ -89,16 +89,31 @@ extension AppDelegate {
             return
         }
 
-        guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
-            Log.app.warning("startTranslationRecording: No API key found")
-            await MainActor.run {
-                appState.errorMessage = "Please add your Soniox API key in Settings"
-                appState.translationRecordingState = .error
-                handleTranslationStateChange(.error)
+        // Provider-specific validation
+        switch SettingsStorage.shared.translationProvider {
+        case .soniox:
+            guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
+                Log.app.warning("startTranslationRecording: No API key found")
+                await MainActor.run {
+                    appState.errorMessage = "Please add your Soniox API key in Settings"
+                    appState.translationRecordingState = .error
+                    handleTranslationStateChange(.error)
+                }
+                return
             }
-            return
+            Log.app.info("startTranslationRecording: API key found (\(apiKey.prefix(4))...)")
+        case .whisperLocal:
+            guard WhisperModelManager.shared.selectedModel() != nil else {
+                Log.app.warning("startTranslationRecording: No Whisper model selected")
+                await MainActor.run {
+                    appState.errorMessage = "No Whisper model downloaded. Please download one in Settings."
+                    appState.translationRecordingState = .error
+                    handleTranslationStateChange(.error)
+                }
+                return
+            }
+            Log.app.info("startTranslationRecording: Whisper model ready")
         }
-        Log.app.info("startTranslationRecording: API key found")
 
         // Determine device with fallback to system default
         var device: AudioDevice?
@@ -223,24 +238,34 @@ extension AppDelegate {
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
 
+        // Capture recording start time for duration calculation
+        let recordingStartTime = appState.translationRecordingStartTime
+
         await MainActor.run {
             appState.translationRecordingState = .processing
             handleTranslationStateChange(.processing)
         }
 
+        // Capture audio data first so it's available in both success and error paths
+        var capturedAudioData: Data?
+
         do {
             Log.app.info("stopTranslationRecording: Stopping audio recorder")
             let audioData = try await audioRecorder.stopRecording()
+            capturedAudioData = audioData
             Log.app.info("stopTranslationRecording: Got audio data, size = \(audioData.count) bytes")
 
-            guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                Log.app.error("stopTranslationRecording: No API key!")
-                throw TranscriptionError.noAPIKey
+            var service = activeTranslationService
+            if SettingsStorage.shared.translationProvider == .soniox {
+                guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                    Log.app.error("stopTranslationRecording: No API key!")
+                    throw TranscriptionError.noAPIKey
+                }
+                service.apiKey = apiKey
             }
 
-            Log.app.info("stopTranslationRecording: Calling translation service (EN <-> UK)")
-            transcriptionService.apiKey = apiKey
-            let text = try await transcriptionService.translateAndTranscribe(audioData: audioData)
+            Log.app.info("stopTranslationRecording: Calling translation service (\(SettingsStorage.shared.translationProvider.rawValue))")
+            let text = try await service.translateAndTranscribe(audioData: audioData)
             Log.app.info("stopTranslationRecording: Translation received: \(text.prefix(50))...")
 
             clipboardService.copy(text: text)
@@ -269,6 +294,15 @@ extension AppDelegate {
             }
             Log.app.info("stopTranslationRecording: SUCCESS")
 
+            // Save to recordings library
+            let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+            RecordingsLibraryStorage.shared.saveRecording(
+                audioData: audioData,
+                type: .translation,
+                duration: duration,
+                transcriptionText: text
+            )
+
             // Optional operations run after state change (non-blocking for UI)
             if SettingsStorage.shared.playSoundOnCompletion {
                 Log.app.info("stopTranslationRecording: Playing sound")
@@ -284,6 +318,17 @@ extension AppDelegate {
                 guard case .emptyTranscription = error as? TranscriptionError else { return false }
                 return true
             }()
+
+            // Save recording without transcription so user can process later
+            if let audioData = capturedAudioData {
+                let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+                RecordingsLibraryStorage.shared.saveRecording(
+                    audioData: audioData,
+                    type: .translation,
+                    duration: duration
+                )
+            }
+
             await MainActor.run {
                 appState.errorMessage = error.localizedDescription
                 appState.isEmptyTranscription = isEmptyTranscription

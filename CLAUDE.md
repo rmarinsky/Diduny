@@ -46,11 +46,27 @@
 | `AudioDeviceManager` | Lists input devices, auto-detects best microphone |
 | `AudioRecorderService` | Records audio using AVAudioEngine |
 | `SonioxTranscriptionService` | 4-step async transcription: upload → create job → poll → get text |
+| `WhisperTranscriptionService` | Local on-device transcription using whisper.cpp |
 | `ClipboardService` | Copy to clipboard, simulate Cmd+V paste |
 | `HotkeyService` | Global hotkey registration using Carbon |
 | `PushToTalkService` | Monitor modifier keys (Caps Lock/Right Shift/Right Option) for push-to-talk |
 | `SystemAudioCaptureService` | Capture system audio using ScreenCaptureKit (macOS 13+) |
 | `MeetingRecorderService` | Orchestrate meeting recording with system audio capture |
+
+### Whisper Local Transcription (Diduny/Core/Whisper/)
+| Component | Purpose |
+|-----------|---------|
+| `WhisperBridge.h` | Bridging header importing whisper.h C API |
+| `WhisperContext.swift` | Swift actor wrapping whisper.cpp C API (Metal GPU, greedy sampling) |
+| `AudioConverter.swift` | Converts recorded WAV to 16kHz mono Float32 for Whisper |
+| `WhisperModelManager.swift` | Model catalog (12 models), download/delete/select, progress tracking |
+
+### Transcription Provider Routing
+- `TranscriptionProvider` enum: `.soniox` (default) or `.whisperLocal`
+- `AppDelegate.activeTranscriptionService` routes to the correct service
+- Provider-specific validation at recording start (API key vs downloaded model)
+- Meeting recording always uses Soniox (real-time WebSocket)
+- Translation with Whisper falls back to plain transcription (Whisper only translates TO English)
 
 ### Soniox API Integration
 - **Base URL:** `https://api.soniox.com/v1`
@@ -78,11 +94,13 @@ MeetingRecordingState: idle → recording → processing → success/error → i
 
 | Task | Files |
 |------|-------|
-| Change transcription logic | `SonioxTranscriptionService.swift` |
+| Change transcription logic | `SonioxTranscriptionService.swift`, `WhisperTranscriptionService.swift` |
 | Modify recording behavior | `AudioRecorderService.swift`, `AppDelegate.swift` |
 | Add settings | `SettingsStorage.swift`, relevant settings view |
 | Change hotkey | `HotkeyService.swift`, `GeneralSettingsView.swift` |
 | Modify menu bar | `AppDelegate.setupMenu()` |
+| Add whisper models | `WhisperModelManager.swift` (availableModels catalog) |
+| Change transcription provider UI | `TranscriptionSettingsView.swift` |
 
 ## Default Shortcuts
 - **Transcribe:** ⌘⌥D (Cmd+Opt+D)

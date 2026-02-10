@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var audioDeviceManager = AudioDeviceManager()
     lazy var audioRecorder = AudioRecorderService()
     lazy var transcriptionService = SonioxTranscriptionService()
+    lazy var whisperTranscriptionService = WhisperTranscriptionService()
     lazy var clipboardService = ClipboardService()
     lazy var hotkeyService = HotkeyService()
     lazy var pushToTalkService = PushToTalkService()
@@ -32,6 +33,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var micEngine: AVAudioEngine?
     let micBufferLock = NSLock()
     var micAudioBuffer = Data()
+
+    var activeTranscriptionService: TranscriptionServiceProtocol {
+        switch SettingsStorage.shared.transcriptionProvider {
+        case .soniox: transcriptionService
+        case .whisperLocal: whisperTranscriptionService
+        }
+    }
+
+    var activeTranslationService: TranscriptionServiceProtocol {
+        switch SettingsStorage.shared.translationProvider {
+        case .soniox: transcriptionService
+        case .whisperLocal: whisperTranscriptionService
+        }
+    }
 
     // MARK: - Lifecycle
 
@@ -101,8 +116,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Check for orphaned recordings from previous crash
         checkForOrphanedRecordings()
 
-        // Check for API key - only prompt if not set during onboarding
-        if KeychainManager.shared.getSonioxAPIKey() == nil {
+        // Check for API key - only prompt if any feature uses Soniox and not set during onboarding
+        let needsSoniox = SettingsStorage.shared.transcriptionProvider == .soniox
+            || SettingsStorage.shared.translationProvider == .soniox
+        if needsSoniox,
+           KeychainManager.shared.getSonioxAPIKey() == nil
+        {
             Task {
                 try? await Task.sleep(for: .milliseconds(500))
                 openSettings()
@@ -151,18 +170,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let audioData = try Data(contentsOf: URL(fileURLWithPath: state.tempFilePath))
                 Log.app.info("Recovered audio data: \(audioData.count) bytes")
 
-                guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                    throw TranscriptionError.noAPIKey
+                var service = activeTranscriptionService
+                if SettingsStorage.shared.transcriptionProvider == .soniox {
+                    guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                        throw TranscriptionError.noAPIKey
+                    }
+                    service.apiKey = apiKey
                 }
-
-                transcriptionService.apiKey = apiKey
 
                 let text: String
                 switch state.recordingType {
                 case .voice, .meeting:
-                    text = try await transcriptionService.transcribe(audioData: audioData)
+                    text = try await service.transcribe(audioData: audioData)
                 case .translation:
-                    text = try await transcriptionService.translateAndTranscribe(audioData: audioData)
+                    text = try await service.translateAndTranscribe(audioData: audioData)
                 }
 
                 clipboardService.copy(text: text)

@@ -54,6 +54,10 @@ targets:
       - package: KeyboardShortcuts
       - package: DynamicNotchKit
       - package: LaunchAtLogin
+      - framework: Frameworks/whisper.xcframework
+        embed: false
+      - sdk: Accelerate.framework
+      - sdk: Metal.framework
     settings:
       base:
         INFOPLIST_FILE: Diduny/Resources/Info.plist
@@ -62,6 +66,9 @@ targets:
         LD_RUNPATH_SEARCH_PATHS:
           - "@executable_path/../Frameworks"
         COMBINE_HIDPI_IMAGES: YES
+        SWIFT_OBJC_BRIDGING_HEADER: Diduny/Core/Whisper/WhisperBridge.h
+        OTHER_LDFLAGS:
+          - "-lc++"
       configs:
         Debug:
           PRODUCT_NAME: "Diduny DEV"

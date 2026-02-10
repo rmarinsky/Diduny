@@ -83,10 +83,8 @@ echo "Build successful: $APP_PATH"
 echo "Installing to $INSTALL_PATH..."
 cp -R "$APP_PATH" "$INSTALL_PATH"
 
-# Clear quarantine and re-sign for local development
-echo "Signing app for local use..."
+# Clear quarantine attribute (keep Xcode's developer signature intact for TCC permissions)
 xattr -cr "$INSTALL_PATH"
-codesign --force --deep --sign - "$INSTALL_PATH" 2>/dev/null || true
 
 echo ""
 echo "=== Installation Complete ==="

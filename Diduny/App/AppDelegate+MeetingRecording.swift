@@ -266,6 +266,9 @@ extension AppDelegate {
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
 
+        // Capture recording start time for duration calculation
+        let recordingStartTime = appState.meetingRecordingStartTime
+
         await MainActor.run {
             appState.meetingRecordingState = .processing
             handleMeetingStateChange(.processing)
@@ -282,10 +285,14 @@ extension AppDelegate {
             store?.isActive = false
         }
 
+        // Track audioURL for library save in error path
+        var capturedAudioURL: URL?
+
         do {
             guard let audioURL = try await meetingRecorderService.stopRecording() else {
                 throw MeetingRecorderError.recordingFailed
             }
+            capturedAudioURL = audioURL
 
             Log.app.info("Meeting recording stopped")
 
@@ -336,6 +343,15 @@ extension AppDelegate {
             }
             Log.app.info("stopMeetingRecording: SUCCESS")
 
+            // Save to recordings library (copies file before we delete temp)
+            let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+            RecordingsLibraryStorage.shared.saveRecording(
+                audioURL: audioURL,
+                type: .meeting,
+                duration: duration,
+                transcriptionText: text
+            )
+
             // Optional operations run after state change (non-blocking for UI)
             if SettingsStorage.shared.playSoundOnCompletion {
                 NSSound(named: .init("Funk"))?.play()
@@ -344,11 +360,24 @@ extension AppDelegate {
             // Clear recovery state on success
             RecoveryStateManager.shared.clearState()
 
-            // Clean up temp file
+            // Clean up temp file (after library save copied it)
             try? FileManager.default.removeItem(at: audioURL)
 
         } catch {
             Log.app.error("Meeting transcription failed: \(error)")
+
+            // Save recording without transcription so user can process later
+            if let audioURL = capturedAudioURL {
+                let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+                RecordingsLibraryStorage.shared.saveRecording(
+                    audioURL: audioURL,
+                    type: .meeting,
+                    duration: duration
+                )
+                // Clean up temp file after library save
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+
             await MainActor.run {
                 appState.errorMessage = error.localizedDescription
                 appState.meetingRecordingState = .error

@@ -16,6 +16,9 @@ final class SettingsStorage {
         case meetingAudioSource
         case translationPushToTalkKey
         case handsFreeModeEnabled
+        case transcriptionProvider
+        case translationProvider
+        case selectedWhisperModel
     }
 
     private init() {}
@@ -116,5 +119,40 @@ final class SettingsStorage {
             return defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue)
         }
         set { defaults.set(newValue, forKey: Key.handsFreeModeEnabled.rawValue) }
+    }
+
+    // MARK: - Transcription Provider
+
+    var transcriptionProvider: TranscriptionProvider {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.transcriptionProvider.rawValue),
+                  let provider = TranscriptionProvider(rawValue: rawValue)
+            else {
+                return .soniox
+            }
+            return provider
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.transcriptionProvider.rawValue)
+        }
+    }
+
+    var translationProvider: TranscriptionProvider {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.translationProvider.rawValue),
+                  let provider = TranscriptionProvider(rawValue: rawValue)
+            else {
+                return .soniox
+            }
+            return provider
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.translationProvider.rawValue)
+        }
+    }
+
+    var selectedWhisperModel: String {
+        get { defaults.string(forKey: Key.selectedWhisperModel.rawValue) ?? "" }
+        set { defaults.set(newValue, forKey: Key.selectedWhisperModel.rawValue) }
     }
 }

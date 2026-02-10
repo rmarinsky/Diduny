@@ -67,6 +67,16 @@ struct MenuBarContentView: View {
 
             Divider()
 
+            // Recordings library
+            Button("Recordings") {
+                RecordingsLibraryWindowController.shared.showWindow()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            }
+
+            Divider()
+
             // Settings
             Button {
                 openSettings()
