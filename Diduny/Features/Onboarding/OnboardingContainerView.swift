@@ -331,7 +331,8 @@ struct PermissionStepView: View {
                     // Bring window back to front after system dialog
                     self.bringWindowToFront()
                     if granted {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(300))
                             self.onContinue()
                         }
                     }
@@ -350,7 +351,8 @@ struct PermissionStepView: View {
                     DispatchQueue.main.async {
                         self.isGranted = true
                         self.bringWindowToFront()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(300))
                             self.onContinue()
                         }
                     }
@@ -365,7 +367,8 @@ struct PermissionStepView: View {
                     isGranted = granted
                     bringWindowToFront()
                     if granted {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(300))
                             onContinue()
                         }
                     } else {
@@ -383,7 +386,8 @@ struct PermissionStepView: View {
                                     await MainActor.run {
                                         self.isGranted = true
                                         self.bringWindowToFront()
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        Task { @MainActor in
+                                            try? await Task.sleep(for: .milliseconds(300))
                                             self.onContinue()
                                         }
                                     }
@@ -545,7 +549,8 @@ struct ShortcutStepView: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 if testStatus == .recording {
                     testStatus = .stopped
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(2))
                         if testStatus == .stopped { testStatus = .idle }
                     }
                 } else {
@@ -557,7 +562,8 @@ struct ShortcutStepView: View {
             lastTapTime = now
             if testStatus != .recording {
                 withAnimation { testStatus = .firstTap }
-                DispatchQueue.main.asyncAfter(deadline: .now() + doubleTapInterval + 0.1) {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(Int(doubleTapInterval * 1000) + 100))
                     if testStatus == .firstTap { withAnimation { testStatus = .idle } }
                 }
             }
@@ -764,7 +770,8 @@ struct APISetupStepView: View {
                 await MainActor.run {
                     isTesting = false
                     testResult = .success
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(500))
                         onContinue()
                     }
                 }

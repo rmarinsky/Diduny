@@ -7,7 +7,8 @@ set -euo pipefail
 
 WHISPER_TAG="v1.7.3"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_DIR"
 BUILD_DIR="$PROJECT_DIR/.whisper-build"
 OUTPUT_DIR="$PROJECT_DIR/Frameworks"
 

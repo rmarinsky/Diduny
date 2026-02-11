@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Compact Leading (Left side of notch)
 
 struct NotchCompactLeadingView: View {
-    @ObservedObject var manager: NotchManager
+    var manager: NotchManager
 
     var body: some View {
         Group {
@@ -25,13 +25,17 @@ struct NotchCompactLeadingView: View {
 // MARK: - Compact Trailing (Right side of notch)
 
 struct NotchCompactTrailingView: View {
-    @ObservedObject var manager: NotchManager
+    var manager: NotchManager
 
     var body: some View {
         Group {
             switch manager.state {
             case .recording:
-                PulsingDotView()
+                HStack(spacing: 6) {
+                    PulsingDotView()
+                    AudioLevelView(level: manager.audioLevel)
+                    RecordingTimerView(startTime: manager.recordingStartTime)
+                }
 
             case .processing:
                 ProgressView()
@@ -49,7 +53,7 @@ struct NotchCompactTrailingView: View {
 // MARK: - Expanded (Below notch)
 
 struct NotchExpandedView: View {
-    @ObservedObject var manager: NotchManager
+    var manager: NotchManager
 
     var body: some View {
         Group {
@@ -78,7 +82,7 @@ struct NotchExpandedView: View {
                 EmptyView()
             }
         }
-        .frame(height: 20)
+        .frame(minHeight: 20)
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
         .animation(.easeInOut(duration: 0.35), value: manager.state)
@@ -122,6 +126,50 @@ private struct PulsingDotView: View {
                     isPulsing = true
                 }
             }
+    }
+}
+
+private struct AudioLevelView: View {
+    let level: Float
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0 ..< 3, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(.red)
+                    .frame(width: 3, height: barHeight(for: index))
+            }
+        }
+        .frame(width: 14, height: 14)
+    }
+
+    private func barHeight(for index: Int) -> CGFloat {
+        let threshold = Float(index + 1) / 4.0
+        let normalized = max(0, min(1, level))
+        let height = normalized > threshold ? CGFloat(normalized) * 14 : 4
+        return max(4, min(14, height))
+    }
+}
+
+private struct RecordingTimerView: View {
+    let startTime: Date?
+
+    var body: some View {
+        if let startTime {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let elapsed = context.date.timeIntervalSince(startTime)
+                Text(formatDuration(elapsed))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.primary)
+            }
+        }
+    }
+
+    private func formatDuration(_ interval: TimeInterval) -> String {
+        let totalSeconds = Int(max(0, interval))
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return "\(minutes):\(String(format: "%02d", seconds))"
     }
 }
 

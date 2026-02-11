@@ -59,12 +59,6 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
             throw AudioError.permissionDenied
         }
 
-        // Set input device if specified
-        if let device {
-            Log.audio.info("startRecording: Setting input device: \(device.name)")
-            setInputDevice(device.id)
-        }
-
         // Create and configure audio engine
         let engine = AVAudioEngine()
         audioEngine = engine
@@ -241,7 +235,9 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
         // Read audio data
         Log.audio.info("stopRecording: Reading audio data from \(url.path)")
-        let audioData = try Data(contentsOf: url)
+        let audioData = try await Task.detached(priority: .userInitiated) {
+            try Data(contentsOf: url)
+        }.value
         Log.audio.info("stopRecording: Read \(audioData.count) bytes")
 
         // Cleanup
@@ -277,47 +273,6 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     }
 
     // MARK: - Private Methods
-
-    private func setInputDevice(_ deviceID: AudioDeviceID) {
-        // Set the default input device using CoreAudio
-        var propertyAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        var mutableDeviceID = deviceID
-        let dataSize = UInt32(MemoryLayout<AudioDeviceID>.size)
-
-        AudioObjectSetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &propertyAddress,
-            0,
-            nil,
-            dataSize,
-            &mutableDeviceID
-        )
-    }
-
-    private func setEngineInputDevice(_ engine: AVAudioEngine, deviceID: AudioDeviceID) {
-        // Set the audio unit's input device directly
-        let inputNode = engine.inputNode
-        guard let audioUnit = inputNode.audioUnit else { return }
-
-        var mutableDeviceID = deviceID
-        let status = AudioUnitSetProperty(
-            audioUnit,
-            kAudioOutputUnitProperty_CurrentDevice,
-            kAudioUnitScope_Global,
-            0,
-            &mutableDeviceID,
-            UInt32(MemoryLayout<AudioDeviceID>.size)
-        )
-
-        if status != noErr {
-            Log.audio.warning("Failed to set engine input device: \(status)")
-        }
-    }
 
     private func handleConfigurationChange() {
         Log.audio.info("Audio configuration changed - handling device switch")

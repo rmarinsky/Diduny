@@ -2,7 +2,7 @@ import SwiftUI
 
 struct MenuBarContentView: View {
     @Environment(AppState.self) var appState
-    @ObservedObject var audioDeviceManager: AudioDeviceManager
+    var audioDeviceManager: AudioDeviceManager
     @Environment(\.openSettings) private var openSettings
 
     var onToggleRecording: @MainActor () -> Void
@@ -67,10 +67,45 @@ struct MenuBarContentView: View {
 
             Divider()
 
+            // Recent Transcriptions
+            Menu("Recent Transcriptions") {
+                let recent = RecordingsLibraryStorage.shared.recordings
+                    .filter { $0.transcriptionText != nil && !$0.transcriptionText!.isEmpty }
+                    .prefix(5)
+
+                if recent.isEmpty {
+                    Text("No transcriptions yet")
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(Array(recent)) { recording in
+                        Button {
+                            if let text = recording.transcriptionText {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(text, forType: .string)
+                            }
+                        } label: {
+                            let preview = transcriptionPreview(recording.transcriptionText ?? "")
+                            Text(preview)
+                        }
+                    }
+
+                    Divider()
+
+                    Button("View All...") {
+                        RecordingsLibraryWindowController.shared.showWindow()
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(100))
+                            NSApp.activate(ignoringOtherApps: true)
+                        }
+                    }
+                }
+            }
+
             // Recordings library
             Button("Recordings") {
                 RecordingsLibraryWindowController.shared.showWindow()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(100))
                     NSApp.activate(ignoringOtherApps: true)
                 }
             }
@@ -80,7 +115,8 @@ struct MenuBarContentView: View {
             // Settings
             Button {
                 openSettings()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(100))
                     NSApp.activate(ignoringOtherApps: true)
                 }
             } label: {
@@ -108,31 +144,39 @@ struct MenuBarContentView: View {
     private var recordingButtonTitle: String {
         switch appState.recordingState {
         case .idle:
-            "Transcribe me"
+            "Start Dictation"
         case .recording:
-            "Stop listening"
+            "Stop Dictation"
         case .processing:
-            "Processing?"
+            "Processing..."
         case .success:
-            "Transcribed!"
+            "Transcribed"
         case .error:
-            "Error :/"
+            "Transcription Error"
         }
     }
 
     private var translateButtonTitle: String {
         switch appState.translationRecordingState {
         case .idle:
-            "Translate me"
+            "Start Translation"
         case .recording:
-            "Stop listening"
+            "Stop Translation"
         case .processing:
-            "Processing?"
+            "Translating..."
         case .success:
-            "Translated!"
+            "Translated"
         case .error:
-            "Error :/"
+            "Translation Error"
         }
+    }
+
+    private func transcriptionPreview(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count > 40 {
+            return String(trimmed.prefix(40)) + "..."
+        }
+        return trimmed
     }
 
     private var meetingButtonTitle: String {
@@ -140,13 +184,13 @@ struct MenuBarContentView: View {
         case .idle:
             "Record Meeting"
         case .recording:
-            "Stop Meeting Recording"
+            "Stop Meeting"
         case .processing:
-            "Processing Meeting?"
+            "Processing Meeting..."
         case .success:
-            "Meeting Welldone!"
+            "Meeting Recorded"
         case .error:
-            "Meeting Error :/"
+            "Meeting Error"
         }
     }
 }

@@ -2,9 +2,12 @@ import SwiftUI
 
 struct TranscriptionSettingsView: View {
     @State private var transcriptionProvider: TranscriptionProvider = SettingsStorage.shared.transcriptionProvider
-    @State private var translationProvider: TranscriptionProvider = SettingsStorage.shared.translationProvider
     @State private var selectedModel: String = SettingsStorage.shared.selectedWhisperModel
     @State private var modelSort: ModelSort = .speed
+    @State private var whisperLanguage: String = SettingsStorage.shared.whisperLanguage
+    @State private var whisperPrompt: String = SettingsStorage.shared.whisperPrompt
+    @State private var sonioxPrompt: String = SettingsStorage.shared.sonioxPrompt
+    @State private var favoriteLanguageCodes: Set<String> = Set(SettingsStorage.shared.favoriteLanguages)
 
     enum ModelSort: String, CaseIterable {
         case speed, accuracy
@@ -30,12 +33,15 @@ struct TranscriptionSettingsView: View {
         case failure(String)
     }
 
-    private var needsSoniox: Bool {
-        transcriptionProvider == .soniox || translationProvider == .soniox
-    }
+    // Soniox is always needed (translation + meeting always use cloud)
+    private var needsSoniox: Bool { true }
 
     private var needsWhisper: Bool {
-        transcriptionProvider == .whisperLocal || translationProvider == .whisperLocal
+        transcriptionProvider == .whisperLocal
+    }
+
+    private var hasSonioxKey: Bool {
+        !sonioxAPIKey.isEmpty
     }
 
     var body: some View {
@@ -53,38 +59,66 @@ struct TranscriptionSettingsView: View {
                 }
             }
 
-            // Translation provider
+            // Translation — always cloud
             Section("Translation") {
-                Picker("Provider", selection: $translationProvider) {
-                    ForEach(TranscriptionProvider.allCases) { provider in
-                        Text(provider.displayName).tag(provider)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: translationProvider) { _, newValue in
-                    SettingsStorage.shared.translationProvider = newValue
-                }
-
-                if translationProvider == .whisperLocal {
-                    Label("Local Whisper can only translate to English.", systemImage: "info.circle")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            // Meeting — cloud only
-            Section("Meeting Recording") {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Cloud only (Soniox)")
                             .font(.body)
-                        Text("Real-time streaming requires a cloud connection.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        if !hasSonioxKey {
+                            Text("A Soniox API key is required for translation.")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
                     }
                 } icon: {
                     Image(systemName: "cloud.fill")
                         .foregroundColor(.blue)
+                }
+            }
+
+            // Favorite languages for quick translation
+            Section("Favorite Languages") {
+                ForEach(SupportedLanguage.allLanguages) { lang in
+                    Toggle(lang.name, isOn: Binding(
+                        get: { favoriteLanguageCodes.contains(lang.code) },
+                        set: { isOn in
+                            if isOn {
+                                favoriteLanguageCodes.insert(lang.code)
+                            } else {
+                                favoriteLanguageCodes.remove(lang.code)
+                            }
+                            SettingsStorage.shared.favoriteLanguages = SupportedLanguage.allLanguages
+                                .map(\.code)
+                                .filter { favoriteLanguageCodes.contains($0) }
+                        }
+                    ))
+                    .toggleStyle(.checkbox)
+                }
+
+                Text("Selected languages appear as quick-translate buttons in the Recordings detail view.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            // Meeting Recording
+            Section("Meeting Recording") {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if hasSonioxKey {
+                            Text("Cloud transcription + diarization enabled")
+                                .font(.body)
+                        } else {
+                            Text("Audio recording only")
+                                .font(.body)
+                            Text("Add a Soniox API key for real-time transcription and diarization.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } icon: {
+                    Image(systemName: hasSonioxKey ? "cloud.fill" : "waveform")
+                        .foregroundColor(hasSonioxKey ? .blue : .secondary)
                 }
             }
 
@@ -97,6 +131,9 @@ struct TranscriptionSettingsView: View {
             if needsWhisper {
                 whisperSection
             }
+
+            // Prompts section
+            promptsSection
         }
         .formStyle(.grouped)
         .onAppear {
@@ -113,6 +150,12 @@ struct TranscriptionSettingsView: View {
                 Text("Soniox API Key")
                     .font(.headline)
 
+                if !hasSonioxKey {
+                    Text("Enter your API key for full cloud features (transcription, translation, diarization).")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+
                 HStack {
                     Group {
                         if showSonioxKey {
@@ -122,6 +165,10 @@ struct TranscriptionSettingsView: View {
                         }
                     }
                     .textFieldStyle(.roundedBorder)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(!hasSonioxKey ? Color.red : Color.clear, lineWidth: 1)
+                    )
                     .onChange(of: sonioxAPIKey) { _, newValue in
                         saveSonioxKey(newValue)
                     }
@@ -347,6 +394,91 @@ struct TranscriptionSettingsView: View {
         if value >= 0.6 { return .yellow }
         if value >= 0.4 { return .orange }
         return .red
+    }
+
+    // MARK: - Prompts Section
+
+    private static let whisperLanguages: [(code: String, name: String)] = [
+        ("auto", "Auto-detect"),
+        ("uk", "Ukrainian"),
+        ("en", "English"),
+        ("ro", "Romanian"),
+        ("es", "Spanish"),
+        ("de", "German"),
+        ("fr", "French"),
+        ("pl", "Polish"),
+        ("it", "Italian"),
+        ("pt", "Portuguese"),
+        ("ja", "Japanese"),
+        ("zh", "Chinese"),
+        ("ko", "Korean"),
+        ("ru", "Russian"),
+    ]
+
+    @ViewBuilder
+    private var promptsSection: some View {
+        if needsSoniox {
+            Section("Soniox Prompt") {
+                VStack(alignment: .leading, spacing: 6) {
+                    TextEditor(text: $sonioxPrompt)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(minHeight: 80, maxHeight: 160)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(.quaternary, lineWidth: 1)
+                        )
+                        .onChange(of: sonioxPrompt) { _, newValue in
+                            SettingsStorage.shared.sonioxPrompt = newValue
+                        }
+
+                    Text("Context prompt sent with every Soniox transcription in Voice Note mode. Leave empty to use the built-in default.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    if !sonioxPrompt.isEmpty {
+                        Button("Reset to default") {
+                            sonioxPrompt = ""
+                            SettingsStorage.shared.sonioxPrompt = ""
+                        }
+                        .font(.caption)
+                    }
+                }
+            }
+        }
+
+        if needsWhisper {
+            Section("Whisper Language & Prompt") {
+                Picker("Language", selection: $whisperLanguage) {
+                    ForEach(Self.whisperLanguages, id: \.code) { lang in
+                        Text(lang.name).tag(lang.code)
+                    }
+                }
+                .onChange(of: whisperLanguage) { _, newValue in
+                    SettingsStorage.shared.whisperLanguage = newValue
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Initial prompt:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    TextEditor(text: $whisperPrompt)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(minHeight: 60, maxHeight: 120)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(.quaternary, lineWidth: 1)
+                        )
+                        .onChange(of: whisperPrompt) { _, newValue in
+                            SettingsStorage.shared.whisperPrompt = newValue
+                        }
+
+                    Text("Guides the Whisper decoder. Write a sentence in your target language to improve recognition. Example for Ukrainian: \"Привіт, це транскрипція українською мовою.\"")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
     }
 
     // MARK: - Soniox Helpers

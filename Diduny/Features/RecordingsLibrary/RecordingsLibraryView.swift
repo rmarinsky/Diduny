@@ -40,11 +40,37 @@ struct RecordingsLibraryView: View {
         }
     }
 
+    /// Recordings grouped by date (day), sorted newest first
+    private var groupedRecordings: [(date: String, recordings: [Recording])] {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+
+        let grouped = Dictionary(grouping: filteredRecordings) { recording in
+            calendar.startOfDay(for: recording.createdAt)
+        }
+
+        return grouped
+            .sorted { $0.key > $1.key }
+            .map { (date: formatter.string(from: $0.key), recordings: $0.value) }
+    }
+
     private var singleSelectedRecording: Recording? {
         guard selectedIds.count == 1,
               let id = selectedIds.first
         else { return nil }
         return filteredRecordings.first(where: { $0.id == id })
+    }
+
+    private var favoriteLanguages: [SupportedLanguage] {
+        let codes = SettingsStorage.shared.favoriteLanguages
+        return codes.compactMap { SupportedLanguage.language(for: $0) }
+    }
+
+    private var otherLanguages: [SupportedLanguage] {
+        let favCodes = Set(SettingsStorage.shared.favoriteLanguages)
+        return SupportedLanguage.allLanguages.filter { !favCodes.contains($0.code) }
     }
 
     var body: some View {
@@ -62,11 +88,11 @@ struct RecordingsLibraryView: View {
             } else {
                 HSplitView {
                     recordingsList
-                        .frame(minWidth: 300)
+                        .frame(minWidth: 220, idealWidth: 280)
 
                     if let recording = singleSelectedRecording {
                         RecordingDetailView(recording: recording)
-                            .frame(minWidth: 250)
+                            .frame(minWidth: 650, idealWidth: 800)
                     }
                 }
             }
@@ -113,12 +139,18 @@ struct RecordingsLibraryView: View {
     // MARK: - List
 
     private var recordingsList: some View {
-        List(filteredRecordings, selection: $selectedIds) { recording in
-            RecordingRowView(recording: recording)
-                .tag(recording.id)
-                .contextMenu {
-                    contextMenu(for: recording)
+        List(selection: $selectedIds) {
+            ForEach(groupedRecordings, id: \.date) { group in
+                Section(header: Text(group.date)) {
+                    ForEach(group.recordings) { recording in
+                        RecordingRowView(recording: recording)
+                            .tag(recording.id)
+                            .contextMenu {
+                                contextMenu(for: recording)
+                            }
+                    }
                 }
+            }
         }
     }
 
@@ -131,8 +163,30 @@ struct RecordingsLibraryView: View {
         }
         .disabled(recording.status == .processing)
 
-        Button("Translate") {
-            queueService.enqueue([recording.id], action: .translate)
+        // Translate submenu with favorite languages
+        Menu("Translate to") {
+            ForEach(favoriteLanguages) { lang in
+                Button(lang.name) {
+                    queueService.enqueue(
+                        [recording.id],
+                        action: .translate,
+                        targetLanguage: lang.code
+                    )
+                }
+            }
+
+            if !otherLanguages.isEmpty {
+                Divider()
+                ForEach(otherLanguages) { lang in
+                    Button(lang.name) {
+                        queueService.enqueue(
+                            [recording.id],
+                            action: .translate,
+                            targetLanguage: lang.code
+                        )
+                    }
+                }
+            }
         }
         .disabled(recording.status == .processing)
 
@@ -190,7 +244,7 @@ struct RecordingsLibraryView: View {
     private var footer: some View {
         HStack(spacing: 12) {
             // Stats
-            Text("\(filteredRecordings.count) recording(s) · \(formattedTotalSize)")
+            Text("\(filteredRecordings.count) recording(s) \u{00B7} \(formattedTotalSize)")
                 .font(.caption)
                 .foregroundColor(.secondary)
 
@@ -213,8 +267,29 @@ struct RecordingsLibraryView: View {
                     queueService.enqueue(Array(selectedIds), action: .transcribe)
                 }
 
-                Button("Translate") {
-                    queueService.enqueue(Array(selectedIds), action: .translate)
+                Menu("Translate to") {
+                    ForEach(favoriteLanguages) { lang in
+                        Button(lang.name) {
+                            queueService.enqueue(
+                                Array(selectedIds),
+                                action: .translate,
+                                targetLanguage: lang.code
+                            )
+                        }
+                    }
+
+                    if !otherLanguages.isEmpty {
+                        Divider()
+                        ForEach(otherLanguages) { lang in
+                            Button(lang.name) {
+                                queueService.enqueue(
+                                    Array(selectedIds),
+                                    action: .translate,
+                                    targetLanguage: lang.code
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Button("Delete", role: .destructive) {

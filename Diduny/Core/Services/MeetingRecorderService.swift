@@ -182,31 +182,32 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
 
     // MARK: - Cancel Recording
 
-    func cancelRecording() {
+    func cancelRecording() async {
         guard isRecording else { return }
 
         Log.recording.info("Canceling meeting recording...")
 
-        // Stop system audio capture
-        if let service = systemAudioService {
-            Task {
-                _ = try? await service.stopCapture()
-            }
-        }
-        systemAudioService = nil
-
-        // Stop audio mixer if present
-        if audioMixer != nil {
-            Task {
-                _ = try? await audioMixer?.stopRecording()
-            }
+        // Stop mixer first to flush pending writes before deleting output file.
+        if let mixer = audioMixer {
+            _ = try? await mixer.stopRecording()
         }
         audioMixer = nil
 
-        // Clean up output file
-        if let url = outputURL {
-            try? FileManager.default.removeItem(at: url)
-            outputURL = nil
+        // Stop system audio capture and clean up callback-mode temp output if any.
+        var callbackCaptureURL: URL?
+        if let service = systemAudioService {
+            callbackCaptureURL = try? await service.stopCapture()
+        }
+        systemAudioService = nil
+
+        let recordingOutputURL = outputURL
+        if let recordingOutputURL {
+            try? FileManager.default.removeItem(at: recordingOutputURL)
+        }
+        outputURL = nil
+
+        if let callbackCaptureURL, callbackCaptureURL != recordingOutputURL {
+            try? FileManager.default.removeItem(at: callbackCaptureURL)
         }
 
         isRecording = false
@@ -232,7 +233,10 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
             // Mixed mode: stop mixer first, then system audio
             savedURL = try await audioMixer?.stopRecording()
             audioMixer = nil
-            _ = try? await systemAudioService?.stopCapture()
+            let callbackCaptureURL = try? await systemAudioService?.stopCapture()
+            if let callbackCaptureURL, callbackCaptureURL != savedURL {
+                try? FileManager.default.removeItem(at: callbackCaptureURL)
+            }
         } else {
             // System-only mode: just stop system audio capture
             savedURL = try await systemAudioService?.stopCapture()

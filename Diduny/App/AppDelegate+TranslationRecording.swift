@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 
 // MARK: - Translation Recording (EN <-> UK)
@@ -89,31 +90,17 @@ extension AppDelegate {
             return
         }
 
-        // Provider-specific validation
-        switch SettingsStorage.shared.translationProvider {
-        case .soniox:
-            guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
-                Log.app.warning("startTranslationRecording: No API key found")
-                await MainActor.run {
-                    appState.errorMessage = "Please add your Soniox API key in Settings"
-                    appState.translationRecordingState = .error
-                    handleTranslationStateChange(.error)
-                }
-                return
+        // Translation always uses Soniox (Cloud)
+        guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
+            Log.app.warning("startTranslationRecording: No API key found")
+            await MainActor.run {
+                appState.errorMessage = "Translation requires a Soniox API key. Add one in Settings."
+                appState.translationRecordingState = .error
+                handleTranslationStateChange(.error)
             }
-            Log.app.info("startTranslationRecording: Soniox API key found")
-        case .whisperLocal:
-            guard WhisperModelManager.shared.selectedModel() != nil else {
-                Log.app.warning("startTranslationRecording: No Whisper model selected")
-                await MainActor.run {
-                    appState.errorMessage = "No Whisper model downloaded. Please download one in Settings."
-                    appState.translationRecordingState = .error
-                    handleTranslationStateChange(.error)
-                }
-                return
-            }
-            Log.app.info("startTranslationRecording: Whisper model ready")
+            return
         }
+        Log.app.info("startTranslationRecording: Soniox API key found")
 
         // Determine device with fallback to system default
         var device: AudioDevice?
@@ -177,6 +164,13 @@ extension AppDelegate {
                 appState.translationRecordingState = .recording
                 appState.translationRecordingStartTime = Date()
                 handleTranslationStateChange(.recording)
+
+                // Pipe audio level to notch
+                audioLevelCancellable = audioRecorder.$audioLevel
+                    .receive(on: DispatchQueue.main)
+                    .sink { level in
+                        NotchManager.shared.audioLevel = level
+                    }
             }
 
             // Activate escape cancel handler
@@ -235,6 +229,10 @@ extension AppDelegate {
     func stopTranslationRecording() async {
         Log.app.info("stopTranslationRecording: BEGIN")
 
+        // Stop audio level piping
+        audioLevelCancellable?.cancel()
+        audioLevelCancellable = nil
+
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
 
@@ -255,16 +253,15 @@ extension AppDelegate {
             capturedAudioData = audioData
             Log.app.info("stopTranslationRecording: Got audio data, size = \(audioData.count) bytes")
 
-            var service = activeTranslationService
-            if SettingsStorage.shared.translationProvider == .soniox {
-                guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                    Log.app.error("stopTranslationRecording: No API key!")
-                    throw TranscriptionError.noAPIKey
-                }
-                service.apiKey = apiKey
+            // Translation always uses Soniox (Cloud)
+            var service: TranscriptionServiceProtocol = transcriptionService
+            guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                Log.app.error("stopTranslationRecording: No API key!")
+                throw TranscriptionError.noAPIKey
             }
+            service.apiKey = apiKey
 
-            Log.app.info("stopTranslationRecording: Calling translation service (\(SettingsStorage.shared.translationProvider.rawValue))")
+            Log.app.info("stopTranslationRecording: Calling Soniox translation service")
             let text = try await service.translateAndTranscribe(audioData: audioData)
             Log.app.info("stopTranslationRecording: Translation received: \(text.prefix(50))...")
 
@@ -364,7 +361,7 @@ extension AppDelegate {
                 try? await Task.sleep(for: .seconds(1.6))
                 guard let self,
                       self.appState.translationRecordingState == .recording else { return }
-                NotchManager.shared.startRecording(mode: .translation)
+                NotchManager.shared.startRecording(mode: .translation(languagePair: "EN <-> UK"))
             }
         }
 

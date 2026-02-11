@@ -20,42 +20,6 @@ enum RecordingState: Equatable, CustomStringConvertible {
     }
 }
 
-enum MeetingRecordingState: Equatable, CustomStringConvertible {
-    case idle
-    case recording
-    case processing
-    case success
-    case error
-
-    var description: String {
-        switch self {
-        case .idle: "idle"
-        case .recording: "recording"
-        case .processing: "processing"
-        case .success: "success"
-        case .error: "error"
-        }
-    }
-}
-
-enum TranslationRecordingState: Equatable, CustomStringConvertible {
-    case idle
-    case recording
-    case processing
-    case success
-    case error
-
-    var description: String {
-        switch self {
-        case .idle: "idle"
-        case .recording: "recording"
-        case .processing: "processing"
-        case .success: "success"
-        case .error: "error"
-        }
-    }
-}
-
 @Observable
 @MainActor
 final class AppState {
@@ -99,7 +63,7 @@ final class AppState {
     var shouldOpenSettings: Bool = false
 
     // Meeting recording
-    var meetingRecordingState: MeetingRecordingState = .idle {
+    var meetingRecordingState: RecordingState = .idle {
         didSet {
             Log.app
                 .debug("meetingRecordingState changed: \(oldValue.description) -> \(self.meetingRecordingState.description)")
@@ -107,10 +71,11 @@ final class AppState {
     }
 
     var meetingRecordingStartTime: Date?
+    var meetingChapters: [MeetingChapter] = []
     var liveTranscriptStore: LiveTranscriptStore?
 
     // Translation recording (EN <-> UK)
-    var translationRecordingState: TranslationRecordingState = .idle {
+    var translationRecordingState: RecordingState = .idle {
         didSet {
             Log.app
                 .debug(
@@ -120,6 +85,8 @@ final class AppState {
     }
 
     var translationRecordingStartTime: Date?
+
+    var ambientListeningActive: Bool = false
 
     var recordingDuration: TimeInterval {
         guard let startTime = recordingStartTime else { return 0 }
@@ -146,16 +113,3 @@ final class AppState {
     }
 }
 
-// MARK: - RecordingState Extension
-
-extension RecordingState {
-    init(from translationState: TranslationRecordingState) {
-        switch translationState {
-        case .idle: self = .idle
-        case .recording: self = .recording
-        case .processing: self = .processing
-        case .success: self = .success
-        case .error: self = .error
-        }
-    }
-}

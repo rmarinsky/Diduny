@@ -6,27 +6,26 @@ struct RecordingDetailView: View {
     @State private var playbackService = AudioPlaybackService.shared
     @State private var queueService = RecordingQueueService.shared
     @State private var modelManager = WhisperModelManager.shared
-    @State private var selectedModelChoice: ModelChoice = .soniox
+    @State private var selectedWhisperModel: String = SettingsStorage.shared.selectedWhisperModel
 
     private let storage = RecordingsLibraryStorage.shared
 
-    enum ModelChoice: Hashable {
-        case soniox
-        case whisper(modelName: String)
-
-        var displayName: String {
-            switch self {
-            case .soniox:
-                "Soniox (Cloud)"
-            case .whisper(let modelName):
-                WhisperModelManager.availableModels
-                    .first(where: { $0.name == modelName })?.displayName ?? modelName
-            }
-        }
-    }
-
     private var downloadedWhisperModels: [WhisperModelManager.WhisperModel] {
         WhisperModelManager.availableModels.filter { modelManager.isModelDownloaded($0) }
+    }
+
+    private var hasSonioxKey: Bool {
+        KeychainManager.shared.hasAPIKeyFast()
+    }
+
+    private var favoriteLanguages: [SupportedLanguage] {
+        let codes = SettingsStorage.shared.favoriteLanguages
+        return codes.compactMap { SupportedLanguage.language(for: $0) }
+    }
+
+    private var otherLanguages: [SupportedLanguage] {
+        let favCodes = Set(SettingsStorage.shared.favoriteLanguages)
+        return SupportedLanguage.allLanguages.filter { !favCodes.contains($0.code) }
     }
 
     var body: some View {
@@ -48,7 +47,7 @@ struct RecordingDetailView: View {
 
             Divider()
 
-            // Model picker + actions
+            // Actions
             actionsSection
                 .padding(12)
         }
@@ -82,8 +81,6 @@ struct RecordingDetailView: View {
             }
 
             Spacer()
-
-            statusBadge
         }
     }
 
@@ -92,7 +89,8 @@ struct RecordingDetailView: View {
     private var playbackSection: some View {
         AudioPlaybackControlView(
             recordingId: recording.id,
-            fileURL: storage.audioFileURL(for: recording)
+            fileURL: storage.audioFileURL(for: recording),
+            durationHint: recording.durationSeconds
         )
     }
 
@@ -129,54 +127,20 @@ struct RecordingDetailView: View {
     // MARK: - Actions
 
     private var actionsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Model picker
-            HStack {
-                Text("Model:")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            // Cloud (Soniox) section
+            cloudActionsSection
 
-                Picker("", selection: $selectedModelChoice) {
-                    Text("Soniox (Cloud)").tag(ModelChoice.soniox)
+            Divider()
 
-                    if !downloadedWhisperModels.isEmpty {
-                        Divider()
-                        ForEach(downloadedWhisperModels) { model in
-                            Text("Whisper: \(model.displayName)")
-                                .tag(ModelChoice.whisper(modelName: model.name))
-                        }
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: 250)
-                .labelsHidden()
-            }
+            // Local (Whisper) section
+            localActionsSection
 
-            // Action buttons
-            HStack(spacing: 8) {
-                Button("Transcribe") {
-                    let (provider, whisperModel) = resolveOverrides()
-                    queueService.enqueue(
-                        [recording.id],
-                        action: .transcribe,
-                        providerOverride: provider,
-                        whisperModelOverride: whisperModel
-                    )
-                }
-                .disabled(recording.status == .processing)
-
-                Button("Translate") {
-                    let (provider, whisperModel) = resolveOverrides()
-                    queueService.enqueue(
-                        [recording.id],
-                        action: .translate,
-                        providerOverride: provider,
-                        whisperModelOverride: whisperModel
-                    )
-                }
-                .disabled(recording.status == .processing)
-
-                if let text = recording.transcriptionText, !text.isEmpty {
+            // Copy text button
+            if let text = recording.transcriptionText, !text.isEmpty {
+                Divider()
+                HStack {
+                    Spacer()
                     Button("Copy Text") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(text, forType: .string)
@@ -186,16 +150,114 @@ struct RecordingDetailView: View {
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Cloud Actions
 
-    private func resolveOverrides() -> (TranscriptionProvider, String?) {
-        switch selectedModelChoice {
-        case .soniox:
-            return (.soniox, nil)
-        case .whisper(let modelName):
-            return (.whisperLocal, modelName)
+    @ViewBuilder
+    private var cloudActionsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Cloud (Soniox)", systemImage: "cloud.fill")
+                .font(.caption)
+                .foregroundColor(.blue)
+
+            if hasSonioxKey {
+                HStack(spacing: 8) {
+                    Button("Transcribe + Diarize") {
+                        queueService.enqueue(
+                            [recording.id],
+                            action: .transcribe,
+                            providerOverride: .soniox
+                        )
+                    }
+                    .disabled(recording.status == .processing)
+
+                    Divider()
+                        .frame(height: 20)
+
+                    Text("Translate to:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    ForEach(favoriteLanguages) { lang in
+                        Button(lang.name) {
+                            queueService.enqueue(
+                                [recording.id],
+                                action: .translate,
+                                providerOverride: .soniox,
+                                targetLanguage: lang.code
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(recording.status == .processing)
+                    }
+
+                    if !otherLanguages.isEmpty {
+                        Menu("Other...") {
+                            ForEach(otherLanguages) { lang in
+                                Button(lang.name) {
+                                    queueService.enqueue(
+                                        [recording.id],
+                                        action: .translate,
+                                        providerOverride: .soniox,
+                                        targetLanguage: lang.code
+                                    )
+                                }
+                            }
+                        }
+                        .menuStyle(.borderlessButton)
+                        .controlSize(.small)
+                        .disabled(recording.status == .processing)
+                    }
+                }
+            } else {
+                Text("Requires Soniox API key")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .italic()
+            }
         }
     }
+
+    // MARK: - Local Actions
+
+    @ViewBuilder
+    private var localActionsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Local (Whisper)", systemImage: "desktopcomputer")
+                .font(.caption)
+                .foregroundColor(.green)
+
+            if !downloadedWhisperModels.isEmpty {
+                HStack(spacing: 8) {
+                    Picker("Model:", selection: $selectedWhisperModel) {
+                        ForEach(downloadedWhisperModels) { model in
+                            Text(model.displayName).tag(model.name)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 200)
+
+                    Button("Transcribe") {
+                        let modelName = selectedWhisperModel.isEmpty ? downloadedWhisperModels.first?.name : selectedWhisperModel
+                        queueService.enqueue(
+                            [recording.id],
+                            action: .transcribe,
+                            providerOverride: .whisperLocal,
+                            whisperModelOverride: modelName
+                        )
+                    }
+                    .disabled(recording.status == .processing)
+                }
+            } else {
+                Text("Download a Whisper model in Settings")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .italic()
+            }
+        }
+    }
+
+    // MARK: - Helpers
 
     private var iconColor: Color {
         switch recording.type {
@@ -222,24 +284,4 @@ struct RecordingDetailView: View {
         ByteCountFormatter.string(fromByteCount: recording.fileSizeBytes, countStyle: .file)
     }
 
-    @ViewBuilder
-    private var statusBadge: some View {
-        Text(recording.status.displayName)
-            .font(.caption2)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(statusColor.opacity(0.15))
-            .foregroundColor(statusColor)
-            .clipShape(Capsule())
-    }
-
-    private var statusColor: Color {
-        switch recording.status {
-        case .unprocessed: .gray
-        case .processing: .blue
-        case .transcribed: .green
-        case .translated: .purple
-        case .failed: .red
-        }
-    }
 }

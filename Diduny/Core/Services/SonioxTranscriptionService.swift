@@ -12,7 +12,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
     // MARK: - Voice Note Processing Context
 
     // swiftlint:disable line_length
-    private let voiceNoteContext = """
+    private static let defaultVoiceNoteContext = """
         role: Voice note processing assistant
         input: Raw Ukrainian speech transcript
 
@@ -42,6 +42,11 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         """
     // swiftlint:enable line_length
 
+    private var voiceNoteContext: String {
+        let custom = SettingsStorage.shared.sonioxPrompt
+        return custom.isEmpty ? Self.defaultVoiceNoteContext : custom
+    }
+
     // Protocol conformance method
     func transcribe(audioData: Data) async throws -> String {
         try await transcribe(audioData: audioData, language: nil)
@@ -60,8 +65,8 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         let fileId = try await uploadFile(audioData: audioData, apiKey: apiKey)
         Log.transcription.info("File uploaded, fileId = \(fileId)")
 
-        // Step 2: Create transcription job with voice note context
-        Log.transcription.info("Step 2: Creating transcription job with context...")
+        // Step 2: Create transcription job
+        Log.transcription.info("Step 2: Creating transcription job...")
         let transcriptionId = try await createTranscription(
             fileId: fileId,
             language: language,
@@ -120,7 +125,12 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
     /// Transcribe and translate between English and Ukrainian (auto-detects language)
     func translateAndTranscribe(audioData: Data) async throws -> String {
-        Log.transcription.info("translateAndTranscribe: BEGIN, audioData size = \(audioData.count) bytes")
+        try await translateAndTranscribe(audioData: audioData, targetLanguage: "uk")
+    }
+
+    /// Transcribe and translate to a specific target language
+    func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String {
+        Log.transcription.info("translateAndTranscribe: BEGIN, audioData size = \(audioData.count) bytes, targetLanguage = \(targetLanguage)")
 
         guard let apiKey, !apiKey.isEmpty else {
             Log.transcription.error("translateAndTranscribe: No API key!")
@@ -134,7 +144,11 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
         // Step 2: Create transcription job with two-way translation
         Log.transcription.info("Step 2: Creating transcription with translation...")
-        let transcriptionId = try await createTranscriptionWithTranslation(fileId: fileId, apiKey: apiKey)
+        let transcriptionId = try await createTranscriptionWithTranslation(
+            fileId: fileId,
+            targetLanguage: targetLanguage,
+            apiKey: apiKey
+        )
         Log.transcription.info("Transcription created, id = \(transcriptionId)")
 
         // Step 3: Poll for completion
@@ -289,7 +303,11 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
     // MARK: - Create Transcription with Translation (EN <-> UK)
 
-    private func createTranscriptionWithTranslation(fileId: String, apiKey: String) async throws -> String {
+    private func createTranscriptionWithTranslation(
+        fileId: String,
+        targetLanguage: String = "uk",
+        apiKey: String
+    ) async throws -> String {
         guard let url = URL(string: "\(baseURL)/transcriptions") else {
             throw TranscriptionError.invalidURL
         }
@@ -299,16 +317,28 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        // Two-way translation: English <-> Ukrainian with voice note context
+        // Two-way translation needs two distinct languages.
+        // If target is "en", pair with the user's primary non-English language.
+        let langA: String
+        let langB: String
+        if targetLanguage == "en" {
+            let primary = SettingsStorage.shared.favoriteLanguages.first(where: { $0 != "en" }) ?? "uk"
+            langA = primary
+            langB = "en"
+        } else {
+            langA = "en"
+            langB = targetLanguage
+        }
+
         let payload: [String: Any] = [
             "file_id": fileId,
             "model": model,
-            "language_hints": ["en", "uk"],
+            "language_hints": [langA, langB],
             "context": voiceNoteContext,
             "translation": [
                 "type": "two_way",
-                "language_a": "en",
-                "language_b": "uk"
+                "language_a": langA,
+                "language_b": langB
             ]
         ]
 

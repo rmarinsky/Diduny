@@ -22,7 +22,7 @@ actor WhisperContext {
         }
     }
 
-    func transcribe(samples: [Float], language: String? = nil) throws -> String {
+    func transcribe(samples: [Float], language: String? = nil, initialPrompt: String? = nil) throws -> String {
         guard let context else {
             throw WhisperError.contextNotInitialized
         }
@@ -39,13 +39,26 @@ actor WhisperContext {
         params.single_segment = false
 
         let languageCString = Array((language ?? "auto").utf8CString)
+        let promptCString = initialPrompt.map { Array($0.utf8CString) }
 
-        Log.whisper.info("Starting transcription: \(samples.count) samples, threads=\(threadCount)")
+        Log.whisper.info("Starting transcription: \(samples.count) samples, threads=\(threadCount), language=\(language ?? "auto"), prompt=\(initialPrompt?.prefix(40) ?? "none")")
 
         let result = languageCString.withUnsafeBufferPointer { langBuf in
             params.language = langBuf.baseAddress
-            return samples.withUnsafeBufferPointer { buffer in
-                whisper_full(context, params, buffer.baseAddress, Int32(buffer.count))
+
+            let runWhisper = { () -> Int32 in
+                samples.withUnsafeBufferPointer { buffer in
+                    whisper_full(context, params, buffer.baseAddress, Int32(buffer.count))
+                }
+            }
+
+            if let promptCString {
+                return promptCString.withUnsafeBufferPointer { promptBuf in
+                    params.initial_prompt = promptBuf.baseAddress
+                    return runWhisper()
+                }
+            } else {
+                return runWhisper()
             }
         }
 

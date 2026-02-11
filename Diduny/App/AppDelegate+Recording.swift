@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 
 // MARK: - Recording Actions
@@ -186,6 +187,13 @@ extension AppDelegate {
                 appState.recordingState = .recording
                 appState.recordingStartTime = Date()
                 handleRecordingStateChange(.recording)
+
+                // Pipe audio level to notch
+                audioLevelCancellable = audioRecorder.$audioLevel
+                    .receive(on: DispatchQueue.main)
+                    .sink { level in
+                        NotchManager.shared.audioLevel = level
+                    }
             }
 
             // Activate escape cancel handler
@@ -243,6 +251,10 @@ extension AppDelegate {
 
     func stopRecording() async {
         Log.app.info("stopRecording: BEGIN")
+
+        // Stop audio level piping
+        audioLevelCancellable?.cancel()
+        audioLevelCancellable = nil
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()

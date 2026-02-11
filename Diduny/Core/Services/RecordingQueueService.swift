@@ -22,7 +22,8 @@ final class RecordingQueueService {
         _ ids: [UUID],
         action: QueueAction,
         providerOverride: TranscriptionProvider? = nil,
-        whisperModelOverride: String? = nil
+        whisperModelOverride: String? = nil,
+        targetLanguage: String? = nil
     ) {
         guard !ids.isEmpty else { return }
 
@@ -53,7 +54,8 @@ final class RecordingQueueService {
                     id: id,
                     action: action,
                     providerOverride: providerOverride,
-                    whisperModelOverride: whisperModelOverride
+                    whisperModelOverride: whisperModelOverride,
+                    targetLanguage: targetLanguage
                 )
                 queueCount -= 1
             }
@@ -80,7 +82,8 @@ final class RecordingQueueService {
         id: UUID,
         action: QueueAction,
         providerOverride: TranscriptionProvider? = nil,
-        whisperModelOverride: String? = nil
+        whisperModelOverride: String? = nil,
+        targetLanguage: String? = nil
     ) async {
         let storage = RecordingsLibraryStorage.shared
 
@@ -95,14 +98,14 @@ final class RecordingQueueService {
         do {
             let audioData = try Data(contentsOf: audioURL)
 
-            // Determine provider: use override if provided, otherwise global setting
+            // Determine provider: translate always uses Soniox; transcribe uses override or global setting
             let provider: TranscriptionProvider
-            if let override = providerOverride {
+            if action == .translate {
+                provider = .soniox
+            } else if let override = providerOverride {
                 provider = override
             } else {
-                provider = action == .transcribe
-                    ? SettingsStorage.shared.transcriptionProvider
-                    : SettingsStorage.shared.translationProvider
+                provider = SettingsStorage.shared.transcriptionProvider
             }
 
             // Create fresh service instance
@@ -127,7 +130,11 @@ final class RecordingQueueService {
                 text = try await service.transcribe(audioData: audioData)
                 status = .transcribed
             case .translate:
-                text = try await service.translateAndTranscribe(audioData: audioData)
+                if let lang = targetLanguage {
+                    text = try await service.translateAndTranscribe(audioData: audioData, targetLanguage: lang)
+                } else {
+                    text = try await service.translateAndTranscribe(audioData: audioData)
+                }
                 status = .translated
             }
 

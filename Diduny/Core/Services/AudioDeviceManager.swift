@@ -1,11 +1,19 @@
 import AVFoundation
-import Combine
 import CoreAudio
 import Foundation
+import Observation
 
-final class AudioDeviceManager: ObservableObject, AudioDeviceManagerProtocol {
-    @Published private(set) var availableDevices: [AudioDevice] = []
-    @Published private(set) var defaultDevice: AudioDevice?
+@Observable
+final class AudioDeviceManager: AudioDeviceManagerProtocol {
+    private(set) var availableDevices: [AudioDevice] = [] {
+        didSet {
+            onDevicesChanged?(availableDevices)
+        }
+    }
+    private(set) var defaultDevice: AudioDevice?
+
+    @ObservationIgnored
+    var onDevicesChanged: (([AudioDevice]) -> Void)?
 
     private var deviceChangeObserver: Any?
 

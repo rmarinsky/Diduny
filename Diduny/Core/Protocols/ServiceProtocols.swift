@@ -20,6 +20,7 @@ protocol TranscriptionServiceProtocol {
     var apiKey: String? { get set }
     func transcribe(audioData: Data) async throws -> String
     func translateAndTranscribe(audioData: Data) async throws -> String
+    func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String
 }
 
 // MARK: - Clipboard Service Protocol
@@ -78,5 +79,5 @@ protocol MeetingRecorderServiceProtocol: AnyObject {
     var recordingDuration: TimeInterval { get }
     func startRecording() async throws
     func stopRecording() async throws -> URL?
-    func cancelRecording()
+    func cancelRecording() async
 }

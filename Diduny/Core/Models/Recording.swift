@@ -11,6 +11,7 @@ struct Recording: Identifiable, Codable, Equatable {
     var transcriptionText: String?
     var errorMessage: String?
     var processedAt: Date?
+    var chapters: [MeetingChapter]?
 
     // Nested to avoid conflict with RecoveryState.RecordingType
     enum RecordingType: String, Codable, CaseIterable {
@@ -31,6 +32,14 @@ struct Recording: Identifiable, Codable, Equatable {
             case .voice: "mic.fill"
             case .translation: "globe"
             case .meeting: "person.3.fill"
+            }
+        }
+
+        var shortPrefix: String {
+            switch self {
+            case .voice: "Transcribe"
+            case .translation: "Translate"
+            case .meeting: "Meeting"
             }
         }
     }

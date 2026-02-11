@@ -9,7 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Properties
 
     let appState = AppState()
-    private var cancellables = Set<AnyCancellable>()
+
+    // Audio level piping to notch
+    var audioLevelCancellable: AnyCancellable?
 
     // App Nap prevention tokens
     var recordingActivityToken: NSObjectProtocol?
@@ -33,16 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var micEngine: AVAudioEngine?
     let micBufferLock = NSLock()
     var micAudioBuffer = Data()
+    lazy var ambientListeningService = AmbientListeningService()
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
         switch SettingsStorage.shared.transcriptionProvider {
-        case .soniox: transcriptionService
-        case .whisperLocal: whisperTranscriptionService
-        }
-    }
-
-    var activeTranslationService: TranscriptionServiceProtocol {
-        switch SettingsStorage.shared.translationProvider {
         case .soniox: transcriptionService
         case .whisperLocal: whisperTranscriptionService
         }
@@ -57,21 +53,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Watch for device changes and auto-select default if selected device is disconnected
-        audioDeviceManager.$availableDevices
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] devices in
-                guard let self else { return }
-                // If selected device is no longer available, switch to default
-                if let selectedID = self.appState.selectedDeviceID,
-                   !devices.contains(where: { $0.id == selectedID }) {
-                    self.appState.selectedDeviceID = self.audioDeviceManager.defaultDevice?.id
-                }
-                // If no device selected and devices are available, select default
-                if self.appState.selectedDeviceID == nil, let defaultDevice = self.audioDeviceManager.defaultDevice {
-                    self.appState.selectedDeviceID = defaultDevice.id
-                }
+        audioDeviceManager.onDevicesChanged = { [weak self] devices in
+            guard let self else { return }
+            // If selected device is no longer available, switch to default
+            if let selectedID = self.appState.selectedDeviceID,
+               !devices.contains(where: { $0.id == selectedID }) {
+                self.appState.selectedDeviceID = self.audioDeviceManager.defaultDevice?.id
             }
-            .store(in: &cancellables)
+            // If no device selected and devices are available, select default
+            if self.appState.selectedDeviceID == nil, let defaultDevice = self.audioDeviceManager.defaultDevice {
+                self.appState.selectedDeviceID = defaultDevice.id
+            }
+        }
 
         // Listen for push-to-talk key changes
         NotificationCenter.default.addObserver(
@@ -86,6 +79,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self,
             selector: #selector(translationPushToTalkKeyChanged(_:)),
             name: .translationPushToTalkKeyChanged,
+            object: nil
+        )
+
+        // Listen for ambient listening settings changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(ambientListeningSettingsChanged(_:)),
+            name: .ambientListeningSettingsChanged,
             object: nil
         )
 
@@ -113,14 +114,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupPushToTalk()
         setupTranslationPushToTalk()
 
+        // Start ambient listening if enabled
+        setupAmbientListening()
+
         // Check for orphaned recordings from previous crash
         checkForOrphanedRecordings()
 
-        // Check for API key - only prompt if any feature uses Soniox and not set during onboarding
+        // Check for API key - prompt if transcription uses Soniox (translation always needs it)
         let needsSoniox = SettingsStorage.shared.transcriptionProvider == .soniox
-            || SettingsStorage.shared.translationProvider == .soniox
         if needsSoniox,
-           KeychainManager.shared.getSonioxAPIKey() == nil {
+           !KeychainManager.shared.hasAPIKeyFast() {
             Task {
                 try? await Task.sleep(for: .milliseconds(500))
                 openSettings()
@@ -166,7 +169,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func recoverRecording(from state: RecoveryState) {
         Task {
             do {
-                let audioData = try Data(contentsOf: URL(fileURLWithPath: state.tempFilePath))
+                let audioURL = URL(fileURLWithPath: state.tempFilePath)
+                let audioData = try await loadAudioData(from: audioURL)
                 Log.app.info("Recovered audio data: \(audioData.count) bytes")
 
                 let text: String
@@ -181,13 +185,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                     text = try await service.transcribe(audioData: audioData)
                 case .translation:
-                    var service = activeTranslationService
-                    if SettingsStorage.shared.translationProvider == .soniox {
-                        guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                            throw TranscriptionError.noAPIKey
-                        }
-                        service.apiKey = apiKey
+                    var service: TranscriptionServiceProtocol = transcriptionService
+                    guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                        throw TranscriptionError.noAPIKey
                     }
+                    service.apiKey = apiKey
                     text = try await service.translateAndTranscribe(audioData: audioData)
                 }
 
@@ -217,97 +219,110 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyService.unregisterAll()
         pushToTalkService.stop()
         translationPushToTalkService.stop()
+        ambientListeningService.stop()
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc func ambientListeningSettingsChanged(_: Notification) {
+        Log.app.info("Ambient listening settings changed - reconfiguring")
+        setupAmbientListening(restart: true)
+    }
+
+    func setupAmbientListening(restart: Bool = false) {
+        ambientListeningService.onWakeWordDetected = { [weak self] in
+            self?.toggleRecording()
+        }
+
+        if restart {
+            ambientListeningService.stop()
+        }
+
+        if SettingsStorage.shared.ambientListeningEnabled {
+            ambientListeningService.start()
+        } else {
+            ambientListeningService.stop()
+        }
+
+        appState.ambientListeningActive = ambientListeningService.isListening
+    }
+
+    func loadAudioData(from url: URL) async throws -> Data {
+        try await Task.detached(priority: .userInitiated) {
+            try Data(contentsOf: url)
+        }.value
     }
 
     // MARK: - State Change Handlers
     // Note: These are called directly from recording methods after state changes
     // Since @Observable doesn't use Combine publishers like ObservableObject
 
+    private func handleStateChange(
+        _ state: RecordingState,
+        mode: RecordingMode,
+        currentStateGetter: @escaping () -> RecordingState,
+        stateResetter: @escaping (RecordingState) -> Void,
+        successDelay: TimeInterval,
+        errorDelay: TimeInterval
+    ) {
+        switch state {
+        case .recording:
+            NotchManager.shared.startRecording(mode: mode)
+        case .processing:
+            NotchManager.shared.startProcessing(mode: mode)
+        case .success:
+            if let text = appState.lastTranscription {
+                NotchManager.shared.showSuccess(text: text)
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(successDelay))
+                if currentStateGetter() == .success {
+                    stateResetter(.idle)
+                }
+            }
+        case .error:
+            NotchManager.shared.showError(message: appState.errorMessage ?? "Error")
+            Task {
+                try? await Task.sleep(for: .seconds(errorDelay))
+                if currentStateGetter() == .error {
+                    stateResetter(.idle)
+                }
+            }
+        case .idle:
+            break
+        }
+    }
+
     func handleRecordingStateChange(_ state: RecordingState) {
-        switch state {
-        case .recording:
-            NotchManager.shared.startRecording(mode: .voice)
-        case .processing:
-            NotchManager.shared.startProcessing(mode: .voice)
-        case .success:
-            if let text = appState.lastTranscription {
-                NotchManager.shared.showSuccess(text: text)
-            }
-            Task {
-                try? await Task.sleep(for: .seconds(1.5))
-                if self.appState.recordingState == .success {
-                    self.appState.recordingState = .idle
-                }
-            }
-        case .error:
-            NotchManager.shared.showError(message: appState.errorMessage ?? "Error")
-            Task {
-                try? await Task.sleep(for: .seconds(2))
-                if self.appState.recordingState == .error {
-                    self.appState.recordingState = .idle
-                }
-            }
-        case .idle:
-            break
-        }
+        handleStateChange(
+            state,
+            mode: .voice,
+            currentStateGetter: { self.appState.recordingState },
+            stateResetter: { self.appState.recordingState = $0 },
+            successDelay: 1.5,
+            errorDelay: 2.0
+        )
     }
 
-    func handleMeetingStateChange(_ state: MeetingRecordingState) {
-        switch state {
-        case .recording:
-            NotchManager.shared.startRecording(mode: .meeting)
-        case .processing:
-            NotchManager.shared.startProcessing(mode: .meeting)
-        case .success:
-            if let text = appState.lastTranscription {
-                NotchManager.shared.showSuccess(text: text)
-            }
-            Task {
-                try? await Task.sleep(for: .seconds(2))
-                if self.appState.meetingRecordingState == .success {
-                    self.appState.meetingRecordingState = .idle
-                }
-            }
-        case .error:
-            NotchManager.shared.showError(message: appState.errorMessage ?? "Error")
-            Task {
-                try? await Task.sleep(for: .seconds(2))
-                if self.appState.meetingRecordingState == .error {
-                    self.appState.meetingRecordingState = .idle
-                }
-            }
-        case .idle:
-            break
-        }
+    func handleMeetingStateChange(_ state: RecordingState) {
+        handleStateChange(
+            state,
+            mode: .meeting,
+            currentStateGetter: { self.appState.meetingRecordingState },
+            stateResetter: { self.appState.meetingRecordingState = $0 },
+            successDelay: 2.0,
+            errorDelay: 2.0
+        )
     }
 
-    func handleTranslationStateChange(_ state: TranslationRecordingState) {
-        switch state {
-        case .recording:
-            NotchManager.shared.startRecording(mode: .translation)
-        case .processing:
-            NotchManager.shared.startProcessing(mode: .translation)
-        case .success:
-            if let text = appState.lastTranscription {
-                NotchManager.shared.showSuccess(text: text)
-            }
-            Task {
-                try? await Task.sleep(for: .seconds(1.5))
-                if self.appState.translationRecordingState == .success {
-                    self.appState.translationRecordingState = .idle
-                }
-            }
-        case .error:
-            NotchManager.shared.showError(message: appState.errorMessage ?? "Error")
-            Task {
-                try? await Task.sleep(for: .seconds(2))
-                if self.appState.translationRecordingState == .error {
-                    self.appState.translationRecordingState = .idle
-                }
-            }
-        case .idle:
-            break
-        }
+    func handleTranslationStateChange(_ state: RecordingState) {
+        handleStateChange(
+            state,
+            mode: .translation(languagePair: "EN <-> UK"),
+            currentStateGetter: { self.appState.translationRecordingState },
+            stateResetter: { self.appState.translationRecordingState = $0 },
+            successDelay: 1.5,
+            errorDelay: 2.0
+        )
     }
 
     // MARK: - Device Selection (exposed for SwiftUI)

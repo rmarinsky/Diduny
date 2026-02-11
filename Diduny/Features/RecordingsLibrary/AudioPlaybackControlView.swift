@@ -3,6 +3,7 @@ import SwiftUI
 struct AudioPlaybackControlView: View {
     let recordingId: UUID
     let fileURL: URL
+    var durationHint: TimeInterval = 0
 
     @State private var playbackService = AudioPlaybackService.shared
 
@@ -10,38 +11,47 @@ struct AudioPlaybackControlView: View {
         playbackService.playingRecordingId == recordingId
     }
 
+    private var effectiveDuration: TimeInterval {
+        if isActiveRecording, playbackService.duration > 0 {
+            return playbackService.duration
+        }
+        return max(durationHint, 0.01)
+    }
+
+    private var currentTime: TimeInterval {
+        isActiveRecording ? playbackService.currentTime : 0
+    }
+
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             // Play/Pause button
             Button {
                 playbackService.togglePlayback(recordingId: recordingId, fileURL: fileURL)
             } label: {
                 Image(systemName: isActiveRecording && playbackService.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.caption)
-                    .frame(width: 20, height: 20)
+                    .font(.body)
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
 
-            // Slider + time (only when this is the active recording)
-            if isActiveRecording {
-                Slider(
-                    value: Binding(
-                        get: { playbackService.currentTime },
-                        set: { playbackService.seek(to: $0) }
-                    ),
-                    in: 0 ... max(playbackService.duration, 0.01),
-                    onEditingChanged: { editing in
-                        playbackService.isSeeking = editing
-                    }
-                )
-                .frame(minWidth: 60, maxWidth: 120)
+            // Always-visible slider
+            Slider(
+                value: Binding(
+                    get: { currentTime },
+                    set: { playbackService.seek(to: $0) }
+                ),
+                in: 0 ... effectiveDuration,
+                onEditingChanged: { editing in
+                    playbackService.isSeeking = editing
+                }
+            )
 
-                Text(formatTime(playbackService.currentTime))
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .monospacedDigit()
-                    .frame(width: 36, alignment: .trailing)
-            }
+            // Time display: elapsed / total
+            Text("\(formatTime(currentTime)) / \(formatTime(effectiveDuration))")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .monospacedDigit()
+                .frame(minWidth: 70, alignment: .trailing)
         }
     }
 

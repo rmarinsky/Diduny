@@ -10,20 +10,40 @@ final class KeychainManager {
         case sonioxAPIKey = "soniox_api_key"
     }
 
+    private var cachedKey: String?
+    private var cacheLoaded = false
+
     private init() {}
 
     // MARK: - Soniox API Key
 
+    /// Returns the API key, reading from Keychain only on first access (lazy cache).
     func getSonioxAPIKey() -> String? {
-        get(key: .sonioxAPIKey)
+        if cacheLoaded {
+            return cachedKey
+        }
+        cachedKey = get(key: .sonioxAPIKey)
+        cacheLoaded = true
+        return cachedKey
     }
 
     func setSonioxAPIKey(_ value: String) throws {
         try save(key: .sonioxAPIKey, value: value)
+        cachedKey = value
+        cacheLoaded = true
+        SettingsStorage.shared.hasCloudAPIKey = true
     }
 
     func deleteSonioxAPIKey() throws {
         try delete(key: .sonioxAPIKey)
+        cachedKey = nil
+        cacheLoaded = true
+        SettingsStorage.shared.hasCloudAPIKey = false
+    }
+
+    /// Lightweight check using UserDefaults flag — no Keychain access.
+    func hasAPIKeyFast() -> Bool {
+        SettingsStorage.shared.hasCloudAPIKey
     }
 
     // MARK: - Private Methods

@@ -3,19 +3,21 @@
 # Build Diduny DEV and install to /Applications
 # This script builds the development version with "Diduny DEV" name
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_DIR"
 
 PROJECT_NAME="Diduny"
 SCHEME="Diduny DEV"
 CONFIG="Debug"
 APP_NAME="Diduny DEV"
 BUNDLE_ID="ua.com.rmarinsky.diduny.dev"
-BUILD_DIR="$SCRIPT_DIR/build"
+BUILD_DIR="$PROJECT_DIR/build/dev-install"
 APP_PATH="$BUILD_DIR/${CONFIG}/${APP_NAME}.app"
 INSTALL_PATH="/Applications/${APP_NAME}.app"
+DESTINATION="platform=macOS,arch=$(uname -m)"
 
 echo "=== Clean Install: $APP_NAME ==="
 echo ""
@@ -44,13 +46,24 @@ echo "=== Building $APP_NAME ==="
 echo ""
 
 # Check if xcodegen is installed and project needs regenerating
-if [ ! -f "${PROJECT_NAME}.xcodeproj/project.pbxproj" ]; then
+if [ ! -f "$PROJECT_DIR/${PROJECT_NAME}.xcodeproj/project.pbxproj" ]; then
     echo "Xcode project not found. Generating..."
     if ! command -v xcodegen &> /dev/null; then
-        echo "XcodeGen not found. Installing via Homebrew..."
-        brew install xcodegen
+        if command -v brew &> /dev/null; then
+            echo "XcodeGen not found. Installing via Homebrew..."
+            brew install xcodegen
+        else
+            echo "XcodeGen not found and Homebrew is not installed. Install xcodegen and re-run."
+            exit 1
+        fi
     fi
-    xcodegen generate
+
+    if [ ! -f "$PROJECT_DIR/project.yml" ]; then
+        echo "No project spec found at $PROJECT_DIR/project.yml"
+        exit 1
+    fi
+
+    xcodegen generate --spec "$PROJECT_DIR/project.yml"
     echo ""
 fi
 
@@ -58,21 +71,27 @@ fi
 echo "Cleaning previous build..."
 rm -rf "$BUILD_DIR"
 
+# Ensure build dir exists (needed for tee log file)
+mkdir -p "$BUILD_DIR"
+
 # Build the app
 echo "Building $APP_NAME ($CONFIG)..."
 xcodebuild \
-    -project "${PROJECT_NAME}.xcodeproj" \
+    -project "$PROJECT_DIR/${PROJECT_NAME}.xcodeproj" \
     -scheme "$SCHEME" \
     -configuration "$CONFIG" \
+    -destination "$DESTINATION" \
     -derivedDataPath "$BUILD_DIR" \
     CONFIGURATION_BUILD_DIR="$BUILD_DIR/${CONFIG}" \
     clean build \
+    | tee "$BUILD_DIR/xcodebuild.log" \
     | grep -E "^(Build|Compiling|Linking|error:|warning:|\*\*)" || true
 
 # Check if build succeeded
 if [ ! -d "$APP_PATH" ]; then
     echo ""
     echo "Build failed. App not found at: $APP_PATH"
+    echo "See log: $BUILD_DIR/xcodebuild.log"
     exit 1
 fi
 

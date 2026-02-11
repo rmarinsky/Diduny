@@ -1,4 +1,5 @@
 import DynamicNotchKit
+import Observation
 import SwiftUI
 
 enum NotchState: Equatable {
@@ -12,13 +13,13 @@ enum NotchState: Equatable {
 
 enum RecordingMode: Equatable {
     case voice
-    case translation
+    case translation(languagePair: String = "EN <-> UK")
     case meeting
 
     var label: String {
         switch self {
         case .voice: "Recording..."
-        case .translation: "Recording (Translate)..."
+        case let .translation(pair): "Recording (\(pair))..."
         case .meeting: "Meeting Recording..."
         }
     }
@@ -40,11 +41,14 @@ enum RecordingMode: Equatable {
     }
 }
 
+@Observable
 @MainActor
-final class NotchManager: ObservableObject {
+final class NotchManager {
     static let shared = NotchManager()
 
-    @Published private(set) var state: NotchState = .idle
+    private(set) var state: NotchState = .idle
+    private(set) var recordingStartTime: Date?
+    var audioLevel: Float = 0
 
     private var notch: DynamicNotch<NotchExpandedView, NotchCompactLeadingView, NotchCompactTrailingView>?
     private var autoDismissTask: Task<Void, Never>?
@@ -53,18 +57,23 @@ final class NotchManager: ObservableObject {
 
     func startRecording(mode: RecordingMode = .voice) {
         autoDismissTask?.cancel()
+        recordingStartTime = Date()
         state = .recording(mode: mode)
         showCompact()
     }
 
     func startProcessing(mode: RecordingMode = .voice) {
         autoDismissTask?.cancel()
+        recordingStartTime = nil
+        audioLevel = 0
         state = .processing(mode: mode)
         showCompact()
     }
 
     func showSuccess(text: String) {
         autoDismissTask?.cancel()
+        recordingStartTime = nil
+        audioLevel = 0
         state = .success(text: text)
         showExpanded()
         scheduleAutoDismiss(delay: 2.0)
@@ -72,6 +81,8 @@ final class NotchManager: ObservableObject {
 
     func showError(message: String) {
         autoDismissTask?.cancel()
+        recordingStartTime = nil
+        audioLevel = 0
         state = .error(message: message)
         showExpanded()
         scheduleAutoDismiss(delay: 3.0)
@@ -87,6 +98,8 @@ final class NotchManager: ObservableObject {
 
     func hide() {
         autoDismissTask?.cancel()
+        recordingStartTime = nil
+        audioLevel = 0
         state = .idle
         Task {
             await notch?.hide()
@@ -105,10 +118,21 @@ final class NotchManager: ObservableObject {
         }
     }
 
+    private var screenHasNotch: Bool {
+        NSScreen.main?.auxiliaryTopLeftArea != nil && NSScreen.main?.auxiliaryTopRightArea != nil
+    }
+
     private func showCompact() {
         ensureNotch()
-        Task {
-            await notch?.compact()
+        if screenHasNotch {
+            Task {
+                await notch?.compact()
+            }
+        } else {
+            // Floating style doesn't support compact — use expanded instead
+            Task {
+                await notch?.expand()
+            }
         }
     }
 

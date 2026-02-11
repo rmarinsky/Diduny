@@ -3,56 +3,45 @@ import SwiftUI
 struct RecordingRowView: View {
     let recording: Recording
 
-    private let storage = RecordingsLibraryStorage.shared
-
     var body: some View {
-        HStack(spacing: 10) {
-            // Type icon
-            Image(systemName: recording.type.iconName)
-                .foregroundColor(iconColor)
-                .font(.title3)
-                .frame(width: 24)
+        HStack(spacing: 8) {
+            // Type prefix badge
+            Text(recording.type.shortPrefix)
+                .font(.caption2)
+                .fontWeight(.medium)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(typeColor.opacity(0.15))
+                .foregroundColor(typeColor)
+                .clipShape(Capsule())
 
-            // Info
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(recording.type.displayName) - \(formattedDate)")
-                    .font(.body)
-                    .lineLimit(1)
+            // Time only (date is shown in section header)
+            Text(formattedTime)
+                .font(.body)
+                .lineLimit(1)
 
-                HStack(spacing: 8) {
-                    Text(formattedDuration)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+            Text("\u{00B7}")
+                .foregroundColor(.secondary)
 
-                    Text(formattedSize)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+            // Duration
+            Text(formattedDuration)
+                .font(.caption)
+                .foregroundColor(.secondary)
 
-                    statusBadge
-                }
-            }
+            Text("\u{00B7}")
+                .foregroundColor(.secondary)
 
-            // Playback control
-            AudioPlaybackControlView(
-                recordingId: recording.id,
-                fileURL: storage.audioFileURL(for: recording)
-            )
+            // Size
+            Text(formattedSize)
+                .font(.caption)
+                .foregroundColor(.secondary)
 
             Spacer()
-
-            // Transcription preview
-            if let text = recording.transcriptionText, !text.isEmpty {
-                Text(text)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: 200, alignment: .trailing)
-            }
         }
         .padding(.vertical, 2)
     }
 
-    private var iconColor: Color {
+    private var typeColor: Color {
         switch recording.type {
         case .voice: .blue
         case .translation: .green
@@ -60,10 +49,9 @@ struct RecordingRowView: View {
         }
     }
 
-    private var formattedDate: String {
+    private var formattedTime: String {
         let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
+        formatter.dateFormat = "HH:mm"
         return formatter.string(from: recording.createdAt)
     }
 
@@ -75,26 +63,5 @@ struct RecordingRowView: View {
 
     private var formattedSize: String {
         ByteCountFormatter.string(fromByteCount: recording.fileSizeBytes, countStyle: .file)
-    }
-
-    @ViewBuilder
-    private var statusBadge: some View {
-        Text(recording.status.displayName)
-            .font(.caption2)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(statusColor.opacity(0.15))
-            .foregroundColor(statusColor)
-            .clipShape(Capsule())
-    }
-
-    private var statusColor: Color {
-        switch recording.status {
-        case .unprocessed: .gray
-        case .processing: .blue
-        case .transcribed: .green
-        case .translated: .purple
-        case .failed: .red
-        }
     }
 }

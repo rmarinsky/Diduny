@@ -4,7 +4,7 @@ import SwiftUI
 
 struct AudioSettingsView: View {
     @Environment(AppState.self) var appState
-    @StateObject private var deviceManager = AudioDeviceManager()
+    @State private var deviceManager = AudioDeviceManager()
 
     // Test recording state
     @State private var isTestRecording = false

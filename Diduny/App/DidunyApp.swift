@@ -19,7 +19,8 @@ struct DidunyApp: App {
             .onChange(of: appDelegate.appState.shouldOpenSettings) { _, shouldOpen in
                 if shouldOpen {
                     openSettings()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(100))
                         NSApp.activate(ignoringOtherApps: true)
                     }
                     appDelegate.appState.shouldOpenSettings = false

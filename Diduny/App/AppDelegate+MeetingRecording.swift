@@ -33,12 +33,14 @@ extension AppDelegate {
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
 
-        // Disconnect real-time transcription and stop mic capture
-        await realtimeTranscriptionService.disconnect()
-        stopMicrophoneCapture()
+        // Disconnect real-time transcription and stop mic capture (if active)
+        if appState.liveTranscriptStore != nil {
+            await realtimeTranscriptionService.disconnect()
+            stopMicrophoneCapture()
+        }
 
         // Cancel meeting recorder
-        meetingRecorderService.cancelRecording()
+        await meetingRecorderService.cancelRecording()
 
         // Mark transcript as inactive but keep window open for review
         await MainActor.run {
@@ -92,15 +94,9 @@ extension AppDelegate {
             return
         }
 
-        guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
-            Log.app.warning("No API key for meeting recording")
-            await MainActor.run {
-                appState.errorMessage = "Please add your Soniox API key in Settings"
-                appState.meetingRecordingState = .error
-                handleMeetingStateChange(.error)
-            }
-            return
-        }
+        // API key is optional — recording works without it, but real-time transcription requires it
+        let apiKey = KeychainManager.shared.getSonioxAPIKey()
+        let hasApiKey = apiKey != nil && !apiKey!.isEmpty
 
         // Prevent App Nap during meeting recording
         meetingActivityToken = ProcessInfo.processInfo.beginActivity(
@@ -127,8 +123,13 @@ extension AppDelegate {
             try await meetingRecorderService.startRecording()
             Log.app.info("Meeting recording started")
 
-            // Setup real-time transcription
-            let store = await setupRealtimeTranscription(apiKey: apiKey)
+            // Setup real-time transcription only if API key is available
+            var store: LiveTranscriptStore?
+            if hasApiKey, let key = apiKey {
+                store = await setupRealtimeTranscription(apiKey: key)
+            } else {
+                Log.app.info("No API key — recording audio only, no real-time transcription")
+            }
 
             // Only set recording state AFTER confirmed working
             await MainActor.run {
@@ -138,14 +139,24 @@ extension AppDelegate {
                 handleMeetingStateChange(.recording)
             }
 
-            // Show transcript window
-            await MainActor.run {
-                TranscriptionWindowController.shared.showWindow(store: store)
+            // Show transcript window only if we have real-time transcription
+            if let store {
+                await MainActor.run {
+                    TranscriptionWindowController.shared.showWindow(store: store)
+                }
             }
 
             // Activate escape cancel handler
             await MainActor.run {
                 setupMeetingEscapeCancelHandler()
+            }
+
+            // Activate chapter bookmark hotkey
+            await MainActor.run {
+                appState.meetingChapters = []
+                hotkeyService.registerChapterHotkey { [weak self] in
+                    self?.addMeetingChapter()
+                }
             }
 
             // Save recovery state in case of crash
@@ -159,6 +170,13 @@ extension AppDelegate {
             }
         } catch {
             Log.app.error("Meeting recording failed: \(error)")
+
+            // End App Nap prevention on failed start
+            if let token = meetingActivityToken {
+                ProcessInfo.processInfo.endActivity(token)
+                meetingActivityToken = nil
+            }
+
             await MainActor.run {
                 appState.errorMessage = error.localizedDescription
                 appState.meetingRecordingState = .error
@@ -184,6 +202,7 @@ extension AppDelegate {
         // mixing in microphone audio before sending
         let captureService = meetingRecorderService.systemAudioCaptureService
         NSLog("[MeetingRT] systemAudioCaptureService is %@", captureService == nil ? "nil" : "present")
+        var micUnderrunCount = 0
         captureService?.onRawAudioData = { [weak self, weak rtService] systemData in
             guard let self, let rtService else { return }
 
@@ -191,12 +210,21 @@ extension AppDelegate {
 
             // Grab matching amount of mic audio from buffer
             self.micBufferLock.lock()
-            let micChunkSize = min(self.micAudioBuffer.count, systemData.count)
+            let availableMicBytes = self.micAudioBuffer.count
+            let micChunkSize = min(availableMicBytes, systemData.count)
             let micData = micChunkSize > 0 ? Data(self.micAudioBuffer.prefix(micChunkSize)) : Data()
             if micChunkSize > 0 {
                 self.micAudioBuffer.removeFirst(micChunkSize)
             }
             self.micBufferLock.unlock()
+
+            // Log mic buffer underrun (not enough mic data → silence on mic channel)
+            if micChunkSize < systemData.count {
+                micUnderrunCount += 1
+                if micUnderrunCount <= 5 || micUnderrunCount % 100 == 0 {
+                    NSLog("[MeetingRT] Mic buffer underrun #%d: needed %d bytes, had %d (mic channel will be partially silent)", micUnderrunCount, systemData.count, availableMicBytes)
+                }
+            }
 
             // Interleave into stereo: left = system audio, right = mic audio
             var stereoData = Data(count: sampleCount * 2 * MemoryLayout<Int16>.size)
@@ -258,10 +286,24 @@ extension AppDelegate {
 
     // MARK: - Stop Meeting Recording
 
+    func addMeetingChapter() {
+        guard appState.meetingRecordingState == .recording,
+              let startTime = appState.meetingRecordingStartTime else { return }
+        let elapsed = Date().timeIntervalSince(startTime)
+        let chapterNumber = appState.meetingChapters.count + 1
+        let chapter = MeetingChapter(timestampSeconds: elapsed, label: "Chapter \(chapterNumber)")
+        appState.meetingChapters.append(chapter)
+        NotchManager.shared.showInfo(message: "Chapter \(chapterNumber) added", duration: 1.0)
+        Log.app.info("Meeting chapter \(chapterNumber) added at \(elapsed)s")
+    }
+
     func stopMeetingRecording() async {
         Log.app.info("stopMeetingRecording: BEGIN")
 
         guard #available(macOS 13.0, *) else { return }
+
+        // Deactivate chapter bookmark hotkey
+        hotkeyService.unregisterChapterHotkey()
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
@@ -274,10 +316,13 @@ extension AppDelegate {
             handleMeetingStateChange(.processing)
         }
 
-        // Finalize and disconnect real-time transcription, stop mic capture
-        stopMicrophoneCapture()
-        await realtimeTranscriptionService.finalize()
-        await realtimeTranscriptionService.disconnect()
+        // Finalize and disconnect real-time transcription (if active), stop mic capture
+        let hasRealtimeSession = await MainActor.run { appState.liveTranscriptStore != nil }
+        if hasRealtimeSession {
+            stopMicrophoneCapture()
+            await realtimeTranscriptionService.finalize()
+            await realtimeTranscriptionService.disconnect()
+        }
 
         // Mark store as no longer active
         let store = await MainActor.run { appState.liveTranscriptStore }
@@ -300,47 +345,60 @@ extension AppDelegate {
             // Check if we have real-time transcript
             let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
 
-            let text: String
+            let apiKey = KeychainManager.shared.getSonioxAPIKey()
+            let hasApiKey = apiKey != nil && !apiKey!.isEmpty
+
+            let text: String?
             if !realtimeText.isEmpty {
                 // Use real-time transcript
                 text = realtimeText
                 Log.app.info("Using real-time transcript (\(realtimeText.count) chars)")
-            } else {
+            } else if hasApiKey {
                 // Fallback: upload WAV to async REST API
                 Log.app.info("No real-time transcript, falling back to async API...")
-                let audioData = try Data(contentsOf: audioURL)
+                let audioData = try await loadAudioData(from: audioURL)
                 Log.app.info("Meeting recording size = \(audioData.count) bytes")
 
-                guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                    throw TranscriptionError.noAPIKey
-                }
-
-                transcriptionService.apiKey = apiKey
+                transcriptionService.apiKey = apiKey!
                 text = try await transcriptionService.transcribeMeeting(audioData: audioData)
-                Log.app.info("Async meeting transcription received: \(text.prefix(100))...")
+                Log.app.info("Async meeting transcription received: \(text?.prefix(100) ?? "")...")
+            } else {
+                // No API key — save audio only, user can transcribe later from Recordings
+                text = nil
+                Log.app.info("No API key — saving meeting recording without transcription")
             }
 
-            clipboardService.copy(text: text)
-            Log.app.info("stopMeetingRecording: Text copied to clipboard")
+            if let text {
+                clipboardService.copy(text: text)
+                Log.app.info("stopMeetingRecording: Text copied to clipboard")
 
-            if SettingsStorage.shared.autoPaste {
-                Log.app.info("stopMeetingRecording: Auto-pasting")
-                do {
-                    try await clipboardService.paste()
-                } catch ClipboardError.accessibilityNotGranted {
-                    Log.app.warning("stopMeetingRecording: Accessibility permission needed")
-                    PermissionManager.shared.showPermissionAlert(for: .accessibility)
-                } catch {
-                    Log.app.error("stopMeetingRecording: Paste failed - \(error.localizedDescription)")
+                if SettingsStorage.shared.autoPaste {
+                    Log.app.info("stopMeetingRecording: Auto-pasting")
+                    do {
+                        try await clipboardService.paste()
+                    } catch ClipboardError.accessibilityNotGranted {
+                        Log.app.warning("stopMeetingRecording: Accessibility permission needed")
+                        PermissionManager.shared.showPermissionAlert(for: .accessibility)
+                    } catch {
+                        Log.app.error("stopMeetingRecording: Paste failed - \(error.localizedDescription)")
+                    }
                 }
-            }
 
-            // Update state to success
-            await MainActor.run {
-                appState.lastTranscription = text
-                appState.meetingRecordingState = .success
-                appState.meetingRecordingStartTime = nil
-                handleMeetingStateChange(.success)
+                // Update state to success
+                await MainActor.run {
+                    appState.lastTranscription = text
+                    appState.meetingRecordingState = .success
+                    appState.meetingRecordingStartTime = nil
+                    handleMeetingStateChange(.success)
+                }
+            } else {
+                // No transcription — still success (audio was recorded)
+                await MainActor.run {
+                    appState.lastTranscription = nil
+                    appState.meetingRecordingState = .success
+                    appState.meetingRecordingStartTime = nil
+                    handleMeetingStateChange(.success)
+                }
             }
             Log.app.info("stopMeetingRecording: SUCCESS")
 
@@ -464,6 +522,7 @@ extension AppDelegate {
 
         // Install tap — downsample + convert to int16 manually, buffer for mixing
         let bufferSize: AVAudioFrameCount = 4096
+        var micOverrunCount = 0
         inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, _ in
             guard let self, let floatData = buffer.floatChannelData else { return }
 
@@ -485,9 +544,16 @@ extension AppDelegate {
 
             self.micBufferLock.lock()
             self.micAudioBuffer.append(int16Data)
-            // Cap at 1 second of audio (32000 bytes at 16kHz int16)
-            if self.micAudioBuffer.count > 32000 {
-                self.micAudioBuffer.removeFirst(self.micAudioBuffer.count - 32000)
+            // Cap at 3 seconds of audio (96000 bytes at 16kHz int16)
+            // Larger buffer prevents underruns that cause diarization to lose the mic channel
+            let maxBufferSize = 96000
+            if self.micAudioBuffer.count > maxBufferSize {
+                let overflow = self.micAudioBuffer.count - maxBufferSize
+                self.micAudioBuffer.removeFirst(overflow)
+                micOverrunCount += 1
+                if micOverrunCount <= 5 || micOverrunCount % 100 == 0 {
+                    NSLog("[MeetingRT] Mic buffer overrun #%d: discarded %d bytes (system audio consuming too slowly)", micOverrunCount, overflow)
+                }
             }
             self.micBufferLock.unlock()
         }
