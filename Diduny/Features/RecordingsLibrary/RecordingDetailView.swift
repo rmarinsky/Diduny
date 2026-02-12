@@ -160,7 +160,7 @@ struct RecordingDetailView: View {
                 .foregroundColor(.blue)
 
             if hasSonioxKey {
-                HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Button("Transcribe + Diarize") {
                         queueService.enqueue(
                             [recording.id],
@@ -170,43 +170,47 @@ struct RecordingDetailView: View {
                     }
                     .disabled(recording.status == .processing)
 
-                    Divider()
-                        .frame(height: 20)
+                    HStack(spacing: 6) {
+                        Text("Translate:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
 
-                    Text("Translate to:")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 4) {
+                                ForEach(favoriteLanguages) { lang in
+                                    Button(lang.code.uppercased()) {
+                                        queueService.enqueue(
+                                            [recording.id],
+                                            action: .translate,
+                                            providerOverride: .soniox,
+                                            targetLanguage: lang.code
+                                        )
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    .disabled(recording.status == .processing)
+                                    .help(lang.name)
+                                }
 
-                    ForEach(favoriteLanguages) { lang in
-                        Button(lang.name) {
-                            queueService.enqueue(
-                                [recording.id],
-                                action: .translate,
-                                providerOverride: .soniox,
-                                targetLanguage: lang.code
-                            )
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(recording.status == .processing)
-                    }
-
-                    if !otherLanguages.isEmpty {
-                        Menu("Other...") {
-                            ForEach(otherLanguages) { lang in
-                                Button(lang.name) {
-                                    queueService.enqueue(
-                                        [recording.id],
-                                        action: .translate,
-                                        providerOverride: .soniox,
-                                        targetLanguage: lang.code
-                                    )
+                                if !otherLanguages.isEmpty {
+                                    Menu("...") {
+                                        ForEach(otherLanguages) { lang in
+                                            Button(lang.name) {
+                                                queueService.enqueue(
+                                                    [recording.id],
+                                                    action: .translate,
+                                                    providerOverride: .soniox,
+                                                    targetLanguage: lang.code
+                                                )
+                                            }
+                                        }
+                                    }
+                                    .menuStyle(.borderlessButton)
+                                    .controlSize(.small)
+                                    .disabled(recording.status == .processing)
                                 }
                             }
                         }
-                        .menuStyle(.borderlessButton)
-                        .controlSize(.small)
-                        .disabled(recording.status == .processing)
                     }
                 }
             } else {

@@ -1,5 +1,4 @@
 import AppKit
-import AVFoundation
 import Foundation
 
 // MARK: - Meeting Recording
@@ -33,10 +32,10 @@ extension AppDelegate {
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
 
-        // Disconnect real-time transcription and stop mic capture (if active)
+        // Disconnect real-time transcription (if active)
         if appState.liveTranscriptStore != nil {
             await realtimeTranscriptionService.disconnect()
-            stopMicrophoneCapture()
+            meetingRecorderService.onRealtimeAudioData = nil
         }
 
         // Cancel meeting recorder
@@ -69,6 +68,11 @@ extension AppDelegate {
 
     func startMeetingRecording() async {
         Log.app.info("startMeetingRecording: BEGIN")
+
+        guard canStartRecording(kind: .meeting) else {
+            Log.app.info("startMeetingRecording: blocked by another active recording mode")
+            return
+        }
 
         guard #available(macOS 13.0, *) else {
             Log.app.warning("Meeting recording requires macOS 13.0+")
@@ -112,6 +116,7 @@ extension AppDelegate {
 
         do {
             meetingRecorderService.audioSource = SettingsStorage.shared.meetingAudioSource
+            meetingRecorderService.onRealtimeAudioData = nil
 
             // Set microphone device for mixed recording
             if let deviceID = appState.selectedDeviceID {
@@ -193,59 +198,10 @@ extension AppDelegate {
 
         let rtService = realtimeTranscriptionService
 
-        // Clear mic buffer
-        micBufferLock.withLock {
-            micAudioBuffer = Data()
+        // Stream the exact same mixed mono audio that is written to fallback WAV.
+        meetingRecorderService.onRealtimeAudioData = { [weak rtService] pcmData in
+            rtService?.sendAudioData(pcmData)
         }
-
-        // Wire raw PCM audio from system capture to WebSocket,
-        // mixing in microphone audio before sending
-        let captureService = meetingRecorderService.systemAudioCaptureService
-        NSLog("[MeetingRT] systemAudioCaptureService is %@", captureService == nil ? "nil" : "present")
-        var micUnderrunCount = 0
-        captureService?.onRawAudioData = { [weak self, weak rtService] systemData in
-            guard let self, let rtService else { return }
-
-            let sampleCount = systemData.count / MemoryLayout<Int16>.size
-
-            // Grab matching amount of mic audio from buffer
-            self.micBufferLock.lock()
-            let availableMicBytes = self.micAudioBuffer.count
-            let micChunkSize = min(availableMicBytes, systemData.count)
-            let micData = micChunkSize > 0 ? Data(self.micAudioBuffer.prefix(micChunkSize)) : Data()
-            if micChunkSize > 0 {
-                self.micAudioBuffer.removeFirst(micChunkSize)
-            }
-            self.micBufferLock.unlock()
-
-            // Log mic buffer underrun (not enough mic data → silence on mic channel)
-            if micChunkSize < systemData.count {
-                micUnderrunCount += 1
-                if micUnderrunCount <= 5 || micUnderrunCount % 100 == 0 {
-                    NSLog("[MeetingRT] Mic buffer underrun #%d: needed %d bytes, had %d (mic channel will be partially silent)", micUnderrunCount, systemData.count, availableMicBytes)
-                }
-            }
-
-            // Interleave into stereo: left = system audio, right = mic audio
-            var stereoData = Data(count: sampleCount * 2 * MemoryLayout<Int16>.size)
-            stereoData.withUnsafeMutableBytes { stereoRaw in
-                let stereo = stereoRaw.bindMemory(to: Int16.self)
-                systemData.withUnsafeBytes { sysRaw in
-                    let sys = sysRaw.bindMemory(to: Int16.self)
-                    micData.withUnsafeBytes { micRaw in
-                        let mic = micRaw.bindMemory(to: Int16.self)
-                        for i in 0 ..< sampleCount {
-                            stereo[i * 2] = sys[i]                        // Left = system
-                            stereo[i * 2 + 1] = i < mic.count ? mic[i] : 0 // Right = mic
-                        }
-                    }
-                }
-            }
-            rtService.sendAudioData(stereoData)
-        }
-
-        // Start microphone capture (buffers audio for mixing above)
-        setupMicrophoneCapture()
 
         // Wire token callbacks
         rtService.onTokensReceived = { [weak store] tokens in
@@ -267,7 +223,15 @@ extension AppDelegate {
 
         // Connect WebSocket (non-blocking — recording works even if this fails)
         do {
-            try await rtService.connect(apiKey: apiKey)
+            let languageHints = SettingsStorage.shared.sonioxLanguageHints
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            try await rtService.connect(
+                apiKey: apiKey,
+                languageHints: languageHints,
+                strictLanguageHints: SettingsStorage.shared.sonioxLanguageHintsStrict
+            )
             await MainActor.run {
                 store.isActive = true
             }
@@ -316,12 +280,12 @@ extension AppDelegate {
             handleMeetingStateChange(.processing)
         }
 
-        // Finalize and disconnect real-time transcription (if active), stop mic capture
+        // Finalize and disconnect real-time transcription (if active)
         let hasRealtimeSession = await MainActor.run { appState.liveTranscriptStore != nil }
         if hasRealtimeSession {
-            stopMicrophoneCapture()
             await realtimeTranscriptionService.finalize()
             await realtimeTranscriptionService.disconnect()
+            meetingRecorderService.onRealtimeAudioData = nil
         }
 
         // Mark store as no longer active
@@ -490,90 +454,4 @@ extension AppDelegate {
         escapeService.activate()
     }
 
-    // MARK: - Microphone Capture for Real-Time Transcription
-
-    private func setupMicrophoneCapture() {
-        let engine = AVAudioEngine()
-        let inputNode = engine.inputNode
-
-        // Set the microphone device if user has selected one
-        if let deviceID = appState.selectedDeviceID,
-           let device = audioDeviceManager.device(for: deviceID)
-        {
-            var audioDeviceID = device.id
-            let propertySize = UInt32(MemoryLayout<AudioDeviceID>.size)
-            let status = AudioUnitSetProperty(
-                inputNode.audioUnit!,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global,
-                0,
-                &audioDeviceID,
-                propertySize
-            )
-            if status != noErr {
-                NSLog("[MeetingRT] Failed to set mic device: %d", status)
-            }
-        }
-
-        let inputFormat = inputNode.outputFormat(forBus: 0)
-        let inputSampleRate = inputFormat.sampleRate
-        let targetSampleRate = 16000.0
-        let ratio = inputSampleRate / targetSampleRate
-        NSLog("[MeetingRT] Mic: %.0fHz %dch, downsample ratio=%.2f", inputSampleRate, inputFormat.channelCount, ratio)
-
-        // Install tap — downsample + convert to int16 manually, buffer for mixing
-        let bufferSize: AVAudioFrameCount = 4096
-        var micOverrunCount = 0
-        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, _ in
-            guard let self, let floatData = buffer.floatChannelData else { return }
-
-            let inputFrames = Int(buffer.frameLength)
-            let outputFrames = Int(Double(inputFrames) / ratio)
-            guard outputFrames > 0 else { return }
-
-            // Downsample and convert float32 → int16
-            var int16Data = Data(count: outputFrames * MemoryLayout<Int16>.size)
-            int16Data.withUnsafeMutableBytes { rawBuffer in
-                let samples = rawBuffer.bindMemory(to: Int16.self)
-                let channel = floatData[0]
-                for i in 0 ..< outputFrames {
-                    let srcIndex = min(Int(Double(i) * ratio), inputFrames - 1)
-                    let clamped = max(-1.0, min(1.0, channel[srcIndex]))
-                    samples[i] = Int16(clamped * Float(Int16.max))
-                }
-            }
-
-            self.micBufferLock.lock()
-            self.micAudioBuffer.append(int16Data)
-            // Cap at 3 seconds of audio (96000 bytes at 16kHz int16)
-            // Larger buffer prevents underruns that cause diarization to lose the mic channel
-            let maxBufferSize = 96000
-            if self.micAudioBuffer.count > maxBufferSize {
-                let overflow = self.micAudioBuffer.count - maxBufferSize
-                self.micAudioBuffer.removeFirst(overflow)
-                micOverrunCount += 1
-                if micOverrunCount <= 5 || micOverrunCount % 100 == 0 {
-                    NSLog("[MeetingRT] Mic buffer overrun #%d: discarded %d bytes (system audio consuming too slowly)", micOverrunCount, overflow)
-                }
-            }
-            self.micBufferLock.unlock()
-        }
-
-        do {
-            try engine.start()
-            self.micEngine = engine
-            NSLog("[MeetingRT] Microphone capture started (buffering for mix)")
-        } catch {
-            NSLog("[MeetingRT] Failed to start mic engine: %@", error.localizedDescription)
-        }
-    }
-
-    private func stopMicrophoneCapture() {
-        if let engine = micEngine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-            micEngine = nil
-            NSLog("[MeetingRT] Microphone capture stopped")
-        }
-    }
 }

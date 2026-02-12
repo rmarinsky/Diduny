@@ -141,8 +141,8 @@ final class OnboardingManager {
     /// Show onboarding from settings - resumes from current step
     func showFromSettings() {
         forceShowOnboarding = true
-        // If already completed, start from welcome but keep permissions
-        if hasCompletedOnboarding {
+        // Always restart from the beginning when opening from settings.
+        if hasCompletedOnboarding || currentStep == .complete {
             currentStep = .welcome
         }
     }
@@ -152,7 +152,7 @@ final class OnboardingManager {
         guard isFirstLaunch else { return }
 
         SettingsStorage.shared.pushToTalkKey = .rightShift
-        SettingsStorage.shared.handsFreeModeEnabled = true
+        SettingsStorage.shared.handsFreeModeEnabled = false
         SettingsStorage.shared.autoPaste = true
         SettingsStorage.shared.playSoundOnCompletion = true
     }
@@ -170,9 +170,10 @@ final class OnboardingWindowController {
     private init() {}
 
     func showOnboarding(completion: @escaping () -> Void) {
-        guard window == nil else {
+        if let window {
             // Window already exists, bring to front
-            window?.makeKeyAndOrderFront(nil)
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
             NSApp.activate(ignoringOtherApps: true)
             return
         }
@@ -190,21 +191,29 @@ final class OnboardingWindowController {
         self.hostingView = hostingView
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 550, height: 580),
-            styleMask: [.titled, .closable, .miniaturizable],
+            contentRect: NSRect(x: 0, y: 0, width: 1320, height: 820),
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
 
         window.title = "Welcome to Diduny"
         window.contentView = hostingView
+        window.identifier = NSUserInterfaceItemIdentifier("diduny.onboarding")
         window.center()
+        window.minSize = NSSize(width: 1080, height: 700)
         window.isReleasedWhenClosed = false
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.backgroundColor = .clear
+        window.isOpaque = false
 
         self.windowDelegate = WindowDelegate(onClose: {
             // If user closes window without completing
             OnboardingManager.shared.forceShowOnboarding = false
             self.window = nil
+            self.hostingView = nil
             self.windowDelegate = nil
             completion()
         })
@@ -212,12 +221,15 @@ final class OnboardingWindowController {
 
         self.window = window
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func closeOnboarding() {
+        window?.delegate = nil
         window?.close()
         window = nil
+        hostingView = nil
         windowDelegate = nil
     }
 }

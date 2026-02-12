@@ -47,6 +47,21 @@ final class KeychainManager {
         SettingsStorage.shared.hasCloudAPIKey
     }
 
+    /// Checks whether the app can read/write to the macOS Keychain.
+    func isKeychainAccessible() -> Bool {
+        let testKey = "keychain_access_check"
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: testKey,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        let status = SecItemCopyMatching(query as CFDictionary, nil)
+        // errSecItemNotFound means keychain is accessible but no item exists — that's fine
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
+
     // MARK: - Private Methods
 
     private func save(key: Key, value: String) throws {
