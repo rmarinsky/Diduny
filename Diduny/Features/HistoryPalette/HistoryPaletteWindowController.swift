@@ -2,13 +2,15 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class HistoryPaletteWindowController {
+final class HistoryPaletteWindowController: NSObject, NSWindowDelegate {
     static let shared = HistoryPaletteWindowController()
 
     private var panel: NSPanel?
     private var eventMonitor: Any?
 
-    private init() {}
+    private override init() {
+        super.init()
+    }
 
     func toggle() {
         if let panel, panel.isVisible {
@@ -47,6 +49,7 @@ final class HistoryPaletteWindowController {
         // Center on screen
         panel.center()
 
+        panel.delegate = self
         self.panel = panel
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -63,7 +66,18 @@ final class HistoryPaletteWindowController {
 
     func closeWindow() {
         panel?.close()
+        cleanupMonitor()
         panel = nil
+    }
+
+    nonisolated func windowWillClose(_ notification: Notification) {
+        Task { @MainActor in
+            cleanupMonitor()
+            panel = nil
+        }
+    }
+
+    private func cleanupMonitor() {
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil

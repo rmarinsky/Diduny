@@ -116,7 +116,7 @@ final class RecordingQueueService {
 
             // Set API key if using Soniox
             if provider == .soniox {
-                guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
                     storage.updateRecording(id: id, status: .failed, error: "No API key configured")
                     return
                 }

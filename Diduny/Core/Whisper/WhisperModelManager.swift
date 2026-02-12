@@ -201,9 +201,15 @@ final class WhisperModelManager: NSObject {
         isDownloading[model.name] = true
         downloadProgress[model.name] = 0
 
-        let task = URLSession.shared.downloadTask(with: model.downloadURL) { [weak self] tempURL, _, error in
+        let task = URLSession.shared.downloadTask(with: model.downloadURL) { [weak self] tempURL, response, error in
+            let statusCode = (response as? HTTPURLResponse)?.statusCode
+            let isOK = statusCode.map { (200 ... 299).contains($0) } ?? true
             DispatchQueue.main.async {
-                self?.handleDownloadCompletion(model: model, tempURL: tempURL, error: error)
+                if let statusCode, !isOK {
+                    self?.handleDownloadCompletion(model: model, tempURL: nil, error: NSError(domain: "WhisperModelManager", code: statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(statusCode)"]))
+                } else {
+                    self?.handleDownloadCompletion(model: model, tempURL: tempURL, error: error)
+                }
             }
         }
 

@@ -435,6 +435,7 @@ extension AppDelegate {
                 )
                 // Clean up temp file after library save
                 try? FileManager.default.removeItem(at: audioURL)
+                RecoveryStateManager.shared.clearState()
             }
 
             await MainActor.run {

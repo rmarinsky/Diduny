@@ -29,6 +29,10 @@ extension AppDelegate {
     func cancelTranslationRecording() async {
         Log.app.info("cancelTranslationRecording: BEGIN")
 
+        // Stop audio level piping
+        audioLevelCancellable?.cancel()
+        audioLevelCancellable = nil
+
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
 
@@ -239,6 +243,9 @@ extension AppDelegate {
         // Capture recording start time for duration calculation
         let recordingStartTime = appState.translationRecordingStartTime
 
+        // Capture stop time immediately for accurate duration
+        let stopTime = Date()
+
         await MainActor.run {
             appState.translationRecordingState = .processing
             handleTranslationStateChange(.processing)
@@ -292,7 +299,7 @@ extension AppDelegate {
             Log.app.info("stopTranslationRecording: SUCCESS")
 
             // Save to recordings library
-            let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+            let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             RecordingsLibraryStorage.shared.saveRecording(
                 audioData: audioData,
                 type: .translation,
@@ -318,12 +325,13 @@ extension AppDelegate {
 
             // Save recording without transcription so user can process later
             if let audioData = capturedAudioData {
-                let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+                let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                 RecordingsLibraryStorage.shared.saveRecording(
                     audioData: audioData,
                     type: .translation,
                     duration: duration
                 )
+                RecoveryStateManager.shared.clearState()
             }
 
             await MainActor.run {
