@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 
 // MARK: - Translation Recording (EN <-> UK)
@@ -27,6 +28,10 @@ extension AppDelegate {
 
     func cancelTranslationRecording() async {
         Log.app.info("cancelTranslationRecording: BEGIN")
+
+        // Stop audio level piping
+        audioLevelCancellable?.cancel()
+        audioLevelCancellable = nil
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
@@ -89,16 +94,17 @@ extension AppDelegate {
             return
         }
 
+        // Translation always uses Soniox (Cloud)
         guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
             Log.app.warning("startTranslationRecording: No API key found")
             await MainActor.run {
-                appState.errorMessage = "Please add your Soniox API key in Settings"
+                appState.errorMessage = "Translation requires a Soniox API key. Add one in Settings."
                 appState.translationRecordingState = .error
                 handleTranslationStateChange(.error)
             }
             return
         }
-        Log.app.info("startTranslationRecording: API key found")
+        Log.app.info("startTranslationRecording: Soniox API key found")
 
         // Determine device with fallback to system default
         var device: AudioDevice?
@@ -162,6 +168,13 @@ extension AppDelegate {
                 appState.translationRecordingState = .recording
                 appState.translationRecordingStartTime = Date()
                 handleTranslationStateChange(.recording)
+
+                // Pipe audio level to notch
+                audioLevelCancellable = audioRecorder.$audioLevel
+                    .receive(on: DispatchQueue.main)
+                    .sink { level in
+                        NotchManager.shared.audioLevel = level
+                    }
             }
 
             // Activate escape cancel handler
@@ -220,27 +233,43 @@ extension AppDelegate {
     func stopTranslationRecording() async {
         Log.app.info("stopTranslationRecording: BEGIN")
 
+        // Stop audio level piping
+        audioLevelCancellable?.cancel()
+        audioLevelCancellable = nil
+
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
+
+        // Capture recording start time for duration calculation
+        let recordingStartTime = appState.translationRecordingStartTime
+
+        // Capture stop time immediately for accurate duration
+        let stopTime = Date()
 
         await MainActor.run {
             appState.translationRecordingState = .processing
             handleTranslationStateChange(.processing)
         }
 
+        // Capture audio data first so it's available in both success and error paths
+        var capturedAudioData: Data?
+
         do {
             Log.app.info("stopTranslationRecording: Stopping audio recorder")
             let audioData = try await audioRecorder.stopRecording()
+            capturedAudioData = audioData
             Log.app.info("stopTranslationRecording: Got audio data, size = \(audioData.count) bytes")
 
+            // Translation always uses Soniox (Cloud)
+            var service: TranscriptionServiceProtocol = transcriptionService
             guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
                 Log.app.error("stopTranslationRecording: No API key!")
                 throw TranscriptionError.noAPIKey
             }
+            service.apiKey = apiKey
 
-            Log.app.info("stopTranslationRecording: Calling translation service (EN <-> UK)")
-            transcriptionService.apiKey = apiKey
-            let text = try await transcriptionService.translateAndTranscribe(audioData: audioData)
+            Log.app.info("stopTranslationRecording: Calling Soniox translation service")
+            let text = try await service.translateAndTranscribe(audioData: audioData)
             Log.app.info("stopTranslationRecording: Translation received: \(text.prefix(50))...")
 
             clipboardService.copy(text: text)
@@ -269,6 +298,15 @@ extension AppDelegate {
             }
             Log.app.info("stopTranslationRecording: SUCCESS")
 
+            // Save to recordings library
+            let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            RecordingsLibraryStorage.shared.saveRecording(
+                audioData: audioData,
+                type: .translation,
+                duration: duration,
+                transcriptionText: text
+            )
+
             // Optional operations run after state change (non-blocking for UI)
             if SettingsStorage.shared.playSoundOnCompletion {
                 Log.app.info("stopTranslationRecording: Playing sound")
@@ -284,6 +322,18 @@ extension AppDelegate {
                 guard case .emptyTranscription = error as? TranscriptionError else { return false }
                 return true
             }()
+
+            // Save recording without transcription so user can process later
+            if let audioData = capturedAudioData {
+                let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+                RecordingsLibraryStorage.shared.saveRecording(
+                    audioData: audioData,
+                    type: .translation,
+                    duration: duration
+                )
+                RecoveryStateManager.shared.clearState()
+            }
+
             await MainActor.run {
                 appState.errorMessage = error.localizedDescription
                 appState.isEmptyTranscription = isEmptyTranscription
@@ -319,7 +369,7 @@ extension AppDelegate {
                 try? await Task.sleep(for: .seconds(1.6))
                 guard let self,
                       self.appState.translationRecordingState == .recording else { return }
-                NotchManager.shared.startRecording(mode: .translation)
+                NotchManager.shared.startRecording(mode: .translation(languagePair: "EN <-> UK"))
             }
         }
 

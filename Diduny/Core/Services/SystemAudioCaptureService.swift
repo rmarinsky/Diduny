@@ -16,6 +16,11 @@ final class SystemAudioCaptureService: NSObject {
     private var lastFlushTime: Date = Date()
     private let flushInterval: TimeInterval = 30.0 // Flush to disk every 30 seconds
 
+    /// Separate queue for real-time transcription callbacks to avoid blocking audio delivery
+    private let realtimeQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.realtime", qos: .userInitiated)
+    /// Separate queue for file writing to avoid blocking the audio callback queue
+    private let fileWriteQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.systemaudio.write")
+
     var includeMicrophone: Bool = false
     var onError: ((Error) -> Void)?
     var onCaptureStarted: (() -> Void)?
@@ -124,6 +129,9 @@ final class SystemAudioCaptureService: NSObject {
         self.stream = nil
         isCapturing = false
 
+        // Wait for pending file writes to complete before closing
+        fileWriteQueue.sync {}
+
         // Close audio file and cleanup
         audioFile = nil
         audioConverter = nil
@@ -177,14 +185,17 @@ extension SystemAudioCaptureService: SCStreamOutput {
     func stream(_: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio else { return }
 
-        // Stream raw PCM data to real-time transcription (fires in both modes)
+        // Stream raw PCM data to real-time transcription on a separate queue
+        // to avoid blocking audio delivery and file writing
         if let onRawAudioData {
             if let data = extractRawPCMData(from: sampleBuffer) {
                 rawAudioCallbackCount += 1
                 if rawAudioCallbackCount <= 5 || rawAudioCallbackCount % 200 == 0 {
                     NSLog("[AudioCapture] onRawAudioData callback #%d, data size=%d bytes", rawAudioCallbackCount, data.count)
                 }
-                onRawAudioData(data)
+                realtimeQueue.async {
+                    onRawAudioData(data)
+                }
             }
         } else if sampleCount <= 3 {
             NSLog("[AudioCapture] onRawAudioData is nil — real-time streaming not wired")
@@ -196,7 +207,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
             return
         }
 
-        // File writing mode
+        // File writing mode: copy buffer on audio queue, write on fileWriteQueue
         guard let audioFile else { return }
 
         guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
@@ -210,11 +221,15 @@ extension SystemAudioCaptureService: SCStreamOutput {
 
         logSampleInfoIfNeeded(asbd: asbd, numSamples: numSamples)
 
+        // Copy buffer data on the audio queue (sampleBuffer may be reused by ScreenCaptureKit)
         guard let pcmBuffer = createPCMBuffer(from: sampleBuffer, asbd: asbd, numSamples: numSamples) else {
             return
         }
 
-        writeBufferToFile(pcmBuffer, audioFile: audioFile, numSamples: numSamples)
+        // Dispatch file writing to a separate queue to keep the audio callback fast
+        fileWriteQueue.async { [weak self] in
+            self?.writeBufferToFile(pcmBuffer, audioFile: audioFile, numSamples: numSamples)
+        }
     }
 
     // MARK: - Helper Methods

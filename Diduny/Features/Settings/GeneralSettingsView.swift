@@ -9,6 +9,8 @@ struct GeneralSettingsView: View {
     @State private var pushToTalkKey = SettingsStorage.shared.pushToTalkKey
     @State private var translationPushToTalkKey = SettingsStorage.shared.translationPushToTalkKey
     @State private var handsFreeModeEnabled = SettingsStorage.shared.handsFreeModeEnabled
+    @State private var ambientListeningEnabled = SettingsStorage.shared.ambientListeningEnabled
+    @State private var wakeWord = SettingsStorage.shared.wakeWord
 
     var body: some View {
         Form {
@@ -51,9 +53,12 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("Translation Push to Talk")
             } footer: {
-                Text("Uses the same recording mode as Push to Talk above.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Uses the same recording mode as Push to Talk above.")
+                    Text("Translation is available with Cloud (Soniox) only.")
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
             }
 
             Section {
@@ -71,8 +76,32 @@ struct GeneralSettingsView: View {
                     .onChange(of: launchAtLogin) { _, newValue in
                         LaunchAtLogin.isEnabled = newValue
                     }
+
             } header: {
                 Text("Behavior")
+            }
+
+            Section {
+                Toggle("Enable ambient listening", isOn: $ambientListeningEnabled)
+                    .onChange(of: ambientListeningEnabled) { _, newValue in
+                        SettingsStorage.shared.ambientListeningEnabled = newValue
+                        NotificationCenter.default.post(name: .ambientListeningSettingsChanged, object: nil)
+                    }
+
+                if ambientListeningEnabled {
+                    TextField("Wake word:", text: $wakeWord)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: wakeWord) { _, newValue in
+                            SettingsStorage.shared.wakeWord = newValue
+                            NotificationCenter.default.post(name: .ambientListeningSettingsChanged, object: nil)
+                        }
+                }
+            } header: {
+                Text("Ambient Listening")
+            } footer: {
+                Text("Requires a Whisper Tiny model. Continuously listens for the wake word, then starts recording.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Section {
@@ -176,6 +205,7 @@ struct GeneralSettingsView: View {
 extension Notification.Name {
     static let pushToTalkKeyChanged = Notification.Name("pushToTalkKeyChanged")
     static let translationPushToTalkKeyChanged = Notification.Name("translationPushToTalkKeyChanged")
+    static let ambientListeningSettingsChanged = Notification.Name("ambientListeningSettingsChanged")
 }
 
 #Preview {

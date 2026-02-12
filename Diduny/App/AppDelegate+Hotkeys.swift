@@ -16,6 +16,10 @@ extension AppDelegate {
         hotkeyService.registerTranslationHotkey { [weak self] in
             self?.toggleTranslationRecording()
         }
+
+        hotkeyService.registerHistoryPaletteHotkey {
+            HistoryPaletteWindowController.shared.toggle()
+        }
     }
 
     func setupPushToTalk() {

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 
 // MARK: - Recording Actions
@@ -30,6 +31,10 @@ extension AppDelegate {
 
     func cancelRecording() async {
         Log.app.info("cancelRecording: BEGIN")
+
+        // Stop audio level piping
+        audioLevelCancellable?.cancel()
+        audioLevelCancellable = nil
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
@@ -93,16 +98,31 @@ extension AppDelegate {
             return
         }
 
-        guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
-            Log.app.warning("startRecording: No API key found")
-            await MainActor.run {
-                appState.errorMessage = "Please add your Soniox API key in Settings"
-                appState.recordingState = .error
-                handleRecordingStateChange(.error)
+        // Provider-specific validation
+        switch SettingsStorage.shared.transcriptionProvider {
+        case .soniox:
+            guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
+                Log.app.warning("startRecording: No API key found")
+                await MainActor.run {
+                    appState.errorMessage = "Please add your Soniox API key in Settings"
+                    appState.recordingState = .error
+                    handleRecordingStateChange(.error)
+                }
+                return
             }
-            return
+            Log.app.info("startRecording: Soniox API key found")
+        case .whisperLocal:
+            guard WhisperModelManager.shared.selectedModel() != nil else {
+                Log.app.warning("startRecording: No Whisper model selected")
+                await MainActor.run {
+                    appState.errorMessage = "No Whisper model downloaded. Please download one in Settings."
+                    appState.recordingState = .error
+                    handleRecordingStateChange(.error)
+                }
+                return
+            }
+            Log.app.info("startRecording: Whisper model ready")
         }
-        Log.app.info("startRecording: API key found")
 
         // Determine device with fallback to system default
         var device: AudioDevice?
@@ -171,6 +191,13 @@ extension AppDelegate {
                 appState.recordingState = .recording
                 appState.recordingStartTime = Date()
                 handleRecordingStateChange(.recording)
+
+                // Pipe audio level to notch
+                audioLevelCancellable = audioRecorder.$audioLevel
+                    .receive(on: DispatchQueue.main)
+                    .sink { level in
+                        NotchManager.shared.audioLevel = level
+                    }
             }
 
             // Activate escape cancel handler
@@ -229,27 +256,44 @@ extension AppDelegate {
     func stopRecording() async {
         Log.app.info("stopRecording: BEGIN")
 
+        // Stop audio level piping
+        audioLevelCancellable?.cancel()
+        audioLevelCancellable = nil
+
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
+
+        // Capture recording start time for duration calculation
+        let recordingStartTime = appState.recordingStartTime
+
+        // Capture stop time immediately for accurate duration
+        let stopTime = Date()
 
         await MainActor.run {
             appState.recordingState = .processing
             handleRecordingStateChange(.processing)
         }
 
+        // Capture audio data first so it's available in both success and error paths
+        var capturedAudioData: Data?
+
         do {
             Log.app.info("stopRecording: Stopping audio recorder")
             let audioData = try await audioRecorder.stopRecording()
+            capturedAudioData = audioData
             Log.app.info("stopRecording: Got audio data, size = \(audioData.count) bytes")
 
-            guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                Log.app.error("stopRecording: No API key!")
-                throw TranscriptionError.noAPIKey
+            var service = activeTranscriptionService
+            if SettingsStorage.shared.transcriptionProvider == .soniox {
+                guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                    Log.app.error("stopRecording: No API key!")
+                    throw TranscriptionError.noAPIKey
+                }
+                service.apiKey = apiKey
             }
 
-            Log.app.info("stopRecording: Calling transcription service")
-            transcriptionService.apiKey = apiKey
-            let text = try await transcriptionService.transcribe(audioData: audioData)
+            Log.app.info("stopRecording: Calling transcription service (\(SettingsStorage.shared.transcriptionProvider.rawValue))")
+            let text = try await service.transcribe(audioData: audioData)
             Log.app.info("stopRecording: Transcription received: \(text.prefix(50))...")
 
             clipboardService.copy(text: text)
@@ -279,6 +323,15 @@ extension AppDelegate {
             }
             Log.app.info("stopRecording: SUCCESS")
 
+            // Save to recordings library
+            let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            RecordingsLibraryStorage.shared.saveRecording(
+                audioData: audioData,
+                type: .voice,
+                duration: duration,
+                transcriptionText: text
+            )
+
             // Optional operations run after state change (non-blocking for UI)
             if SettingsStorage.shared.playSoundOnCompletion {
                 Log.app.info("stopRecording: Playing sound")
@@ -294,6 +347,18 @@ extension AppDelegate {
                 guard case .emptyTranscription = error as? TranscriptionError else { return false }
                 return true
             }()
+
+            // Save recording without transcription so user can process later
+            if let audioData = capturedAudioData {
+                let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+                RecordingsLibraryStorage.shared.saveRecording(
+                    audioData: audioData,
+                    type: .voice,
+                    duration: duration
+                )
+                RecoveryStateManager.shared.clearState()
+            }
+
             await MainActor.run {
                 appState.errorMessage = error.localizedDescription
                 appState.isEmptyTranscription = isEmptyTranscription

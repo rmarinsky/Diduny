@@ -16,6 +16,15 @@ final class SettingsStorage {
         case meetingAudioSource
         case translationPushToTalkKey
         case handsFreeModeEnabled
+        case transcriptionProvider
+        case selectedWhisperModel
+        case ambientListeningEnabled
+        case wakeWord
+        case whisperLanguage
+        case whisperPrompt
+        case sonioxPrompt
+        case favoriteLanguages
+        case hasCloudAPIKey
     }
 
     private init() {}
@@ -116,5 +125,71 @@ final class SettingsStorage {
             return defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue)
         }
         set { defaults.set(newValue, forKey: Key.handsFreeModeEnabled.rawValue) }
+    }
+
+    // MARK: - Transcription Provider
+
+    var transcriptionProvider: TranscriptionProvider {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.transcriptionProvider.rawValue),
+                  let provider = TranscriptionProvider(rawValue: rawValue)
+            else {
+                return .soniox
+            }
+            return provider
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.transcriptionProvider.rawValue)
+        }
+    }
+
+    var selectedWhisperModel: String {
+        get { defaults.string(forKey: Key.selectedWhisperModel.rawValue) ?? "" }
+        set { defaults.set(newValue, forKey: Key.selectedWhisperModel.rawValue) }
+    }
+
+    // MARK: - Whisper Local Settings
+
+    var whisperLanguage: String {
+        get { defaults.string(forKey: Key.whisperLanguage.rawValue) ?? "auto" }
+        set { defaults.set(newValue, forKey: Key.whisperLanguage.rawValue) }
+    }
+
+    var whisperPrompt: String {
+        get { defaults.string(forKey: Key.whisperPrompt.rawValue) ?? "" }
+        set { defaults.set(newValue, forKey: Key.whisperPrompt.rawValue) }
+    }
+
+    // MARK: - Soniox Prompt
+
+    var sonioxPrompt: String {
+        get { defaults.string(forKey: Key.sonioxPrompt.rawValue) ?? "" }
+        set { defaults.set(newValue, forKey: Key.sonioxPrompt.rawValue) }
+    }
+
+    // MARK: - Ambient Listening
+
+    var ambientListeningEnabled: Bool {
+        get { defaults.object(forKey: Key.ambientListeningEnabled.rawValue) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: Key.ambientListeningEnabled.rawValue) }
+    }
+
+    var wakeWord: String {
+        get { defaults.string(forKey: Key.wakeWord.rawValue) ?? "" }
+        set { defaults.set(newValue, forKey: Key.wakeWord.rawValue) }
+    }
+
+    // MARK: - Favorite Languages
+
+    var favoriteLanguages: [String] {
+        get { defaults.stringArray(forKey: Key.favoriteLanguages.rawValue) ?? ["en", "uk"] }
+        set { defaults.set(newValue, forKey: Key.favoriteLanguages.rawValue) }
+    }
+
+    // MARK: - Cloud API Key Flag
+
+    var hasCloudAPIKey: Bool {
+        get { defaults.bool(forKey: Key.hasCloudAPIKey.rawValue) }
+        set { defaults.set(newValue, forKey: Key.hasCloudAPIKey.rawValue) }
     }
 }

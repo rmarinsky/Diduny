@@ -23,7 +23,7 @@ configs:
 
 settings:
   base:
-    MARKETING_VERSION: "1.6.1"
+    MARKETING_VERSION: "1.7.0"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: "8JL9TM5WLG"
     CODE_SIGN_STYLE: Automatic
@@ -54,6 +54,10 @@ targets:
       - package: KeyboardShortcuts
       - package: DynamicNotchKit
       - package: LaunchAtLogin
+      - framework: Frameworks/whisper.xcframework
+        embed: false
+      - sdk: Accelerate.framework
+      - sdk: Metal.framework
     settings:
       base:
         INFOPLIST_FILE: Diduny/Resources/Info.plist
@@ -62,6 +66,9 @@ targets:
         LD_RUNPATH_SEARCH_PATHS:
           - "@executable_path/../Frameworks"
         COMBINE_HIDPI_IMAGES: YES
+        SWIFT_OBJC_BRIDGING_HEADER: Diduny/Core/Whisper/WhisperBridge.h
+        OTHER_LDFLAGS:
+          - "-lc++"
       configs:
         Debug:
           PRODUCT_NAME: "Diduny DEV"
