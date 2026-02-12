@@ -42,6 +42,7 @@
 		7E2725D4B5424D54367BCC82 /* WhisperError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F06909181E0B9AD3B70E57E3 /* WhisperError.swift */; };
 		8089B2EF55ADCDC2F120C765 /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = 57D44526E8ECA54C87677F5B /* LaunchAtLogin */; };
 		86207F57859F544F066B0140 /* PushToTalkKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67216EAEE79FD497A77BD7D6 /* PushToTalkKey.swift */; };
+		8864F470B8EFDFF965ABAA76 /* SupportedLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 459DCE179DA235DE6208C013 /* SupportedLanguage.swift */; };
 		8CAA1C227A9788C6A9687E7D /* NotchContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 622FD84CF56FC17420114B9C /* NotchContentView.swift */; };
 		8E61D4628397B11E5BCEE03D /* SystemAudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70DDD786E73A1532AE91FC20 /* SystemAudioCaptureService.swift */; };
 		8F7F926DB1CF87A2F8800B51 /* AudioSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D052DF5E0E01BC0AD2742150 /* AudioSettingsView.swift */; };
@@ -61,7 +62,6 @@
 		C8F29AF8B551E388C4C6F2A0 /* AudioConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37F0D303A220D46E8D6F7A57 /* AudioConverter.swift */; };
 		CAA3AF319715F9DD611CCC8B /* PermissionsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52C8A25D3FCD6DE742A1274E /* PermissionsSettingsView.swift */; };
 		CC8A0AB7ADA44B998EC3E45D /* ServiceProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26809CA162E096F4EA668768 /* ServiceProtocols.swift */; };
-		A1B2C3D4E5F60718293A4B5C /* SupportedLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6071829304B5C /* SupportedLanguage.swift */; };
 		D52AFEB3B25B529860D14116 /* AudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118CE8BCA0160E31FD916B10 /* AudioDevice.swift */; };
 		D6203B3BADF3AA7E40186F11 /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491E26240E167BDB5DCACEE /* HotkeyService.swift */; };
 		D88F0858310A14339ADE4178 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E4ECCACC4D64216B39204947 /* Metal.framework */; };
@@ -109,6 +109,7 @@
 		3E35E1F13A5F9761C79FB488 /* AppDelegate+Recording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+Recording.swift"; sourceTree = "<group>"; };
 		3F9F609481B3D9169BF4B1E8 /* WhisperContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperContext.swift; sourceTree = "<group>"; };
 		459B59FAABA91EB9AD4EB4EF /* ClipboardService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardService.swift; sourceTree = "<group>"; };
+		459DCE179DA235DE6208C013 /* SupportedLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportedLanguage.swift; sourceTree = "<group>"; };
 		4C5A21F6255692712508A475 /* Diduny.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Diduny.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CDE81820CACD577C91281C9 /* PushToTalkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushToTalkService.swift; sourceTree = "<group>"; };
 		52166362DE73BAC6891FA206 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -155,7 +156,6 @@
 		F4E5B531DCAD149223A50A75 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		F54AB0D8602B537FB2845507 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F6206FCF30AD9AFE3530CB50 /* WhisperTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperTranscriptionService.swift; sourceTree = "<group>"; };
-		D1E2F3A4B5C6071829304B5C /* SupportedLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportedLanguage.swift; sourceTree = "<group>"; };
 		F91E893AF3E6C20B492D3CB7 /* SettingsStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStorage.swift; sourceTree = "<group>"; };
 		FDED8DC543F3EEDBCAC5A5D7 /* RecordingsLibraryWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingsLibraryWindowController.swift; sourceTree = "<group>"; };
 		FE81A3506184A31D459CC1DA /* MeetingRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRecorderService.swift; sourceTree = "<group>"; };
@@ -250,7 +250,7 @@
 				67216EAEE79FD497A77BD7D6 /* PushToTalkKey.swift */,
 				158C39D9362442B65F2948C6 /* RealtimeTranscription.swift */,
 				B5D4FC33778F42CC48FF44C5 /* Recording.swift */,
-				D1E2F3A4B5C6071829304B5C /* SupportedLanguage.swift */,
+				459DCE179DA235DE6208C013 /* SupportedLanguage.swift */,
 				FF5B2157378ABF82C5B80572 /* TranscriptionProvider.swift */,
 				F06909181E0B9AD3B70E57E3 /* WhisperError.swift */,
 			);
@@ -568,10 +568,10 @@
 				DEE6BFC7FC33767EDB94BFDE /* RecoveryStateManager.swift in Sources */,
 				CC8A0AB7ADA44B998EC3E45D /* ServiceProtocols.swift in Sources */,
 				0FFD1A4567A90C61047FD763 /* SettingsStorage.swift in Sources */,
-				A1B2C3D4E5F60718293A4B5C /* SupportedLanguage.swift in Sources */,
 				C7A8368E38269D419E0C0832 /* SettingsView.swift in Sources */,
 				C2F04DD9EDC031204976F3FF /* SonioxRealtimeService.swift in Sources */,
 				55F5847B980E76CCAA1B8E0B /* SonioxTranscriptionService.swift in Sources */,
+				8864F470B8EFDFF965ABAA76 /* SupportedLanguage.swift in Sources */,
 				8E61D4628397B11E5BCEE03D /* SystemAudioCaptureService.swift in Sources */,
 				F293480FBFF36536227A5878 /* TranscriptionProvider.swift in Sources */,
 				311D90B9A30E9B26801F5AF0 /* TranscriptionSettingsView.swift in Sources */,
@@ -662,7 +662,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.6.1;
+				MARKETING_VERSION = 1.7.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -748,7 +748,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.6.1;
+				MARKETING_VERSION = 1.7.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -814,7 +814,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.6.1;
+				MARKETING_VERSION = 1.7.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

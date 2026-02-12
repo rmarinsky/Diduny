@@ -24,6 +24,7 @@ final class KeychainManager {
         }
         cachedKey = get(key: .sonioxAPIKey)
         cacheLoaded = true
+        SettingsStorage.shared.hasCloudAPIKey = (cachedKey?.isEmpty == false)
         return cachedKey
     }
 
