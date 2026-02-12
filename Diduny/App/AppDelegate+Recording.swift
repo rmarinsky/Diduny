@@ -84,6 +84,11 @@ extension AppDelegate {
     func startRecording() async {
         Log.app.info("startRecording: BEGIN")
 
+        guard canStartRecording(kind: .voice) else {
+            Log.app.info("startRecording: blocked by another active recording mode")
+            return
+        }
+
         // Request microphone permission on-demand
         let micGranted = await PermissionManager.shared.ensureMicrophonePermission()
         appState.microphonePermissionGranted = micGranted

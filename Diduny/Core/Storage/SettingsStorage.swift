@@ -25,6 +25,9 @@ final class SettingsStorage {
         case sonioxPrompt
         case favoriteLanguages
         case hasCloudAPIKey
+        case sonioxLanguageHints
+        case sonioxLanguageHintsStrict
+        case translationRealtimeSocketEnabled
     }
 
     private init() {}
@@ -117,10 +120,10 @@ final class SettingsStorage {
     /// When disabled, hold-to-record mode is used
     var handsFreeModeEnabled: Bool {
         get {
-            // Default to true (double-tap mode enabled)
+            // Default to false (push-to-talk hold mode)
             // Use object check to distinguish "not set" from "set to false"
             if defaults.object(forKey: Key.handsFreeModeEnabled.rawValue) == nil {
-                return true
+                return false
             }
             return defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue)
         }
@@ -134,7 +137,7 @@ final class SettingsStorage {
             guard let rawValue = defaults.string(forKey: Key.transcriptionProvider.rawValue),
                   let provider = TranscriptionProvider(rawValue: rawValue)
             else {
-                return .soniox
+                return .whisperLocal
             }
             return provider
         }
@@ -165,6 +168,34 @@ final class SettingsStorage {
     var sonioxPrompt: String {
         get { defaults.string(forKey: Key.sonioxPrompt.rawValue) ?? "" }
         set { defaults.set(newValue, forKey: Key.sonioxPrompt.rawValue) }
+    }
+
+    // MARK: - Soniox Language Hints
+
+    /// Optional allowed language list sent to Soniox cloud APIs.
+    /// Empty means "let Soniox auto-detect all languages".
+    var sonioxLanguageHints: [String] {
+        get { defaults.stringArray(forKey: Key.sonioxLanguageHints.rawValue) ?? [] }
+        set { defaults.set(newValue, forKey: Key.sonioxLanguageHints.rawValue) }
+    }
+
+    /// When enabled, Soniox will only consider languages from `sonioxLanguageHints`.
+    var sonioxLanguageHintsStrict: Bool {
+        get { defaults.bool(forKey: Key.sonioxLanguageHintsStrict.rawValue) }
+        set { defaults.set(newValue, forKey: Key.sonioxLanguageHintsStrict.rawValue) }
+    }
+
+    // MARK: - Translation Realtime Socket
+
+    /// Enables cloud realtime translation over Soniox websocket during translation recording.
+    var translationRealtimeSocketEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.translationRealtimeSocketEnabled.rawValue) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.translationRealtimeSocketEnabled.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.translationRealtimeSocketEnabled.rawValue) }
     }
 
     // MARK: - Ambient Listening

@@ -4,6 +4,7 @@ import os
 @available(macOS 13.0, *)
 final class SonioxRealtimeService: NSObject, @unchecked Sendable {
     private let wsURL = "wss://stt-rt.soniox.com/transcribe-websocket"
+    private let model = "stt-rt-v4"
     private var webSocketTask: URLSessionWebSocketTask?
     private var urlSession: URLSession?
     private var receiveTask: Task<Void, Never>?
@@ -15,6 +16,9 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
 
     private var apiKey: String?
     private var languageHints: [String] = []
+    private var strictLanguageHints = false
+    private var audioConfig: RealtimeAudioConfig = .defaultPCM16kMono
+    private var translationConfig: RealtimeTranslationConfig?
 
     var onTokensReceived: (([RealtimeToken]) -> Void)?
     var onError: ((Error) -> Void)?
@@ -22,9 +26,18 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
 
     // MARK: - Connect
 
-    func connect(apiKey: String, languageHints: [String] = ["uk"]) async throws {
+    func connect(
+        apiKey: String,
+        languageHints: [String] = [],
+        strictLanguageHints: Bool = false,
+        audioConfig: RealtimeAudioConfig = .defaultPCM16kMono,
+        translationConfig: RealtimeTranslationConfig? = nil
+    ) async throws {
         self.apiKey = apiKey
         self.languageHints = languageHints
+        self.strictLanguageHints = strictLanguageHints
+        self.audioConfig = audioConfig
+        self.translationConfig = translationConfig
         reconnectAttempt = 0
         try await connectWebSocket()
     }
@@ -59,16 +72,23 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
         self.webSocketTask = task
         task.resume()
 
-        // Send configuration
-        let config: [String: Any] = [
+        var config: [String: Any] = [
             "api_key": apiKey,
-            "model": "stt-rt-preview",
-            "audio_format": "s16le",
-            "sample_rate": 16000,
-            "num_channels": 2,
-            "language_hints": languageHints,
+            "model": model,
+            "audio_format": audioConfig.audioFormat,
+            "sample_rate": audioConfig.sampleRate,
+            "num_channels": audioConfig.numChannels,
             "enable_speaker_diarization": true
         ]
+
+        if !languageHints.isEmpty {
+            config["language_hints"] = languageHints
+            config["language_hints_strict"] = strictLanguageHints
+        }
+
+        if let translationPayload = makeTranslationPayload(from: translationConfig) {
+            config["translation"] = translationPayload
+        }
 
         let configData = try JSONSerialization.data(withJSONObject: config)
         let configString = String(data: configData, encoding: .utf8) ?? "{}"
@@ -91,12 +111,18 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
 
     func sendAudioData(_ data: Data) {
         guard isConnected, let task = webSocketTask else { return }
+        guard !data.isEmpty else { return }
 
         audioBytesSent += data.count
         audioChunkCount += 1
 
         if audioChunkCount <= 5 || audioChunkCount % 100 == 0 {
-            NSLog("[Soniox RT] Sending audio chunk #%d, size=%d, total=%d bytes", audioChunkCount, data.count, audioBytesSent)
+            NSLog(
+                "[Soniox RT] Sending audio chunk #%d, size=%d, total=%d bytes",
+                audioChunkCount,
+                data.count,
+                audioBytesSent
+            )
         }
 
         task.send(.data(data)) { [weak self] error in
@@ -190,6 +216,15 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
         do {
             let response = try JSONDecoder().decode(SonioxRealtimeResponse.self, from: data)
 
+            if let errorMessage = response.error_message {
+                let code = response.error_code ?? "unknown"
+                let error = RealtimeTranscriptionError.connectionFailed("\(code): \(errorMessage)")
+                Log.transcription.error("Soniox RT: Server error - \(code): \(errorMessage)")
+                onError?(error)
+                onConnectionStatusChanged?(.failed(error.localizedDescription))
+                return
+            }
+
             if response.finished == true {
                 Log.transcription.info("Soniox RT: Received finished signal")
                 return
@@ -197,7 +232,9 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
 
             guard let apiTokens = response.tokens, !apiTokens.isEmpty else { return }
 
-            Log.transcription.info("Soniox RT: Received \(apiTokens.count) tokens, first: '\(apiTokens.first?.text ?? "")', is_final=\(apiTokens.first?.is_final ?? false)")
+            Log.transcription.info(
+                "Soniox RT: Received \(apiTokens.count) tokens, first: '\(apiTokens.first?.text ?? "")', is_final=\(apiTokens.first?.is_final ?? false)"
+            )
 
             let tokens = apiTokens.map { token in
                 RealtimeToken(
@@ -205,7 +242,10 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
                     isFinal: token.is_final,
                     speaker: token.speaker,
                     startMs: token.start_ms ?? 0,
-                    endMs: token.end_ms ?? 0
+                    endMs: token.end_ms ?? 0,
+                    language: token.language,
+                    sourceLanguage: token.source_language,
+                    translationStatus: token.translation_status
                 )
             }
 
@@ -262,6 +302,24 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
                 self.onError?(error)
                 self.handleDisconnect()
             }
+        }
+    }
+
+    private func makeTranslationPayload(from config: RealtimeTranslationConfig?) -> [String: Any]? {
+        guard let config else { return nil }
+        switch config.mode {
+        case let .twoWay(languageA, languageB):
+            return [
+                "type": "two_way",
+                "language_a": languageA,
+                "language_b": languageB
+            ]
+        case let .oneWay(sourceLanguage, targetLanguage):
+            return [
+                "type": "one_way",
+                "source_language": sourceLanguage,
+                "target_language": targetLanguage
+            ]
         }
     }
 }

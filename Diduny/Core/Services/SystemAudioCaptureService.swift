@@ -283,6 +283,12 @@ extension SystemAudioCaptureService: SCStreamOutput {
     }
 
     private func extractRawPCMData(from sampleBuffer: CMSampleBuffer) -> Data? {
+        guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)
+        else {
+            return nil
+        }
+
         guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return nil }
 
         var totalLength = 0
@@ -299,19 +305,67 @@ extension SystemAudioCaptureService: SCStreamOutput {
             return nil
         }
 
-        // ScreenCaptureKit outputs 32-bit float PCM, but Soniox expects s16le (16-bit signed int).
-        // Convert float32 samples to int16 samples.
-        let floatCount = totalLength / MemoryLayout<Float>.size
-        guard floatCount > 0 else { return nil }
+        // Convert any incoming PCM layout to mono s16le (what Soniox realtime expects).
+        let channelCount = max(1, Int(asbd.pointee.mChannelsPerFrame))
+        let bitsPerChannel = Int(asbd.pointee.mBitsPerChannel)
+        let bytesPerSample = max(1, bitsPerChannel / 8)
+        let isFloat = (asbd.pointee.mFormatFlags & kAudioFormatFlagIsFloat) != 0
+        let isNonInterleaved = (asbd.pointee.mFormatFlags & kAudioFormatFlagIsNonInterleaved) != 0
+        let bytesPerFrame = Int(asbd.pointee.mBytesPerFrame)
 
-        let floatPointer = UnsafeRawPointer(ptr).bindMemory(to: Float.self, capacity: floatCount)
+        let frameCount: Int
+        if isNonInterleaved {
+            frameCount = totalLength / (channelCount * bytesPerSample)
+        } else if bytesPerFrame > 0 {
+            frameCount = totalLength / bytesPerFrame
+        } else {
+            return nil
+        }
+        guard frameCount > 0 else { return nil }
 
-        var int16Data = Data(count: floatCount * MemoryLayout<Int16>.size)
+        let rawPointer = UnsafeRawPointer(ptr)
+
+        func sample(at offset: Int) -> Float {
+            if isFloat, bitsPerChannel == 32 {
+                var value: Float = 0
+                memcpy(&value, rawPointer.advanced(by: offset), MemoryLayout<Float>.size)
+                return value
+            }
+
+            if !isFloat, bitsPerChannel == 16 {
+                var value: Int16 = 0
+                memcpy(&value, rawPointer.advanced(by: offset), MemoryLayout<Int16>.size)
+                return Float(value) / Float(Int16.max)
+            }
+
+            if !isFloat, bitsPerChannel == 32 {
+                var value: Int32 = 0
+                memcpy(&value, rawPointer.advanced(by: offset), MemoryLayout<Int32>.size)
+                return Float(value) / Float(Int32.max)
+            }
+
+            return 0
+        }
+
+        var int16Data = Data(count: frameCount * MemoryLayout<Int16>.size)
         int16Data.withUnsafeMutableBytes { rawBuffer in
             let int16Buffer = rawBuffer.bindMemory(to: Int16.self)
-            for i in 0 ..< floatCount {
-                let clamped = max(-1.0, min(1.0, floatPointer[i]))
-                int16Buffer[i] = Int16(clamped * Float(Int16.max))
+            for frame in 0 ..< frameCount {
+                var mixed: Float = 0
+
+                for channel in 0 ..< channelCount {
+                    let offset: Int
+                    if isNonInterleaved {
+                        offset = (channel * frameCount + frame) * bytesPerSample
+                    } else {
+                        offset = (frame * channelCount + channel) * bytesPerSample
+                    }
+                    mixed += sample(at: offset)
+                }
+
+                mixed /= Float(channelCount)
+                let clamped = max(-1.0, min(1.0, mixed))
+                int16Buffer[frame] = Int16(clamped * Float(Int16.max))
             }
         }
 
