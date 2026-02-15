@@ -28,12 +28,29 @@
 - **Auto-Paste** - Transcribed text automatically pastes to active app
 - **Secure Storage** - API keys stored in macOS Keychain
 
+## Install via Homebrew
+
+The easiest way to install Diduny is with [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask rmarinsky/tap/diduny
+```
+
+To update to the latest version:
+
+```bash
+brew upgrade --cask diduny
+```
+
 ## Requirements
 
 - macOS 14.0+ (Sonoma)
+- [Soniox API key](https://console.soniox.com)
+
+### Build from Source (additional requirements)
+
 - Xcode 15.0+
 - [Homebrew](https://brew.sh) (for XcodeGen)
-- [Soniox API key](https://console.soniox.com)
 
 ## Build & Install
 

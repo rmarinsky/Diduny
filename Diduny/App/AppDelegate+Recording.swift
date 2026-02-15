@@ -2,6 +2,24 @@ import AppKit
 import Combine
 import Foundation
 
+@available(macOS 13.0, *)
+actor RealtimeVoiceAccumulator {
+    private var finalText: String = ""
+
+    func process(tokens: [RealtimeToken]) {
+        let finalTokens = tokens.filter(\.isFinal)
+        guard !finalTokens.isEmpty else { return }
+
+        for token in finalTokens {
+            finalText += token.text
+        }
+    }
+
+    func bestText() -> String {
+        finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 // MARK: - Recording Actions
 
 extension AppDelegate {
@@ -35,6 +53,9 @@ extension AppDelegate {
         // Stop audio level piping
         audioLevelCancellable?.cancel()
         audioLevelCancellable = nil
+
+        // Stop realtime transcription session (if active)
+        _ = await stopVoiceRealtimeSession(finalize: false)
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
@@ -104,6 +125,8 @@ extension AppDelegate {
         }
 
         // Provider-specific validation
+        var sonioxAPIKey: String?
+
         switch SettingsStorage.shared.transcriptionProvider {
         case .soniox:
             guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
@@ -115,6 +138,7 @@ extension AppDelegate {
                 }
                 return
             }
+            sonioxAPIKey = apiKey
             Log.app.info("startRecording: Soniox API key found")
         case .whisperLocal:
             guard WhisperModelManager.shared.selectedModel() != nil else {
@@ -126,6 +150,7 @@ extension AppDelegate {
                 }
                 return
             }
+            sonioxAPIKey = nil
             Log.app.info("startRecording: Whisper model ready")
         }
 
@@ -187,6 +212,16 @@ extension AppDelegate {
         }
 
         do {
+            if let apiKey = sonioxAPIKey {
+                // Configure realtime websocket BEFORE starting recorder.
+                // AudioRecorderService snapshots onRealtimeAudioData at start time.
+                await setupVoiceRealtimeTranscriptionIfNeeded(apiKey: apiKey)
+            } else {
+                audioRecorder.onRealtimeAudioData = nil
+                voiceRealtimeSessionEnabled = false
+                voiceRealtimeAccumulator = nil
+            }
+
             Log.app.info("startRecording: Starting audio recording")
             try await audioRecorder.startRecording(device: device)
             Log.app.info("startRecording: Recording started successfully")
@@ -213,6 +248,8 @@ extension AppDelegate {
             // Audio hardware timed out - likely coreaudiod is unresponsive or device is unavailable
             Log.app.error("startRecording: TIMEOUT - \(error.localizedDescription)")
 
+            _ = await stopVoiceRealtimeSession(finalize: false)
+
             // End App Nap prevention
             if let token = recordingActivityToken {
                 ProcessInfo.processInfo.endActivity(token)
@@ -231,6 +268,8 @@ extension AppDelegate {
         } catch {
             // Handle any other errors during recording start
             Log.app.error("startRecording: ERROR - \(error.localizedDescription)")
+
+            _ = await stopVoiceRealtimeSession(finalize: false)
 
             // End App Nap prevention
             if let token = recordingActivityToken {
@@ -288,17 +327,25 @@ extension AppDelegate {
             capturedAudioData = audioData
             Log.app.info("stopRecording: Got audio data, size = \(audioData.count) bytes")
 
-            var service = activeTranscriptionService
-            if SettingsStorage.shared.transcriptionProvider == .soniox {
-                guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                    Log.app.error("stopRecording: No API key!")
-                    throw TranscriptionError.noAPIKey
-                }
-                service.apiKey = apiKey
-            }
+            let realtimeText = await stopVoiceRealtimeSession(finalize: true)
 
-            Log.app.info("stopRecording: Calling transcription service (\(SettingsStorage.shared.transcriptionProvider.rawValue))")
-            let text = try await service.transcribe(audioData: audioData)
+            let text: String
+            if !realtimeText.isEmpty {
+                text = realtimeText
+                Log.app.info("stopRecording: Using realtime transcription (\(realtimeText.count) chars)")
+            } else {
+                var service = activeTranscriptionService
+                if SettingsStorage.shared.transcriptionProvider == .soniox {
+                    guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                        Log.app.error("stopRecording: No API key!")
+                        throw TranscriptionError.noAPIKey
+                    }
+                    service.apiKey = apiKey
+                }
+
+                Log.app.info("stopRecording: Calling transcription service (\(SettingsStorage.shared.transcriptionProvider.rawValue))")
+                text = try await service.transcribe(audioData: audioData)
+            }
             Log.app.info("stopRecording: Transcription received: \(text.prefix(50))...")
 
             clipboardService.copy(text: text)
@@ -347,6 +394,7 @@ extension AppDelegate {
             RecoveryStateManager.shared.clearState()
 
         } catch {
+            _ = await stopVoiceRealtimeSession(finalize: false)
             Log.app.error("stopRecording: ERROR - \(error.localizedDescription)")
             let isEmptyTranscription: Bool = {
                 guard case .emptyTranscription = error as? TranscriptionError else { return false }
@@ -381,6 +429,92 @@ extension AppDelegate {
         }
 
         Log.app.info("stopRecording: END")
+    }
+
+    // MARK: - Realtime Transcription (WebSocket)
+
+    private func setupVoiceRealtimeTranscriptionIfNeeded(apiKey: String) async {
+        guard SettingsStorage.shared.transcriptionProvider == .soniox,
+              SettingsStorage.shared.transcriptionRealtimeSocketEnabled
+        else {
+            audioRecorder.onRealtimeAudioData = nil
+            voiceRealtimeSessionEnabled = false
+            voiceRealtimeAccumulator = nil
+            return
+        }
+
+        let accumulator = RealtimeVoiceAccumulator()
+        voiceRealtimeAccumulator = accumulator
+
+        let rtService = realtimeTranscriptionService
+        audioRecorder.onRealtimeAudioData = { [weak rtService] pcmData in
+            rtService?.sendAudioData(pcmData)
+        }
+
+        rtService.onTokensReceived = { [weak accumulator] tokens in
+            guard let accumulator else { return }
+            Task {
+                await accumulator.process(tokens: tokens)
+            }
+        }
+
+        rtService.onConnectionStatusChanged = { status in
+            Log.transcription.info("Dictation RT status: \(String(describing: status))")
+        }
+
+        rtService.onError = { error in
+            Log.transcription.error("Dictation RT error: \(error.localizedDescription)")
+        }
+
+        do {
+            let languageHints = SettingsStorage.shared.sonioxLanguageHints
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            try await rtService.connect(
+                apiKey: apiKey,
+                languageHints: languageHints,
+                strictLanguageHints: SettingsStorage.shared.sonioxLanguageHintsStrict,
+                audioConfig: .defaultPCM16kMono
+            )
+
+            voiceRealtimeSessionEnabled = true
+            Log.transcription.info("Dictation RT connected")
+        } catch {
+            audioRecorder.onRealtimeAudioData = nil
+            voiceRealtimeSessionEnabled = false
+            voiceRealtimeAccumulator = nil
+            Log.transcription.warning(
+                "Dictation RT unavailable (\(error.localizedDescription)); fallback to async transcription will be used"
+            )
+        }
+    }
+
+    private func stopVoiceRealtimeSession(finalize: Bool) async -> String {
+        audioRecorder.onRealtimeAudioData = nil
+
+        let accumulator = voiceRealtimeAccumulator
+        let wasEnabled = voiceRealtimeSessionEnabled
+
+        defer {
+            voiceRealtimeSessionEnabled = false
+            voiceRealtimeAccumulator = nil
+            realtimeTranscriptionService.onTokensReceived = nil
+            realtimeTranscriptionService.onError = nil
+            realtimeTranscriptionService.onConnectionStatusChanged = nil
+        }
+
+        guard wasEnabled else {
+            return ""
+        }
+
+        if finalize {
+            await realtimeTranscriptionService.finalize()
+        }
+        await realtimeTranscriptionService.disconnect()
+
+        let text = await accumulator?.bestText() ?? ""
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Escape Cancel Handler

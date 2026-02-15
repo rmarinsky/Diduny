@@ -28,6 +28,8 @@ final class SettingsStorage {
         case sonioxLanguageHints
         case sonioxLanguageHintsStrict
         case translationRealtimeSocketEnabled
+        case transcriptionRealtimeSocketEnabled
+        case meetingRealtimeTranscriptionEnabled
     }
 
     private init() {}
@@ -196,6 +198,25 @@ final class SettingsStorage {
             return defaults.bool(forKey: Key.translationRealtimeSocketEnabled.rawValue)
         }
         set { defaults.set(newValue, forKey: Key.translationRealtimeSocketEnabled.rawValue) }
+    }
+
+    // MARK: - Transcription Realtime Socket
+
+    /// Enables cloud realtime transcription over Soniox websocket during voice dictation.
+    /// Disabled by default to keep existing async cloud behavior unless explicitly enabled.
+    var transcriptionRealtimeSocketEnabled: Bool {
+        get { defaults.bool(forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) }
+        set { defaults.set(newValue, forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) }
+    }
+
+    // MARK: - Meeting Cloud Mode
+
+    /// `true` = Cloud mode (realtime websocket + async fallback when API key exists).
+    /// `false` = Local mode (audio recording only, process later from Recordings).
+    /// If API key is missing, recording still works as audio-only in both modes.
+    var meetingRealtimeTranscriptionEnabled: Bool {
+        get { defaults.bool(forKey: Key.meetingRealtimeTranscriptionEnabled.rawValue) }
+        set { defaults.set(newValue, forKey: Key.meetingRealtimeTranscriptionEnabled.rawValue) }
     }
 
     // MARK: - Ambient Listening

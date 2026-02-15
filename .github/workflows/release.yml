@@ -114,7 +114,7 @@ jobs:
       - name: Export and verify app
         run: |
           mkdir -p "$EXPORT_DIR"
-          cp -R "$ARCHIVE_PATH/Products/Applications/$APP_BUNDLE_NAME" "$EXPORT_DIR/"
+          ditto "$ARCHIVE_PATH/Products/Applications/$APP_BUNDLE_NAME" "$EXPORT_DIR/$APP_BUNDLE_NAME"
 
           echo "Architectures:"
           lipo -archs "$EXPORT_DIR/$APP_BUNDLE_NAME/Contents/MacOS/$APP_NAME"

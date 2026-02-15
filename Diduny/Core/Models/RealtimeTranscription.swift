@@ -104,17 +104,32 @@ struct RealtimeTranslationConfig: Equatable {
 struct SonioxRealtimeResponse: Decodable {
     let tokens: [SonioxRealtimeToken]?
     let finished: Bool?
-    let error_code: String?
-    let error_message: String?
+    let errorCode: String?
+    let errorMessage: String?
+
+    enum CodingKeys: String, CodingKey {
+        case tokens, finished
+        case errorCode = "error_code"
+        case errorMessage = "error_message"
+    }
 
     struct SonioxRealtimeToken: Decodable {
         let text: String
-        let is_final: Bool
+        let isFinal: Bool
         let speaker: String?
-        let start_ms: Int?
-        let end_ms: Int?
+        let startMs: Int?
+        let endMs: Int?
         let language: String?
-        let source_language: String?
-        let translation_status: String?
+        let sourceLanguage: String?
+        let translationStatus: String?
+
+        enum CodingKeys: String, CodingKey {
+            case text, speaker, language
+            case isFinal = "is_final"
+            case startMs = "start_ms"
+            case endMs = "end_ms"
+            case sourceLanguage = "source_language"
+            case translationStatus = "translation_status"
+        }
     }
 }

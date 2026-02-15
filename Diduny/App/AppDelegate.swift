@@ -46,6 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @available(macOS 13.0, *)
     lazy var realtimeTranscriptionService = SonioxRealtimeService()
     @available(macOS 13.0, *)
+    var voiceRealtimeAccumulator: RealtimeVoiceAccumulator?
+    var voiceRealtimeSessionEnabled: Bool = false
+    @available(macOS 13.0, *)
     var translationRealtimeAccumulator: RealtimeTranslationAccumulator?
     var translationRealtimeSessionEnabled: Bool = false
     lazy var ambientListeningService = AmbientListeningService()

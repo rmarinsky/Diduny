@@ -98,9 +98,10 @@ extension AppDelegate {
             return
         }
 
-        // API key is optional — recording works without it, but real-time transcription requires it
+        // API key is optional — recording always works, cloud mode requires key
         let apiKey = KeychainManager.shared.getSonioxAPIKey()
         let hasApiKey = apiKey != nil && !apiKey!.isEmpty
+        let cloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
 
         // Prevent App Nap during meeting recording
         meetingActivityToken = ProcessInfo.processInfo.beginActivity(
@@ -128,12 +129,14 @@ extension AppDelegate {
             try await meetingRecorderService.startRecording()
             Log.app.info("Meeting recording started")
 
-            // Setup real-time transcription only if API key is available
+            // Setup real-time transcription only in Cloud mode with API key
             var store: LiveTranscriptStore?
-            if hasApiKey, let key = apiKey {
+            if hasApiKey, cloudModeEnabled, let key = apiKey {
                 store = await setupRealtimeTranscription(apiKey: key)
+            } else if cloudModeEnabled {
+                Log.app.info("Cloud mode selected, but API key missing — recording audio only")
             } else {
-                Log.app.info("No API key — recording audio only, no real-time transcription")
+                Log.app.info("Local mode selected — recording audio only")
             }
 
             // Only set recording state AFTER confirmed working
@@ -235,9 +238,9 @@ extension AppDelegate {
             await MainActor.run {
                 store.isActive = true
             }
-            NSLog("[MeetingRT] Real-time transcription connected successfully")
+            NSLog("[Transcription] Meeting real-time transcription connected successfully")
         } catch {
-            NSLog("[MeetingRT] Real-time transcription FAILED to connect: %@", error.localizedDescription)
+            NSLog("[Transcription] Meeting real-time transcription FAILED to connect: %@", error.localizedDescription)
             await MainActor.run {
                 store.isActive = true
                 store.connectionStatus = .failed(error.localizedDescription)
@@ -311,13 +314,14 @@ extension AppDelegate {
 
             let apiKey = KeychainManager.shared.getSonioxAPIKey()
             let hasApiKey = apiKey != nil && !apiKey!.isEmpty
+            let cloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
 
             let text: String?
             if !realtimeText.isEmpty {
                 // Use real-time transcript
                 text = realtimeText
                 Log.app.info("Using real-time transcript (\(realtimeText.count) chars)")
-            } else if hasApiKey {
+            } else if hasApiKey, cloudModeEnabled {
                 // Fallback: upload WAV to async REST API
                 Log.app.info("No real-time transcript, falling back to async API...")
                 let audioData = try await loadAudioData(from: audioURL)
@@ -327,9 +331,9 @@ extension AppDelegate {
                 text = try await transcriptionService.transcribeMeeting(audioData: audioData)
                 Log.app.info("Async meeting transcription received: \(text?.prefix(100) ?? "")...")
             } else {
-                // No API key — save audio only, user can transcribe later from Recordings
+                // Local mode or missing API key — save audio only, user can transcribe later from Recordings
                 text = nil
-                Log.app.info("No API key — saving meeting recording without transcription")
+                Log.app.info("Saving meeting recording without automatic transcription")
             }
 
             if let text {
@@ -362,6 +366,13 @@ extension AppDelegate {
                     appState.meetingRecordingState = .success
                     appState.meetingRecordingStartTime = nil
                     handleMeetingStateChange(.success)
+                }
+
+                if !cloudModeEnabled {
+                    NotchManager.shared.showInfo(
+                        message: "Recording saved. Open Recordings and choose a local model to transcribe.",
+                        duration: 3.0
+                    )
                 }
             }
             Log.app.info("stopMeetingRecording: SUCCESS")

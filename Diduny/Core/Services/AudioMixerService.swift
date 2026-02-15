@@ -8,9 +8,168 @@ import os
 /// It also exposes the same mixed PCM stream for cloud real-time transcription.
 @available(macOS 13.0, *)
 final class AudioMixerService {
-    private enum Source {
+    private enum Source: String {
         case microphone
         case system
+    }
+
+    private struct AudioChunk {
+        let startFrame: Int64
+        let samples: [Float]
+
+        var endFrame: Int64 {
+            startFrame + Int64(samples.count)
+        }
+    }
+
+    private struct SourceTimelineState {
+        var firstTimestampSeconds: TimeInterval?
+        var startFrameOffset: Int64 = 0
+        var nextFrameEstimate: Int64 = 0
+
+        mutating func reset() {
+            firstTimestampSeconds = nil
+            startFrameOffset = 0
+            nextFrameEstimate = 0
+        }
+    }
+
+    private struct MixerTelemetry: Equatable {
+        var micUnderflowFrames: Int64 = 0
+        var systemUnderflowFrames: Int64 = 0
+        var micOverflowFrames: Int64 = 0
+        var systemOverflowFrames: Int64 = 0
+        var mixedFramesWritten: Int64 = 0
+        var quantumCount: Int64 = 0
+        var maxInterSourceFrameDelta: Int64 = 0
+    }
+
+    /// Timestamp-aware bounded queue for source frames in mixer timeline.
+    private final class TimestampedRingBuffer {
+        private let capacityFrames: Int
+        private var chunks: [AudioChunk] = []
+        private var totalFrames: Int = 0
+
+        init(capacityFrames: Int) {
+            self.capacityFrames = max(1, capacityFrames)
+        }
+
+        var earliestFrame: Int64? {
+            chunks.first?.startFrame
+        }
+
+        var latestFrame: Int64? {
+            chunks.last?.endFrame
+        }
+
+        func reset() {
+            chunks.removeAll(keepingCapacity: true)
+            totalFrames = 0
+        }
+
+        /// Appends a chunk in timeline coordinates.
+        /// Returns number of dropped (oldest) frames due to ring overflow.
+        @discardableResult
+        func append(startFrame: Int64, samples: [Float]) -> Int {
+            guard !samples.isEmpty else { return 0 }
+
+            var normalizedStartFrame = max(0, startFrame)
+            var normalizedSamples = samples
+
+            // Ensure monotonic chunk sequence; trim overlaps to keep lookup simple.
+            if let last = chunks.last, normalizedStartFrame < last.endFrame {
+                let overlapFrames = Int(last.endFrame - normalizedStartFrame)
+                if overlapFrames >= normalizedSamples.count {
+                    return 0
+                }
+
+                normalizedStartFrame = last.endFrame
+                normalizedSamples = Array(normalizedSamples.dropFirst(overlapFrames))
+            }
+
+            guard !normalizedSamples.isEmpty else { return 0 }
+
+            let chunk = AudioChunk(startFrame: normalizedStartFrame, samples: normalizedSamples)
+            chunks.append(chunk)
+            totalFrames += chunk.samples.count
+
+            var droppedFrames = 0
+            while totalFrames > capacityFrames, !chunks.isEmpty {
+                let overflowFrames = totalFrames - capacityFrames
+                let firstChunk = chunks[0]
+
+                if overflowFrames >= firstChunk.samples.count {
+                    droppedFrames += firstChunk.samples.count
+                    totalFrames -= firstChunk.samples.count
+                    chunks.removeFirst()
+                    continue
+                }
+
+                droppedFrames += overflowFrames
+                totalFrames -= overflowFrames
+
+                let trimmedSamples = Array(firstChunk.samples.dropFirst(overflowFrames))
+                chunks[0] = AudioChunk(
+                    startFrame: firstChunk.startFrame + Int64(overflowFrames),
+                    samples: trimmedSamples
+                )
+            }
+
+            return droppedFrames
+        }
+
+        /// Copies overlap with [rangeStart, rangeStart + destination.count) into destination.
+        /// Returns number of frames that were provided by this source.
+        func fill(rangeStart: Int64, destination: inout [Float]) -> Int {
+            guard !destination.isEmpty, !chunks.isEmpty else { return 0 }
+
+            let rangeEnd = rangeStart + Int64(destination.count)
+            var filledFrames = 0
+
+            for chunk in chunks {
+                if chunk.endFrame <= rangeStart {
+                    continue
+                }
+                if chunk.startFrame >= rangeEnd {
+                    break
+                }
+
+                let overlapStart = max(rangeStart, chunk.startFrame)
+                let overlapEnd = min(rangeEnd, chunk.endFrame)
+                let overlapFrameCount = Int(overlapEnd - overlapStart)
+                guard overlapFrameCount > 0 else { continue }
+
+                let sourceOffset = Int(overlapStart - chunk.startFrame)
+                let destinationOffset = Int(overlapStart - rangeStart)
+
+                for index in 0 ..< overlapFrameCount {
+                    destination[destinationOffset + index] = chunk.samples[sourceOffset + index]
+                }
+
+                filledFrames += overlapFrameCount
+            }
+
+            return filledFrames
+        }
+
+        func discard(upToFrame frame: Int64) {
+            while let first = chunks.first, first.endFrame <= frame {
+                totalFrames -= first.samples.count
+                chunks.removeFirst()
+            }
+
+            guard !chunks.isEmpty else { return }
+            let first = chunks[0]
+
+            if frame > first.startFrame, frame < first.endFrame {
+                let dropFrames = Int(frame - first.startFrame)
+                guard dropFrames > 0 else { return }
+
+                totalFrames -= dropFrames
+                let trimmedSamples = Array(first.samples.dropFirst(dropFrames))
+                chunks[0] = AudioChunk(startFrame: frame, samples: trimmedSamples)
+            }
+        }
     }
 
     // MARK: - Properties
@@ -18,6 +177,7 @@ final class AudioMixerService {
     private var audioFile: AVAudioFile?
     private var outputURL: URL?
     private var isRecording = false
+    private var isStopping = false
     private var startTime: Date?
 
     // Audio engine for microphone capture
@@ -39,18 +199,32 @@ final class AudioMixerService {
     // Cached converters (keyed by input format hash) - must be used only on writeQueue
     private var converterCache: [String: AVAudioConverter] = [:]
 
-    // Per-source sample queues (float32 mono, 16kHz timeline)
-    private var micSamples: [Float] = []
-    private var micReadIndex = 0
-    private var systemSamples: [Float] = []
-    private var systemReadIndex = 0
-    private var lastMicBufferTime: Date?
-    private var lastSystemBufferTime: Date?
+    // Timestamped source ring buffers (all in output timeline/frame space)
+    private let ringBufferCapacityFrames = 16000 * 20 // 20 seconds per source
+    private var micRingBuffer = TimestampedRingBuffer(capacityFrames: 16000 * 20)
+    private var systemRingBuffer = TimestampedRingBuffer(capacityFrames: 16000 * 20)
+    private var micTimeline = SourceTimelineState()
+    private var systemTimeline = SourceTimelineState()
 
-    // If one source stalls for this long, continue writing with the active source only.
-    private let sourceStallThreshold: TimeInterval = 0.35
-    private let maxFramesPerWrite = 4096
+    // Mixer clock / scheduling
+    private var mixCursorFrame: Int64 = 0
+    private var hasInitializedMixCursor = false
+    private var includeMicrophoneInMix = true
+    private let mixQuantumFrames = 160 // 10ms @ 16kHz
+    private let mixLookaheadFrames = 320 // 20ms jitter buffer
+    private let ringDiscardGuardFrames = 1600 // keep ~100ms history for overlap safety
+    private let sourceStallThreshold: TimeInterval = 1.0
     private let mixNormalization: Float = 0.7
+
+    // Arrival timestamps for stall detection
+    private var lastMicChunkEnqueueTime: Date?
+    private var lastSystemChunkEnqueueTime: Date?
+
+    // Telemetry (underflow/overflow and sync quality)
+    private var telemetry = MixerTelemetry()
+    private var lastTelemetrySnapshot = MixerTelemetry()
+    private var lastTelemetryLogTime = Date()
+    private let telemetryLogInterval: TimeInterval = 5.0
 
     // Callbacks
     var onError: ((Error) -> Void)?
@@ -90,13 +264,25 @@ final class AudioMixerService {
         Log.audio.info("AudioMixer: Audio file created at \(url.path)")
 
         // Reset mixing state
-        micSamples.removeAll(keepingCapacity: true)
-        systemSamples.removeAll(keepingCapacity: true)
-        micReadIndex = 0
-        systemReadIndex = 0
+        includeMicrophoneInMix = includeMicrophone
+        micRingBuffer.reset()
+        systemRingBuffer.reset()
+        micTimeline.reset()
+        systemTimeline.reset()
+        mixCursorFrame = 0
+        hasInitializedMixCursor = false
+
+        converterCache.removeAll()
+        telemetry = MixerTelemetry()
+        lastTelemetrySnapshot = MixerTelemetry()
+        lastTelemetryLogTime = Date()
+
+        lastMicChunkEnqueueTime = nil
+        lastSystemChunkEnqueueTime = nil
+
         let now = Date()
-        lastMicBufferTime = now
-        lastSystemBufferTime = now
+        lastMicAudioTime = now
+        lastSystemAudioTime = now
 
         // Setup microphone if requested
         if includeMicrophone {
@@ -107,7 +293,7 @@ final class AudioMixerService {
         startTime = Date()
         hasWrittenData = false
 
-        Log.audio.info("AudioMixer: Recording started")
+        Log.audio.info("AudioMixer: Recording started, ringCapacityFrames=\(self.ringBufferCapacityFrames)")
     }
 
     // MARK: - Microphone Setup
@@ -146,15 +332,22 @@ final class AudioMixerService {
         }
 
         // Install tap on input node
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            guard let self, self.isRecording else { return }
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, when in
+            guard let self, self.isRecording, !self.isStopping else { return }
 
             if self.hasAudioContent(buffer) {
                 self.lastMicAudioTime = Date()
             }
 
-            // Copy buffer and queue for mixing/writing (buffer may be reused by AVAudioEngine)
-            self.queueBufferForWriting(buffer: buffer, inputFormat: inputFormat, source: .microphone)
+            let timestampSeconds = self.microphoneTimestampSeconds(from: when)
+
+            // Copy buffer and queue for conversion + timestamped ring-buffer mixing.
+            self.queueBufferForWriting(
+                buffer: buffer,
+                inputFormat: inputFormat,
+                source: .microphone,
+                sourceTimestampSeconds: timestampSeconds
+            )
         }
 
         try engine.start()
@@ -167,7 +360,7 @@ final class AudioMixerService {
 
     /// Feed system audio buffer from ScreenCaptureKit.
     func feedSystemAudio(_ sampleBuffer: CMSampleBuffer) {
-        guard isRecording, audioFile != nil else { return }
+        guard isRecording, !isStopping, audioFile != nil else { return }
 
         systemAudioBufferCount += 1
 
@@ -189,13 +382,25 @@ final class AudioMixerService {
             lastSystemAudioTime = Date()
         }
 
-        queueBufferForWriting(buffer: pcmBuffer, inputFormat: pcmBuffer.format, source: .system)
+        let timestampSeconds = systemTimestampSeconds(from: sampleBuffer)
+
+        queueBufferForWriting(
+            buffer: pcmBuffer,
+            inputFormat: pcmBuffer.format,
+            source: .system,
+            sourceTimestampSeconds: timestampSeconds
+        )
     }
 
     // MARK: - Buffer Conversion and Mixing
 
     /// Copies buffer data synchronously, then processes conversion/mixing on writeQueue.
-    private func queueBufferForWriting(buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat, source: Source) {
+    private func queueBufferForWriting(
+        buffer: AVAudioPCMBuffer,
+        inputFormat: AVAudioFormat,
+        source: Source,
+        sourceTimestampSeconds: TimeInterval?
+    ) {
         guard inputFormat.sampleRate > 0 else {
             Log.audio.warning("AudioMixer: Invalid input format - sampleRate=\(inputFormat.sampleRate)")
             return
@@ -205,14 +410,15 @@ final class AudioMixerService {
         guard frameCount > 0 else { return }
 
         guard let safeCopiedBuffer = copyAudioBuffer(buffer, inputFormat: inputFormat, frameCount: frameCount) else {
-            Log.audio.warning("AudioMixer: Failed to copy buffer from \(source == .microphone ? "mic" : "system")")
+            Log.audio.warning("AudioMixer: Failed to copy buffer from \(source.rawValue)")
             return
         }
 
-        let formatKey = "\(inputFormat.sampleRate)-\(inputFormat.channelCount)-\(inputFormat.commonFormat.rawValue)-\(inputFormat.isInterleaved)"
+        let sourceKey = (source == .microphone) ? "mic" : "system"
+        let formatKey = "\(sourceKey)-\(inputFormat.sampleRate)-\(inputFormat.channelCount)-\(inputFormat.commonFormat.rawValue)-\(inputFormat.isInterleaved)"
 
         writeQueue.async { [weak self] in
-            guard let self, let audioFile = self.audioFile, self.isRecording else { return }
+            guard let self, let audioFile = self.audioFile, (self.isRecording || self.isStopping) else { return }
 
             let fileProcessingFormat = audioFile.processingFormat
 
@@ -226,11 +432,11 @@ final class AudioMixerService {
                 }
                 self.converterCache[formatKey] = newConverter
                 converter = newConverter
-                Log.audio.info("AudioMixer: Created converter for \(source == .microphone ? "mic" : "system") - input: sampleRate=\(inputFormat.sampleRate), ch=\(inputFormat.channelCount), format=\(inputFormat.commonFormat.rawValue), interleaved=\(inputFormat.isInterleaved) -> output: sampleRate=\(fileProcessingFormat.sampleRate), ch=\(fileProcessingFormat.channelCount), format=\(fileProcessingFormat.commonFormat.rawValue), interleaved=\(fileProcessingFormat.isInterleaved)")
+                Log.audio.info("AudioMixer: Created converter for \(source.rawValue) - input: sampleRate=\(inputFormat.sampleRate), ch=\(inputFormat.channelCount), format=\(inputFormat.commonFormat.rawValue), interleaved=\(inputFormat.isInterleaved) -> output: sampleRate=\(fileProcessingFormat.sampleRate), ch=\(fileProcessingFormat.channelCount), format=\(fileProcessingFormat.commonFormat.rawValue), interleaved=\(fileProcessingFormat.isInterleaved)")
             }
 
             let ratio = fileProcessingFormat.sampleRate / inputFormat.sampleRate
-            let outputFrameCount = AVAudioFrameCount(Double(frameCount) * ratio)
+            let outputFrameCount = AVAudioFrameCount(Double(frameCount) * ratio) + 32
             guard outputFrameCount > 0 else { return }
 
             guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: fileProcessingFormat, frameCapacity: outputFrameCount) else {
@@ -253,13 +459,13 @@ final class AudioMixerService {
 
             if let error {
                 if !self.hasWrittenData {
-                    Log.audio.error("AudioMixer: Conversion error from \(source == .microphone ? "mic" : "system") - \(error.localizedDescription)")
+                    Log.audio.error("AudioMixer: Conversion error from \(source.rawValue) - \(error.localizedDescription)")
                 }
                 return
             }
 
             guard status != .error else {
-                Log.audio.warning("AudioMixer: Converter returned error status from \(source == .microphone ? "mic" : "system")")
+                Log.audio.warning("AudioMixer: Converter returned error status from \(source.rawValue)")
                 return
             }
 
@@ -267,7 +473,12 @@ final class AudioMixerService {
                 return
             }
 
-            self.enqueueConvertedSamples(outputBuffer, source: source, fileProcessingFormat: fileProcessingFormat)
+            self.enqueueConvertedSamples(
+                outputBuffer,
+                source: source,
+                timestampSeconds: sourceTimestampSeconds,
+                fileProcessingFormat: fileProcessingFormat
+            )
         }
     }
 
@@ -301,24 +512,360 @@ final class AudioMixerService {
     private func enqueueConvertedSamples(
         _ buffer: AVAudioPCMBuffer,
         source: Source,
+        timestampSeconds: TimeInterval?,
         fileProcessingFormat: AVAudioFormat
     ) {
         guard let monoSamples = extractMonoFloatSamples(from: buffer), !monoSamples.isEmpty else {
-            Log.audio.warning("AudioMixer: Failed to extract converted samples from \(source == .microphone ? "mic" : "system")")
+            Log.audio.warning("AudioMixer: Failed to extract converted samples from \(source.rawValue)")
             return
         }
 
+        let startFrame = assignStartFrame(
+            for: source,
+            timestampSeconds: timestampSeconds,
+            sampleCount: monoSamples.count
+        )
+
+        let droppedFrames: Int
         let now = Date()
+
         switch source {
         case .microphone:
-            micSamples.append(contentsOf: monoSamples)
-            lastMicBufferTime = now
+            droppedFrames = micRingBuffer.append(startFrame: startFrame, samples: monoSamples)
+            lastMicChunkEnqueueTime = now
+            if droppedFrames > 0 {
+                telemetry.micOverflowFrames += Int64(droppedFrames)
+            }
         case .system:
-            systemSamples.append(contentsOf: monoSamples)
-            lastSystemBufferTime = now
+            droppedFrames = systemRingBuffer.append(startFrame: startFrame, samples: monoSamples)
+            lastSystemChunkEnqueueTime = now
+            if droppedFrames > 0 {
+                telemetry.systemOverflowFrames += Int64(droppedFrames)
+            }
         }
 
+        updateSyncTelemetry()
         mixAndWriteAvailableFrames(fileProcessingFormat: fileProcessingFormat, flush: false)
+        logTelemetryIfNeeded(force: false)
+    }
+
+    private func assignStartFrame(
+        for source: Source,
+        timestampSeconds: TimeInterval?,
+        sampleCount: Int
+    ) -> Int64 {
+        switch source {
+        case .microphone:
+            return assignStartFrame(
+                for: source,
+                timeline: &micTimeline,
+                timestampSeconds: timestampSeconds,
+                sampleCount: sampleCount
+            )
+        case .system:
+            return assignStartFrame(
+                for: source,
+                timeline: &systemTimeline,
+                timestampSeconds: timestampSeconds,
+                sampleCount: sampleCount
+            )
+        }
+    }
+
+    private func assignStartFrame(
+        for source: Source,
+        timeline: inout SourceTimelineState,
+        timestampSeconds: TimeInterval?,
+        sampleCount: Int
+    ) -> Int64 {
+        let sampleFrames = Int64(sampleCount)
+
+        let startFrame: Int64
+        if let timestampSeconds, timestampSeconds.isFinite {
+            if timeline.firstTimestampSeconds == nil {
+                timeline.firstTimestampSeconds = timestampSeconds
+                timeline.startFrameOffset = initialFrameOffset(for: source)
+            }
+
+            let origin = timeline.firstTimestampSeconds ?? timestampSeconds
+            let localFrame = Int64(max(0, (timestampSeconds - origin) * outputSampleRate))
+            let candidateFrame = timeline.startFrameOffset + localFrame
+            startFrame = max(candidateFrame, timeline.nextFrameEstimate)
+        } else {
+            if timeline.nextFrameEstimate == 0 {
+                timeline.startFrameOffset = initialFrameOffset(for: source)
+            }
+            startFrame = max(timeline.startFrameOffset, timeline.nextFrameEstimate)
+        }
+
+        timeline.nextFrameEstimate = startFrame + sampleFrames
+        return startFrame
+    }
+
+    private func initialFrameOffset(for source: Source) -> Int64 {
+        switch source {
+        case .microphone:
+            return max(systemTimeline.nextFrameEstimate, mixCursorFrame)
+        case .system:
+            return max(micTimeline.nextFrameEstimate, mixCursorFrame)
+        }
+    }
+
+    private func updateSyncTelemetry() {
+        guard let micLatest = micRingBuffer.latestFrame,
+              let systemLatest = systemRingBuffer.latestFrame
+        else {
+            return
+        }
+
+        let delta = abs(micLatest - systemLatest)
+        telemetry.maxInterSourceFrameDelta = max(telemetry.maxInterSourceFrameDelta, delta)
+    }
+
+    private func initializeMixCursorIfNeeded() {
+        guard !hasInitializedMixCursor else { return }
+
+        let earliestSystem = systemRingBuffer.earliestFrame
+        let earliestMic = micRingBuffer.earliestFrame
+
+        if includeMicrophoneInMix {
+            if let earliestSystem, let earliestMic {
+                mixCursorFrame = min(earliestSystem, earliestMic)
+                hasInitializedMixCursor = true
+                return
+            }
+
+            // If one source stalls at start, don't block output forever.
+            if let earliestSystem, isSourceStalled(.microphone) {
+                mixCursorFrame = earliestSystem
+                hasInitializedMixCursor = true
+                return
+            }
+
+            if let earliestMic, isSourceStalled(.system) {
+                mixCursorFrame = earliestMic
+                hasInitializedMixCursor = true
+                return
+            }
+
+            return
+        }
+
+        if let earliestSystem {
+            mixCursorFrame = earliestSystem
+            hasInitializedMixCursor = true
+        }
+    }
+
+    private func mixAndWriteAvailableFrames(fileProcessingFormat: AVAudioFormat, flush: Bool) {
+        guard let audioFile else { return }
+
+        initializeMixCursorIfNeeded()
+        guard hasInitializedMixCursor else { return }
+
+        guard let mixEndFrame = calculateMixEndFrame(flush: flush) else { return }
+        guard mixEndFrame > mixCursorFrame else { return }
+
+        var wroteAnyData = false
+
+        while mixCursorFrame < mixEndFrame {
+            let remainingFrames = Int(mixEndFrame - mixCursorFrame)
+            let framesToWrite = flush ? min(mixQuantumFrames, remainingFrames) : mixQuantumFrames
+
+            if framesToWrite <= 0 {
+                break
+            }
+
+            if !flush, remainingFrames < framesToWrite {
+                break
+            }
+
+            var micFrameData = [Float](repeating: 0, count: framesToWrite)
+            var systemFrameData = [Float](repeating: 0, count: framesToWrite)
+
+            let micFilledFrames: Int
+            if includeMicrophoneInMix {
+                micFilledFrames = micRingBuffer.fill(rangeStart: mixCursorFrame, destination: &micFrameData)
+                if micFilledFrames < framesToWrite {
+                    telemetry.micUnderflowFrames += Int64(framesToWrite - micFilledFrames)
+                }
+            } else {
+                micFilledFrames = framesToWrite
+            }
+
+            let systemFilledFrames = systemRingBuffer.fill(rangeStart: mixCursorFrame, destination: &systemFrameData)
+            if systemFilledFrames < framesToWrite {
+                telemetry.systemUnderflowFrames += Int64(framesToWrite - systemFilledFrames)
+            }
+
+            guard let outputBuffer = AVAudioPCMBuffer(
+                pcmFormat: fileProcessingFormat,
+                frameCapacity: AVAudioFrameCount(framesToWrite)
+            ) else {
+                Log.audio.error("AudioMixer: Failed to create mixed output buffer")
+                break
+            }
+            outputBuffer.frameLength = AVAudioFrameCount(framesToWrite)
+
+            // Write float32 mono to fallback file
+            if let out = outputBuffer.floatChannelData?[0] {
+                for index in 0 ..< framesToWrite {
+                    let micSample = includeMicrophoneInMix ? micFrameData[index] : 0
+                    let systemSample = systemFrameData[index]
+                    out[index] = clamp((micSample + systemSample) * mixNormalization)
+                }
+            } else if let out = outputBuffer.int16ChannelData?[0] {
+                for index in 0 ..< framesToWrite {
+                    let micSample = includeMicrophoneInMix ? micFrameData[index] : 0
+                    let systemSample = systemFrameData[index]
+                    let mixed = clamp((micSample + systemSample) * mixNormalization)
+                    out[index] = Int16(mixed * Float(Int16.max))
+                }
+            } else {
+                Log.audio.error("AudioMixer: Unsupported output buffer format")
+                break
+            }
+
+            do {
+                try audioFile.write(from: outputBuffer)
+                if !hasWrittenData {
+                    hasWrittenData = true
+                    NSLog("[Diduny] AudioMixer: Started writing mixed audio data")
+                }
+            } catch {
+                Log.audio.error("AudioMixer: Write error - \(error.localizedDescription)")
+                onError?(error)
+                break
+            }
+
+            if let onMixedAudioData {
+                let pcmData = toInt16PCMData(buffer: outputBuffer)
+                if !pcmData.isEmpty {
+                    onMixedAudioData(pcmData)
+                }
+            }
+
+            telemetry.mixedFramesWritten += Int64(framesToWrite)
+            telemetry.quantumCount += 1
+
+            mixCursorFrame += Int64(framesToWrite)
+
+            let discardFrame = max(0, mixCursorFrame - Int64(ringDiscardGuardFrames))
+            micRingBuffer.discard(upToFrame: discardFrame)
+            systemRingBuffer.discard(upToFrame: discardFrame)
+
+            wroteAnyData = true
+        }
+
+        if wroteAnyData {
+            logTelemetryIfNeeded(force: flush)
+        }
+    }
+
+    private func calculateMixEndFrame(flush: Bool) -> Int64? {
+        let systemLatest = systemRingBuffer.latestFrame
+        let micLatest = micRingBuffer.latestFrame
+
+        if flush {
+            var latestFrame = systemLatest ?? mixCursorFrame
+            if includeMicrophoneInMix {
+                latestFrame = max(latestFrame, micLatest ?? mixCursorFrame)
+            }
+            return latestFrame
+        }
+
+        let lookaheadFrames = Int64(mixLookaheadFrames)
+
+        if includeMicrophoneInMix {
+            switch (systemLatest, micLatest) {
+            case let (systemEnd?, micEnd?):
+                return max(mixCursorFrame, min(systemEnd, micEnd) - lookaheadFrames)
+            case let (systemEnd?, nil):
+                if isSourceStalled(.microphone) {
+                    return max(mixCursorFrame, systemEnd - lookaheadFrames)
+                }
+                return nil
+            case let (nil, micEnd?):
+                if isSourceStalled(.system) {
+                    return max(mixCursorFrame, micEnd - lookaheadFrames)
+                }
+                return nil
+            case (nil, nil):
+                return nil
+            }
+        }
+
+        guard let systemLatest else { return nil }
+        return max(mixCursorFrame, systemLatest - lookaheadFrames)
+    }
+
+    private func isSourceStalled(_ source: Source) -> Bool {
+        let now = Date()
+
+        let lastEnqueueTime: Date?
+        switch source {
+        case .microphone:
+            lastEnqueueTime = lastMicChunkEnqueueTime
+        case .system:
+            lastEnqueueTime = lastSystemChunkEnqueueTime
+        }
+
+        if let lastEnqueueTime {
+            return now.timeIntervalSince(lastEnqueueTime) > sourceStallThreshold
+        }
+
+        guard let startTime else { return false }
+        return now.timeIntervalSince(startTime) > sourceStallThreshold
+    }
+
+    private func logTelemetryIfNeeded(force: Bool) {
+        let now = Date()
+
+        if !force, now.timeIntervalSince(lastTelemetryLogTime) < telemetryLogInterval {
+            return
+        }
+
+        if !force, telemetry == lastTelemetrySnapshot {
+            return
+        }
+
+        let maxDeltaMs = (Double(telemetry.maxInterSourceFrameDelta) / outputSampleRate) * 1000.0
+        let micUnderflow = telemetry.micUnderflowFrames
+        let systemUnderflow = telemetry.systemUnderflowFrames
+        let micOverflow = telemetry.micOverflowFrames
+        let systemOverflow = telemetry.systemOverflowFrames
+        let mixedFrames = telemetry.mixedFramesWritten
+        let quantumCount = telemetry.quantumCount
+        Log.audio.info(
+            "AudioMixer telemetry: underflow(mic=\(micUnderflow), system=\(systemUnderflow)), overflow(mic=\(micOverflow), system=\(systemOverflow)), mixedFrames=\(mixedFrames), quanta=\(quantumCount), maxDeltaMs=\(maxDeltaMs)"
+        )
+
+        lastTelemetrySnapshot = telemetry
+        lastTelemetryLogTime = now
+    }
+
+    private func microphoneTimestampSeconds(from when: AVAudioTime?) -> TimeInterval? {
+        guard let when else { return nil }
+
+        if when.isHostTimeValid {
+            return AVAudioTime.seconds(forHostTime: when.hostTime)
+        }
+
+        if when.isSampleTimeValid {
+            let sampleRate = when.sampleRate > 0 ? when.sampleRate : outputSampleRate
+            return Double(when.sampleTime) / sampleRate
+        }
+
+        return nil
+    }
+
+    private func systemTimestampSeconds(from sampleBuffer: CMSampleBuffer) -> TimeInterval? {
+        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        guard presentationTime.isValid else { return nil }
+
+        let seconds = CMTimeGetSeconds(presentationTime)
+        guard seconds.isFinite else { return nil }
+        return seconds
     }
 
     private func extractMonoFloatSamples(from buffer: AVAudioPCMBuffer) -> [Float]? {
@@ -368,110 +915,6 @@ final class AudioMixerService {
         return nil
     }
 
-    private func mixAndWriteAvailableFrames(fileProcessingFormat: AVAudioFormat, flush: Bool) {
-        guard let audioFile else { return }
-
-        while true {
-            let micAvailable = micSamples.count - micReadIndex
-            let systemAvailable = systemSamples.count - systemReadIndex
-
-            if micAvailable <= 0, systemAvailable <= 0 {
-                break
-            }
-
-            var micFramesToConsume = 0
-            var systemFramesToConsume = 0
-
-            let syncedFrames = min(micAvailable, systemAvailable)
-            if syncedFrames > 0 {
-                let frameCount = min(syncedFrames, maxFramesPerWrite)
-                micFramesToConsume = frameCount
-                systemFramesToConsume = frameCount
-            } else if flush {
-                micFramesToConsume = min(micAvailable, maxFramesPerWrite)
-                systemFramesToConsume = min(systemAvailable, maxFramesPerWrite)
-            } else {
-                let now = Date()
-                if micAvailable > 0,
-                   shouldFallbackToSingleSource(now: now, missingSource: .system)
-                {
-                    micFramesToConsume = min(micAvailable, maxFramesPerWrite)
-                } else if systemAvailable > 0,
-                          shouldFallbackToSingleSource(now: now, missingSource: .microphone)
-                {
-                    systemFramesToConsume = min(systemAvailable, maxFramesPerWrite)
-                } else {
-                    break
-                }
-            }
-
-            let framesToWrite = max(micFramesToConsume, systemFramesToConsume)
-            guard framesToWrite > 0 else { break }
-
-            guard let outputBuffer = AVAudioPCMBuffer(
-                pcmFormat: fileProcessingFormat,
-                frameCapacity: AVAudioFrameCount(framesToWrite)
-            ) else {
-                Log.audio.error("AudioMixer: Failed to create mixed output buffer")
-                break
-            }
-            outputBuffer.frameLength = AVAudioFrameCount(framesToWrite)
-
-            // Write float32 mono to fallback file
-            if let out = outputBuffer.floatChannelData?[0] {
-                for index in 0 ..< framesToWrite {
-                    let micSample: Float = index < micFramesToConsume ? micSamples[micReadIndex + index] : 0
-                    let systemSample: Float = index < systemFramesToConsume ? systemSamples[systemReadIndex + index] : 0
-                    out[index] = clamp((micSample + systemSample) * mixNormalization)
-                }
-            } else if let out = outputBuffer.int16ChannelData?[0] {
-                for index in 0 ..< framesToWrite {
-                    let micSample: Float = index < micFramesToConsume ? micSamples[micReadIndex + index] : 0
-                    let systemSample: Float = index < systemFramesToConsume ? systemSamples[systemReadIndex + index] : 0
-                    let mixed = clamp((micSample + systemSample) * mixNormalization)
-                    out[index] = Int16(mixed * Float(Int16.max))
-                }
-            } else {
-                Log.audio.error("AudioMixer: Unsupported output buffer format")
-                break
-            }
-
-            do {
-                try audioFile.write(from: outputBuffer)
-                if !hasWrittenData {
-                    hasWrittenData = true
-                    Log.audio.info("AudioMixer: Started writing mixed audio data")
-                }
-            } catch {
-                Log.audio.error("AudioMixer: Write error - \(error.localizedDescription)")
-                onError?(error)
-                break
-            }
-
-            if let onMixedAudioData {
-                let pcmData = toInt16PCMData(buffer: outputBuffer)
-                if !pcmData.isEmpty {
-                    onMixedAudioData(pcmData)
-                }
-            }
-
-            micReadIndex += micFramesToConsume
-            systemReadIndex += systemFramesToConsume
-            compactQueuesIfNeeded()
-        }
-    }
-
-    private func shouldFallbackToSingleSource(now: Date, missingSource: Source) -> Bool {
-        switch missingSource {
-        case .microphone:
-            guard let lastMicBufferTime else { return false }
-            return now.timeIntervalSince(lastMicBufferTime) > sourceStallThreshold
-        case .system:
-            guard let lastSystemBufferTime else { return false }
-            return now.timeIntervalSince(lastSystemBufferTime) > sourceStallThreshold
-        }
-    }
-
     private func toInt16PCMData(buffer: AVAudioPCMBuffer) -> Data {
         let frameCount = Int(buffer.frameLength)
         guard frameCount > 0 else { return Data() }
@@ -493,26 +936,6 @@ final class AudioMixerService {
         }
 
         return Data()
-    }
-
-    private func compactQueuesIfNeeded() {
-        compactQueue(&micSamples, readIndex: &micReadIndex)
-        compactQueue(&systemSamples, readIndex: &systemReadIndex)
-    }
-
-    private func compactQueue(_ queue: inout [Float], readIndex: inout Int) {
-        guard readIndex > 0 else { return }
-
-        if readIndex >= queue.count {
-            queue.removeAll(keepingCapacity: true)
-            readIndex = 0
-            return
-        }
-
-        if readIndex >= 8192, readIndex * 2 >= queue.count {
-            queue.removeFirst(readIndex)
-            readIndex = 0
-        }
     }
 
     private func clamp(_ value: Float) -> Float {
@@ -645,7 +1068,9 @@ final class AudioMixerService {
 
         Log.audio.info("AudioMixer: Stopping recording...")
 
-        isRecording = false
+        // Prevent new buffers from being accepted at entry points while
+        // still allowing already-queued async blocks to finish processing.
+        isStopping = true
 
         if let engine = audioEngine {
             engine.inputNode.removeTap(onBus: 0)
@@ -658,7 +1083,11 @@ final class AudioMixerService {
             if let format = audioFile?.processingFormat {
                 mixAndWriteAvailableFrames(fileProcessingFormat: format, flush: true)
             }
+            logTelemetryIfNeeded(force: true)
         }
+
+        isRecording = false
+        isStopping = false
 
         let finalURL = outputURL
         audioFile = nil
@@ -672,14 +1101,20 @@ final class AudioMixerService {
         startTime = nil
         lastMicAudioTime = nil
         lastSystemAudioTime = nil
-        lastMicBufferTime = nil
-        lastSystemBufferTime = nil
+        lastMicChunkEnqueueTime = nil
+        lastSystemChunkEnqueueTime = nil
         systemAudioBufferCount = 0
+
         converterCache.removeAll()
-        micSamples.removeAll(keepingCapacity: true)
-        systemSamples.removeAll(keepingCapacity: true)
-        micReadIndex = 0
-        systemReadIndex = 0
+        micRingBuffer.reset()
+        systemRingBuffer.reset()
+        micTimeline.reset()
+        systemTimeline.reset()
+        mixCursorFrame = 0
+        hasInitializedMixCursor = false
+
+        telemetry = MixerTelemetry()
+        lastTelemetrySnapshot = MixerTelemetry()
 
         return finalURL
     }

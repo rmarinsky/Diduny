@@ -1,4 +1,5 @@
 import SwiftUI
+import KeyboardShortcuts
 
 struct MenuBarContentView: View {
     @Environment(AppState.self) var appState
@@ -13,41 +14,17 @@ struct MenuBarContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Recording toggle
-            Button(action: onToggleRecording) {
-                HStack {
-                    Text(recordingButtonTitle)
-                    Spacer()
-                    Text("⌘⇧D")
-                        .foregroundColor(.secondary)
-                        .font(.caption)
-                }
-            }
-            .keyboardShortcut("d", modifiers: [.command, .shift])
+            Button(recordingButtonTitle, action: onToggleRecording)
+            .globalKeyboardShortcut(.toggleRecording)
             .disabled(isDictationButtonDisabled)
 
-            Button(action: onToggleTranslationRecording) {
-                HStack {
-                    Text(translateButtonTitle)
-                    Spacer()
-                    Text("⌘⇧T")
-                        .foregroundColor(.secondary)
-                        .font(.caption)
-                }
-            }
-            .keyboardShortcut("t", modifiers: [.command, .shift])
+            Button(translateButtonTitle, action: onToggleTranslationRecording)
+            .globalKeyboardShortcut(.toggleTranslation)
             .disabled(isTranslationButtonDisabled)
 
             // Meeting recording toggle
-            Button(action: onToggleMeetingRecording) {
-                HStack {
-                    Text(meetingButtonTitle)
-                    Spacer()
-                    Text("⌘⇧M")
-                        .foregroundColor(.secondary)
-                        .font(.caption)
-                }
-            }
-            .keyboardShortcut("m", modifiers: [.command, .shift])
+            Button(meetingButtonTitle, action: onToggleMeetingRecording)
+            .globalKeyboardShortcut(.toggleMeetingRecording)
             .disabled(isMeetingButtonDisabled)
 
             Divider()
