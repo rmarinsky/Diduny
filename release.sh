@@ -131,7 +131,7 @@ echo -e "${GREEN}  App exported${NC}"
 # ── Step 5: Verify ──────────────────────────────────────────────────
 echo -e "${YELLOW}[5/7] Verifying build...${NC}"
 echo -n "  Architectures: "
-lipo -archs "${APP_PATH}/Contents/MacOS/${DISPLAY_NAME}"
+lipo -archs "${APP_PATH}/Contents/MacOS/${APP_NAME}"
 codesign --verify --deep --strict --verbose=2 "${APP_PATH}" 2>&1 | tail -1
 echo -e "${GREEN}  Signature valid${NC}"
 

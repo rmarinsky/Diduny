@@ -200,6 +200,10 @@ extension AppDelegate {
         }
 
         do {
+            // Configure realtime websocket BEFORE starting recorder.
+            // AudioRecorderService snapshots onRealtimeAudioData at start time.
+            await setupRealtimeTranslationIfNeeded(apiKey: apiKey)
+
             Log.app.info("startTranslationRecording: Starting audio recording")
             try await audioRecorder.startRecording(device: device)
             Log.app.info("startTranslationRecording: Recording started successfully")
@@ -222,12 +226,11 @@ extension AppDelegate {
             await MainActor.run {
                 setupTranslationEscapeCancelHandler()
             }
-
-            // Optional websocket mode: realtime cloud transcription + translation
-            await setupRealtimeTranslationIfNeeded(apiKey: apiKey)
         } catch let error as AudioTimeoutError {
             // Audio hardware timed out - likely coreaudiod is unresponsive or device is unavailable
             Log.app.error("startTranslationRecording: TIMEOUT - \(error.localizedDescription)")
+
+            _ = await stopTranslationRealtimeSession(finalize: false)
 
             // End App Nap prevention
             if let token = translationActivityToken {
@@ -247,6 +250,8 @@ extension AppDelegate {
         } catch {
             // Handle any other errors during recording start
             Log.app.error("startTranslationRecording: ERROR - \(error.localizedDescription)")
+
+            _ = await stopTranslationRealtimeSession(finalize: false)
 
             // End App Nap prevention
             if let token = translationActivityToken {

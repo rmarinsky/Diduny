@@ -216,8 +216,8 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
         do {
             let response = try JSONDecoder().decode(SonioxRealtimeResponse.self, from: data)
 
-            if let errorMessage = response.error_message {
-                let code = response.error_code ?? "unknown"
+            if let errorMessage = response.errorMessage {
+                let code = response.errorCode ?? "unknown"
                 let error = RealtimeTranscriptionError.connectionFailed("\(code): \(errorMessage)")
                 Log.transcription.error("Soniox RT: Server error - \(code): \(errorMessage)")
                 onError?(error)
@@ -233,19 +233,19 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
             guard let apiTokens = response.tokens, !apiTokens.isEmpty else { return }
 
             Log.transcription.info(
-                "Soniox RT: Received \(apiTokens.count) tokens, first: '\(apiTokens.first?.text ?? "")', is_final=\(apiTokens.first?.is_final ?? false)"
+                "Soniox RT: Received \(apiTokens.count) tokens, first: '\(apiTokens.first?.text ?? "")', isFinal=\(apiTokens.first?.isFinal ?? false)"
             )
 
             let tokens = apiTokens.map { token in
                 RealtimeToken(
                     text: token.text,
-                    isFinal: token.is_final,
+                    isFinal: token.isFinal,
                     speaker: token.speaker,
-                    startMs: token.start_ms ?? 0,
-                    endMs: token.end_ms ?? 0,
+                    startMs: token.startMs ?? 0,
+                    endMs: token.endMs ?? 0,
                     language: token.language,
-                    sourceLanguage: token.source_language,
-                    translationStatus: token.translation_status
+                    sourceLanguage: token.sourceLanguage,
+                    translationStatus: token.translationStatus
                 )
             }
 

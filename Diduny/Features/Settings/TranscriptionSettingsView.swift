@@ -11,6 +11,8 @@ struct TranscriptionSettingsView: View {
     @State private var sonioxLanguageHintCodes: Set<String> = Set(SettingsStorage.shared.sonioxLanguageHints)
     @State private var sonioxLanguageHintsStrict: Bool = SettingsStorage.shared.sonioxLanguageHintsStrict
     @State private var translationRealtimeSocketEnabled: Bool = SettingsStorage.shared.translationRealtimeSocketEnabled
+    @State private var transcriptionRealtimeSocketEnabled: Bool = SettingsStorage.shared.transcriptionRealtimeSocketEnabled
+    @State private var meetingCloudModeEnabled: Bool = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
 
     enum ModelSort: String, CaseIterable {
         case speed, accuracy
@@ -60,6 +62,18 @@ struct TranscriptionSettingsView: View {
                 .pickerStyle(.segmented)
                 .onChange(of: transcriptionProvider) { _, newValue in
                     SettingsStorage.shared.transcriptionProvider = newValue
+                }
+
+                if transcriptionProvider == .soniox {
+                    Toggle("Realtime dictation via WebSocket", isOn: $transcriptionRealtimeSocketEnabled)
+                        .onChange(of: transcriptionRealtimeSocketEnabled) { _, newValue in
+                            SettingsStorage.shared.transcriptionRealtimeSocketEnabled = newValue
+                        }
+                        .disabled(!hasSonioxKey)
+
+                    Text("When enabled, dictation is streamed live via cloud socket. If unavailable, app falls back to async cloud transcription.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
 
@@ -165,22 +179,29 @@ struct TranscriptionSettingsView: View {
 
             // Meeting Recording
             Section("Meeting Recording") {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        if hasSonioxKey {
-                            Text("Cloud transcription + diarization enabled")
-                                .font(.body)
-                        } else {
-                            Text("Audio recording only")
-                                .font(.body)
-                            Text("Add a Soniox API key for real-time transcription and diarization.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                Picker("Provider", selection: $meetingCloudModeEnabled) {
+                    Text("Cloud").tag(true)
+                    Text("Local").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: meetingCloudModeEnabled) { _, newValue in
+                    SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = newValue
+                }
+
+                if meetingCloudModeEnabled {
+                    if hasSonioxKey {
+                        Text("Cloud mode streams transcription during recording. If realtime is unavailable, app falls back to cloud transcription after stop.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Cloud selected, but API key is missing. Recording will continue as audio-only.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
-                } icon: {
-                    Image(systemName: hasSonioxKey ? "cloud.fill" : "waveform")
-                        .foregroundColor(hasSonioxKey ? .blue : .secondary)
+                } else {
+                    Text("Local mode records audio only. You can process it later from Recordings using local Whisper models.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
 
@@ -204,6 +225,8 @@ struct TranscriptionSettingsView: View {
             sonioxLanguageHintCodes = Set(SettingsStorage.shared.sonioxLanguageHints)
             sonioxLanguageHintsStrict = SettingsStorage.shared.sonioxLanguageHintsStrict
             translationRealtimeSocketEnabled = SettingsStorage.shared.translationRealtimeSocketEnabled
+            transcriptionRealtimeSocketEnabled = SettingsStorage.shared.transcriptionRealtimeSocketEnabled
+            meetingCloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
         }
     }
 
