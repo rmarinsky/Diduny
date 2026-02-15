@@ -231,8 +231,10 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
             "model": model
         ]
 
-        if let lang = language {
-            payload["language_hints"] = [lang]
+        let languageConfig = resolveLanguageConfig(explicitLanguage: language)
+        if !languageConfig.hints.isEmpty {
+            payload["language_hints"] = languageConfig.hints
+            payload["language_hints_strict"] = languageConfig.strict
         }
 
         if let context {
@@ -275,11 +277,17 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         // Enable speaker diarization for meeting transcription
-        let payload: [String: Any] = [
+        let languageConfig = resolveLanguageConfig()
+        var payload: [String: Any] = [
             "file_id": fileId,
             "model": model,
             "enable_speaker_diarization": true
         ]
+
+        if !languageConfig.hints.isEmpty {
+            payload["language_hints"] = languageConfig.hints
+            payload["language_hints_strict"] = languageConfig.strict
+        }
 
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
@@ -330,10 +338,11 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
             langB = targetLanguage
         }
 
-        let payload: [String: Any] = [
+        let languageConfig = resolveLanguageConfig(forcedLanguageHints: [langA, langB])
+
+        var payload: [String: Any] = [
             "file_id": fileId,
             "model": model,
-            "language_hints": [langA, langB],
             "context": voiceNoteContext,
             "translation": [
                 "type": "two_way",
@@ -341,6 +350,11 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
                 "language_b": langB
             ]
         ]
+
+        if !languageConfig.hints.isEmpty {
+            payload["language_hints"] = languageConfig.hints
+            payload["language_hints_strict"] = languageConfig.strict
+        }
 
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
@@ -616,6 +630,32 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
         // Default to WAV (Soniox will auto-detect anyway)
         return ("recording.wav", "audio/wav")
+    }
+
+    // MARK: - Soniox Language Config
+
+    private func resolveLanguageConfig(
+        explicitLanguage: String? = nil,
+        forcedLanguageHints: [String]? = nil
+    ) -> (hints: [String], strict: Bool) {
+        if let forcedLanguageHints {
+            let hints = forcedLanguageHints.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            return (hints, SettingsStorage.shared.sonioxLanguageHintsStrict)
+        }
+
+        if let explicitLanguage {
+            let trimmed = explicitLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return ([trimmed], true)
+            }
+        }
+
+        let hints = SettingsStorage.shared.sonioxLanguageHints
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return (hints, SettingsStorage.shared.sonioxLanguageHintsStrict)
     }
 
     // MARK: - Test Connection

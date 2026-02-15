@@ -8,6 +8,9 @@ struct TranscriptionSettingsView: View {
     @State private var whisperPrompt: String = SettingsStorage.shared.whisperPrompt
     @State private var sonioxPrompt: String = SettingsStorage.shared.sonioxPrompt
     @State private var favoriteLanguageCodes: Set<String> = Set(SettingsStorage.shared.favoriteLanguages)
+    @State private var sonioxLanguageHintCodes: Set<String> = Set(SettingsStorage.shared.sonioxLanguageHints)
+    @State private var sonioxLanguageHintsStrict: Bool = SettingsStorage.shared.sonioxLanguageHintsStrict
+    @State private var translationRealtimeSocketEnabled: Bool = SettingsStorage.shared.translationRealtimeSocketEnabled
 
     enum ModelSort: String, CaseIterable {
         case speed, accuracy
@@ -25,6 +28,7 @@ struct TranscriptionSettingsView: View {
     @State private var showSonioxKey = false
     @State private var isTesting = false
     @State private var testResult: TestResult?
+    @State private var keychainAccessible = true
 
     private let modelManager = WhisperModelManager.shared
 
@@ -75,6 +79,16 @@ struct TranscriptionSettingsView: View {
                     Image(systemName: "cloud.fill")
                         .foregroundColor(.blue)
                 }
+
+                Toggle("Realtime translation via WebSocket", isOn: $translationRealtimeSocketEnabled)
+                    .onChange(of: translationRealtimeSocketEnabled) { _, newValue in
+                        SettingsStorage.shared.translationRealtimeSocketEnabled = newValue
+                    }
+                    .disabled(!hasSonioxKey)
+
+                Text("When enabled, translation is streamed live via cloud socket. If unavailable, app falls back to async cloud translation.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             // Favorite languages for quick translation
@@ -99,6 +113,54 @@ struct TranscriptionSettingsView: View {
                 Text("Selected languages appear as quick-translate buttons in the Recordings detail view.")
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+
+            // Soniox cloud language restrictions
+            Section("Cloud Language Restrictions") {
+                ForEach(SupportedLanguage.allLanguages) { lang in
+                    Toggle(lang.name, isOn: Binding(
+                        get: { sonioxLanguageHintCodes.contains(lang.code) },
+                        set: { isOn in
+                            if isOn {
+                                sonioxLanguageHintCodes.insert(lang.code)
+                            } else {
+                                sonioxLanguageHintCodes.remove(lang.code)
+                            }
+
+                            SettingsStorage.shared.sonioxLanguageHints = SupportedLanguage.allLanguages
+                                .map(\.code)
+                                .filter { sonioxLanguageHintCodes.contains($0) }
+
+                            if sonioxLanguageHintCodes.isEmpty {
+                                sonioxLanguageHintsStrict = false
+                                SettingsStorage.shared.sonioxLanguageHintsStrict = false
+                            }
+                        }
+                    ))
+                    .toggleStyle(.checkbox)
+                }
+
+                Toggle("Strict mode (only selected languages)", isOn: $sonioxLanguageHintsStrict)
+                    .onChange(of: sonioxLanguageHintsStrict) { _, newValue in
+                        let strict = !sonioxLanguageHintCodes.isEmpty && newValue
+                        sonioxLanguageHintsStrict = strict
+                        SettingsStorage.shared.sonioxLanguageHintsStrict = strict
+                    }
+                    .disabled(sonioxLanguageHintCodes.isEmpty)
+
+                if sonioxLanguageHintCodes.isEmpty {
+                    Text("No language selected: Soniox auto-detects any language.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else if sonioxLanguageHintsStrict {
+                    Text("Strict mode enabled: cloud recognition is limited to selected languages only.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Selected languages are hints; Soniox can still detect other languages.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
 
             // Meeting Recording
@@ -138,6 +200,10 @@ struct TranscriptionSettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             sonioxAPIKey = KeychainManager.shared.getSonioxAPIKey() ?? ""
+            keychainAccessible = KeychainManager.shared.isKeychainAccessible()
+            sonioxLanguageHintCodes = Set(SettingsStorage.shared.sonioxLanguageHints)
+            sonioxLanguageHintsStrict = SettingsStorage.shared.sonioxLanguageHintsStrict
+            translationRealtimeSocketEnabled = SettingsStorage.shared.translationRealtimeSocketEnabled
         }
     }
 
@@ -149,6 +215,17 @@ struct TranscriptionSettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Soniox API Key")
                     .font(.headline)
+
+                HStack(spacing: 6) {
+                    Image(systemName: keychainAccessible ? "lock.shield.fill" : "exclamationmark.shield.fill")
+                        .foregroundColor(keychainAccessible ? .green : .red)
+                        .font(.caption)
+                    Text(keychainAccessible
+                        ? "Your API key is stored securely in the macOS Keychain"
+                        : "Keychain access unavailable — key cannot be stored securely")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
 
                 if !hasSonioxKey {
                     Text("Enter your API key for full cloud features (transcription, translation, diarization).")

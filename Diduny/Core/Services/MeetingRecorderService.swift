@@ -29,6 +29,18 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
     var onError: ((Error) -> Void)?
     var onRecordingStarted: (() -> Void)?
     var onRecordingStopped: ((URL?) -> Void)?
+    var onRealtimeAudioData: ((Data) -> Void)? {
+        didSet {
+            if audioMixer != nil {
+                // In mixed mode we stream the already-mixed mono audio.
+                audioMixer?.onMixedAudioData = onRealtimeAudioData
+                systemAudioService?.onRawAudioData = nil
+            } else {
+                // In system-only mode stream raw system mono audio.
+                systemAudioService?.onRawAudioData = onRealtimeAudioData
+            }
+        }
+    }
 
     /// Called when microphone has been silent for a while (fallback info)
     var onMicrophoneSilent: (() -> Void)?
@@ -93,6 +105,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         // For system-only, use SystemAudioCaptureService directly (proven to work)
         systemAudioService = SystemAudioCaptureService()
         systemAudioService?.useCallbackMode = false // Write directly to file
+        systemAudioService?.onRawAudioData = onRealtimeAudioData
 
         systemAudioService?.onError = { [weak self] error in
             Log.recording.error("System audio capture error: \(error.localizedDescription)")
@@ -112,7 +125,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
     // MARK: - Mixed Recording (System + Microphone)
 
     private func startMixedRecording(to url: URL) async throws {
-        Log.recording.info("Using mixed recording mode (system + microphone, AAC output)")
+        Log.recording.info("Using mixed recording mode (system + microphone, single mixed WAV output)")
 
         // Check microphone permission
         let micPermission = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -150,10 +163,12 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
             Log.recording.info("System audio is silent - meeting may be muted (this is OK)")
             self?.onSystemAudioSilent?()
         }
+        audioMixer?.onMixedAudioData = onRealtimeAudioData
 
         // Start system audio capture in callback mode
         systemAudioService = SystemAudioCaptureService()
         systemAudioService?.useCallbackMode = true
+        systemAudioService?.onRawAudioData = nil
         systemAudioService?.onAudioBuffer = { [weak self] sampleBuffer in
             self?.audioMixer?.feedSystemAudio(sampleBuffer)
         }

@@ -2,6 +2,38 @@ import AppKit
 import Combine
 import Foundation
 
+@available(macOS 13.0, *)
+actor RealtimeTranslationAccumulator {
+    private var finalOriginalText: String = ""
+    private var finalTranslatedText: String = ""
+
+    func process(tokens: [RealtimeToken]) {
+        let finalTokens = tokens.filter(\.isFinal)
+        guard !finalTokens.isEmpty else { return }
+
+        for token in finalTokens {
+            let status = token.translationStatus?.lowercased()
+            switch status {
+            case "translation":
+                finalTranslatedText += token.text
+            case "transcription", "source", "original", "none", nil:
+                finalOriginalText += token.text
+            default:
+                finalOriginalText += token.text
+            }
+        }
+    }
+
+    func bestText() -> String {
+        let translated = finalTranslatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !translated.isEmpty {
+            return translated
+        }
+
+        return finalOriginalText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 // MARK: - Translation Recording (EN <-> UK)
 
 extension AppDelegate {
@@ -32,6 +64,9 @@ extension AppDelegate {
         // Stop audio level piping
         audioLevelCancellable?.cancel()
         audioLevelCancellable = nil
+
+        // Stop realtime translation session (if active)
+        _ = await stopTranslationRealtimeSession(finalize: false)
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
@@ -80,6 +115,11 @@ extension AppDelegate {
     func startTranslationRecording() async {
         Log.app.info("startTranslationRecording: BEGIN")
 
+        guard canStartRecording(kind: .translation) else {
+            Log.app.info("startTranslationRecording: blocked by another active recording mode")
+            return
+        }
+
         // Request microphone permission on-demand
         let micGranted = await PermissionManager.shared.ensureMicrophonePermission()
         appState.microphonePermissionGranted = micGranted
@@ -105,6 +145,7 @@ extension AppDelegate {
             return
         }
         Log.app.info("startTranslationRecording: Soniox API key found")
+        translationRealtimeSessionEnabled = false
 
         // Determine device with fallback to system default
         var device: AudioDevice?
@@ -181,6 +222,9 @@ extension AppDelegate {
             await MainActor.run {
                 setupTranslationEscapeCancelHandler()
             }
+
+            // Optional websocket mode: realtime cloud transcription + translation
+            await setupRealtimeTranslationIfNeeded(apiKey: apiKey)
         } catch let error as AudioTimeoutError {
             // Audio hardware timed out - likely coreaudiod is unresponsive or device is unavailable
             Log.app.error("startTranslationRecording: TIMEOUT - \(error.localizedDescription)")
@@ -260,16 +304,25 @@ extension AppDelegate {
             capturedAudioData = audioData
             Log.app.info("stopTranslationRecording: Got audio data, size = \(audioData.count) bytes")
 
-            // Translation always uses Soniox (Cloud)
-            var service: TranscriptionServiceProtocol = transcriptionService
-            guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                Log.app.error("stopTranslationRecording: No API key!")
-                throw TranscriptionError.noAPIKey
-            }
-            service.apiKey = apiKey
+            // If websocket mode produced translated text, use it.
+            let realtimeText = await stopTranslationRealtimeSession(finalize: true)
 
-            Log.app.info("stopTranslationRecording: Calling Soniox translation service")
-            let text = try await service.translateAndTranscribe(audioData: audioData)
+            let text: String
+            if !realtimeText.isEmpty {
+                text = realtimeText
+                Log.app.info("stopTranslationRecording: Using realtime translation (\(realtimeText.count) chars)")
+            } else {
+                // Fallback: async cloud translation
+                var service: TranscriptionServiceProtocol = transcriptionService
+                guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                    Log.app.error("stopTranslationRecording: No API key!")
+                    throw TranscriptionError.noAPIKey
+                }
+                service.apiKey = apiKey
+
+                Log.app.info("stopTranslationRecording: Calling async Soniox translation service (fallback)")
+                text = try await service.translateAndTranscribe(audioData: audioData)
+            }
             Log.app.info("stopTranslationRecording: Translation received: \(text.prefix(50))...")
 
             clipboardService.copy(text: text)
@@ -317,6 +370,7 @@ extension AppDelegate {
             RecoveryStateManager.shared.clearState()
 
         } catch {
+            _ = await stopTranslationRealtimeSession(finalize: false)
             Log.app.error("stopTranslationRecording: ERROR - \(error.localizedDescription)")
             let isEmptyTranscription: Bool = {
                 guard case .emptyTranscription = error as? TranscriptionError else { return false }
@@ -350,6 +404,98 @@ extension AppDelegate {
         }
 
         Log.app.info("stopTranslationRecording: END")
+    }
+
+    // MARK: - Realtime Translation (WebSocket)
+
+    private func setupRealtimeTranslationIfNeeded(apiKey: String) async {
+        guard SettingsStorage.shared.translationRealtimeSocketEnabled else {
+            audioRecorder.onRealtimeAudioData = nil
+            translationRealtimeSessionEnabled = false
+            translationRealtimeAccumulator = nil
+            return
+        }
+
+        let pair = translationLanguagePair()
+        let accumulator = RealtimeTranslationAccumulator()
+        translationRealtimeAccumulator = accumulator
+
+        let rtService = realtimeTranscriptionService
+        audioRecorder.onRealtimeAudioData = { [weak rtService] pcmData in
+            rtService?.sendAudioData(pcmData)
+        }
+
+        rtService.onTokensReceived = { [weak accumulator] tokens in
+            guard let accumulator else { return }
+            Task {
+                await accumulator.process(tokens: tokens)
+            }
+        }
+
+        rtService.onConnectionStatusChanged = { status in
+            Log.transcription.info("Translation RT status: \(String(describing: status))")
+        }
+
+        rtService.onError = { error in
+            Log.transcription.error("Translation RT error: \(error.localizedDescription)")
+        }
+
+        do {
+            try await rtService.connect(
+                apiKey: apiKey,
+                languageHints: [pair.languageA, pair.languageB],
+                strictLanguageHints: SettingsStorage.shared.sonioxLanguageHintsStrict,
+                audioConfig: .defaultPCM16kMono,
+                translationConfig: RealtimeTranslationConfig(
+                    mode: .twoWay(languageA: pair.languageA, languageB: pair.languageB)
+                )
+            )
+
+            translationRealtimeSessionEnabled = true
+            Log.transcription.info("Translation RT connected (\(pair.languageA) <-> \(pair.languageB))")
+        } catch {
+            audioRecorder.onRealtimeAudioData = nil
+            translationRealtimeSessionEnabled = false
+            translationRealtimeAccumulator = nil
+            Log.transcription.warning(
+                "Translation RT unavailable (\(error.localizedDescription)); fallback to async translation will be used"
+            )
+        }
+    }
+
+    private func stopTranslationRealtimeSession(finalize: Bool) async -> String {
+        audioRecorder.onRealtimeAudioData = nil
+
+        let accumulator = translationRealtimeAccumulator
+        let wasEnabled = translationRealtimeSessionEnabled
+
+        defer {
+            translationRealtimeSessionEnabled = false
+            translationRealtimeAccumulator = nil
+            realtimeTranscriptionService.onTokensReceived = nil
+            realtimeTranscriptionService.onError = nil
+            realtimeTranscriptionService.onConnectionStatusChanged = nil
+        }
+
+        guard wasEnabled else {
+            return ""
+        }
+
+        if finalize {
+            await realtimeTranscriptionService.finalize()
+        }
+        await realtimeTranscriptionService.disconnect()
+
+        let text = await accumulator?.bestText() ?? ""
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func translationLanguagePair(targetLanguage: String = "uk") -> (languageA: String, languageB: String) {
+        if targetLanguage == "en" {
+            let primary = SettingsStorage.shared.favoriteLanguages.first(where: { $0 != "en" }) ?? "uk"
+            return (primary, "en")
+        }
+        return ("en", targetLanguage)
     }
 
     // MARK: - Escape Cancel Handler

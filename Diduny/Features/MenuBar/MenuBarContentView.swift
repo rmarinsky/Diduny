@@ -23,6 +23,7 @@ struct MenuBarContentView: View {
                 }
             }
             .keyboardShortcut("d", modifiers: [.command, .shift])
+            .disabled(isDictationButtonDisabled)
 
             Button(action: onToggleTranslationRecording) {
                 HStack {
@@ -34,6 +35,7 @@ struct MenuBarContentView: View {
                 }
             }
             .keyboardShortcut("t", modifiers: [.command, .shift])
+            .disabled(isTranslationButtonDisabled)
 
             // Meeting recording toggle
             Button(action: onToggleMeetingRecording) {
@@ -46,6 +48,7 @@ struct MenuBarContentView: View {
                 }
             }
             .keyboardShortcut("m", modifiers: [.command, .shift])
+            .disabled(isMeetingButtonDisabled)
 
             Divider()
 
@@ -156,6 +159,15 @@ struct MenuBarContentView: View {
         }
     }
 
+    private func isInProgress(_ state: RecordingState) -> Bool {
+        state == .recording || state == .processing
+    }
+
+    private var isDictationButtonDisabled: Bool {
+        appState.recordingState == .idle
+            && (isInProgress(appState.translationRecordingState) || isInProgress(appState.meetingRecordingState))
+    }
+
     private var translateButtonTitle: String {
         switch appState.translationRecordingState {
         case .idle:
@@ -169,6 +181,11 @@ struct MenuBarContentView: View {
         case .error:
             "Translation Error"
         }
+    }
+
+    private var isTranslationButtonDisabled: Bool {
+        appState.translationRecordingState == .idle
+            && (isInProgress(appState.recordingState) || isInProgress(appState.meetingRecordingState))
     }
 
     private func transcriptionPreview(_ text: String) -> String {
@@ -192,5 +209,10 @@ struct MenuBarContentView: View {
         case .error:
             "Meeting Error"
         }
+    }
+
+    private var isMeetingButtonDisabled: Bool {
+        appState.meetingRecordingState == .idle
+            && (isInProgress(appState.recordingState) || isInProgress(appState.translationRecordingState))
     }
 }

@@ -154,3 +154,5 @@ coverage/
 *.gcda
 *.gcno
 *.dmg
+*.sha256
+*-notary.zip

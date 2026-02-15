@@ -1,8 +1,21 @@
 import AppKit
-import AVFoundation
 import Combine
 import os
 import SwiftUI
+
+enum RecordingKind {
+    case voice
+    case translation
+    case meeting
+
+    var displayName: String {
+        switch self {
+        case .voice: "dictation"
+        case .translation: "translation"
+        case .meeting: "meeting recording"
+        }
+    }
+}
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -32,9 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var meetingRecorderService = MeetingRecorderService()
     @available(macOS 13.0, *)
     lazy var realtimeTranscriptionService = SonioxRealtimeService()
-    var micEngine: AVAudioEngine?
-    let micBufferLock = NSLock()
-    var micAudioBuffer = Data()
+    @available(macOS 13.0, *)
+    var translationRealtimeAccumulator: RealtimeTranslationAccumulator?
+    var translationRealtimeSessionEnabled: Bool = false
     lazy var ambientListeningService = AmbientListeningService()
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
@@ -96,10 +109,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Setup defaults for new users
             OnboardingManager.shared.setupDefaultsForNewUser()
 
-            // Show onboarding window
-            OnboardingWindowController.shared.showOnboarding { [weak self] in
-                // Setup after onboarding completes
-                self?.setupAfterOnboarding()
+            // Show onboarding window after app launch settles (more reliable for LSUIElement apps)
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(120))
+                OnboardingWindowController.shared.showOnboarding {
+                    // Setup after onboarding completes
+                    self?.setupAfterOnboarding()
+                }
             }
         } else {
             // Normal startup
@@ -250,6 +266,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try await Task.detached(priority: .userInitiated) {
             try Data(contentsOf: url)
         }.value
+    }
+
+    // MARK: - Cross-Mode Recording Guard
+
+    private func isStateInProgress(_ state: RecordingState) -> Bool {
+        state == .recording || state == .processing
+    }
+
+    func canStartRecording(kind: RecordingKind) -> Bool {
+        var blockers: [RecordingKind] = []
+
+        if kind != .voice, isStateInProgress(appState.recordingState) {
+            blockers.append(.voice)
+        }
+        if kind != .translation, isStateInProgress(appState.translationRecordingState) {
+            blockers.append(.translation)
+        }
+        if kind != .meeting, isStateInProgress(appState.meetingRecordingState) {
+            blockers.append(.meeting)
+        }
+
+        guard !blockers.isEmpty else { return true }
+
+        let blockersText = blockers.map(\.displayName).joined(separator: ", ")
+        Log.app.warning("Cannot start \(kind.displayName) while \(blockersText) is in progress")
+        NotchManager.shared.showInfo(message: "Stop current recording first", duration: 1.5)
+
+        return false
     }
 
     // MARK: - State Change Handlers

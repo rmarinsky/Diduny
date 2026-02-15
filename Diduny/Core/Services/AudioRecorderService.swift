@@ -24,6 +24,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     private var audioFile: AVAudioFile?
     private var recordingURL: URL?
     private var configurationObserver: NSObjectProtocol?
+    private var realtimeAudioStreamer: RealtimeAudioStreamer?
 
     /// Timeout for audio hardware operations (in seconds)
     /// Increased to 5s to support older Intel Macs which can be slower
@@ -33,6 +34,9 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     var currentRecordingPath: String? {
         recordingURL?.path
     }
+
+    /// Real-time PCM stream in `s16le`, 16kHz, mono for cloud websocket transcription/translation.
+    var onRealtimeAudioData: ((Data) -> Void)?
 
     // MARK: - Public Methods
 
@@ -146,6 +150,10 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
             throw AudioError.recordingFailed("Audio file not initialized")
         }
 
+        // Optional realtime streamer for websocket mode (translation/live features)
+        let realtimeAudioStreamer = makeRealtimeAudioStreamerIfNeeded(inputFormat: inputFormat)
+        self.realtimeAudioStreamer = realtimeAudioStreamer
+
         // Install tap on input node to capture audio
         // IMPORTANT: This callback runs on a realtime audio thread, NOT the main thread
         // Write directly in the input format - no conversion needed
@@ -162,6 +170,8 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
             } catch {
                 Log.audio.error("Failed to write audio buffer: \(error.localizedDescription)")
             }
+
+            realtimeAudioStreamer?.process(buffer: buffer)
         }
         Log.audio.info("startRecording: Tap installed successfully")
 
@@ -244,6 +254,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         try? FileManager.default.removeItem(at: url)
         audioEngine = nil
         recordingURL = nil
+        realtimeAudioStreamer = nil
 
         Log.audio.info("stopRecording: END")
         return audioData
@@ -268,6 +279,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
             recordingURL = nil
         }
 
+        realtimeAudioStreamer = nil
         isRecording = false
         audioLevel = 0
     }
@@ -346,5 +358,118 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
             group.cancelAll()
             return result
         }
+    }
+
+    private func makeRealtimeAudioStreamerIfNeeded(inputFormat: AVAudioFormat) -> RealtimeAudioStreamer? {
+        guard let callback = onRealtimeAudioData else { return nil }
+        return RealtimeAudioStreamer(inputFormat: inputFormat, onAudioData: callback)
+    }
+}
+
+private final class RealtimeAudioStreamer {
+    private let queue = DispatchQueue(label: "ua.com.rmarinsky.diduny.realtime.mic", qos: .userInitiated)
+    private let converter: AVAudioConverter
+    private let outputFormat: AVAudioFormat
+    private let onAudioData: (Data) -> Void
+
+    init?(inputFormat: AVAudioFormat, onAudioData: @escaping (Data) -> Void) {
+        guard let outputFormat = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: 16000,
+            channels: 1,
+            interleaved: true
+        ) else {
+            return nil
+        }
+
+        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
+            return nil
+        }
+
+        self.converter = converter
+        self.outputFormat = outputFormat
+        self.onAudioData = onAudioData
+    }
+
+    func process(buffer: AVAudioPCMBuffer) {
+        guard let copiedBuffer = copyBuffer(buffer) else { return }
+
+        queue.async { [weak self] in
+            guard let self else { return }
+            guard let data = self.convertToRealtimePCM(buffer: copiedBuffer) else { return }
+            self.onAudioData(data)
+        }
+    }
+
+    private func convertToRealtimePCM(buffer: AVAudioPCMBuffer) -> Data? {
+        let inputFormat = buffer.format
+        let ratio = outputFormat.sampleRate / inputFormat.sampleRate
+        let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
+        guard outputFrameCapacity > 0 else { return nil }
+
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: outputFormat,
+            frameCapacity: outputFrameCapacity
+        ) else {
+            return nil
+        }
+
+        var error: NSError?
+        var hasInputData = true
+
+        let status = converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+            if hasInputData {
+                hasInputData = false
+                outStatus.pointee = .haveData
+                return buffer
+            }
+
+            outStatus.pointee = .noDataNow
+            return nil
+        }
+
+        guard error == nil, status != .error, outputBuffer.frameLength > 0 else {
+            if let error {
+                Log.audio.error("RealtimeAudioStreamer conversion error: \(error.localizedDescription)")
+            }
+            return nil
+        }
+
+        let audioBufferPointer = UnsafeMutableAudioBufferListPointer(outputBuffer.mutableAudioBufferList)
+        guard let audioBuffer = audioBufferPointer.first,
+              let dataPtr = audioBuffer.mData,
+              audioBuffer.mDataByteSize > 0
+        else {
+            return nil
+        }
+
+        return Data(bytes: dataPtr, count: Int(audioBuffer.mDataByteSize))
+    }
+
+    private func copyBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        let frameCount = buffer.frameLength
+        guard frameCount > 0 else { return nil }
+        let format = buffer.format
+
+        guard let copiedBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            return nil
+        }
+        copiedBuffer.frameLength = frameCount
+
+        let sourceList = UnsafeMutableAudioBufferListPointer(
+            UnsafeMutablePointer(mutating: buffer.audioBufferList)
+        )
+        let destinationList = UnsafeMutableAudioBufferListPointer(copiedBuffer.mutableAudioBufferList)
+        let bufferCount = min(sourceList.count, destinationList.count)
+
+        for index in 0 ..< bufferCount {
+            let source = sourceList[index]
+            let destination = destinationList[index]
+            guard let sourceData = source.mData, let destinationData = destination.mData else { continue }
+            let byteCount = min(Int(source.mDataByteSize), Int(destination.mDataByteSize))
+            memcpy(destinationData, sourceData, byteCount)
+        }
+
+        return copiedBuffer
     }
 }
