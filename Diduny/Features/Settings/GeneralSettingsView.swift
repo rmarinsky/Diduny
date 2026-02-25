@@ -11,6 +11,7 @@ struct GeneralSettingsView: View {
     @State private var handsFreeModeEnabled = SettingsStorage.shared.handsFreeModeEnabled
     @State private var ambientListeningEnabled = SettingsStorage.shared.ambientListeningEnabled
     @State private var wakeWord = SettingsStorage.shared.wakeWord
+    @State private var escapeCancelEnabled = SettingsStorage.shared.escapeCancelEnabled
 
     var body: some View {
         Form {
@@ -70,6 +71,14 @@ struct GeneralSettingsView: View {
                 Toggle("Play sound when done", isOn: $playSound)
                     .onChange(of: playSound) { _, newValue in
                         SettingsStorage.shared.playSoundOnCompletion = newValue
+                    }
+
+                Toggle("Double-press Escape to cancel recording", isOn: $escapeCancelEnabled)
+                    .onChange(of: escapeCancelEnabled) { _, newValue in
+                        SettingsStorage.shared.escapeCancelEnabled = newValue
+                        if !newValue {
+                            EscapeCancelService.shared.deactivate()
+                        }
                     }
 
                 Toggle("Launch at login", isOn: $launchAtLogin)

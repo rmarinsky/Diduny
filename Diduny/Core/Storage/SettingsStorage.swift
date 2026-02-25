@@ -14,6 +14,8 @@ final class SettingsStorage {
         case launchAtLogin
         case pushToTalkKey
         case meetingAudioSource
+        case meetingMicGain
+        case meetingSystemGain
         case translationPushToTalkKey
         case handsFreeModeEnabled
         case transcriptionProvider
@@ -30,6 +32,7 @@ final class SettingsStorage {
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
         case meetingRealtimeTranscriptionEnabled
+        case escapeCancelEnabled
     }
 
     private init() {}
@@ -98,6 +101,18 @@ final class SettingsStorage {
         set {
             defaults.set(newValue.rawValue, forKey: Key.meetingAudioSource.rawValue)
         }
+    }
+
+    // MARK: - Meeting Gain Controls
+
+    var meetingMicGain: Float {
+        get { defaults.object(forKey: Key.meetingMicGain.rawValue) as? Float ?? 1.0 }
+        set { defaults.set(newValue, forKey: Key.meetingMicGain.rawValue) }
+    }
+
+    var meetingSystemGain: Float {
+        get { defaults.object(forKey: Key.meetingSystemGain.rawValue) as? Float ?? 0.3 }
+        set { defaults.set(newValue, forKey: Key.meetingSystemGain.rawValue) }
     }
 
     // MARK: - Translation Push to Talk
@@ -217,6 +232,19 @@ final class SettingsStorage {
     var meetingRealtimeTranscriptionEnabled: Bool {
         get { defaults.bool(forKey: Key.meetingRealtimeTranscriptionEnabled.rawValue) }
         set { defaults.set(newValue, forKey: Key.meetingRealtimeTranscriptionEnabled.rawValue) }
+    }
+
+    // MARK: - Escape Cancel
+
+    /// Enables double-press Escape cancellation during active recording.
+    var escapeCancelEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.escapeCancelEnabled.rawValue) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.escapeCancelEnabled.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.escapeCancelEnabled.rawValue) }
     }
 
     // MARK: - Ambient Listening

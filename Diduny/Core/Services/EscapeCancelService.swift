@@ -69,6 +69,12 @@ final class EscapeCancelService: ObservableObject {
 
     private func handleKeyDown(_ event: NSEvent) {
         guard isActive else { return }
+        guard SettingsStorage.shared.escapeCancelEnabled else {
+            firstPressTime = nil
+            timeoutTask?.cancel()
+            timeoutTask = nil
+            return
+        }
 
         // Check for Escape key (keyCode 53)
         guard event.keyCode == 53 else { return }

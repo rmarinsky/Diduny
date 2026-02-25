@@ -277,6 +277,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state == .recording || state == .processing
     }
 
+    private func restoreNotchForActiveRecordingAfterInfo(delay: TimeInterval = 1.6) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self else { return }
+
+            if self.appState.meetingRecordingState == .recording {
+                NotchManager.shared.startRecording(mode: .meeting)
+                return
+            }
+            if self.appState.meetingRecordingState == .processing {
+                NotchManager.shared.startProcessing(mode: .meeting)
+                return
+            }
+
+            let translationMode: RecordingMode = .translation(languagePair: "EN <-> UK")
+            if self.appState.translationRecordingState == .recording {
+                NotchManager.shared.startRecording(mode: translationMode)
+                return
+            }
+            if self.appState.translationRecordingState == .processing {
+                NotchManager.shared.startProcessing(mode: translationMode)
+                return
+            }
+
+            if self.appState.recordingState == .recording {
+                NotchManager.shared.startRecording(mode: .voice)
+                return
+            }
+            if self.appState.recordingState == .processing {
+                NotchManager.shared.startProcessing(mode: .voice)
+            }
+        }
+    }
+
+    private func isSettingsWindowVisible() -> Bool {
+        NSApp.windows.contains { window in
+            window.identifier?.rawValue == "com_apple_SwiftUI_Settings_window" && window.isVisible
+        }
+    }
+
+    func refreshActivationPolicy() {
+        let shouldShowInAppSwitcher = isStateInProgress(appState.meetingRecordingState) || isSettingsWindowVisible()
+        NSApp.setActivationPolicy(shouldShowInAppSwitcher ? .regular : .accessory)
+    }
+
     func canStartRecording(kind: RecordingKind) -> Bool {
         var blockers: [RecordingKind] = []
 
@@ -295,6 +340,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let blockersText = blockers.map(\.displayName).joined(separator: ", ")
         Log.app.warning("Cannot start \(kind.displayName) while \(blockersText) is in progress")
         NotchManager.shared.showInfo(message: "Stop current recording first", duration: 1.5)
+        restoreNotchForActiveRecordingAfterInfo()
 
         return false
     }
@@ -359,6 +405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             successDelay: 2.0,
             errorDelay: 2.0
         )
+        refreshActivationPolicy()
     }
 
     func handleTranslationStateChange(_ state: RecordingState) {

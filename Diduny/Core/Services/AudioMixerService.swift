@@ -216,6 +216,10 @@ final class AudioMixerService {
     private let sourceStallThreshold: TimeInterval = 1.0
     private let mixNormalization: Float = 0.7
 
+    // Per-source gain controls (set before startRecording)
+    var micGain: Float = 1.0
+    var systemGain: Float = 0.3
+
     // Arrival timestamps for stall detection
     private var lastMicChunkEnqueueTime: Date?
     private var lastSystemChunkEnqueueTime: Date?
@@ -710,14 +714,14 @@ final class AudioMixerService {
             // Write float32 mono to fallback file
             if let out = outputBuffer.floatChannelData?[0] {
                 for index in 0 ..< framesToWrite {
-                    let micSample = includeMicrophoneInMix ? micFrameData[index] : 0
-                    let systemSample = systemFrameData[index]
+                    let micSample = includeMicrophoneInMix ? micFrameData[index] * micGain : 0
+                    let systemSample = systemFrameData[index] * systemGain
                     out[index] = clamp((micSample + systemSample) * mixNormalization)
                 }
             } else if let out = outputBuffer.int16ChannelData?[0] {
                 for index in 0 ..< framesToWrite {
-                    let micSample = includeMicrophoneInMix ? micFrameData[index] : 0
-                    let systemSample = systemFrameData[index]
+                    let micSample = includeMicrophoneInMix ? micFrameData[index] * micGain : 0
+                    let systemSample = systemFrameData[index] * systemGain
                     let mixed = clamp((micSample + systemSample) * mixNormalization)
                     out[index] = Int16(mixed * Float(Int16.max))
                 }

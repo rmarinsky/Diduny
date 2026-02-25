@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -76,7 +76,6 @@
 		E5A43EA1048E2701A2B0498B /* RecordingRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30A4F862A41E4EC48E5CAEFB /* RecordingRowView.swift */; };
 		E6C0A2BB2B96403F5AD765B3 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 2E72BE3A05C906A8B16DBE4E /* KeyboardShortcuts */; };
 		E8268E59FC06679FC0BABA3D /* RecordingsLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2217BBA473011B6506284B3 /* RecordingsLibraryView.swift */; };
-		E964A2A72A8EF5749A0D3FFD /* PERMISSIONS_UPDATE.md in Resources */ = {isa = PBXBuildFile; fileRef = 26B3B34E40EA2C4BC6947F32 /* PERMISSIONS_UPDATE.md */; };
 		EBD6CE2EED71E6F9BC63E53E /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C864D23789DFC70C7FE0D3 /* MenuBarContentView.swift */; };
 		F293480FBFF36536227A5878 /* TranscriptionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF5B2157378ABF82C5B80572 /* TranscriptionProvider.swift */; };
 		F6597F7A3262A493D769B85B /* Errors.swift in Sources */ = {isa = PBXBuildFile; fileRef = BECAEC93BAEBC7FB0CE79126 /* Errors.swift */; };
@@ -98,7 +97,6 @@
 		1A7E2F21047194B8A5423BF5 /* OnboardingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingManager.swift; sourceTree = "<group>"; };
 		2430641841403AB68C61B536 /* KeychainManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManager.swift; sourceTree = "<group>"; };
 		26809CA162E096F4EA668768 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
-		26B3B34E40EA2C4BC6947F32 /* PERMISSIONS_UPDATE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PERMISSIONS_UPDATE.md; sourceTree = "<group>"; };
 		2A69C86E608DDD0D38D8AB54 /* WhisperBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WhisperBridge.h; sourceTree = "<group>"; };
 		2C88AE153FCAA14A227A7E16 /* AudioPlaybackControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackControlView.swift; sourceTree = "<group>"; };
 		30A4F862A41E4EC48E5CAEFB /* RecordingRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingRowView.swift; sourceTree = "<group>"; };
@@ -110,7 +108,7 @@
 		3F9F609481B3D9169BF4B1E8 /* WhisperContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperContext.swift; sourceTree = "<group>"; };
 		459B59FAABA91EB9AD4EB4EF /* ClipboardService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardService.swift; sourceTree = "<group>"; };
 		459DCE179DA235DE6208C013 /* SupportedLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportedLanguage.swift; sourceTree = "<group>"; };
-		4C5A21F6255692712508A475 /* Diduny.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Diduny.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4C5A21F6255692712508A475 /* Diduny DEV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Diduny DEV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CDE81820CACD577C91281C9 /* PushToTalkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushToTalkService.swift; sourceTree = "<group>"; };
 		52166362DE73BAC6891FA206 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		52C8A25D3FCD6DE742A1274E /* PermissionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsSettingsView.swift; sourceTree = "<group>"; };
@@ -195,7 +193,7 @@
 		166821B9EBE984E0D67F7515 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				4C5A21F6255692712508A475 /* Diduny.app */,
+				4C5A21F6255692712508A475 /* Diduny DEV.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -346,7 +344,6 @@
 			children = (
 				2430641841403AB68C61B536 /* KeychainManager.swift */,
 				924F66A90537891F57F1CF0D /* PermissionManager.swift */,
-				26B3B34E40EA2C4BC6947F32 /* PERMISSIONS_UPDATE.md */,
 				52C8A25D3FCD6DE742A1274E /* PermissionsSettingsView.swift */,
 				865E86F8079EAE7A9BFB178E /* RecordingsLibraryStorage.swift */,
 				E2133D27EF1A261954A78BEB /* RecoveryStateManager.swift */,
@@ -455,7 +452,7 @@
 				57D44526E8ECA54C87677F5B /* LaunchAtLogin */,
 			);
 			productName = Diduny;
-			productReference = 4C5A21F6255692712508A475 /* Diduny.app */;
+			productReference = 4C5A21F6255692712508A475 /* Diduny DEV.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -488,7 +485,6 @@
 				44A6802ED268E042B3E340B9 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
 				40D87DB8B850A83EB00FF9EE /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */,
 			);
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -503,7 +499,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				107FDBF081DEEF30BD2A922D /* Assets.xcassets in Resources */,
-				E964A2A72A8EF5749A0D3FFD /* PERMISSIONS_UPDATE.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -597,12 +592,8 @@
 					"\"Frameworks\"",
 				);
 				INFOPLIST_FILE = Diduny/Resources/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"@executable_path/../Frameworks",
-				);
-				OTHER_LDFLAGS = (
-					"-lc++",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				OTHER_LDFLAGS = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.diduny.test;
 				PRODUCT_NAME = "Diduny TEST";
 				SDKROOT = macosx;
@@ -616,7 +607,10 @@
 			baseConfigurationReference = 0C49EEDF9A5AEED5B941A6AF /* Test.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = "arm64 x86_64";
+				ARCHS = (
+					arm64,
+					x86_64,
+				);
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -662,7 +656,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -684,12 +678,8 @@
 					"\"Frameworks\"",
 				);
 				INFOPLIST_FILE = Diduny/Resources/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"@executable_path/../Frameworks",
-				);
-				OTHER_LDFLAGS = (
-					"-lc++",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				OTHER_LDFLAGS = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.diduny;
 				PRODUCT_NAME = Diduny;
 				SDKROOT = macosx;
@@ -702,7 +692,10 @@
 			baseConfigurationReference = F4E5B531DCAD149223A50A75 /* Release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = "arm64 x86_64";
+				ARCHS = (
+					arm64,
+					x86_64,
+				);
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -748,7 +741,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -764,7 +757,10 @@
 			baseConfigurationReference = C1AFB9C5F772A874A404885C /* Debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = "arm64 x86_64";
+				ARCHS = (
+					arm64,
+					x86_64,
+				);
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -814,7 +810,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -836,12 +832,8 @@
 					"\"Frameworks\"",
 				);
 				INFOPLIST_FILE = Diduny/Resources/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"@executable_path/../Frameworks",
-				);
-				OTHER_LDFLAGS = (
-					"-lc++",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
+				OTHER_LDFLAGS = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.diduny.dev;
 				PRODUCT_NAME = "Diduny DEV";
 				SDKROOT = macosx;

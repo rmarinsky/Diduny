@@ -3,6 +3,8 @@ import SwiftUI
 
 struct MeetingSettingsView: View {
     @State private var audioSource = SettingsStorage.shared.meetingAudioSource
+    @State private var micGain = SettingsStorage.shared.meetingMicGain
+    @State private var systemGain = SettingsStorage.shared.meetingSystemGain
 
     // Test capture state
     @State private var isTestCapturing = false
@@ -48,6 +50,48 @@ struct MeetingSettingsView: View {
                 )
                 .font(.caption)
                 .foregroundColor(.secondary)
+            }
+
+            if audioSource == .systemPlusMicrophone {
+                Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Microphone")
+                                Spacer()
+                                Text("\(Int(micGain * 100))%")
+                                    .foregroundColor(.secondary)
+                                    .monospacedDigit()
+                            }
+                            Slider(value: $micGain, in: 0 ... 2, step: 0.05) { editing in
+                                if !editing {
+                                    SettingsStorage.shared.meetingMicGain = micGain
+                                }
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("System Audio")
+                                Spacer()
+                                Text("\(Int(systemGain * 100))%")
+                                    .foregroundColor(.secondary)
+                                    .monospacedDigit()
+                            }
+                            Slider(value: $systemGain, in: 0 ... 2, step: 0.05) { editing in
+                                if !editing {
+                                    SettingsStorage.shared.meetingSystemGain = systemGain
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Audio Gain")
+                } footer: {
+                    Text("Adjust the volume balance between your microphone and system audio. Changes apply to the next recording.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
 
             Section {
