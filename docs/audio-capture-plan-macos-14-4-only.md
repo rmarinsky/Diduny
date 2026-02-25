@@ -4,10 +4,12 @@
 
 ## Scope
 
-- Підтримуємо лише `macOS 14.4+`.
-- Системне аудіо: тільки через Core Audio Process Tap.
-- Мікрофон: через `AVAudioEngine` (або Core Audio input unit, якщо потрібно пізніше).
-- Старі macOS не підтримуємо взагалі: fail-fast з явним повідомленням.
+- Target state / Future plan:
+  - Плануємо підтримувати лише `macOS 14.4+`.
+  - Плануємо системне аудіо тільки через Core Audio Process Tap.
+  - Плануємо мікрофон через `AVAudioEngine` (або Core Audio input unit, якщо потрібно пізніше).
+  - Плануємо не підтримувати старі macOS: fail-fast з явним повідомленням.
+- Поточний стан: meeting recording зараз використовує ScreenCaptureKit для system audio capture на macOS 13.0+.
 
 ## Ціль
 
@@ -130,4 +132,3 @@
 - Не підтримуємо macOS < 14.4.
 - Не додаємо BlackHole/віртуальні драйвери.
 - Не робимо AEC/NS у цій ітерації.
-

@@ -5,7 +5,7 @@
 ## TL;DR
 
 - Симптом "ніби слухається один канал в моменті" пояснюється не стерео/моно, а логікою міксу без таймлайна.
-- Поточний міксер змішує черги за принципом "що приїхало", без прив'язки до timestamp, і має fallback в single-source після `0.35s`.
+- Поточний міксер змішує черги за принципом "що приїхало", без прив'язки до timestamp, і має fallback в single-source після `1.0s`.
 - Для стабільного запису без пропусків треба перейти на frame-driven mixer з timestamp + ring buffer на кожне джерело.
 - Для macOS 14.4+ найкращий шлях: Core Audio Process Tap (driver-free system capture) + mic capture, далі єдиний міксер.
 
@@ -34,7 +34,7 @@
 - Кожен буфер (mic/system) копіюється, конвертується і додається в окремі масиви `micSamples/systemSamples`.
 - Далі `mixAndWriteAvailableFrames(...)` бере:
   - або `min(micAvailable, systemAvailable)` (коли обидва є),
-  - або один source, якщо інший "завис" більше `sourceStallThreshold = 0.35s`.
+  - або один source, якщо інший "завис" більше `sourceStallThreshold = 1.0s`.
 - Дивись:
   - `Diduny/Core/Services/AudioMixerService.swift:43`
   - `Diduny/Core/Services/AudioMixerService.swift:45`
@@ -54,7 +54,7 @@
 
 ## 2) Fallback у single-source закладений у дизайн
 
-- Якщо одне джерело затрималось >350ms, міксер пише тільки друге.
+- Якщо одне джерело затрималось >1000ms, міксер пише тільки друге.
 - Це прямо дає "фрагментами чути лише system або лише mic".
 
 ## 3) Конвертація і мікс в одному serial `writeQueue`
@@ -159,4 +159,3 @@
 - З WWDC22 видно, що ScreenCaptureKit для audio типово демонструється в `48kHz stereo`, і окремо підкреслюється роль `sampleHandlerQueue`.
   - [Meet ScreenCaptureKit (WWDC22)](https://developer.apple.com/kr/videos/play/wwdc2022/10156/)
 - Поточний код Diduny примусово ставить `16kHz mono` вже на вході system stream, що добре для економії, але гірше для гнучкого міксу.
-

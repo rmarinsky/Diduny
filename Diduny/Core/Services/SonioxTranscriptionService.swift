@@ -9,6 +9,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
     private let pollingInterval: TimeInterval = 1.0
     private let maxPollingAttempts = 60 // 60 seconds max wait
     private let maxAudioBytesForSpeechPrecheck = 25 * 1024 * 1024
+    private let strictSpeechPrecheck = false
 
     // MARK: - Voice Note Processing Context
 
@@ -183,8 +184,13 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
         let hasSpeech = await AudioSpeechDetector.hasSpeech(in: audioData)
         guard hasSpeech else {
-            Log.transcription.info("\(context): no speech detected, skipping Soniox request")
-            throw TranscriptionError.emptyTranscription
+            if strictSpeechPrecheck {
+                Log.transcription.info("\(context): no speech detected, skipping Soniox request")
+                throw TranscriptionError.emptyTranscription
+            }
+
+            Log.transcription.info("\(context): no speech confidently detected, continuing with Soniox")
+            return
         }
     }
 
@@ -731,7 +737,7 @@ private enum AudioSpeechDetector {
                 return detectSpeech(samples: samples)
             } catch {
                 // Fallback to cloud transcription when local analysis fails.
-                Log.audio.warning("Speech pre-check failed: \(error.localizedDescription)")
+                NSLog("[Transcription] Speech pre-check failed: \(error.localizedDescription)")
                 return true
             }
         }.value

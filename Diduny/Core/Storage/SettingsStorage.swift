@@ -168,13 +168,19 @@ final class SettingsStorage {
     // MARK: - Meeting Gain Controls
 
     var meetingMicGain: Float {
-        get { defaults.object(forKey: Key.meetingMicGain.rawValue) as? Float ?? 1.0 }
-        set { defaults.set(newValue, forKey: Key.meetingMicGain.rawValue) }
+        get {
+            let stored = defaults.object(forKey: Key.meetingMicGain.rawValue) as? Float ?? 1.0
+            return Self.sanitizedGain(stored, fallback: 1.0)
+        }
+        set { defaults.set(Self.sanitizedGain(newValue, fallback: 1.0), forKey: Key.meetingMicGain.rawValue) }
     }
 
     var meetingSystemGain: Float {
-        get { defaults.object(forKey: Key.meetingSystemGain.rawValue) as? Float ?? 0.3 }
-        set { defaults.set(newValue, forKey: Key.meetingSystemGain.rawValue) }
+        get {
+            let stored = defaults.object(forKey: Key.meetingSystemGain.rawValue) as? Float ?? 0.3
+            return Self.sanitizedGain(stored, fallback: 0.3)
+        }
+        set { defaults.set(Self.sanitizedGain(newValue, fallback: 0.3), forKey: Key.meetingSystemGain.rawValue) }
     }
 
     // MARK: - Translation Push to Talk
@@ -353,6 +359,11 @@ final class SettingsStorage {
 
     private static func foldedWordKey(_ word: String) -> String {
         word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    private static func sanitizedGain(_ value: Float, fallback: Float) -> Float {
+        guard value.isFinite else { return fallback }
+        return min(max(value, 0), 2.0)
     }
 }
 

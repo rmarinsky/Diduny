@@ -7,10 +7,10 @@
   - Repo: `https://github.com/Beingpax/VoiceInk`
   - Commit: `36427ebfa8d26db130816d4676463df3e3933e0e`
   - Commit date: `2026-02-10`
-  - Локальна копія для аналізу: `/tmp/VoiceInk`
+  - Локальна копія для аналізу: `VoiceInk`
 - Поточний стан Diduny:
-  - Workspace: `/Users/rmarinskyi/IdeaProjects/personal/Diduny`
-  - App code: `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny`
+  - Workspace: `<PROJECT_ROOT>`
+  - App code: `<PROJECT_ROOT>/Diduny`
 
 ### 1.2 Межі
 - Це статичний code-level аудит, без runtime бенчмарків VoiceInk.
@@ -362,7 +362,7 @@ protocol AudioProcessingPipelineProtocol {
 ## 10. Потрібні API / interface / type зміни в Diduny
 
 ## 10.1 `MeetingAudioSource` (розширення без breaking змін)
-Файл: `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Models/MeetingAudioSource.swift`
+Файл: `Diduny/Core/Models/MeetingAudioSource.swift`
 
 - Зберегти:
   - `.systemOnly`
@@ -373,7 +373,7 @@ protocol AudioProcessingPipelineProtocol {
   - `auto` (strategy-driven)
 
 ## 10.2 Нові типи
-Розміщення: `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Models`
+Розміщення: `Diduny/Core/Models`
 
 ```swift
 enum SystemAudioCaptureStrategy: String, Codable, CaseIterable {
@@ -404,7 +404,7 @@ struct AudioProcessingProfile: Codable, Equatable {
 ```
 
 ## 10.3 `MeetingRecorderServiceProtocol` (розширення)
-Файл: `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Protocols/ServiceProtocols.swift`
+Файл: `Diduny/Core/Protocols/ServiceProtocols.swift`
 
 - Додати overload:
 
@@ -437,7 +437,7 @@ protocol MeetingRecorderServiceProtocol: AnyObject {
   - `HybridAudioPipeline` (optional, phase 3/4).
 
 ## 10.5 `SettingsStorage` (persisted keys)
-Файл: `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Storage/SettingsStorage.swift`
+Файл: `Diduny/Core/Storage/SettingsStorage.swift`
 
 Додати:
 - `meetingCaptureStrategy`
@@ -578,7 +578,7 @@ Success criteria:
 1. Аналіз виконано по VoiceInk snapshot commit `36427ebfa8d26db130816d4676463df3e3933e0e`.
 2. Порівняння і roadmap орієнтовані на поточний код Diduny у цьому workspace.
 3. Документ підготовлений українською.
-4. Основний deliverable: `/Users/rmarinskyi/IdeaProjects/personal/Diduny/docs/voiceink_audit_and_audio_roadmap.md`.
+4. Основний deliverable: `docs/voiceink_audit_and_audio_roadmap.md`.
 5. Розглянуті всі 3 стратегії system audio, primary path: `ScreenCaptureKit-first`.
 6. Фокус: практичне впровадження без абстрактного AI-hype.
 
@@ -588,61 +588,61 @@ Success criteria:
 
 ## 15.1 VoiceInk
 - App bootstrap/onboarding gate:
-  - `/tmp/VoiceInk/VoiceInk/VoiceInk.swift:22`
-  - `/tmp/VoiceInk/VoiceInk/VoiceInk.swift:200`
-  - `/tmp/VoiceInk/VoiceInk/VoiceInk.swift:262`
+  - `VoiceInk/VoiceInk/VoiceInk.swift:22`
+  - `VoiceInk/VoiceInk/VoiceInk.swift:200`
+  - `VoiceInk/VoiceInk/VoiceInk.swift:262`
 - Onboarding screens:
-  - `/tmp/VoiceInk/VoiceInk/Views/Onboarding/OnboardingView.swift:3`
-  - `/tmp/VoiceInk/VoiceInk/Views/Onboarding/OnboardingPermissionsView.swift:32`
-  - `/tmp/VoiceInk/VoiceInk/Views/Onboarding/OnboardingModelDownloadView.swift:3`
-  - `/tmp/VoiceInk/VoiceInk/Views/Onboarding/OnboardingTutorialView.swift:4`
+  - `VoiceInk/VoiceInk/Views/Onboarding/OnboardingView.swift:3`
+  - `VoiceInk/VoiceInk/Views/Onboarding/OnboardingPermissionsView.swift:32`
+  - `VoiceInk/VoiceInk/Views/Onboarding/OnboardingModelDownloadView.swift:3`
+  - `VoiceInk/VoiceInk/Views/Onboarding/OnboardingTutorialView.swift:4`
 - Recorder orchestration:
-  - `/tmp/VoiceInk/VoiceInk/Recorder.swift:7`
-  - `/tmp/VoiceInk/VoiceInk/Recorder.swift:89`
-  - `/tmp/VoiceInk/VoiceInk/Recorder.swift:162`
+  - `VoiceInk/VoiceInk/Recorder.swift:7`
+  - `VoiceInk/VoiceInk/Recorder.swift:89`
+  - `VoiceInk/VoiceInk/Recorder.swift:162`
 - Core audio capture format:
-  - `/tmp/VoiceInk/VoiceInk/CoreAudioRecorder.swift:23`
-  - `/tmp/VoiceInk/VoiceInk/CoreAudioRecorder.swift:380`
-  - `/tmp/VoiceInk/VoiceInk/CoreAudioRecorder.swift:631`
+  - `VoiceInk/VoiceInk/CoreAudioRecorder.swift:23`
+  - `VoiceInk/VoiceInk/CoreAudioRecorder.swift:380`
+  - `VoiceInk/VoiceInk/CoreAudioRecorder.swift:631`
 - STT state machine:
-  - `/tmp/VoiceInk/VoiceInk/Whisper/WhisperState.swift:147`
-  - `/tmp/VoiceInk/VoiceInk/Whisper/WhisperState.swift:297`
+  - `VoiceInk/VoiceInk/Whisper/WhisperState.swift:147`
+  - `VoiceInk/VoiceInk/Whisper/WhisperState.swift:297`
 - Service routing:
-  - `/tmp/VoiceInk/VoiceInk/Services/TranscriptionServiceRegistry.swift:43`
-  - `/tmp/VoiceInk/VoiceInk/Services/TranscriptionServiceRegistry.swift:58`
+  - `VoiceInk/VoiceInk/Services/TranscriptionServiceRegistry.swift:43`
+  - `VoiceInk/VoiceInk/Services/TranscriptionServiceRegistry.swift:58`
 - Streaming providers:
-  - `/tmp/VoiceInk/VoiceInk/Services/StreamingTranscription/StreamingTranscriptionService.swift:75`
+  - `VoiceInk/VoiceInk/Services/StreamingTranscription/StreamingTranscriptionService.swift:75`
 - ScreenCapture usage for OCR context:
-  - `/tmp/VoiceInk/VoiceInk/Services/ScreenCaptureService.swift:7`
-  - `/tmp/VoiceInk/VoiceInk/Services/ScreenCaptureService.swift:126`
-  - `/tmp/VoiceInk/VoiceInk/Services/AIEnhancement/AIEnhancementService.swift:412`
+  - `VoiceInk/VoiceInk/Services/ScreenCaptureService.swift:7`
+  - `VoiceInk/VoiceInk/Services/ScreenCaptureService.swift:126`
+  - `VoiceInk/VoiceInk/Services/AIEnhancement/AIEnhancementService.swift:412`
 - Audio cleanup is retention:
-  - `/tmp/VoiceInk/VoiceInk/Views/Settings/AudioCleanupSettingsView.swift:109`
-  - `/tmp/VoiceInk/VoiceInk/Views/Settings/AudioCleanupManager.swift:95`
+  - `VoiceInk/VoiceInk/Views/Settings/AudioCleanupSettingsView.swift:109`
+  - `VoiceInk/VoiceInk/Views/Settings/AudioCleanupManager.swift:95`
 
 ## 15.2 Diduny
 - Meeting mode orchestration:
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/App/AppDelegate+MeetingRecording.swift:104`
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/App/AppDelegate+MeetingRecording.swift:199`
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/App/AppDelegate+MeetingRecording.swift:317`
+  - `Diduny/App/AppDelegate+MeetingRecording.swift:104`
+  - `Diduny/App/AppDelegate+MeetingRecording.swift:199`
+  - `Diduny/App/AppDelegate+MeetingRecording.swift:317`
 - Meeting recorder capture modes:
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Services/MeetingRecorderService.swift:27`
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Services/MeetingRecorderService.swift:102`
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Services/MeetingRecorderService.swift:127`
+  - `Diduny/Core/Services/MeetingRecorderService.swift:27`
+  - `Diduny/Core/Services/MeetingRecorderService.swift:102`
+  - `Diduny/Core/Services/MeetingRecorderService.swift:127`
 - System audio capture:
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Services/SystemAudioCaptureService.swift:81`
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Services/SystemAudioCaptureService.swift:87`
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Services/SystemAudioCaptureService.swift:285`
+  - `Diduny/Core/Services/SystemAudioCaptureService.swift:81`
+  - `Diduny/Core/Services/SystemAudioCaptureService.swift:87`
+  - `Diduny/Core/Services/SystemAudioCaptureService.swift:285`
 - Mixing and realtime hook:
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Services/AudioMixerService.swift:51`
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Services/AudioMixerService.swift:53`
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Services/AudioMixerService.swift:372`
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Services/AudioMixerService.swift:452`
+  - `Diduny/Core/Services/AudioMixerService.swift:51`
+  - `Diduny/Core/Services/AudioMixerService.swift:53`
+  - `Diduny/Core/Services/AudioMixerService.swift:372`
+  - `Diduny/Core/Services/AudioMixerService.swift:452`
 - Existing audio source model:
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Models/MeetingAudioSource.swift:3`
+  - `Diduny/Core/Models/MeetingAudioSource.swift:3`
 - Existing protocol surface:
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Protocols/ServiceProtocols.swift:70`
+  - `Diduny/Core/Protocols/ServiceProtocols.swift:70`
 - Existing meeting settings:
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Storage/SettingsStorage.swift:89`
-  - `/Users/rmarinskyi/IdeaProjects/personal/Diduny/Diduny/Core/Storage/SettingsStorage.swift:217`
+  - `Diduny/Core/Storage/SettingsStorage.swift:89`
+  - `Diduny/Core/Storage/SettingsStorage.swift:217`
 
