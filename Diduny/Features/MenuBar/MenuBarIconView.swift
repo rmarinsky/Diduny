@@ -20,7 +20,15 @@ struct MenuBarIconView: View {
 
     /// Returns an emoji for active states, or nil for idle (to show robot icon)
     private var statusEmoji: String? {
-        // Meeting recording takes priority
+        // Meeting translation takes priority
+        if appState.meetingTranslationRecordingState == .recording {
+            return "🌐"
+        }
+        if appState.meetingTranslationRecordingState == .processing {
+            return "⏳"
+        }
+
+        // Meeting recording
         if appState.meetingRecordingState == .recording {
             return "🎙️"
         }
@@ -45,9 +53,9 @@ struct MenuBarIconView: View {
         // Regular recording
         switch appState.recordingState {
         case .idle:
-            if appState.meetingRecordingState == .success {
+            if appState.meetingTranslationRecordingState == .success || appState.meetingRecordingState == .success {
                 return "✅"
-            } else if appState.meetingRecordingState == .error {
+            } else if appState.meetingTranslationRecordingState == .error || appState.meetingRecordingState == .error {
                 return "❌"
             }
             return nil // Show robot icon

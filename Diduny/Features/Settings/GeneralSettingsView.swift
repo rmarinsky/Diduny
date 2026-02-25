@@ -219,6 +219,12 @@ struct GeneralSettingsView: View {
                     .frame(width: 100, alignment: .leading)
                 KeyboardShortcuts.Recorder(for: .toggleMeetingRecording)
             }
+
+            HStack {
+                Text("Meeting tr.:")
+                    .frame(width: 100, alignment: .leading)
+                KeyboardShortcuts.Recorder(for: .toggleMeetingTranslation)
+            }
         }
     }
 

@@ -9,6 +9,16 @@ struct RecoveryState: Codable {
         case voice
         case meeting
         case translation
+        case meetingTranslation
+
+        var displayName: String {
+            switch self {
+            case .voice: "voice"
+            case .meeting: "meeting"
+            case .translation: "translation"
+            case .meetingTranslation: "meeting translation"
+            }
+        }
     }
 }
 

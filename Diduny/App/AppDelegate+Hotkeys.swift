@@ -13,6 +13,10 @@ extension AppDelegate {
             self?.toggleMeetingRecording()
         }
 
+        hotkeyService.registerMeetingTranslationHotkey { [weak self] in
+            self?.toggleMeetingTranslationRecording()
+        }
+
         hotkeyService.registerTranslationHotkey { [weak self] in
             self?.toggleTranslationRecording()
         }

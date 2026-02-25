@@ -7,12 +7,14 @@ enum RecordingKind {
     case voice
     case translation
     case meeting
+    case meetingTranslation
 
     var displayName: String {
         switch self {
         case .voice: "dictation"
         case .translation: "translation"
         case .meeting: "meeting recording"
+        case .meetingTranslation: "meeting translation"
         }
     }
 }
@@ -29,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // App Nap prevention tokens
     var recordingActivityToken: NSObjectProtocol?
     var meetingActivityToken: NSObjectProtocol?
+    var meetingTranslationActivityToken: NSObjectProtocol?
     var translationActivityToken: NSObjectProtocol?
 
     // MARK: - Services (exposed for SwiftUI access)
@@ -165,9 +168,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showRecoveryAlert(for state: RecoveryState) {
         let alert = NSAlert()
         alert.messageText = "Recover Previous Recording?"
-        alert.informativeText = "An incomplete \(state.recordingType.rawValue) recording was found from \(formatDate(state.startTime)). Would you like to try to transcribe it?"
+        alert.informativeText = "An incomplete \(state.recordingType.displayName) recording was found from \(formatDate(state.startTime)). Would you like to process it now?"
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Transcribe")
+        alert.addButton(withTitle: "Process")
         alert.addButton(withTitle: "Discard")
 
         let response = alert.runModal()
@@ -194,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
                 let text: String
                 switch state.recordingType {
-                case .voice, .meeting:
+                case .voice:
                     var service = activeTranscriptionService
                     if SettingsStorage.shared.transcriptionProvider == .soniox {
                         guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
@@ -203,13 +206,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         service.apiKey = apiKey
                     }
                     text = try await service.transcribe(audioData: audioData)
-                case .translation:
+                case .meeting:
+                    if SettingsStorage.shared.transcriptionProvider == .soniox {
+                        guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                            throw TranscriptionError.noAPIKey
+                        }
+                        transcriptionService.apiKey = apiKey
+                        text = try await transcriptionService.transcribeMeeting(audioData: audioData)
+                    } else {
+                        text = try await whisperTranscriptionService.transcribe(audioData: audioData)
+                    }
+                case .translation, .meetingTranslation:
                     var service: TranscriptionServiceProtocol = transcriptionService
                     guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
                         throw TranscriptionError.noAPIKey
                     }
                     service.apiKey = apiKey
-                    text = try await service.translateAndTranscribe(audioData: audioData)
+                    text = try await service.translateAndTranscribe(audioData: audioData, targetLanguage: "uk")
                 }
 
                 clipboardService.copy(text: text)
@@ -334,6 +347,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if kind != .meeting, isStateInProgress(appState.meetingRecordingState) {
             blockers.append(.meeting)
         }
+        if kind != .meetingTranslation, isStateInProgress(appState.meetingTranslationRecordingState) {
+            blockers.append(.meetingTranslation)
+        }
 
         guard !blockers.isEmpty else { return true }
 
@@ -406,6 +422,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             errorDelay: 2.0
         )
         refreshActivationPolicy()
+    }
+
+    func handleMeetingTranslationStateChange(_ state: RecordingState) {
+        handleStateChange(
+            state,
+            mode: .meetingTranslation,
+            currentStateGetter: { self.appState.meetingTranslationRecordingState },
+            stateResetter: { self.appState.meetingTranslationRecordingState = $0 },
+            successDelay: 2.0,
+            errorDelay: 2.0
+        )
     }
 
     func handleTranslationStateChange(_ state: RecordingState) {

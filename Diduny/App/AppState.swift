@@ -74,6 +74,17 @@ final class AppState {
     var meetingChapters: [MeetingChapter] = []
     var liveTranscriptStore: LiveTranscriptStore?
 
+    // Meeting translation (system audio -> Ukrainian)
+    var meetingTranslationRecordingState: RecordingState = .idle {
+        didSet {
+            Log.app.debug(
+                "meetingTranslationRecordingState changed: \(oldValue.description) -> \(self.meetingTranslationRecordingState.description)"
+            )
+        }
+    }
+
+    var meetingTranslationRecordingStartTime: Date?
+
     // Translation recording (EN <-> UK)
     var translationRecordingState: RecordingState = .idle {
         didSet {
@@ -103,6 +114,11 @@ final class AppState {
         return Date().timeIntervalSince(startTime)
     }
 
+    var meetingTranslationRecordingDuration: TimeInterval {
+        guard let startTime = meetingTranslationRecordingStartTime else { return 0 }
+        return Date().timeIntervalSince(startTime)
+    }
+
     init() {
         let settings = SettingsStorage.shared
         selectedDeviceID = settings.selectedDeviceID
@@ -112,4 +128,3 @@ final class AppState {
             )
     }
 }
-

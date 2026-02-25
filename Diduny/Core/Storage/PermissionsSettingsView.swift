@@ -38,7 +38,7 @@ struct PermissionsSettingsView: View {
                 PermissionRow(
                     icon: "rectangle.on.rectangle",
                     title: "Screen Recording",
-                    description: "Record meeting audio (macOS 13.0+)",
+                    description: "Transcribe meeting audio (macOS 13.0+)",
                     isGranted: $screenRecordingGranted,
                     permissionType: .screenRecording
                 )

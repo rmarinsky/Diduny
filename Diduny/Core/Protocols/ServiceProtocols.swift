@@ -35,9 +35,11 @@ protocol ClipboardServiceProtocol {
 protocol HotkeyServiceProtocol {
     func registerRecordingHotkey(handler: @escaping () -> Void)
     func registerMeetingHotkey(handler: @escaping () -> Void)
+    func registerMeetingTranslationHotkey(handler: @escaping () -> Void)
     func registerTranslationHotkey(handler: @escaping () -> Void)
     func unregisterRecordingHotkey()
     func unregisterMeetingHotkey()
+    func unregisterMeetingTranslationHotkey()
     func unregisterTranslationHotkey()
     func unregisterAll()
 }

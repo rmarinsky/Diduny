@@ -11,6 +11,7 @@ struct MenuBarContentView: View {
     var onToggleRecording: @MainActor () -> Void
     var onToggleTranslationRecording: @MainActor () -> Void
     var onToggleMeetingRecording: @MainActor () -> Void
+    var onToggleMeetingTranslationRecording: @MainActor () -> Void
     var onSelectDevice: @MainActor (AudioDevice) -> Void
 
     var body: some View {
@@ -28,6 +29,11 @@ struct MenuBarContentView: View {
             Button(meetingButtonTitle, action: onToggleMeetingRecording)
             .globalKeyboardShortcut(.toggleMeetingRecording)
             .disabled(isMeetingButtonDisabled)
+
+            // Meeting translation toggle
+            Button(meetingTranslationButtonTitle, action: onToggleMeetingTranslationRecording)
+            .globalKeyboardShortcut(.toggleMeetingTranslation)
+            .disabled(isMeetingTranslationButtonDisabled)
 
             Divider()
 
@@ -182,7 +188,9 @@ struct MenuBarContentView: View {
 
     private var isDictationButtonDisabled: Bool {
         appState.recordingState == .idle
-            && (isInProgress(appState.translationRecordingState) || isInProgress(appState.meetingRecordingState))
+            && (isInProgress(appState.translationRecordingState)
+                || isInProgress(appState.meetingRecordingState)
+                || isInProgress(appState.meetingTranslationRecordingState))
     }
 
     private var translateButtonTitle: String {
@@ -202,7 +210,9 @@ struct MenuBarContentView: View {
 
     private var isTranslationButtonDisabled: Bool {
         appState.translationRecordingState == .idle
-            && (isInProgress(appState.recordingState) || isInProgress(appState.meetingRecordingState))
+            && (isInProgress(appState.recordingState)
+                || isInProgress(appState.meetingRecordingState)
+                || isInProgress(appState.meetingTranslationRecordingState))
     }
 
     private func transcriptionPreview(_ text: String) -> String {
@@ -216,7 +226,7 @@ struct MenuBarContentView: View {
     private var meetingButtonTitle: String {
         switch appState.meetingRecordingState {
         case .idle:
-            "Record Meeting"
+            "Transcribe Meeting"
         case .recording:
             "Stop Meeting"
         case .processing:
@@ -230,7 +240,31 @@ struct MenuBarContentView: View {
 
     private var isMeetingButtonDisabled: Bool {
         appState.meetingRecordingState == .idle
-            && (isInProgress(appState.recordingState) || isInProgress(appState.translationRecordingState))
+            && (isInProgress(appState.recordingState)
+                || isInProgress(appState.translationRecordingState)
+                || isInProgress(appState.meetingTranslationRecordingState))
+    }
+
+    private var meetingTranslationButtonTitle: String {
+        switch appState.meetingTranslationRecordingState {
+        case .idle:
+            "Translate Meeting"
+        case .recording:
+            "Stop Translation"
+        case .processing:
+            "Translating Meeting..."
+        case .success:
+            "Meeting Translated"
+        case .error:
+            "Meeting Translation Error"
+        }
+    }
+
+    private var isMeetingTranslationButtonDisabled: Bool {
+        appState.meetingTranslationRecordingState == .idle
+            && (isInProgress(appState.recordingState)
+                || isInProgress(appState.translationRecordingState)
+                || isInProgress(appState.meetingRecordingState))
     }
 
     private func reloadTextCleanupSettings() {

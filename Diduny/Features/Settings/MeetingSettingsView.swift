@@ -99,7 +99,7 @@ struct MeetingSettingsView: View {
                     Text("Hotkey: ⌘⇧M")
                         .font(.subheadline)
 
-                    Text("Or use Menu → Record Meeting")
+                    Text("Or use Menu → Transcaribe Meeting")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

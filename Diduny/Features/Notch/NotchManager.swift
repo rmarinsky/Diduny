@@ -15,12 +15,14 @@ enum RecordingMode: Equatable {
     case voice
     case translation(languagePair: String = "EN <-> UK")
     case meeting
+    case meetingTranslation
 
     var label: String {
         switch self {
         case .voice: "Recording..."
         case let .translation(pair): "Recording (\(pair))..."
         case .meeting: "Meeting Recording..."
+        case .meetingTranslation: "Meeting Translation..."
         }
     }
 
@@ -29,6 +31,7 @@ enum RecordingMode: Equatable {
         case .voice: "Processing..."
         case .translation: "Translating..."
         case .meeting: "Processing Meeting..."
+        case .meetingTranslation: "Translating Meeting..."
         }
     }
 
@@ -37,6 +40,7 @@ enum RecordingMode: Equatable {
         case .voice: "mic.fill"
         case .translation: "globe"
         case .meeting: "laptopcomputer"
+        case .meetingTranslation: "captions.bubble.fill"
         }
     }
 }

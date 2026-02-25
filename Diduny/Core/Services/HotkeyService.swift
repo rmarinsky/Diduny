@@ -6,6 +6,10 @@ import KeyboardShortcuts
 extension KeyboardShortcuts.Name {
     static let toggleRecording = Self("toggleRecording", default: .init(.d, modifiers: [.command, .option]))
     static let toggleMeetingRecording = Self("toggleMeetingRecording", default: .init(.m, modifiers: [.command, .option]))
+    static let toggleMeetingTranslation = Self(
+        "toggleMeetingTranslation",
+        default: .init(.m, modifiers: [.command, .option, .shift])
+    )
     static let toggleTranslation = Self("toggleTranslation", default: .init(.slash, modifiers: [.command, .option]))
     static let addMeetingChapter = Self("addMeetingChapter", default: .init(.b, modifiers: [.command, .option]))
     static let toggleHistoryPalette = Self("toggleHistoryPalette", default: .init(.h, modifiers: [.command, .option]))
@@ -16,6 +20,7 @@ extension KeyboardShortcuts.Name {
 final class HotkeyService: HotkeyServiceProtocol {
     private var recordingHandler: (() -> Void)?
     private var meetingHandler: (() -> Void)?
+    private var meetingTranslationHandler: (() -> Void)?
     private var translationHandler: (() -> Void)?
     private var chapterHandler: (() -> Void)?
     private var historyPaletteHandler: (() -> Void)?
@@ -46,6 +51,20 @@ final class HotkeyService: HotkeyServiceProtocol {
     func unregisterMeetingHotkey() {
         KeyboardShortcuts.disable(.toggleMeetingRecording)
         meetingHandler = nil
+    }
+
+    // MARK: - Meeting Translation Hotkey
+
+    func registerMeetingTranslationHotkey(handler: @escaping () -> Void) {
+        meetingTranslationHandler = handler
+        KeyboardShortcuts.onKeyDown(for: .toggleMeetingTranslation) { [weak self] in
+            self?.meetingTranslationHandler?()
+        }
+    }
+
+    func unregisterMeetingTranslationHotkey() {
+        KeyboardShortcuts.disable(.toggleMeetingTranslation)
+        meetingTranslationHandler = nil
     }
 
     // MARK: - Translation Hotkey
@@ -95,6 +114,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     func unregisterAll() {
         unregisterRecordingHotkey()
         unregisterMeetingHotkey()
+        unregisterMeetingTranslationHotkey()
         unregisterTranslationHotkey()
         unregisterChapterHotkey()
         unregisterHistoryPaletteHotkey()
