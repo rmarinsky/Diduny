@@ -188,8 +188,7 @@ struct LiveTranscriptView: View {
             Button("Copy") {
                 let text = store.finalTranscriptText
                 if !text.isEmpty {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
+                    ClipboardService.shared.copy(text: text)
                 }
             }
             .buttonStyle(.bordered)

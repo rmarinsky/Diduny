@@ -1,10 +1,12 @@
-import SwiftUI
 import KeyboardShortcuts
+import SwiftUI
 
 struct MenuBarContentView: View {
     @Environment(AppState.self) var appState
     var audioDeviceManager: AudioDeviceManager
     @Environment(\.openSettings) private var openSettings
+    @State private var textCleanupEnabled = SettingsStorage.shared.textCleanupEnabled
+    @State private var fillerWords = SettingsStorage.shared.fillerWords
 
     var onToggleRecording: @MainActor () -> Void
     var onToggleTranslationRecording: @MainActor () -> Void
@@ -60,8 +62,7 @@ struct MenuBarContentView: View {
                     ForEach(Array(recent)) { recording in
                         Button {
                             if let text = recording.transcriptionText {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(text, forType: .string)
+                                ClipboardService.shared.copy(text: text)
                             }
                         } label: {
                             let preview = transcriptionPreview(recording.transcriptionText ?? "")
@@ -78,6 +79,41 @@ struct MenuBarContentView: View {
                             NSApp.activate(ignoringOtherApps: true)
                         }
                     }
+                }
+            }
+
+            Menu("Text Cleanup") {
+                Toggle("Enable Cleanup", isOn: Binding(
+                    get: { textCleanupEnabled },
+                    set: { newValue in
+                        textCleanupEnabled = newValue
+                        SettingsStorage.shared.textCleanupEnabled = newValue
+                    }
+                ))
+
+                Divider()
+
+                Button("Add Word to Remove...") {
+                    promptToAddFillerWord()
+                }
+
+                if fillerWords.isEmpty {
+                    Text("No words configured")
+                        .foregroundColor(.secondary)
+                } else {
+                    Menu("Remove Word") {
+                        ForEach(fillerWords, id: \.self) { word in
+                            Button(word) {
+                                SettingsStorage.shared.removeFillerWord(word)
+                                reloadTextCleanupSettings()
+                            }
+                        }
+                    }
+                }
+
+                Button("Reset Defaults") {
+                    SettingsStorage.shared.resetFillerWordsToDefault()
+                    reloadTextCleanupSettings()
                 }
             }
 
@@ -119,6 +155,10 @@ struct MenuBarContentView: View {
             .keyboardShortcut("q", modifiers: .command)
         }
         .padding(.vertical, 4)
+        .onAppear(perform: reloadTextCleanupSettings)
+        .onReceive(NotificationCenter.default.publisher(for: .textCleanupSettingsChanged)) { _ in
+            reloadTextCleanupSettings()
+        }
     }
 
     private var recordingButtonTitle: String {
@@ -191,5 +231,29 @@ struct MenuBarContentView: View {
     private var isMeetingButtonDisabled: Bool {
         appState.meetingRecordingState == .idle
             && (isInProgress(appState.recordingState) || isInProgress(appState.translationRecordingState))
+    }
+
+    private func reloadTextCleanupSettings() {
+        textCleanupEnabled = SettingsStorage.shared.textCleanupEnabled
+        fillerWords = SettingsStorage.shared.fillerWords
+    }
+
+    private func promptToAddFillerWord() {
+        let alert = NSAlert()
+        alert.messageText = "Add Word to Remove"
+        alert.informativeText = "This word will be removed before text is copied to clipboard."
+        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: "Cancel")
+
+        let inputField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        inputField.placeholderString = "e.g. е-е, em, ем"
+        alert.accessoryView = inputField
+
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let candidate = inputField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard SettingsStorage.shared.addFillerWord(candidate) else { return }
+        reloadTextCleanupSettings()
     }
 }

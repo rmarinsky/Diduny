@@ -6,6 +6,15 @@ final class SettingsStorage {
     static let shared = SettingsStorage()
 
     private let defaults = UserDefaults.standard
+    private static let defaultFillerWords = [
+        "е-е",
+        "ем",
+        "em",
+        "uh",
+        "um",
+        "мм",
+        "ммм",
+    ]
 
     private enum Key: String {
         case selectedDeviceID
@@ -33,6 +42,8 @@ final class SettingsStorage {
         case transcriptionRealtimeSocketEnabled
         case meetingRealtimeTranscriptionEnabled
         case escapeCancelEnabled
+        case textCleanupEnabled
+        case fillerWords
     }
 
     private init() {}
@@ -68,6 +79,57 @@ final class SettingsStorage {
     var launchAtLogin: Bool {
         get { LaunchAtLogin.isEnabled }
         set { LaunchAtLogin.isEnabled = newValue }
+    }
+
+    var textCleanupEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.textCleanupEnabled.rawValue) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.textCleanupEnabled.rawValue)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.textCleanupEnabled.rawValue)
+            NotificationCenter.default.post(name: .textCleanupSettingsChanged, object: nil)
+        }
+    }
+
+    var fillerWords: [String] {
+        get {
+            guard let stored = defaults.stringArray(forKey: Key.fillerWords.rawValue) else {
+                return Self.defaultFillerWords
+            }
+            return Self.normalizedFillerWords(stored)
+        }
+        set {
+            defaults.set(Self.normalizedFillerWords(newValue), forKey: Key.fillerWords.rawValue)
+            NotificationCenter.default.post(name: .textCleanupSettingsChanged, object: nil)
+        }
+    }
+
+    @discardableResult
+    func addFillerWord(_ word: String) -> Bool {
+        guard let candidate = Self.normalizedFillerWords([word]).first else { return false }
+
+        let candidateKey = Self.foldedWordKey(candidate)
+        var current = fillerWords
+        let alreadyExists = current.contains { Self.foldedWordKey($0) == candidateKey }
+        guard !alreadyExists else { return false }
+
+        current.append(candidate)
+        fillerWords = current
+        return true
+    }
+
+    func removeFillerWord(_ word: String) {
+        let targetKey = Self.foldedWordKey(word)
+        let filtered = fillerWords.filter { Self.foldedWordKey($0) != targetKey }
+        guard filtered.count != fillerWords.count else { return }
+        fillerWords = filtered
+    }
+
+    func resetFillerWordsToDefault() {
+        fillerWords = Self.defaultFillerWords
     }
 
     // MARK: - Push to Talk
@@ -272,4 +334,28 @@ final class SettingsStorage {
         get { defaults.bool(forKey: Key.hasCloudAPIKey.rawValue) }
         set { defaults.set(newValue, forKey: Key.hasCloudAPIKey.rawValue) }
     }
+
+    private static func normalizedFillerWords(_ words: [String]) -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+
+        for rawWord in words {
+            let trimmed = rawWord.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+
+            let key = foldedWordKey(trimmed)
+            guard seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+
+        return result
+    }
+
+    private static func foldedWordKey(_ word: String) -> String {
+        word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    }
+}
+
+extension Notification.Name {
+    static let textCleanupSettingsChanged = Notification.Name("textCleanupSettingsChanged")
 }
