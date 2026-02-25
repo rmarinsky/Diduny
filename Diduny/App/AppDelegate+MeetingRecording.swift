@@ -436,6 +436,10 @@ extension AppDelegate {
 
     private func setupMeetingEscapeCancelHandler() {
         let escapeService = EscapeCancelService.shared
+        guard SettingsStorage.shared.escapeCancelEnabled else {
+            escapeService.deactivate()
+            return
+        }
 
         // On first escape: show confirmation notification
         escapeService.onFirstEscape = { [weak self] in

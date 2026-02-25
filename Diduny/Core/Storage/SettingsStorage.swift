@@ -6,6 +6,15 @@ final class SettingsStorage {
     static let shared = SettingsStorage()
 
     private let defaults = UserDefaults.standard
+    private static let defaultFillerWords = [
+        "е-е",
+        "ем",
+        "em",
+        "uh",
+        "um",
+        "мм",
+        "ммм",
+    ]
 
     private enum Key: String {
         case selectedDeviceID
@@ -14,6 +23,8 @@ final class SettingsStorage {
         case launchAtLogin
         case pushToTalkKey
         case meetingAudioSource
+        case meetingMicGain
+        case meetingSystemGain
         case translationPushToTalkKey
         case handsFreeModeEnabled
         case transcriptionProvider
@@ -30,6 +41,9 @@ final class SettingsStorage {
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
         case meetingRealtimeTranscriptionEnabled
+        case escapeCancelEnabled
+        case textCleanupEnabled
+        case fillerWords
     }
 
     private init() {}
@@ -67,6 +81,57 @@ final class SettingsStorage {
         set { LaunchAtLogin.isEnabled = newValue }
     }
 
+    var textCleanupEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.textCleanupEnabled.rawValue) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.textCleanupEnabled.rawValue)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.textCleanupEnabled.rawValue)
+            NotificationCenter.default.post(name: .textCleanupSettingsChanged, object: nil)
+        }
+    }
+
+    var fillerWords: [String] {
+        get {
+            guard let stored = defaults.stringArray(forKey: Key.fillerWords.rawValue) else {
+                return Self.defaultFillerWords
+            }
+            return Self.normalizedFillerWords(stored)
+        }
+        set {
+            defaults.set(Self.normalizedFillerWords(newValue), forKey: Key.fillerWords.rawValue)
+            NotificationCenter.default.post(name: .textCleanupSettingsChanged, object: nil)
+        }
+    }
+
+    @discardableResult
+    func addFillerWord(_ word: String) -> Bool {
+        guard let candidate = Self.normalizedFillerWords([word]).first else { return false }
+
+        let candidateKey = Self.foldedWordKey(candidate)
+        var current = fillerWords
+        let alreadyExists = current.contains { Self.foldedWordKey($0) == candidateKey }
+        guard !alreadyExists else { return false }
+
+        current.append(candidate)
+        fillerWords = current
+        return true
+    }
+
+    func removeFillerWord(_ word: String) {
+        let targetKey = Self.foldedWordKey(word)
+        let filtered = fillerWords.filter { Self.foldedWordKey($0) != targetKey }
+        guard filtered.count != fillerWords.count else { return }
+        fillerWords = filtered
+    }
+
+    func resetFillerWordsToDefault() {
+        fillerWords = Self.defaultFillerWords
+    }
+
     // MARK: - Push to Talk
 
     var pushToTalkKey: PushToTalkKey {
@@ -98,6 +163,24 @@ final class SettingsStorage {
         set {
             defaults.set(newValue.rawValue, forKey: Key.meetingAudioSource.rawValue)
         }
+    }
+
+    // MARK: - Meeting Gain Controls
+
+    var meetingMicGain: Float {
+        get {
+            let stored = defaults.object(forKey: Key.meetingMicGain.rawValue) as? Float ?? 1.0
+            return Self.sanitizedGain(stored, fallback: 1.0)
+        }
+        set { defaults.set(Self.sanitizedGain(newValue, fallback: 1.0), forKey: Key.meetingMicGain.rawValue) }
+    }
+
+    var meetingSystemGain: Float {
+        get {
+            let stored = defaults.object(forKey: Key.meetingSystemGain.rawValue) as? Float ?? 0.3
+            return Self.sanitizedGain(stored, fallback: 0.3)
+        }
+        set { defaults.set(Self.sanitizedGain(newValue, fallback: 0.3), forKey: Key.meetingSystemGain.rawValue) }
     }
 
     // MARK: - Translation Push to Talk
@@ -219,6 +302,19 @@ final class SettingsStorage {
         set { defaults.set(newValue, forKey: Key.meetingRealtimeTranscriptionEnabled.rawValue) }
     }
 
+    // MARK: - Escape Cancel
+
+    /// Enables double-press Escape cancellation during active recording.
+    var escapeCancelEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.escapeCancelEnabled.rawValue) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.escapeCancelEnabled.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.escapeCancelEnabled.rawValue) }
+    }
+
     // MARK: - Ambient Listening
 
     var ambientListeningEnabled: Bool {
@@ -244,4 +340,33 @@ final class SettingsStorage {
         get { defaults.bool(forKey: Key.hasCloudAPIKey.rawValue) }
         set { defaults.set(newValue, forKey: Key.hasCloudAPIKey.rawValue) }
     }
+
+    private static func normalizedFillerWords(_ words: [String]) -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+
+        for rawWord in words {
+            let trimmed = rawWord.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+
+            let key = foldedWordKey(trimmed)
+            guard seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+
+        return result
+    }
+
+    private static func foldedWordKey(_ word: String) -> String {
+        word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    private static func sanitizedGain(_ value: Float, fallback: Float) -> Float {
+        guard value.isFinite else { return fallback }
+        return min(max(value, 0), 2.0)
+    }
+}
+
+extension Notification.Name {
+    static let textCleanupSettingsChanged = Notification.Name("textCleanupSettingsChanged")
 }

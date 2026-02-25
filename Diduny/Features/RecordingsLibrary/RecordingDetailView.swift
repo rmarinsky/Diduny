@@ -142,8 +142,7 @@ struct RecordingDetailView: View {
                 HStack {
                     Spacer()
                     Button("Copy Text") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(text, forType: .string)
+                        ClipboardService.shared.copy(text: text)
                     }
                 }
             }

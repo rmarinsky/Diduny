@@ -43,8 +43,12 @@ struct SettingsView: View {
             NSApp.activate(ignoringOtherApps: true)
         }
         .onDisappear {
-            // Hide from Dock and Cmd+Tab when Settings is closed
-            NSApp.setActivationPolicy(.accessory)
+            // Respect active meeting recording visibility in Cmd+Tab.
+            if let appDelegate = NSApp.delegate as? AppDelegate {
+                appDelegate.refreshActivationPolicy()
+            } else {
+                NSApp.setActivationPolicy(.accessory)
+            }
         }
     }
 }

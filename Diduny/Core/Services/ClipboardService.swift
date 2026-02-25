@@ -1,7 +1,5 @@
 import AppKit
 import ApplicationServices
-import Carbon
-import os
 
 enum ClipboardError: LocalizedError {
     case accessibilityNotGranted
@@ -18,11 +16,14 @@ enum ClipboardError: LocalizedError {
 }
 
 final class ClipboardService: ClipboardServiceProtocol {
+    static let shared = ClipboardService()
+
     private let pasteboard = NSPasteboard.general
 
     func copy(text: String) {
+        let normalizedText = ClipboardTextNormalizer.normalize(text)
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        pasteboard.setString(normalizedText, forType: .string)
     }
 
     /// Check if accessibility permission is granted
@@ -79,5 +80,66 @@ final class ClipboardService: ClipboardServiceProtocol {
 
     func getContent() -> String? {
         pasteboard.string(forType: .string)
+    }
+}
+
+private enum ClipboardTextNormalizer {
+    static func normalize(_ text: String) -> String {
+        var normalized = normalizeSpacing(in: text)
+
+        guard SettingsStorage.shared.textCleanupEnabled else {
+            return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        normalized = removeSingleLetterStutters(in: normalized)
+
+        for fillerWord in SettingsStorage.shared.fillerWords {
+            normalized = removeFillerWord(fillerWord, from: normalized)
+        }
+
+        normalized = normalizeSpacing(in: normalized)
+        normalized = normalizePunctuation(in: normalized)
+        return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func removeSingleLetterStutters(in text: String) -> String {
+        // Removes patterns like "е-е", "е-е-е", "m-m" when they are standalone tokens.
+        replacing(
+            in: text,
+            pattern: "(?iu)(^|[^\\p{L}\\p{N}])([\\p{L}])(?:[-–—]\\2){1,}(?=$|[^\\p{L}\\p{N}])",
+            with: "$1"
+        )
+    }
+
+    private static func removeFillerWord(_ fillerWord: String, from text: String) -> String {
+        let trimmed = fillerWord.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return text }
+
+        let escaped = NSRegularExpression.escapedPattern(for: trimmed)
+        let pattern = "(?iu)(^|[^\\p{L}\\p{N}])\(escaped)(?:\\s*[,.;:!?])?(?=$|[^\\p{L}\\p{N}])"
+        return replacing(in: text, pattern: pattern, with: "$1")
+    }
+
+    private static func normalizeSpacing(in text: String) -> String {
+        var result = text.replacingOccurrences(of: "\u{00A0}", with: " ")
+        result = replacing(in: result, pattern: "[ \\t]+", with: " ")
+        result = replacing(in: result, pattern: " *\\n *", with: "\n")
+        result = replacing(in: result, pattern: "\\n{3,}", with: "\n\n")
+        return result
+    }
+
+    private static func normalizePunctuation(in text: String) -> String {
+        var result = text
+        result = replacing(in: result, pattern: "\\s+([,.;:!?])", with: "$1")
+        result = replacing(in: result, pattern: "([\\(\\[\\{])\\s+", with: "$1")
+        result = replacing(in: result, pattern: "\\s+([\\)\\]\\}])", with: "$1")
+        result = replacing(in: result, pattern: "([,.;:!?]){2,}", with: "$1")
+        return result
+    }
+
+    private static func replacing(in text: String, pattern: String, with template: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.stringByReplacingMatches(in: text, range: fullRange, withTemplate: template)
     }
 }

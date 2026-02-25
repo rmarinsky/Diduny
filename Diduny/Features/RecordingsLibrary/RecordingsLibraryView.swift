@@ -193,8 +193,7 @@ struct RecordingsLibraryView: View {
         if let text = recording.transcriptionText, !text.isEmpty {
             Divider()
             Button("Copy Text") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
+                ClipboardService.shared.copy(text: text)
             }
         }
 

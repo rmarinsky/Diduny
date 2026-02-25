@@ -146,6 +146,8 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
 
         // Create mixer with microphone support
         audioMixer = AudioMixerService()
+        audioMixer?.micGain = SettingsStorage.shared.meetingMicGain
+        audioMixer?.systemGain = SettingsStorage.shared.meetingSystemGain
 
         audioMixer?.onError = { [weak self] error in
             Log.recording.error("Audio mixer error: \(error.localizedDescription)")

@@ -8,6 +8,8 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
     private let model = "stt-async-v4"
     private let pollingInterval: TimeInterval = 1.0
     private let maxPollingAttempts = 60 // 60 seconds max wait
+    private let maxAudioBytesForSpeechPrecheck = 25 * 1024 * 1024
+    private let strictSpeechPrecheck = false
 
     // MARK: - Voice Note Processing Context
 
@@ -60,6 +62,8 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
             throw TranscriptionError.noAPIKey
         }
 
+        try await ensureSpeechDetected(audioData, context: "transcribe")
+
         // Step 1: Upload the audio file
         Log.transcription.info("Step 1: Uploading audio file...")
         let fileId = try await uploadFile(audioData: audioData, apiKey: apiKey)
@@ -96,6 +100,8 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
             Log.transcription.error("transcribeMeeting: No API key!")
             throw TranscriptionError.noAPIKey
         }
+
+        try await ensureSpeechDetected(audioData, context: "transcribeMeeting")
 
         // Step 1: Upload the audio file
         Log.transcription.info("Step 1: Uploading audio file...")
@@ -137,6 +143,8 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
             throw TranscriptionError.noAPIKey
         }
 
+        try await ensureSpeechDetected(audioData, context: "translateAndTranscribe")
+
         // Step 1: Upload the audio file
         Log.transcription.info("Step 1: Uploading audio file...")
         let fileId = try await uploadFile(audioData: audioData, apiKey: apiKey)
@@ -162,6 +170,28 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         Log.transcription.info("Translated transcript retrieved: \(text.prefix(50))...")
 
         return text
+    }
+
+    // MARK: - Speech Pre-check
+
+    private func ensureSpeechDetected(_ audioData: Data, context: String) async throws {
+        guard audioData.count <= maxAudioBytesForSpeechPrecheck else {
+            Log.transcription.info(
+                "\(context): skipping speech pre-check for large audio (\(audioData.count) bytes)"
+            )
+            return
+        }
+
+        let hasSpeech = await AudioSpeechDetector.hasSpeech(in: audioData)
+        guard hasSpeech else {
+            if strictSpeechPrecheck {
+                Log.transcription.info("\(context): no speech detected, skipping Soniox request")
+                throw TranscriptionError.emptyTranscription
+            }
+
+            Log.transcription.info("\(context): no speech confidently detected, continuing with Soniox")
+            return
+        }
     }
 
     // MARK: - Step 1: Upload File
@@ -690,6 +720,108 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
             let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
             throw TranscriptionError.apiError("Status \(httpResponse.statusCode): \(errorBody)")
         }
+    }
+}
+
+private enum AudioSpeechDetector {
+    private static let frameSize = 320 // 20 ms at 16 kHz
+    private static let minSpeechDurationSeconds: Double = 0.18
+    private static let minRmsThreshold: Float = 0.0015
+    private static let dynamicThresholdMultiplier: Float = 1.8
+    private static let minPeakThreshold: Float = 0.015
+
+    static func hasSpeech(in audioData: Data) async -> Bool {
+        await Task.detached(priority: .userInitiated) {
+            do {
+                let samples = try AudioConverter.convertToWhisperFormat(audioData: audioData)
+                return detectSpeech(samples: samples)
+            } catch {
+                // Fallback to cloud transcription when local analysis fails.
+                NSLog("[Transcription] Speech pre-check failed: \(error.localizedDescription)")
+                return true
+            }
+        }.value
+    }
+
+    private static func detectSpeech(samples: [Float]) -> Bool {
+        guard !samples.isEmpty else { return false }
+
+        let frameMetrics = buildFrameMetrics(samples: samples)
+        guard !frameMetrics.rmsValues.isEmpty else { return false }
+
+        let noiseFloor = percentile20(values: frameMetrics.rmsValues)
+        let rmsThreshold = max(minRmsThreshold, noiseFloor * dynamicThresholdMultiplier)
+        let peakThreshold = max(minPeakThreshold, rmsThreshold * 2.0)
+
+        let minSpeechFrames = max(
+            1,
+            Int(
+                ceil(
+                    (minSpeechDurationSeconds * AudioConverter.whisperSampleRate) / Double(frameSize)
+                )
+            )
+        )
+        let minConsecutiveFrames = max(3, minSpeechFrames / 2)
+
+        var voicedFrames = 0
+        var longestRun = 0
+        var currentRun = 0
+
+        for index in frameMetrics.rmsValues.indices {
+            let isVoiced =
+                frameMetrics.rmsValues[index] >= rmsThreshold &&
+                frameMetrics.peakValues[index] >= peakThreshold
+
+            if isVoiced {
+                voicedFrames += 1
+                currentRun += 1
+                longestRun = max(longestRun, currentRun)
+            } else {
+                currentRun = 0
+            }
+        }
+
+        return voicedFrames >= minSpeechFrames && longestRun >= minConsecutiveFrames
+    }
+
+    private static func buildFrameMetrics(samples: [Float]) -> (rmsValues: [Float], peakValues: [Float]) {
+        var rmsValues: [Float] = []
+        var peakValues: [Float] = []
+
+        rmsValues.reserveCapacity((samples.count / frameSize) + 1)
+        peakValues.reserveCapacity((samples.count / frameSize) + 1)
+
+        var frameStart = 0
+        while frameStart < samples.count {
+            let frameEnd = min(frameStart + frameSize, samples.count)
+            let count = frameEnd - frameStart
+            if count < frameSize / 2 { break }
+
+            var sumSquares: Float = 0
+            var peak: Float = 0
+
+            for index in frameStart..<frameEnd {
+                let sample = samples[index]
+                let amplitude = abs(sample)
+                sumSquares += sample * sample
+                peak = max(peak, amplitude)
+            }
+
+            let rms = sqrt(sumSquares / Float(count))
+            rmsValues.append(rms)
+            peakValues.append(peak)
+
+            frameStart += frameSize
+        }
+
+        return (rmsValues, peakValues)
+    }
+
+    private static func percentile20(values: [Float]) -> Float {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let index = min(sorted.count - 1, Int(Double(sorted.count) * 0.2))
+        return sorted[index]
     }
 }
 

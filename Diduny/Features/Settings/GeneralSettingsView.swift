@@ -11,6 +11,10 @@ struct GeneralSettingsView: View {
     @State private var handsFreeModeEnabled = SettingsStorage.shared.handsFreeModeEnabled
     @State private var ambientListeningEnabled = SettingsStorage.shared.ambientListeningEnabled
     @State private var wakeWord = SettingsStorage.shared.wakeWord
+    @State private var escapeCancelEnabled = SettingsStorage.shared.escapeCancelEnabled
+    @State private var textCleanupEnabled = SettingsStorage.shared.textCleanupEnabled
+    @State private var fillerWords = SettingsStorage.shared.fillerWords
+    @State private var newFillerWord = ""
 
     var body: some View {
         Form {
@@ -72,6 +76,14 @@ struct GeneralSettingsView: View {
                         SettingsStorage.shared.playSoundOnCompletion = newValue
                     }
 
+                Toggle("Double-press Escape to cancel recording", isOn: $escapeCancelEnabled)
+                    .onChange(of: escapeCancelEnabled) { _, newValue in
+                        SettingsStorage.shared.escapeCancelEnabled = newValue
+                        if !newValue {
+                            EscapeCancelService.shared.deactivate()
+                        }
+                    }
+
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, newValue in
                         LaunchAtLogin.isEnabled = newValue
@@ -79,6 +91,50 @@ struct GeneralSettingsView: View {
 
             } header: {
                 Text("Behavior")
+            }
+
+            Section {
+                Toggle("Normalize text before copy", isOn: $textCleanupEnabled)
+                    .onChange(of: textCleanupEnabled) { _, newValue in
+                        SettingsStorage.shared.textCleanupEnabled = newValue
+                    }
+
+                HStack(spacing: 8) {
+                    TextField("Add filler word (e.g. е-е, em, ем)", text: $newFillerWord)
+                    Button("Add") {
+                        addFillerWordFromInput()
+                    }
+                    .disabled(trimmedFillerWordInput.isEmpty)
+                }
+
+                if fillerWords.isEmpty {
+                    Text("No filler words configured")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(fillerWords, id: \.self) { word in
+                        HStack {
+                            Text(word)
+                            Spacer()
+                            Button("Remove") {
+                                SettingsStorage.shared.removeFillerWord(word)
+                                reloadTextCleanupSettings()
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+
+                Button("Reset Default Words") {
+                    SettingsStorage.shared.resetFillerWordsToDefault()
+                    reloadTextCleanupSettings()
+                }
+            } header: {
+                Text("Text Cleanup")
+            } footer: {
+                Text("Words are removed before copying to clipboard and before auto-paste.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Section {
@@ -114,6 +170,10 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear(perform: reloadTextCleanupSettings)
+        .onReceive(NotificationCenter.default.publisher(for: .textCleanupSettingsChanged)) { _ in
+            reloadTextCleanupSettings()
+        }
     }
 
     private func showOnboarding() {
@@ -122,6 +182,22 @@ struct GeneralSettingsView: View {
         OnboardingWindowController.shared.showOnboarding {
             // Onboarding completed
         }
+    }
+
+    private var trimmedFillerWordInput: String {
+        newFillerWord.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func addFillerWordFromInput() {
+        let value = trimmedFillerWordInput
+        guard SettingsStorage.shared.addFillerWord(value) else { return }
+        newFillerWord = ""
+        reloadTextCleanupSettings()
+    }
+
+    private func reloadTextCleanupSettings() {
+        textCleanupEnabled = SettingsStorage.shared.textCleanupEnabled
+        fillerWords = SettingsStorage.shared.fillerWords
     }
 
     private var hotkeySection: some View {

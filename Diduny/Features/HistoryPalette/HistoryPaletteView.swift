@@ -98,8 +98,7 @@ struct HistoryPaletteView: View {
 
     private func copyAndClose(_ recording: Recording) {
         guard let text = recording.transcriptionText else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        ClipboardService.shared.copy(text: text)
         HistoryPaletteWindowController.shared.closeWindow()
     }
 }
