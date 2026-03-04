@@ -1,19 +1,15 @@
 import AVFoundation
-import CoreAudio
 import SwiftUI
 
 struct AudioSettingsView: View {
     @Environment(AppState.self) var appState
     @State private var deviceManager = AudioDeviceManager()
+    @StateObject private var testRecorderService = AudioRecorderService()
 
     // Test recording state
-    @State private var isTestRecording = false
     @State private var isTestPlaying = false
-    @State private var testAudioLevel: Float = 0
     @State private var testRecordingURL: URL?
     @State private var testAudioPlayer: AVAudioPlayer?
-    @State private var testRecorder: AVAudioRecorder?
-    @State private var levelTimer: Timer?
     @State private var testStatusMessage = ""
 
     var body: some View {
@@ -98,14 +94,12 @@ struct AudioSettingsView: View {
                                 .foregroundColor(.secondary)
                             GeometryReader { geometry in
                                 ZStack(alignment: .leading) {
-                                    Rectangle()
+                                    RoundedRectangle(cornerRadius: 4)
                                         .fill(Color.gray.opacity(0.3))
                                         .frame(height: 8)
-                                        .cornerRadius(4)
-                                    Rectangle()
+                                    RoundedRectangle(cornerRadius: 4)
                                         .fill(levelColor)
-                                        .frame(width: geometry.size.width * CGFloat(testAudioLevel), height: 8)
-                                        .cornerRadius(4)
+                                        .frame(width: geometry.size.width * CGFloat(testRecorderService.audioLevel), height: 8)
                                 }
                             }
                             .frame(height: 8)
@@ -135,76 +129,62 @@ struct AudioSettingsView: View {
     // MARK: - Level Color
 
     private var levelColor: Color {
-        if testAudioLevel > 0.8 {
+        if testRecorderService.audioLevel > 0.8 {
             .red
-        } else if testAudioLevel > 0.5 {
+        } else if testRecorderService.audioLevel > 0.5 {
             .yellow
         } else {
             .green
         }
     }
 
+    private var isTestRecording: Bool {
+        testRecorderService.isRecording
+    }
+
     // MARK: - Test Recording Methods
 
     private func startTestRecording() {
-        // Get the selected device
         let device: AudioDevice? = if let selectedID = appState.selectedDeviceID {
             deviceManager.availableDevices.first { $0.id == selectedID }
         } else {
             deviceManager.defaultDevice
         }
 
-        // Set input device if specified
-        if let device {
-            setInputDevice(device.id)
-        }
+        testStatusMessage = "Starting test recording..."
 
-        // Create temp file
-        let tempDir = FileManager.default.temporaryDirectory
-        let fileName = "test_recording_\(UUID().uuidString).wav"
-        testRecordingURL = tempDir.appendingPathComponent(fileName)
-
-        guard let url = testRecordingURL else {
-            testStatusMessage = "Failed to create recording file"
-            return
-        }
-
-        // Configure audio settings - use device native sample rate for best compatibility
-        let settings: [String: Any] = [
-            AVFormatIDKey: Int(kAudioFormatLinearPCM),
-            AVSampleRateKey: 44100.0, // Standard sample rate, device will use native if different
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-        ]
-
-        do {
-            testRecorder = try AVAudioRecorder(url: url, settings: settings)
-            testRecorder?.isMeteringEnabled = true
-            testRecorder?.prepareToRecord()
-
-            guard testRecorder?.record() == true else {
-                testStatusMessage = "Failed to start recording"
-                return
+        Task { @MainActor in
+            do {
+                try await testRecorderService.startRecording(device: device)
+                testStatusMessage = "Recording... speak into your microphone"
+            } catch {
+                testStatusMessage = "Error: \(error.localizedDescription)"
             }
-
-            isTestRecording = true
-            testStatusMessage = "Recording... speak into your microphone"
-            startLevelMonitoring()
-        } catch {
-            testStatusMessage = "Error: \(error.localizedDescription)"
         }
     }
 
     private func stopTestRecording() {
-        stopLevelMonitoring()
-        testRecorder?.stop()
-        testRecorder = nil
-        isTestRecording = false
-        testAudioLevel = 0
-        testStatusMessage = "Recording saved. Press Play to listen."
+        testStatusMessage = "Stopping test recording..."
+
+        Task { @MainActor in
+            do {
+                let audioData = try await testRecorderService.stopRecording()
+                let tempDir = FileManager.default.temporaryDirectory
+                let fileName = "test_recording_\(UUID().uuidString).wav"
+                let newURL = tempDir.appendingPathComponent(fileName)
+
+                try audioData.write(to: newURL, options: .atomic)
+
+                if let previousURL = testRecordingURL, previousURL != newURL {
+                    try? FileManager.default.removeItem(at: previousURL)
+                }
+
+                testRecordingURL = newURL
+                testStatusMessage = "Recording saved. Press Play to listen."
+            } catch {
+                testStatusMessage = "Error: \(error.localizedDescription)"
+            }
+        }
     }
 
     private func playTestRecording() {
@@ -238,9 +218,8 @@ struct AudioSettingsView: View {
     }
 
     private func cleanupTestRecording() {
-        stopLevelMonitoring()
-        testRecorder?.stop()
-        testRecorder = nil
+        testRecorderService.cancelRecording()
+
         testAudioPlayer?.stop()
         testAudioPlayer = nil
 
@@ -249,48 +228,6 @@ struct AudioSettingsView: View {
             testRecordingURL = nil
         }
     }
-
-    private func startLevelMonitoring() {
-        levelTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            updateAudioLevel()
-        }
-    }
-
-    private func stopLevelMonitoring() {
-        levelTimer?.invalidate()
-        levelTimer = nil
-    }
-
-    private func updateAudioLevel() {
-        testRecorder?.updateMeters()
-        let level = testRecorder?.averagePower(forChannel: 0) ?? -160
-
-        // Convert dB to linear scale (0-1)
-        let minDb: Float = -60
-        let normalizedLevel = max(0, (level - minDb) / -minDb)
-        testAudioLevel = normalizedLevel
-    }
-
-    private func setInputDevice(_ deviceID: AudioDeviceID) {
-        var propertyAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        var mutableDeviceID = deviceID
-        let dataSize = UInt32(MemoryLayout<AudioDeviceID>.size)
-
-        AudioObjectSetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &propertyAddress,
-            0,
-            nil,
-            dataSize,
-            &mutableDeviceID
-        )
-    }
-
 }
 
 // MARK: - Radio Button

@@ -19,10 +19,37 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
     private var strictLanguageHints = false
     private var audioConfig: RealtimeAudioConfig = .defaultPCM16kMono
     private var translationConfig: RealtimeTranslationConfig?
+    private var endpointDetectionEnabled = false
+    private var maxEndpointDelayMs: Int?
+    private let finalizeStateLock = NSLock()
+    private var awaitingFinalizeResponse = false
+    private var didReceiveFinishedSignal = false
+    private var lastRealtimeTokenAt: Date?
 
-    var onTokensReceived: (([RealtimeToken]) -> Void)?
-    var onError: ((Error) -> Void)?
-    var onConnectionStatusChanged: ((RealtimeConnectionStatus) -> Void)?
+    private var _onTokensReceived: (([RealtimeToken]) -> Void)?
+    private var _onError: ((Error) -> Void)?
+    private var _onConnectionStatusChanged: ((RealtimeConnectionStatus) -> Void)?
+    private var _onSegmentBoundary: ((RealtimeSegmentBoundary) -> Void)?
+
+    var onTokensReceived: (([RealtimeToken]) -> Void)? {
+        get { finalizeStateLock.lock(); defer { finalizeStateLock.unlock() }; return _onTokensReceived }
+        set { finalizeStateLock.lock(); defer { finalizeStateLock.unlock() }; _onTokensReceived = newValue }
+    }
+
+    var onError: ((Error) -> Void)? {
+        get { finalizeStateLock.lock(); defer { finalizeStateLock.unlock() }; return _onError }
+        set { finalizeStateLock.lock(); defer { finalizeStateLock.unlock() }; _onError = newValue }
+    }
+
+    var onConnectionStatusChanged: ((RealtimeConnectionStatus) -> Void)? {
+        get { finalizeStateLock.lock(); defer { finalizeStateLock.unlock() }; return _onConnectionStatusChanged }
+        set { finalizeStateLock.lock(); defer { finalizeStateLock.unlock() }; _onConnectionStatusChanged = newValue }
+    }
+
+    var onSegmentBoundary: ((RealtimeSegmentBoundary) -> Void)? {
+        get { finalizeStateLock.lock(); defer { finalizeStateLock.unlock() }; return _onSegmentBoundary }
+        set { finalizeStateLock.lock(); defer { finalizeStateLock.unlock() }; _onSegmentBoundary = newValue }
+    }
 
     // MARK: - Connect
 
@@ -31,13 +58,17 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
         languageHints: [String] = [],
         strictLanguageHints: Bool = false,
         audioConfig: RealtimeAudioConfig = .defaultPCM16kMono,
-        translationConfig: RealtimeTranslationConfig? = nil
+        translationConfig: RealtimeTranslationConfig? = nil,
+        enableEndpointDetection: Bool = false,
+        maxEndpointDelayMs: Int? = nil
     ) async throws {
         self.apiKey = apiKey
         self.languageHints = languageHints
         self.strictLanguageHints = strictLanguageHints
         self.audioConfig = audioConfig
         self.translationConfig = translationConfig
+        endpointDetectionEnabled = enableEndpointDetection
+        self.maxEndpointDelayMs = maxEndpointDelayMs
         reconnectAttempt = 0
         try await connectWebSocket()
     }
@@ -90,6 +121,14 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
             config["translation"] = translationPayload
         }
 
+        if endpointDetectionEnabled {
+            config["enable_endpoint_detection"] = true
+        }
+
+        if let maxEndpointDelayMs {
+            config["max_endpoint_delay_ms"] = max(0, maxEndpointDelayMs)
+        }
+
         let configData = try JSONSerialization.data(withJSONObject: config)
         let configString = String(data: configData, encoding: .utf8) ?? "{}"
 
@@ -135,18 +174,55 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
 
     // MARK: - Finalize
 
-    func finalize() async {
-        guard isConnected, let task = webSocketTask else { return }
+    func finalize() async -> Bool {
+        guard isConnected, let task = webSocketTask else { return false }
 
-        // Soniox requires an empty frame to signal end of audio and flush final tokens
+        setFinalizeState(awaiting: true, finished: false)
+
         do {
+            let finalizePayloadData = try JSONSerialization.data(withJSONObject: ["type": "finalize"])
+            if let finalizePayload = String(data: finalizePayloadData, encoding: .utf8) {
+                try await task.send(.string(finalizePayload))
+                Log.transcription.info("Soniox RT: Finalize control message sent")
+                try? await Task.sleep(for: .milliseconds(350))
+            }
+
+            // Empty frame ends the stream and flushes pending final tokens.
             try await task.send(.data(Data()))
             Log.transcription.info("Soniox RT: Empty frame sent (finalize)")
 
-            // Wait for server to send back final tokens and finished signal
-            try? await Task.sleep(for: .seconds(3))
+            // Wait for explicit finished signal and a short quiet window for final tokens.
+            let timeoutSeconds = 5.0
+            let quietWindowSeconds = 0.35
+            let deadline = Date().addingTimeInterval(timeoutSeconds)
+
+            while Date() < deadline {
+                let snapshot = readFinalizeState()
+                let hasQuietWindow: Bool = {
+                    guard let lastTokenAt = snapshot.lastTokenAt else { return true }
+                    return Date().timeIntervalSince(lastTokenAt) >= quietWindowSeconds
+                }()
+
+                if snapshot.finished && hasQuietWindow {
+                    setFinalizeState(awaiting: false, finished: false)
+                    return true
+                }
+
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+
+            let timedOutSnapshot = readFinalizeState()
+            setFinalizeState(awaiting: false, finished: false)
+            if !timedOutSnapshot.finished {
+                Log.transcription.warning("Soniox RT: Finalize timeout — finished signal was not received")
+            } else {
+                Log.transcription.warning("Soniox RT: Finalize timeout — finished received but quiet window not reached")
+            }
+            return timedOutSnapshot.finished
         } catch {
             Log.transcription.error("Soniox RT: Finalize error - \(error.localizedDescription)")
+            setFinalizeState(awaiting: false, finished: false)
+            return false
         }
     }
 
@@ -225,31 +301,47 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
                 return
             }
 
+            if let apiTokens = response.tokens, !apiTokens.isEmpty {
+                var bufferedTokens: [RealtimeToken] = []
+                for token in apiTokens {
+                    guard !token.text.isEmpty else { continue }
+
+                    if let boundary = segmentBoundary(from: token.text) {
+                        // Flush buffered tokens before emitting boundary to preserve ordering
+                        if !bufferedTokens.isEmpty {
+                            markTokenArrival()
+                            onTokensReceived?(bufferedTokens)
+                            bufferedTokens.removeAll()
+                        }
+                        onSegmentBoundary?(boundary)
+                        continue
+                    }
+
+                    bufferedTokens.append(
+                        RealtimeToken(
+                            text: token.text,
+                            isFinal: token.isFinal,
+                            speaker: token.speaker,
+                            startMs: token.startMs ?? 0,
+                            endMs: token.endMs ?? 0,
+                            language: token.language,
+                            sourceLanguage: token.sourceLanguage,
+                            translationStatus: token.translationStatus
+                        )
+                    )
+                }
+
+                if !bufferedTokens.isEmpty {
+                    markTokenArrival()
+                    onTokensReceived?(bufferedTokens)
+                }
+            }
+
             if response.finished == true {
+                markFinishedSignalReceived()
                 Log.transcription.info("Soniox RT: Received finished signal")
-                return
+                onSegmentBoundary?(.endpoint)
             }
-
-            guard let apiTokens = response.tokens, !apiTokens.isEmpty else { return }
-
-            Log.transcription.info(
-                "Soniox RT: Received \(apiTokens.count) tokens, first: '\(apiTokens.first?.text ?? "")', isFinal=\(apiTokens.first?.isFinal ?? false)"
-            )
-
-            let tokens = apiTokens.map { token in
-                RealtimeToken(
-                    text: token.text,
-                    isFinal: token.isFinal,
-                    speaker: token.speaker,
-                    startMs: token.startMs ?? 0,
-                    endMs: token.endMs ?? 0,
-                    language: token.language,
-                    sourceLanguage: token.sourceLanguage,
-                    translationStatus: token.translationStatus
-                )
-            }
-
-            onTokensReceived?(tokens)
         } catch {
             Log.transcription.error("Soniox RT: Parse error - \(error.localizedDescription), text: \(text.prefix(200))")
         }
@@ -321,6 +413,51 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
                 "target_language": targetLanguage
             ]
         }
+    }
+
+    private func segmentBoundary(from rawTokenText: String) -> RealtimeSegmentBoundary? {
+        let normalized = rawTokenText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalized {
+        case "<end>":
+            return .endpoint
+        case "<fin>":
+            return .finalize
+        default:
+            return nil
+        }
+    }
+
+    private func setFinalizeState(awaiting: Bool, finished: Bool) {
+        finalizeStateLock.lock()
+        awaitingFinalizeResponse = awaiting
+        didReceiveFinishedSignal = finished
+        if !awaiting {
+            lastRealtimeTokenAt = nil
+        }
+        finalizeStateLock.unlock()
+    }
+
+    private func markTokenArrival() {
+        finalizeStateLock.lock()
+        if awaitingFinalizeResponse {
+            lastRealtimeTokenAt = Date()
+        }
+        finalizeStateLock.unlock()
+    }
+
+    private func markFinishedSignalReceived() {
+        finalizeStateLock.lock()
+        if awaitingFinalizeResponse {
+            didReceiveFinishedSignal = true
+        }
+        finalizeStateLock.unlock()
+    }
+
+    private func readFinalizeState() -> (finished: Bool, lastTokenAt: Date?) {
+        finalizeStateLock.lock()
+        let snapshot = (finished: didReceiveFinishedSignal, lastTokenAt: lastRealtimeTokenAt)
+        finalizeStateLock.unlock()
+        return snapshot
     }
 }
 

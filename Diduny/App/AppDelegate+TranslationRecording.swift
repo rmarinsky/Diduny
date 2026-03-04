@@ -6,22 +6,58 @@ import Foundation
 actor RealtimeTranslationAccumulator {
     private var finalOriginalText: String = ""
     private var finalTranslatedText: String = ""
+    private var pendingSegmentBoundary = false
+    private var lastFinalEndMs: Int?
 
     func process(tokens: [RealtimeToken]) {
         let finalTokens = tokens.filter(\.isFinal)
         guard !finalTokens.isEmpty else { return }
+        let pauseBoundaryThresholdMs = SettingsStorage.shared.pauseParagraphThresholdMs
 
         for token in finalTokens {
+            let hasPauseBoundary: Bool = {
+                guard let previousEndMs = lastFinalEndMs,
+                      previousEndMs > 0,
+                      token.startMs > 0
+                else {
+                    return false
+                }
+
+                return token.startMs - previousEndMs >= pauseBoundaryThresholdMs
+            }()
+
+            let applyBoundary: (inout String) -> Void = { text in
+                if (self.pendingSegmentBoundary || hasPauseBoundary), !text.isEmpty, !text.hasSuffix("\n") {
+                    text += "\n"
+                }
+            }
+
             let status = token.translationStatus?.lowercased()
             switch status {
             case "translation":
+                applyBoundary(&finalTranslatedText)
+                pendingSegmentBoundary = false
                 finalTranslatedText += token.text
             case "transcription", "source", "original", "none", nil:
+                applyBoundary(&finalOriginalText)
+                pendingSegmentBoundary = false
                 finalOriginalText += token.text
             default:
+                applyBoundary(&finalOriginalText)
+                pendingSegmentBoundary = false
                 finalOriginalText += token.text
             }
+
+            if token.endMs > 0 {
+                lastFinalEndMs = token.endMs
+            } else if token.startMs > 0 {
+                lastFinalEndMs = token.startMs
+            }
         }
+    }
+
+    func markSegmentBoundary() {
+        pendingSegmentBoundary = true
     }
 
     func bestText() -> String {
@@ -39,7 +75,8 @@ actor RealtimeTranslationAccumulator {
 extension AppDelegate {
     @objc func toggleTranslationRecording() {
         Log.app.info("toggleTranslationRecording called, current state: \(self.appState.translationRecordingState)")
-        Task {
+        translationPipelineTask?.cancel()
+        translationPipelineTask = Task {
             await self.performToggleTranslationRecording()
         }
     }
@@ -52,14 +89,23 @@ extension AppDelegate {
             await stopTranslationRecording()
         case .processing:
             Log.app.info("Translation state is processing, canceling...")
-            await cancelTranslationRecording()
+            await cancelTranslationRecording(cancelTask: false)
         default:
             Log.app.info("Translation state is \(self.appState.translationRecordingState), ignoring toggle")
         }
     }
 
-    func cancelTranslationRecording() async {
+    func cancelTranslationRecording(cancelTask: Bool = true) async {
         Log.app.info("cancelTranslationRecording: BEGIN")
+
+        // Cancel any in-flight pipeline task (skip when called from within the task itself)
+        if cancelTask {
+            translationPipelineTask?.cancel()
+        }
+        translationPipelineTask = nil
+
+        let recordingStartTime = appState.translationRecordingStartTime
+        let stopTime = Date()
 
         // Stop audio level piping
         audioLevelCancellable?.cancel()
@@ -71,8 +117,24 @@ extension AppDelegate {
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
 
-        // Cancel audio recorder
-        audioRecorder.cancelRecording()
+        if SettingsStorage.shared.escapeCancelSaveAudio, audioRecorder.isRecording {
+            do {
+                let audioData = try await audioRecorder.stopRecording()
+                let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+                RecordingsLibraryStorage.shared.saveRecording(
+                    audioData: audioData,
+                    type: .translation,
+                    duration: duration
+                )
+                Log.app.info("cancelTranslationRecording: audio saved after cancel")
+            } catch {
+                Log.app.warning("cancelTranslationRecording: failed to save audio on cancel - \(error.localizedDescription)")
+                audioRecorder.cancelRecording()
+            }
+        } else {
+            // Cancel audio recorder without persisting
+            audioRecorder.cancelRecording()
+        }
 
         // End App Nap prevention
         if let token = translationActivityToken {
@@ -209,6 +271,16 @@ extension AppDelegate {
             Log.app.info("startTranslationRecording: Recording started successfully")
 
             // Only set recording state AFTER audio engine is confirmed working
+            guard appState.translationRecordingState == .processing else {
+                Log.app.warning("startTranslationRecording: state changed during init (now \(self.appState.translationRecordingState)), aborting")
+                audioRecorder.cancelRecording()
+                _ = await stopTranslationRealtimeSession(finalize: false)
+                if let token = translationActivityToken {
+                    ProcessInfo.processInfo.endActivity(token)
+                    translationActivityToken = nil
+                }
+                return
+            }
             await MainActor.run {
                 appState.translationRecordingState = .recording
                 appState.translationRecordingStartTime = Date()
@@ -302,103 +374,175 @@ extension AppDelegate {
 
         // Capture audio data first so it's available in both success and error paths
         var capturedAudioData: Data?
+        let recordingId = UUID()
 
-        do {
-            Log.app.info("stopTranslationRecording: Stopping audio recorder")
-            let audioData = try await audioRecorder.stopRecording()
-            capturedAudioData = audioData
-            Log.app.info("stopTranslationRecording: Got audio data, size = \(audioData.count) bytes")
+        await RecordingDebugScope.$recordingID.withValue(recordingId) {
+            RecordingDebugLog.app("Translation stop pipeline started", source: "Translation")
+            do {
+                Log.app.info("stopTranslationRecording: Stopping audio recorder")
+                let audioData = try await audioRecorder.stopRecording()
+                capturedAudioData = audioData
+                Log.app.info("stopTranslationRecording: Got audio data, size = \(audioData.count) bytes")
+                RecordingDebugLog.app("Audio captured, bytes=\(audioData.count)", source: "Translation")
 
-            // If websocket mode produced translated text, use it.
-            let realtimeText = await stopTranslationRealtimeSession(finalize: true)
+                // If websocket mode produced translated text, use it.
+                let realtimeResult = await stopTranslationRealtimeSession(finalize: true)
+                RecordingDebugLog.decision(
+                    "Realtime result: chars=\(realtimeResult.text.count), finalized=\(realtimeResult.didReceiveFinalization)",
+                    source: "Translation"
+                )
+                let recordingDurationSeconds = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
 
-            let text: String
-            if !realtimeText.isEmpty {
-                text = realtimeText
-                Log.app.info("stopTranslationRecording: Using realtime translation (\(realtimeText.count) chars)")
-            } else {
-                // Fallback: async cloud translation
-                var service: TranscriptionServiceProtocol = transcriptionService
-                guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                    Log.app.error("stopTranslationRecording: No API key!")
-                    throw TranscriptionError.noAPIKey
+                let text: String
+                let useRealtimeWithoutFinalize = shouldUseRealtimeFallbackText(
+                    realtimeResult.text,
+                    didReceiveFinalization: realtimeResult.didReceiveFinalization,
+                    recordingDurationSeconds: recordingDurationSeconds
+                )
+
+                if useRealtimeWithoutFinalize {
+                    text = realtimeResult.text
+                    if realtimeResult.didReceiveFinalization {
+                        Log.app.info("stopTranslationRecording: Using realtime translation (\(realtimeResult.text.count) chars)")
+                        RecordingDebugLog.decision("Using realtime translation result (finalized)", source: "Translation")
+                    } else {
+                        Log.app.warning(
+                            "stopTranslationRecording: Finalize delayed, using realtime fallback text (\(realtimeResult.text.count) chars)"
+                        )
+                        RecordingDebugLog.decision(
+                            "Using realtime fallback text despite incomplete finalize (policy matched)",
+                            source: "Translation"
+                        )
+                    }
+                } else {
+                    // Fallback: async cloud translation
+                    var service: TranscriptionServiceProtocol = transcriptionService
+                    guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                        Log.app.error("stopTranslationRecording: No API key!")
+                        throw TranscriptionError.noAPIKey
+                    }
+                    service.apiKey = apiKey
+
+                    if !realtimeResult.didReceiveFinalization {
+                        Log.app.warning("stopTranslationRecording: Realtime finalize was incomplete, forcing async translation fallback")
+                        RecordingDebugLog.decision("Fallback to async: realtime finalize incomplete", source: "Translation")
+                    } else if realtimeResult.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Log.app.info("stopTranslationRecording: Realtime translation empty, using async fallback")
+                        RecordingDebugLog.decision("Fallback to async: realtime result empty", source: "Translation")
+                    } else {
+                        Log.app.warning(
+                            "stopTranslationRecording: Realtime finalized text too short (\(realtimeResult.text.count) chars) for \(String(format: "%.2f", recordingDurationSeconds))s recording, using async fallback"
+                        )
+                        RecordingDebugLog.decision("Fallback to async: realtime finalized text too short", source: "Translation")
+                    }
+
+                    do {
+                        text = try await service.translateAndTranscribe(audioData: audioData)
+                    } catch {
+                        if !realtimeResult.text.isEmpty {
+                            Log.app.warning(
+                                "stopTranslationRecording: Async fallback failed, using partial realtime text (\(realtimeResult.text.count) chars)"
+                            )
+                            RecordingDebugLog.decision(
+                                "Async fallback failed, using partial realtime text",
+                                source: "Translation"
+                            )
+                            text = realtimeResult.text
+                        } else {
+                            throw error
+                        }
+                    }
                 }
-                service.apiKey = apiKey
+                Log.app.info("stopTranslationRecording: Translation received (\(text.count) chars)")
+                RecordingDebugLog.app("Text ready, chars=\(text.count)", source: "Translation")
 
-                Log.app.info("stopTranslationRecording: Calling async Soniox translation service (fallback)")
-                text = try await service.translateAndTranscribe(audioData: audioData)
-            }
-            Log.app.info("stopTranslationRecording: Translation received: \(text.prefix(50))...")
+                clipboardService.copy(text: text)
+                Log.app.info("stopTranslationRecording: Text copied to clipboard")
 
-            clipboardService.copy(text: text)
-            Log.app.info("stopTranslationRecording: Text copied to clipboard")
-
-            if SettingsStorage.shared.autoPaste {
-                Log.app.info("stopTranslationRecording: Auto-pasting")
-                do {
-                    try await clipboardService.paste()
-                } catch ClipboardError.accessibilityNotGranted {
-                    Log.app.warning("stopTranslationRecording: Accessibility permission needed")
-                    PermissionManager.shared.showPermissionAlert(for: .accessibility)
-                } catch {
-                    Log.app.error("stopTranslationRecording: Paste failed - \(error.localizedDescription)")
+                if SettingsStorage.shared.autoPaste {
+                    Log.app.info("stopTranslationRecording: Auto-pasting")
+                    do {
+                        try await clipboardService.paste()
+                    } catch ClipboardError.accessibilityNotGranted {
+                        Log.app.warning("stopTranslationRecording: Accessibility permission needed")
+                        PermissionManager.shared.showPermissionAlert(for: .accessibility)
+                    } catch {
+                        Log.app.error("stopTranslationRecording: Paste failed - \(error.localizedDescription)")
+                    }
                 }
-            }
 
-            // Update state to success IMMEDIATELY after text is available
-            // This ensures the UI shows checkmark right when user can work with the text
-            await MainActor.run {
-                appState.lastTranscription = text
-                appState.isEmptyTranscription = false
-                appState.translationRecordingState = .success
-                appState.translationRecordingStartTime = nil
-                handleTranslationStateChange(.success)
-            }
-            Log.app.info("stopTranslationRecording: SUCCESS")
+                // Update state to success IMMEDIATELY after text is available
+                // This ensures the UI shows checkmark right when user can work with the text
+                guard appState.translationRecordingState == .processing else {
+                    Log.app.warning("stopTranslationRecording: state changed during processing (now \(self.appState.translationRecordingState)), dropping result")
+                    return
+                }
+                await MainActor.run {
+                    appState.lastTranscription = text
+                    appState.isEmptyTranscription = false
+                    appState.translationRecordingState = .success
+                    appState.translationRecordingStartTime = nil
+                    handleTranslationStateChange(.success)
+                }
+                Log.app.info("stopTranslationRecording: SUCCESS")
 
-            // Save to recordings library
-            let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
-            RecordingsLibraryStorage.shared.saveRecording(
-                audioData: audioData,
-                type: .translation,
-                duration: duration,
-                transcriptionText: text
-            )
-
-            // Optional operations run after state change (non-blocking for UI)
-            if SettingsStorage.shared.playSoundOnCompletion {
-                Log.app.info("stopTranslationRecording: Playing sound")
-                NSSound(named: .init("Funk"))?.play()
-            }
-
-            // Clear recovery state on success
-            RecoveryStateManager.shared.clearState()
-
-        } catch {
-            _ = await stopTranslationRealtimeSession(finalize: false)
-            Log.app.error("stopTranslationRecording: ERROR - \(error.localizedDescription)")
-            let isEmptyTranscription: Bool = {
-                guard case .emptyTranscription = error as? TranscriptionError else { return false }
-                return true
-            }()
-
-            // Save recording without transcription so user can process later
-            if let audioData = capturedAudioData {
+                // Save to recordings library
                 let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                 RecordingsLibraryStorage.shared.saveRecording(
+                    id: recordingId,
                     audioData: audioData,
                     type: .translation,
-                    duration: duration
+                    duration: duration,
+                    transcriptionText: text
                 )
-                RecoveryStateManager.shared.clearState()
-            }
+                RecordingDebugLog.app("Recording saved to library", source: "Translation")
 
-            await MainActor.run {
-                appState.errorMessage = error.localizedDescription
-                appState.isEmptyTranscription = isEmptyTranscription
-                appState.translationRecordingState = .error
-                appState.translationRecordingStartTime = nil
-                handleTranslationStateChange(.error)
+                // Optional operations run after state change (non-blocking for UI)
+                if SettingsStorage.shared.playSoundOnCompletion {
+                    Log.app.info("stopTranslationRecording: Playing sound")
+                    NSSound(named: .init("Funk"))?.play()
+                }
+
+                // Clear recovery state on success
+                RecoveryStateManager.shared.clearState()
+
+            } catch is CancellationError {
+                _ = await stopTranslationRealtimeSession(finalize: false)
+                Log.app.info("stopTranslationRecording: Cancelled")
+                return
+            } catch {
+                _ = await stopTranslationRealtimeSession(finalize: false)
+                Log.app.error("stopTranslationRecording: ERROR - \(error.localizedDescription)")
+                RecordingDebugLog.app("Stop pipeline failed: \(error.localizedDescription)", source: "Translation")
+                let isEmptyTranscription: Bool = {
+                    guard case .emptyTranscription = error as? TranscriptionError else { return false }
+                    return true
+                }()
+
+                // Save recording without transcription so user can process later
+                if let audioData = capturedAudioData {
+                    let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+                    RecordingsLibraryStorage.shared.saveRecording(
+                        id: recordingId,
+                        audioData: audioData,
+                        type: .translation,
+                        duration: duration
+                    )
+                    RecoveryStateManager.shared.clearState()
+                    RecordingDebugLog.app("Saved audio-only after failure", source: "Translation")
+                }
+
+                guard appState.translationRecordingState == .processing else {
+                    Log.app.warning("stopTranslationRecording: state changed during processing (now \(self.appState.translationRecordingState)), dropping error")
+                    return
+                }
+                await MainActor.run {
+                    appState.errorMessage = error.localizedDescription
+                    appState.isEmptyTranscription = isEmptyTranscription
+                    appState.translationRecordingState = .error
+                    appState.translationRecordingStartTime = nil
+                    handleTranslationStateChange(.error)
+                }
             }
         }
 
@@ -441,6 +585,13 @@ extension AppDelegate {
             Log.transcription.info("Translation RT status: \(String(describing: status))")
         }
 
+        rtService.onSegmentBoundary = { [weak accumulator] _ in
+            guard let accumulator else { return }
+            Task {
+                await accumulator.markSegmentBoundary()
+            }
+        }
+
         rtService.onError = { error in
             Log.transcription.error("Translation RT error: \(error.localizedDescription)")
         }
@@ -449,11 +600,13 @@ extension AppDelegate {
             try await rtService.connect(
                 apiKey: apiKey,
                 languageHints: [pair.languageA, pair.languageB],
-                strictLanguageHints: SettingsStorage.shared.sonioxLanguageHintsStrict,
+                strictLanguageHints: true,
                 audioConfig: .defaultPCM16kMono,
                 translationConfig: RealtimeTranslationConfig(
                     mode: .twoWay(languageA: pair.languageA, languageB: pair.languageB)
-                )
+                ),
+                enableEndpointDetection: true,
+                maxEndpointDelayMs: SettingsStorage.shared.sonioxEndpointDelayMs
             )
 
             translationRealtimeSessionEnabled = true
@@ -468,11 +621,12 @@ extension AppDelegate {
         }
     }
 
-    private func stopTranslationRealtimeSession(finalize: Bool) async -> String {
+    private func stopTranslationRealtimeSession(finalize: Bool) async -> (text: String, didReceiveFinalization: Bool) {
         audioRecorder.onRealtimeAudioData = nil
 
         let accumulator = translationRealtimeAccumulator
         let wasEnabled = translationRealtimeSessionEnabled
+        var didReceiveFinalization = false
 
         defer {
             translationRealtimeSessionEnabled = false
@@ -480,19 +634,20 @@ extension AppDelegate {
             realtimeTranscriptionService.onTokensReceived = nil
             realtimeTranscriptionService.onError = nil
             realtimeTranscriptionService.onConnectionStatusChanged = nil
+            realtimeTranscriptionService.onSegmentBoundary = nil
         }
 
         guard wasEnabled else {
-            return ""
+            return ("", false)
         }
 
         if finalize {
-            await realtimeTranscriptionService.finalize()
+            didReceiveFinalization = await realtimeTranscriptionService.finalize()
         }
         await realtimeTranscriptionService.disconnect()
 
         let text = await accumulator?.bestText() ?? ""
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (text.trimmingCharacters(in: .whitespacesAndNewlines), didReceiveFinalization)
     }
 
     private func translationLanguagePair(targetLanguage: String = "uk") -> (languageA: String, languageB: String) {
@@ -512,10 +667,10 @@ extension AppDelegate {
             return
         }
 
-        // On first escape: show confirmation notification
+        // On first shortcut press: show confirmation notification
         escapeService.onFirstEscape = { [weak self] in
             NotchManager.shared.showInfo(
-                message: "Press ESC again to cancel",
+                message: SettingsStorage.shared.escapeCancelShortcut.repeatHint,
                 duration: 1.5
             )
 
@@ -528,14 +683,59 @@ extension AppDelegate {
             }
         }
 
-        // On second escape (confirmed cancel): cancel recording
+        // On second shortcut press (confirmed cancel): cancel recording
         escapeService.onCancel = { [weak self] in
             Task { @MainActor in
+                let shouldSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
                 await self?.cancelTranslationRecording()
-                NotchManager.shared.showInfo(message: "Recording cancelled")
+                let message = shouldSaveAudio ? "Recording cancelled and saved" : "Recording cancelled"
+                NotchManager.shared.showInfo(message: message)
             }
         }
 
         escapeService.activate()
+    }
+
+    private func shouldUseRealtimeFallbackText(
+        _ text: String,
+        didReceiveFinalization: Bool,
+        recordingDurationSeconds: TimeInterval
+    ) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let wordCount = trimmed.split { $0.isWhitespace || $0.isNewline }.count
+        let charCount = trimmed.count
+        let hasSentenceEnding = trimmed.hasSuffix(".")
+            || trimmed.hasSuffix("!")
+            || trimmed.hasSuffix("?")
+            || trimmed.contains("\n")
+
+        if didReceiveFinalization {
+            // Same guard as voice mode: avoid accepting tiny finalized websocket fragments.
+            if recordingDurationSeconds <= 1.2 {
+                return true
+            }
+            if wordCount >= 2 {
+                return true
+            }
+            if charCount >= 12 {
+                return true
+            }
+            return false
+        }
+
+        // Slightly softer thresholds for translation output.
+        if hasSentenceEnding, wordCount >= 3 {
+            return true
+        }
+        if wordCount >= 6 {
+            return true
+        }
+        if charCount >= 36 {
+            return true
+        }
+
+        return false
     }
 }

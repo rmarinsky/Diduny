@@ -1,3 +1,4 @@
+import AppKit
 import KeyboardShortcuts
 import LaunchAtLogin
 import SwiftUI
@@ -9,12 +10,16 @@ struct GeneralSettingsView: View {
     @State private var pushToTalkKey = SettingsStorage.shared.pushToTalkKey
     @State private var translationPushToTalkKey = SettingsStorage.shared.translationPushToTalkKey
     @State private var handsFreeModeEnabled = SettingsStorage.shared.handsFreeModeEnabled
-    @State private var ambientListeningEnabled = SettingsStorage.shared.ambientListeningEnabled
-    @State private var wakeWord = SettingsStorage.shared.wakeWord
     @State private var escapeCancelEnabled = SettingsStorage.shared.escapeCancelEnabled
+    @State private var escapeCancelShortcut = SettingsStorage.shared.escapeCancelShortcut
+    @State private var escapeCancelSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
+    @State private var isRecordingEscapeCancelShortcut = false
+    @State private var escapeCancelShortcutMonitor: Any?
     @State private var textCleanupEnabled = SettingsStorage.shared.textCleanupEnabled
     @State private var fillerWords = SettingsStorage.shared.fillerWords
     @State private var newFillerWord = ""
+    @State private var fillerWordFeedback = ""
+    @State private var fillerWordFeedbackIsError = false
 
     var body: some View {
         Form {
@@ -76,13 +81,42 @@ struct GeneralSettingsView: View {
                         SettingsStorage.shared.playSoundOnCompletion = newValue
                     }
 
-                Toggle("Double-press Escape to cancel recording", isOn: $escapeCancelEnabled)
+                Toggle("Enable cancel shortcut during recording", isOn: $escapeCancelEnabled)
                     .onChange(of: escapeCancelEnabled) { _, newValue in
                         SettingsStorage.shared.escapeCancelEnabled = newValue
                         if !newValue {
                             EscapeCancelService.shared.deactivate()
+                            stopEscapeCancelShortcutCapture()
                         }
                     }
+
+                if escapeCancelEnabled {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) {
+                            Text("Cancel shortcut:")
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Button(isRecordingEscapeCancelShortcut ? "Press shortcut..." : escapeCancelShortcut.displayName) {
+                                if isRecordingEscapeCancelShortcut {
+                                    stopEscapeCancelShortcutCapture()
+                                } else {
+                                    startEscapeCancelShortcutCapture()
+                                }
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button("Reset") {
+                                resetEscapeCancelShortcutToDefault()
+                            }
+                            .disabled(isRecordingEscapeCancelShortcut || escapeCancelShortcut == .defaultShortcut)
+                        }
+
+                        Toggle("Save audio when cancelled", isOn: $escapeCancelSaveAudio)
+                            .onChange(of: escapeCancelSaveAudio) { _, newValue in
+                                SettingsStorage.shared.escapeCancelSaveAudio = newValue
+                            }
+                    }
+                }
 
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, newValue in
@@ -99,12 +133,28 @@ struct GeneralSettingsView: View {
                         SettingsStorage.shared.textCleanupEnabled = newValue
                     }
 
-                HStack(spacing: 8) {
-                    TextField("Add filler word (e.g. е-е, em, ем)", text: $newFillerWord)
-                    Button("Add") {
-                        addFillerWordFromInput()
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        TextField("Add filler words (comma or new line separated)", text: $newFillerWord)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit {
+                                addFillerWordsFromInput()
+                            }
+                            .onChange(of: newFillerWord) { _, _ in
+                                fillerWordFeedback = ""
+                            }
+
+                        Button("Add") {
+                            addFillerWordsFromInput()
+                        }
+                        .disabled(fillerWordCandidates.isEmpty)
                     }
-                    .disabled(trimmedFillerWordInput.isEmpty)
+
+                    if !fillerWordFeedback.isEmpty {
+                        Text(fillerWordFeedback)
+                            .font(.caption)
+                            .foregroundColor(fillerWordFeedbackIsError ? .red : .secondary)
+                    }
                 }
 
                 if fillerWords.isEmpty {
@@ -112,50 +162,31 @@ struct GeneralSettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 } else {
-                    ForEach(fillerWords, id: \.self) { word in
-                        HStack {
-                            Text(word)
-                            Spacer()
-                            Button("Remove") {
-                                SettingsStorage.shared.removeFillerWord(word)
-                                reloadTextCleanupSettings()
-                            }
-                            .buttonStyle(.borderless)
+                    WrappingChipsLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                        ForEach(fillerWords, id: \.self) { word in
+                            fillerWordChip(for: word)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Button("Reset Default Words") {
-                    SettingsStorage.shared.resetFillerWordsToDefault()
-                    reloadTextCleanupSettings()
+                HStack(spacing: 8) {
+                    Button("Add English Variations") {
+                        addEnglishPresetWords()
+                    }
+                    .disabled(!canAddEnglishPreset)
+
+                    Button("Reset Default Words") {
+                        SettingsStorage.shared.resetFillerWordsToDefault()
+                        reloadTextCleanupSettings()
+                        fillerWordFeedback = "Default list restored."
+                        fillerWordFeedbackIsError = false
+                    }
                 }
             } header: {
                 Text("Text Cleanup")
             } footer: {
-                Text("Words are removed before copying to clipboard and before auto-paste.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Section {
-                Toggle("Enable ambient listening", isOn: $ambientListeningEnabled)
-                    .onChange(of: ambientListeningEnabled) { _, newValue in
-                        SettingsStorage.shared.ambientListeningEnabled = newValue
-                        NotificationCenter.default.post(name: .ambientListeningSettingsChanged, object: nil)
-                    }
-
-                if ambientListeningEnabled {
-                    TextField("Wake word:", text: $wakeWord)
-                        .textFieldStyle(.roundedBorder)
-                        .onChange(of: wakeWord) { _, newValue in
-                            SettingsStorage.shared.wakeWord = newValue
-                            NotificationCenter.default.post(name: .ambientListeningSettingsChanged, object: nil)
-                        }
-                }
-            } header: {
-                Text("Ambient Listening")
-            } footer: {
-                Text("Requires a Whisper Tiny model. Continuously listens for the wake word, then starts recording.")
+                Text("Words are removed before copying to clipboard and before auto-paste. Use commas or new lines to add multiple words at once.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -170,7 +201,13 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear(perform: reloadTextCleanupSettings)
+        .onAppear {
+            reloadBehaviorSettings()
+            reloadTextCleanupSettings()
+        }
+        .onDisappear {
+            stopEscapeCancelShortcutCapture()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .textCleanupSettingsChanged)) { _ in
             reloadTextCleanupSettings()
         }
@@ -184,15 +221,85 @@ struct GeneralSettingsView: View {
         }
     }
 
-    private var trimmedFillerWordInput: String {
-        newFillerWord.trimmingCharacters(in: .whitespacesAndNewlines)
+    @ViewBuilder
+    private func fillerWordChip(for word: String) -> some View {
+        HStack(spacing: 6) {
+            Text(word)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+
+            Button {
+                SettingsStorage.shared.removeFillerWord(word)
+                reloadTextCleanupSettings()
+                fillerWordFeedback = ""
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .padding(4)
+                    .background(Circle().fill(Color.secondary.opacity(0.16)))
+            }
+            .buttonStyle(.plain)
+            .help("Remove")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Capsule().fill(Color.accentColor.opacity(0.14)))
+        .overlay(Capsule().stroke(Color.accentColor.opacity(0.32), lineWidth: 1))
     }
 
-    private func addFillerWordFromInput() {
-        let value = trimmedFillerWordInput
-        guard SettingsStorage.shared.addFillerWord(value) else { return }
-        newFillerWord = ""
+    private var fillerWordCandidates: [String] {
+        let separators = CharacterSet(charactersIn: ",;\n")
+        return newFillerWord
+            .components(separatedBy: separators)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private var canAddEnglishPreset: Bool {
+        let existingKeys = Set(fillerWords.map(foldedFillerWordKey))
+        return SettingsStorage.shared.englishFillerWordPreset
+            .contains { !existingKeys.contains(foldedFillerWordKey($0)) }
+    }
+
+    private func foldedFillerWordKey(_ word: String) -> String {
+        word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    private func addEnglishPresetWords() {
+        let addedCount = SettingsStorage.shared.addEnglishFillerWordPreset()
         reloadTextCleanupSettings()
+
+        if addedCount > 0 {
+            fillerWordFeedback = "Added \(addedCount) English variants."
+            fillerWordFeedbackIsError = false
+        } else {
+            fillerWordFeedback = "English preset is already in the list."
+            fillerWordFeedbackIsError = false
+        }
+    }
+
+    private func addFillerWordsFromInput() {
+        let candidates = fillerWordCandidates
+        guard !candidates.isEmpty else { return }
+
+        let addedCount = SettingsStorage.shared.addFillerWords(candidates)
+        reloadTextCleanupSettings()
+
+        if addedCount == 0 {
+            fillerWordFeedback = "Nothing added: all items already exist."
+            fillerWordFeedbackIsError = true
+            return
+        }
+
+        newFillerWord = ""
+        let skippedCount = candidates.count - addedCount
+        if skippedCount > 0 {
+            fillerWordFeedback = "Added \(addedCount), skipped \(skippedCount) duplicates."
+        } else {
+            fillerWordFeedback = "Added \(addedCount) item\(addedCount == 1 ? "" : "s")."
+        }
+        fillerWordFeedbackIsError = false
     }
 
     private func reloadTextCleanupSettings() {
@@ -200,29 +307,69 @@ struct GeneralSettingsView: View {
         fillerWords = SettingsStorage.shared.fillerWords
     }
 
+    private func reloadBehaviorSettings() {
+        escapeCancelEnabled = SettingsStorage.shared.escapeCancelEnabled
+        escapeCancelShortcut = SettingsStorage.shared.escapeCancelShortcut
+        escapeCancelSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
+    }
+
+    private func startEscapeCancelShortcutCapture() {
+        stopEscapeCancelShortcutCapture()
+        isRecordingEscapeCancelShortcut = true
+
+        escapeCancelShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let shortcut = RecordingCancelShortcut.from(event: event)
+            SettingsStorage.shared.escapeCancelShortcut = shortcut
+            escapeCancelShortcut = shortcut
+            stopEscapeCancelShortcutCapture()
+            return nil
+        }
+    }
+
+    private func stopEscapeCancelShortcutCapture() {
+        isRecordingEscapeCancelShortcut = false
+        if let monitor = escapeCancelShortcutMonitor {
+            NSEvent.removeMonitor(monitor)
+            escapeCancelShortcutMonitor = nil
+        }
+    }
+
+    private func resetEscapeCancelShortcutToDefault() {
+        let shortcut = RecordingCancelShortcut.defaultShortcut
+        SettingsStorage.shared.escapeCancelShortcut = shortcut
+        escapeCancelShortcut = shortcut
+    }
+
     private var hotkeySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Recording:")
-                    .frame(width: 100, alignment: .leading)
+                Text("Transcribe Me:")
+                    .frame(width: 160, alignment: .leading)
                 KeyboardShortcuts.Recorder(for: .toggleRecording)
             }
 
             HStack {
-                Text("Translation:")
-                    .frame(width: 100, alignment: .leading)
+                Text("Translate Me:")
+                    .frame(width: 160, alignment: .leading)
                 KeyboardShortcuts.Recorder(for: .toggleTranslation)
             }
 
             HStack {
-                Text("Meeting:")
-                    .frame(width: 100, alignment: .leading)
+                Text("Translate Selected Text:")
+                    .frame(width: 160, alignment: .leading)
+                Text("Double-press ⌘C")
+                    .foregroundColor(.secondary)
+            }
+
+            HStack {
+                Text("Transcribe Meeting:")
+                    .frame(width: 160, alignment: .leading)
                 KeyboardShortcuts.Recorder(for: .toggleMeetingRecording)
             }
 
             HStack {
-                Text("Meeting tr.:")
-                    .frame(width: 100, alignment: .leading)
+                Text("Translate Meeting:")
+                    .frame(width: 160, alignment: .leading)
                 KeyboardShortcuts.Recorder(for: .toggleMeetingTranslation)
             }
         }
@@ -284,10 +431,75 @@ struct GeneralSettingsView: View {
     }
 }
 
+private struct WrappingChipsLayout: Layout {
+    let horizontalSpacing: CGFloat
+    let verticalSpacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache _: inout Void
+    ) -> CGSize {
+        arrangement(maxWidth: proposal.width ?? .greatestFiniteMagnitude, subviews: subviews).containerSize
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal _: ProposedViewSize,
+        subviews: Subviews,
+        cache _: inout Void
+    ) {
+        let arranged = arrangement(maxWidth: bounds.width, subviews: subviews)
+
+        for index in subviews.indices {
+            let origin = arranged.origins[index]
+            let size = arranged.sizes[index]
+            subviews[index].place(
+                at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+        }
+    }
+
+    private func arrangement(maxWidth: CGFloat, subviews: Subviews) -> (origins: [CGPoint], sizes: [CGSize], containerSize: CGSize) {
+        let widthLimit = max(maxWidth, 1)
+        var origins: [CGPoint] = []
+        var sizes: [CGSize] = []
+
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var rowWidth: CGFloat = 0
+        var maxRowWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+
+            if x > 0, x + size.width > widthLimit {
+                maxRowWidth = max(maxRowWidth, rowWidth)
+                x = 0
+                y += rowHeight + verticalSpacing
+                rowHeight = 0
+                rowWidth = 0
+            }
+
+            origins.append(CGPoint(x: x, y: y))
+            sizes.append(size)
+
+            x += size.width + horizontalSpacing
+            rowWidth = max(rowWidth, x - horizontalSpacing)
+            rowHeight = max(rowHeight, size.height)
+        }
+
+        maxRowWidth = max(maxRowWidth, rowWidth)
+        let totalHeight: CGFloat = subviews.isEmpty ? 0 : y + rowHeight
+        return (origins, sizes, CGSize(width: maxRowWidth, height: totalHeight))
+    }
+}
+
 extension Notification.Name {
     static let pushToTalkKeyChanged = Notification.Name("pushToTalkKeyChanged")
     static let translationPushToTalkKeyChanged = Notification.Name("translationPushToTalkKeyChanged")
-    static let ambientListeningSettingsChanged = Notification.Name("ambientListeningSettingsChanged")
 }
 
 #Preview {

@@ -19,7 +19,7 @@ struct LiveTranscriptView: View {
             footerBar
         }
         .frame(minWidth: 350, minHeight: 300)
-        .onAppear { startTimer() }
+        .onAppear { seedDurationFromRecordingStart(); startTimer() }
         .onDisappear { stopTimer() }
     }
 
@@ -188,7 +188,7 @@ struct LiveTranscriptView: View {
             Button("Copy") {
                 let text = store.finalTranscriptText
                 if !text.isEmpty {
-                    ClipboardService.shared.copy(text: text)
+                    ClipboardService.shared.copy(text: text, behavior: .raw)
                 }
             }
             .buttonStyle(.bordered)
@@ -222,6 +222,10 @@ struct LiveTranscriptView: View {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         }
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    private func seedDurationFromRecordingStart() {
+        recordingDuration = max(0, Date().timeIntervalSince(store.createdAt))
     }
 
     private func startTimer() {

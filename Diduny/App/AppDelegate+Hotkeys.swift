@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 // MARK: - Hotkey & Push to Talk
@@ -113,4 +114,5 @@ extension AppDelegate {
             translationPushToTalkService.start()
         }
     }
+
 }

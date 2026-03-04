@@ -20,7 +20,7 @@
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
-    <key>NSHumanReadableCopyright</key>
+<key>NSHumanReadableCopyright</key>
     <string>© 2024-2026 Roman Marinsky. rmarinsky.com.ua</string>
     <key>LSMinimumSystemVersion</key>
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>

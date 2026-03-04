@@ -1,8 +1,8 @@
 import AppKit
 import Foundation
 
-/// Service to handle double-escape cancellation during recording.
-/// First escape shows a confirmation notification, second escape within threshold cancels recording.
+/// Service to handle double-press cancellation shortcut during recording.
+/// First press shows a confirmation notification, second press within threshold cancels recording.
 @MainActor
 final class EscapeCancelService: ObservableObject {
     static let shared = EscapeCancelService()
@@ -14,21 +14,21 @@ final class EscapeCancelService: ObservableObject {
     private var timeoutTask: Task<Void, Never>?
     private var isActive = false
 
-    /// Called when recording should be cancelled (after double-escape confirmed)
+    /// Called when recording should be cancelled (after double-press confirmed)
     var onCancel: (() -> Void)?
 
-    /// Called on first escape to show confirmation notification
+    /// Called on first shortcut press to show confirmation notification
     var onFirstEscape: (() -> Void)?
 
     private init() {}
 
-    /// Activate escape monitoring (call when recording starts)
+    /// Activate shortcut monitoring (call when recording starts)
     func activate() {
         guard !isActive else { return }
         isActive = true
         firstPressTime = nil
 
-        // Monitor keyDown events globally for Escape key
+        // Monitor keyDown events globally.
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             Task { @MainActor in
                 self?.handleKeyDown(event)
@@ -44,10 +44,10 @@ final class EscapeCancelService: ObservableObject {
             return event
         }
 
-        Log.app.debug("Escape cancel handler activated")
+        Log.app.debug("Cancel shortcut handler activated")
     }
 
-    /// Deactivate escape monitoring (call when recording stops)
+    /// Deactivate shortcut monitoring (call when recording stops)
     func deactivate() {
         isActive = false
 
@@ -63,8 +63,10 @@ final class EscapeCancelService: ObservableObject {
         firstPressTime = nil
         timeoutTask?.cancel()
         timeoutTask = nil
+        onCancel = nil
+        onFirstEscape = nil
 
-        Log.app.debug("Escape cancel handler deactivated")
+        Log.app.debug("Cancel shortcut handler deactivated")
     }
 
     private func handleKeyDown(_ event: NSEvent) {
@@ -76,8 +78,8 @@ final class EscapeCancelService: ObservableObject {
             return
         }
 
-        // Check for Escape key (keyCode 53)
-        guard event.keyCode == 53 else { return }
+        let shortcut = SettingsStorage.shared.escapeCancelShortcut
+        guard shortcut.matches(event) else { return }
 
         let now = Date()
 
@@ -85,7 +87,7 @@ final class EscapeCancelService: ObservableObject {
            now.timeIntervalSince(firstTime) <= secondPressThreshold
         {
             // Second press within threshold - cancel recording
-            Log.app.info("Double-escape detected - cancelling recording")
+            Log.app.info("Double cancel shortcut detected - cancelling recording")
             firstPressTime = nil
             timeoutTask?.cancel()
             timeoutTask = nil
@@ -94,7 +96,7 @@ final class EscapeCancelService: ObservableObject {
         } else {
             // First press - show notification and wait
             firstPressTime = now
-            Log.app.debug("First escape press - waiting for confirmation")
+            Log.app.debug("First cancel shortcut press - waiting for confirmation")
 
             // Play subtle sound for feedback
             NSSound(named: NSSound.Name("Tink"))?.play()

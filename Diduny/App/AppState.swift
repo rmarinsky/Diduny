@@ -97,8 +97,6 @@ final class AppState {
 
     var translationRecordingStartTime: Date?
 
-    var ambientListeningActive: Bool = false
-
     var recordingDuration: TimeInterval {
         guard let startTime = recordingStartTime else { return 0 }
         return Date().timeIntervalSince(startTime)

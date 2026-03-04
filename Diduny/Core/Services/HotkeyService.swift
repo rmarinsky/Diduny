@@ -11,7 +11,7 @@ extension KeyboardShortcuts.Name {
         default: .init(.m, modifiers: [.command, .option, .shift])
     )
     static let toggleTranslation = Self("toggleTranslation", default: .init(.slash, modifiers: [.command, .option]))
-    static let addMeetingChapter = Self("addMeetingChapter", default: .init(.b, modifiers: [.command, .option]))
+static let addMeetingChapter = Self("addMeetingChapter", default: .init(.b, modifiers: [.command, .option]))
     static let toggleHistoryPalette = Self("toggleHistoryPalette", default: .init(.h, modifiers: [.command, .option]))
 }
 
@@ -22,7 +22,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     private var meetingHandler: (() -> Void)?
     private var meetingTranslationHandler: (() -> Void)?
     private var translationHandler: (() -> Void)?
-    private var chapterHandler: (() -> Void)?
+private var chapterHandler: (() -> Void)?
     private var historyPaletteHandler: (() -> Void)?
 
     // MARK: - Recording Hotkey
@@ -116,7 +116,7 @@ final class HotkeyService: HotkeyServiceProtocol {
         unregisterMeetingHotkey()
         unregisterMeetingTranslationHotkey()
         unregisterTranslationHotkey()
-        unregisterChapterHotkey()
+unregisterChapterHotkey()
         unregisterHistoryPaletteHotkey()
     }
 }

@@ -7,14 +7,7 @@ struct MenuBarIconView: View {
         if let statusEmoji = statusEmoji {
             Text(statusEmoji)
         } else {
-            HStack(spacing: 2) {
-                Image("MenuBarIcon")
-                if appState.ambientListeningActive {
-                    Circle()
-                        .fill(.green)
-                        .frame(width: 5, height: 5)
-                }
-            }
+            Image("MenuBarIcon")
         }
     }
 

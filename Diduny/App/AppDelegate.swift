@@ -34,6 +34,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var meetingTranslationActivityToken: NSObjectProtocol?
     var translationActivityToken: NSObjectProtocol?
 
+    // Pipeline Tasks (stored so cancel can abort them)
+    var voicePipelineTask: Task<Void, Never>?
+    var translationPipelineTask: Task<Void, Never>?
+    var meetingPipelineTask: Task<Void, Never>?
+    var meetingTranslationPipelineTask: Task<Void, Never>?
+
+    // Auto-reset Tasks (success/error → idle timers)
+    var voiceAutoResetTask: Task<Void, Never>?
+    var translationAutoResetTask: Task<Void, Never>?
+    var meetingAutoResetTask: Task<Void, Never>?
+    var meetingTranslationAutoResetTask: Task<Void, Never>?
+
     // MARK: - Services (exposed for SwiftUI access)
 
     lazy var audioDeviceManager = AudioDeviceManager()
@@ -54,7 +66,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @available(macOS 13.0, *)
     var translationRealtimeAccumulator: RealtimeTranslationAccumulator?
     var translationRealtimeSessionEnabled: Bool = false
-    lazy var ambientListeningService = AmbientListeningService()
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
         switch SettingsStorage.shared.transcriptionProvider {
@@ -66,6 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_: Notification) {
+        setupNotchStopHandler()
+
         // Auto-select system default device if none selected
         if appState.selectedDeviceID == nil, let defaultDevice = audioDeviceManager.defaultDevice {
             appState.selectedDeviceID = defaultDevice.id
@@ -101,14 +114,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
-        // Listen for ambient listening settings changes
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(ambientListeningSettingsChanged(_:)),
-            name: .ambientListeningSettingsChanged,
-            object: nil
-        )
-
         // Check if onboarding needs to be shown
         // Uses shouldShowOnboarding which skips for existing users with mic access
         if OnboardingManager.shared.shouldShowOnboarding {
@@ -136,8 +141,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupPushToTalk()
         setupTranslationPushToTalk()
 
-        // Start ambient listening if enabled
-        setupAmbientListening()
+        // Start double Cmd+C detector for text translation
+        DoubleCopyDetector.shared.start { text in
+            TextTranslationWindowController.shared.showWindow(sourceText: text)
+        }
 
         // Check for orphaned recordings from previous crash
         checkForOrphanedRecordings()
@@ -225,7 +232,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     text = try await service.translateAndTranscribe(audioData: audioData, targetLanguage: "uk")
                 }
 
-                clipboardService.copy(text: text)
+                let copyBehavior: ClipboardCopyBehavior
+                switch state.recordingType {
+                case .voice, .translation:
+                    copyBehavior = .cleaned
+                case .meeting, .meetingTranslation:
+                    copyBehavior = .raw
+                }
+
+                clipboardService.copy(text: text, behavior: copyBehavior)
                 Log.app.info("Recovery transcription successful")
 
                 if SettingsStorage.shared.playSoundOnCompletion {
@@ -251,31 +266,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyService.unregisterAll()
         pushToTalkService.stop()
         translationPushToTalkService.stop()
-        ambientListeningService.stop()
+        DoubleCopyDetector.shared.stop()
         NotificationCenter.default.removeObserver(self)
-    }
-
-    @objc func ambientListeningSettingsChanged(_: Notification) {
-        Log.app.info("Ambient listening settings changed - reconfiguring")
-        setupAmbientListening(restart: true)
-    }
-
-    func setupAmbientListening(restart: Bool = false) {
-        ambientListeningService.onWakeWordDetected = { [weak self] in
-            self?.toggleRecording()
-        }
-
-        if restart {
-            ambientListeningService.stop()
-        }
-
-        if SettingsStorage.shared.ambientListeningEnabled {
-            ambientListeningService.start()
-        } else {
-            ambientListeningService.stop()
-        }
-
-        appState.ambientListeningActive = ambientListeningService.isListening
     }
 
     func loadAudioData(from url: URL) async throws -> Data {
@@ -285,6 +277,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Cross-Mode Recording Guard
+
+    private func setupNotchStopHandler() {
+        NotchManager.shared.setStopHandler { [weak self] in
+            await self?.stopActiveRecordingFromNotch()
+        }
+    }
+
+    func stopActiveRecordingFromNotch() async {
+        if appState.meetingTranslationRecordingState == .recording {
+            await stopMeetingTranslationRecording()
+            return
+        }
+
+        if appState.meetingRecordingState == .recording {
+            await stopMeetingRecording()
+            return
+        }
+
+        if appState.translationRecordingState == .recording {
+            await stopTranslationRecording()
+            return
+        }
+
+        if appState.recordingState == .recording {
+            await stopRecording()
+            return
+        }
+
+        Log.app.info("stopActiveRecordingFromNotch: no active recording state")
+    }
 
     private func isStateInProgress(_ state: RecordingState) -> Bool {
         state == .recording || state == .processing
@@ -370,9 +392,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mode: RecordingMode,
         currentStateGetter: @escaping () -> RecordingState,
         stateResetter: @escaping (RecordingState) -> Void,
+        autoResetTaskSetter: @escaping (Task<Void, Never>?) -> Void,
         successDelay: TimeInterval,
         errorDelay: TimeInterval
     ) {
+        // Cancel any previous auto-reset timer for this mode
+        autoResetTaskSetter(nil)
+
         switch state {
         case .recording:
             NotchManager.shared.startRecording(mode: mode)
@@ -381,43 +407,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .success:
             if let text = appState.lastTranscription {
                 NotchManager.shared.showSuccess(text: text)
+            } else {
+                NotchManager.shared.hide()
             }
-            Task {
+            let task = Task {
                 try? await Task.sleep(for: .seconds(successDelay))
+                guard !Task.isCancelled else { return }
                 if currentStateGetter() == .success {
                     stateResetter(.idle)
                 }
             }
+            autoResetTaskSetter(task)
         case .error:
             NotchManager.shared.showError(message: appState.errorMessage ?? "Error")
-            Task {
+            let task = Task {
                 try? await Task.sleep(for: .seconds(errorDelay))
+                guard !Task.isCancelled else { return }
                 if currentStateGetter() == .error {
                     stateResetter(.idle)
                 }
             }
+            autoResetTaskSetter(task)
         case .idle:
             break
         }
     }
 
     func handleRecordingStateChange(_ state: RecordingState) {
+        voiceAutoResetTask?.cancel()
         handleStateChange(
             state,
             mode: .voice,
             currentStateGetter: { self.appState.recordingState },
             stateResetter: { self.appState.recordingState = $0 },
+            autoResetTaskSetter: { self.voiceAutoResetTask = $0 },
             successDelay: 1.5,
             errorDelay: 2.0
         )
     }
 
     func handleMeetingStateChange(_ state: RecordingState) {
+        meetingAutoResetTask?.cancel()
         handleStateChange(
             state,
             mode: .meeting,
             currentStateGetter: { self.appState.meetingRecordingState },
             stateResetter: { self.appState.meetingRecordingState = $0 },
+            autoResetTaskSetter: { self.meetingAutoResetTask = $0 },
             successDelay: 2.0,
             errorDelay: 2.0
         )
@@ -425,22 +461,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleMeetingTranslationStateChange(_ state: RecordingState) {
+        meetingTranslationAutoResetTask?.cancel()
         handleStateChange(
             state,
             mode: .meetingTranslation,
             currentStateGetter: { self.appState.meetingTranslationRecordingState },
             stateResetter: { self.appState.meetingTranslationRecordingState = $0 },
+            autoResetTaskSetter: { self.meetingTranslationAutoResetTask = $0 },
             successDelay: 2.0,
             errorDelay: 2.0
         )
     }
 
     func handleTranslationStateChange(_ state: RecordingState) {
+        translationAutoResetTask?.cancel()
         handleStateChange(
             state,
             mode: .translation(languagePair: "EN <-> UK"),
             currentStateGetter: { self.appState.translationRecordingState },
             stateResetter: { self.appState.translationRecordingState = $0 },
+            autoResetTaskSetter: { self.translationAutoResetTask = $0 },
             successDelay: 1.5,
             errorDelay: 2.0
         )

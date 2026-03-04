@@ -6,15 +6,31 @@ final class SettingsStorage {
     static let shared = SettingsStorage()
 
     private let defaults = UserDefaults.standard
-    private static let defaultFillerWords = [
+    private static let baseFillerWords = [
         "е-е",
         "ем",
-        "em",
-        "uh",
-        "um",
         "мм",
         "ммм",
     ]
+    private static let englishFillerWordPreset = [
+        "uh",
+        "uhh",
+        "um",
+        "umm",
+        "em",
+        "er",
+        "erm",
+        "hmm",
+        "hm",
+        "mmm",
+        "mm-hmm",
+        "uh-huh",
+        "you know",
+        "i mean",
+        "kind of",
+        "sort of",
+    ]
+    private static let defaultFillerWords = normalizedFillerWords(baseFillerWords + englishFillerWordPreset)
 
     private enum Key: String {
         case selectedDeviceID
@@ -29,21 +45,20 @@ final class SettingsStorage {
         case handsFreeModeEnabled
         case transcriptionProvider
         case selectedWhisperModel
-        case ambientListeningEnabled
-        case wakeWord
         case whisperLanguage
         case whisperPrompt
-        case sonioxPrompt
         case favoriteLanguages
         case hasCloudAPIKey
-        case sonioxLanguageHints
-        case sonioxLanguageHintsStrict
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
         case meetingRealtimeTranscriptionEnabled
         case escapeCancelEnabled
+        case escapeCancelShortcut
+        case escapeCancelSaveAudio
         case textCleanupEnabled
         case fillerWords
+        case pauseParagraphThresholdMs
+        case sonioxEndpointDelayMs
     }
 
     private init() {}
@@ -109,16 +124,37 @@ final class SettingsStorage {
 
     @discardableResult
     func addFillerWord(_ word: String) -> Bool {
-        guard let candidate = Self.normalizedFillerWords([word]).first else { return false }
+        addFillerWords([word]) > 0
+    }
 
-        let candidateKey = Self.foldedWordKey(candidate)
+    @discardableResult
+    func addFillerWords(_ words: [String]) -> Int {
+        let candidates = Self.normalizedFillerWords(words)
+        guard !candidates.isEmpty else { return 0 }
+
         var current = fillerWords
-        let alreadyExists = current.contains { Self.foldedWordKey($0) == candidateKey }
-        guard !alreadyExists else { return false }
+        var currentKeys = Set(current.map { Self.foldedWordKey($0) })
+        var addedCount = 0
 
-        current.append(candidate)
+        for candidate in candidates {
+            let candidateKey = Self.foldedWordKey(candidate)
+            guard currentKeys.insert(candidateKey).inserted else { continue }
+            current.append(candidate)
+            addedCount += 1
+        }
+
+        guard addedCount > 0 else { return 0 }
         fillerWords = current
-        return true
+        return addedCount
+    }
+
+    @discardableResult
+    func addEnglishFillerWordPreset() -> Int {
+        addFillerWords(Self.englishFillerWordPreset)
+    }
+
+    var englishFillerWordPreset: [String] {
+        Self.englishFillerWordPreset
     }
 
     func removeFillerWord(_ word: String) {
@@ -248,28 +284,6 @@ final class SettingsStorage {
         set { defaults.set(newValue, forKey: Key.whisperPrompt.rawValue) }
     }
 
-    // MARK: - Soniox Prompt
-
-    var sonioxPrompt: String {
-        get { defaults.string(forKey: Key.sonioxPrompt.rawValue) ?? "" }
-        set { defaults.set(newValue, forKey: Key.sonioxPrompt.rawValue) }
-    }
-
-    // MARK: - Soniox Language Hints
-
-    /// Optional allowed language list sent to Soniox cloud APIs.
-    /// Empty means "let Soniox auto-detect all languages".
-    var sonioxLanguageHints: [String] {
-        get { defaults.stringArray(forKey: Key.sonioxLanguageHints.rawValue) ?? [] }
-        set { defaults.set(newValue, forKey: Key.sonioxLanguageHints.rawValue) }
-    }
-
-    /// When enabled, Soniox will only consider languages from `sonioxLanguageHints`.
-    var sonioxLanguageHintsStrict: Bool {
-        get { defaults.bool(forKey: Key.sonioxLanguageHintsStrict.rawValue) }
-        set { defaults.set(newValue, forKey: Key.sonioxLanguageHintsStrict.rawValue) }
-    }
-
     // MARK: - Translation Realtime Socket
 
     /// Enables cloud realtime translation over Soniox websocket during translation recording.
@@ -290,6 +304,25 @@ final class SettingsStorage {
     var transcriptionRealtimeSocketEnabled: Bool {
         get { defaults.bool(forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) }
         set { defaults.set(newValue, forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) }
+    }
+
+    // MARK: - Pause Paragraph Segmentation
+
+    /// Pause duration (ms) that triggers a new paragraph/line in transcription formatting.
+    /// Applied to realtime socket mode and async Soniox token formatting.
+    var pauseParagraphThresholdMs: Int {
+        get {
+            if defaults.object(forKey: Key.pauseParagraphThresholdMs.rawValue) == nil {
+                return 1200
+            }
+            return Self.sanitizedPauseThresholdMs(defaults.integer(forKey: Key.pauseParagraphThresholdMs.rawValue))
+        }
+        set {
+            defaults.set(
+                Self.sanitizedPauseThresholdMs(newValue),
+                forKey: Key.pauseParagraphThresholdMs.rawValue
+            )
+        }
     }
 
     // MARK: - Meeting Cloud Mode
@@ -315,16 +348,32 @@ final class SettingsStorage {
         set { defaults.set(newValue, forKey: Key.escapeCancelEnabled.rawValue) }
     }
 
-    // MARK: - Ambient Listening
-
-    var ambientListeningEnabled: Bool {
-        get { defaults.object(forKey: Key.ambientListeningEnabled.rawValue) as? Bool ?? false }
-        set { defaults.set(newValue, forKey: Key.ambientListeningEnabled.rawValue) }
+    /// Shortcut used for double-press cancellation during active recording.
+    /// Default is Escape (double-press).
+    var escapeCancelShortcut: RecordingCancelShortcut {
+        get {
+            guard let data = defaults.data(forKey: Key.escapeCancelShortcut.rawValue),
+                  let shortcut = try? JSONDecoder().decode(RecordingCancelShortcut.self, from: data)
+            else {
+                return .defaultShortcut
+            }
+            return shortcut
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: Key.escapeCancelShortcut.rawValue)
+        }
     }
 
-    var wakeWord: String {
-        get { defaults.string(forKey: Key.wakeWord.rawValue) ?? "" }
-        set { defaults.set(newValue, forKey: Key.wakeWord.rawValue) }
+    /// When enabled, cancelled recordings are still saved to the recordings library.
+    var escapeCancelSaveAudio: Bool {
+        get {
+            if defaults.object(forKey: Key.escapeCancelSaveAudio.rawValue) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.escapeCancelSaveAudio.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.escapeCancelSaveAudio.rawValue) }
     }
 
     // MARK: - Favorite Languages
@@ -364,6 +413,33 @@ final class SettingsStorage {
     private static func sanitizedGain(_ value: Float, fallback: Float) -> Float {
         guard value.isFinite else { return fallback }
         return min(max(value, 0), 2.0)
+    }
+
+    // MARK: - Soniox Endpoint Delay
+
+    /// Delay (ms) that Soniox uses to detect speech endpoints and place periods.
+    /// Higher values = fewer periods from Soniox. Range: 500–5000ms.
+    var sonioxEndpointDelayMs: Int {
+        get {
+            if defaults.object(forKey: Key.sonioxEndpointDelayMs.rawValue) == nil {
+                return 1200
+            }
+            return Self.sanitizedEndpointDelayMs(defaults.integer(forKey: Key.sonioxEndpointDelayMs.rawValue))
+        }
+        set {
+            defaults.set(
+                Self.sanitizedEndpointDelayMs(newValue),
+                forKey: Key.sonioxEndpointDelayMs.rawValue
+            )
+        }
+    }
+
+    private static func sanitizedPauseThresholdMs(_ value: Int) -> Int {
+        min(max(value, 250), 3000)
+    }
+
+    private static func sanitizedEndpointDelayMs(_ value: Int) -> Int {
+        min(max(value, 500), 5000)
     }
 }
 

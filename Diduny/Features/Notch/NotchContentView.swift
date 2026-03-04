@@ -9,7 +9,10 @@ struct NotchCompactLeadingView: View {
         Group {
             switch manager.state {
             case let .recording(mode):
-                RecordingCompactView(mode: mode)
+                HStack(spacing: 6) {
+                    RecordingCompactView(mode: mode)
+                    AudioLevelView(level: manager.audioLevel)
+                }
 
             case let .processing(mode):
                 ProcessingCompactView(mode: mode)
@@ -26,15 +29,21 @@ struct NotchCompactLeadingView: View {
 
 struct NotchCompactTrailingView: View {
     var manager: NotchManager
+    @State private var isHovering = false
 
     var body: some View {
         Group {
             switch manager.state {
             case .recording:
-                HStack(spacing: 6) {
-                    PulsingDotView()
-                    AudioLevelView(level: manager.audioLevel)
-                    RecordingTimerView(startTime: manager.recordingStartTime)
+                if isHovering {
+                    StopCompactButton {
+                        manager.requestStopActiveRecording()
+                    }
+                } else {
+                    HStack(spacing: 6) {
+                        PulsingDotView()
+                        RecordingTimerView(startTime: manager.recordingStartTime)
+                    }
                 }
 
             case .processing:
@@ -44,6 +53,22 @@ struct NotchCompactTrailingView: View {
 
             default:
                 EmptyView()
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            guard case .recording = manager.state else {
+                isHovering = false
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovering = hovering
+            }
+        }
+        .onChange(of: manager.state) { _, newState in
+            guard case .recording = newState else {
+                isHovering = false
+                return
             }
         }
         .animation(.easeInOut(duration: 0.2), value: manager.state)
@@ -71,7 +96,9 @@ struct NotchExpandedView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
 
             case let .recording(mode):
-                RecordingExpandedView(mode: mode)
+                RecordingExpandedView(mode: mode) {
+                    manager.requestStopActiveRecording()
+                }
                     .transition(.opacity)
 
             case let .processing(mode):
@@ -177,7 +204,9 @@ private struct RecordingTimerView: View {
 
 private struct RecordingExpandedView: View {
     let mode: RecordingMode
+    let onStop: () -> Void
     @State private var isPulsing = false
+    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -194,12 +223,68 @@ private struct RecordingExpandedView: View {
             Text(mode.label)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.primary)
+
+            Spacer(minLength: 6)
+
+            if isHovering {
+                StopExpandedButton(action: onStop)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovering = hovering
+            }
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
         }
+    }
+}
+
+private struct StopCompactButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "stop.fill")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 16, height: 16)
+                .background(
+                    Circle()
+                        .fill(.red.opacity(0.95))
+                )
+        }
+        .buttonStyle(.plain)
+        .help("Stop recording")
+    }
+}
+
+private struct StopExpandedButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 9, weight: .bold))
+                Text("Stop")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(.red.opacity(0.95))
+            )
+        }
+        .buttonStyle(.plain)
+        .help("Stop recording")
     }
 }
 
