@@ -89,17 +89,19 @@ extension AppDelegate {
             await stopTranslationRecording()
         case .processing:
             Log.app.info("Translation state is processing, canceling...")
-            await cancelTranslationRecording()
+            await cancelTranslationRecording(cancelTask: false)
         default:
             Log.app.info("Translation state is \(self.appState.translationRecordingState), ignoring toggle")
         }
     }
 
-    func cancelTranslationRecording() async {
+    func cancelTranslationRecording(cancelTask: Bool = true) async {
         Log.app.info("cancelTranslationRecording: BEGIN")
 
-        // Cancel any in-flight pipeline task
-        translationPipelineTask?.cancel()
+        // Cancel any in-flight pipeline task (skip when called from within the task itself)
+        if cancelTask {
+            translationPipelineTask?.cancel()
+        }
         translationPipelineTask = nil
 
         let recordingStartTime = appState.translationRecordingStartTime
@@ -451,7 +453,7 @@ extension AppDelegate {
                         }
                     }
                 }
-                Log.app.info("stopTranslationRecording: Translation received: \(text.prefix(50))...")
+                Log.app.info("stopTranslationRecording: Translation received (\(text.count) chars)")
                 RecordingDebugLog.app("Text ready, chars=\(text.count)", source: "Translation")
 
                 clipboardService.copy(text: text)
@@ -504,6 +506,10 @@ extension AppDelegate {
                 // Clear recovery state on success
                 RecoveryStateManager.shared.clearState()
 
+            } catch is CancellationError {
+                _ = await stopTranslationRealtimeSession(finalize: false)
+                Log.app.info("stopTranslationRecording: Cancelled")
+                return
             } catch {
                 _ = await stopTranslationRealtimeSession(finalize: false)
                 Log.app.error("stopTranslationRecording: ERROR - \(error.localizedDescription)")

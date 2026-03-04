@@ -15,6 +15,8 @@ final class DoubleCopyDetector {
     private init() {}
 
     func start(handler: @escaping (String) -> Void) {
+        // Ensure repeated starts don't stack monitors
+        stop()
         self.handler = handler
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in

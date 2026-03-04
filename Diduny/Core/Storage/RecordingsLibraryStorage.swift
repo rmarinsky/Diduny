@@ -50,7 +50,12 @@ final class RecordingsLibraryStorage {
             return
         }
 
-        let status: Recording.ProcessingStatus = transcriptionText != nil ? .transcribed : .unprocessed
+        let status: Recording.ProcessingStatus
+        if transcriptionText != nil {
+            status = type == .translation ? .translated : .transcribed
+        } else {
+            status = .unprocessed
+        }
         let recording = Recording(
             id: recordingID,
             createdAt: Date(),

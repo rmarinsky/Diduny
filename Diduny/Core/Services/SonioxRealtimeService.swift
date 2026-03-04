@@ -302,39 +302,38 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
             }
 
             if let apiTokens = response.tokens, !apiTokens.isEmpty {
-                var boundaries: [RealtimeSegmentBoundary] = []
-                let tokens = apiTokens.compactMap { token -> RealtimeToken? in
-                    guard !token.text.isEmpty else { return nil }
+                var bufferedTokens: [RealtimeToken] = []
+                for token in apiTokens {
+                    guard !token.text.isEmpty else { continue }
 
                     if let boundary = segmentBoundary(from: token.text) {
-                        boundaries.append(boundary)
-                        return nil
-                    }
-
-                    return RealtimeToken(
-                        text: token.text,
-                        isFinal: token.isFinal,
-                        speaker: token.speaker,
-                        startMs: token.startMs ?? 0,
-                        endMs: token.endMs ?? 0,
-                        language: token.language,
-                        sourceLanguage: token.sourceLanguage,
-                        translationStatus: token.translationStatus
-                    )
-                }
-
-                if !tokens.isEmpty {
-                    markTokenArrival()
-                    Log.transcription.info(
-                        "Soniox RT: Received \(tokens.count) tokens, first: '\(tokens.first?.text ?? "")', isFinal=\(tokens.first?.isFinal ?? false)"
-                    )
-                    onTokensReceived?(tokens)
-                }
-
-                if !boundaries.isEmpty {
-                    boundaries.forEach { boundary in
+                        // Flush buffered tokens before emitting boundary to preserve ordering
+                        if !bufferedTokens.isEmpty {
+                            markTokenArrival()
+                            onTokensReceived?(bufferedTokens)
+                            bufferedTokens.removeAll()
+                        }
                         onSegmentBoundary?(boundary)
+                        continue
                     }
+
+                    bufferedTokens.append(
+                        RealtimeToken(
+                            text: token.text,
+                            isFinal: token.isFinal,
+                            speaker: token.speaker,
+                            startMs: token.startMs ?? 0,
+                            endMs: token.endMs ?? 0,
+                            language: token.language,
+                            sourceLanguage: token.sourceLanguage,
+                            translationStatus: token.translationStatus
+                        )
+                    )
+                }
+
+                if !bufferedTokens.isEmpty {
+                    markTokenArrival()
+                    onTokensReceived?(bufferedTokens)
                 }
             }
 

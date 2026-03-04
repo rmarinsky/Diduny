@@ -42,6 +42,12 @@ final class TextTranslationViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var showCopiedConfirmation: Bool = false
 
+    private var translationTask: Task<Void, Never>?
+
+    deinit {
+        translationTask?.cancel()
+    }
+
     init(sourceText: String) {
         self.sourceText = sourceText
 
@@ -59,13 +65,15 @@ final class TextTranslationViewModel: ObservableObject {
         translatedText = ""
         showCopiedConfirmation = false
 
-        Task { [weak self] in
+        translationTask?.cancel()
+        translationTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let result = try await Self.requestTranslation(
                     sourceText: self.sourceText,
                     targetLanguage: self.targetLanguageCode
                 )
+                guard !Task.isCancelled else { return }
                 self.translatedText = result
                 self.isTranslating = false
 
@@ -76,8 +84,11 @@ final class TextTranslationViewModel: ObservableObject {
                 // Hide confirmation after a delay
                 Task {
                     try? await Task.sleep(for: .seconds(2))
+                    guard !Task.isCancelled else { return }
                     self.showCopiedConfirmation = false
                 }
+            } catch is CancellationError {
+                self.isTranslating = false
             } catch {
                 self.errorMessage = error.localizedDescription
                 self.isTranslating = false

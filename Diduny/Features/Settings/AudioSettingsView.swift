@@ -218,9 +218,7 @@ struct AudioSettingsView: View {
     }
 
     private func cleanupTestRecording() {
-        if testRecorderService.isRecording {
-            testRecorderService.cancelRecording()
-        }
+        testRecorderService.cancelRecording()
 
         testAudioPlayer?.stop()
         testAudioPlayer = nil

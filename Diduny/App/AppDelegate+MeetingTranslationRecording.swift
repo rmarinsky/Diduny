@@ -20,18 +20,20 @@ extension AppDelegate {
             await stopMeetingTranslationRecording()
         case .processing:
             Log.app.info("Meeting translation state is processing, canceling...")
-            await cancelMeetingTranslationRecording()
+            await cancelMeetingTranslationRecording(cancelTask: false)
         default:
             Log.app.info("Meeting translation state is \(self.appState.meetingTranslationRecordingState), ignoring toggle")
         }
     }
 
     @available(macOS 13.0, *)
-    func cancelMeetingTranslationRecording() async {
+    func cancelMeetingTranslationRecording(cancelTask: Bool = true) async {
         Log.app.info("cancelMeetingTranslationRecording: BEGIN")
 
-        // Cancel any in-flight pipeline task
-        meetingTranslationPipelineTask?.cancel()
+        // Cancel any in-flight pipeline task (skip when called from within the task itself)
+        if cancelTask {
+            meetingTranslationPipelineTask?.cancel()
+        }
         meetingTranslationPipelineTask = nil
 
         let recordingStartTime = appState.meetingTranslationRecordingStartTime
@@ -410,7 +412,7 @@ extension AppDelegate {
                     }
                     transcriptionService.apiKey = apiKey
                     text = try await transcriptionService.translateAndTranscribe(audioData: audioData, targetLanguage: "uk")
-                    Log.app.info("Async meeting translation received: \(text.prefix(100))...")
+                    Log.app.info("Async meeting translation received (\(text.count) chars)")
                 }
 
                 clipboardService.copy(text: text, behavior: .raw)
@@ -432,6 +434,10 @@ extension AppDelegate {
                 // Update state to success
                 guard appState.meetingTranslationRecordingState == .processing else {
                     Log.app.warning("stopMeetingTranslationRecording: state changed during processing (now \(self.appState.meetingTranslationRecordingState)), dropping result")
+                    if let audioURL = capturedAudioURL {
+                        try? FileManager.default.removeItem(at: audioURL)
+                    }
+                    RecoveryStateManager.shared.clearState()
                     return
                 }
                 await MainActor.run {
@@ -464,6 +470,13 @@ extension AppDelegate {
                 // Clean up temp file (after library save copied it)
                 try? FileManager.default.removeItem(at: audioURL)
 
+            } catch is CancellationError {
+                Log.app.info("stopMeetingTranslationRecording: Cancelled")
+                if let audioURL = capturedAudioURL {
+                    try? FileManager.default.removeItem(at: audioURL)
+                }
+                RecoveryStateManager.shared.clearState()
+                return
             } catch {
                 Log.app.error("Meeting translation failed: \(error)")
                 RecordingDebugLog.app("Stop pipeline failed: \(error.localizedDescription)", source: "MeetingTranslation")
