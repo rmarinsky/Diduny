@@ -33,13 +33,14 @@ final class RecordingsLibraryStorage {
     // MARK: - Save (from Data — voice/translation)
 
     func saveRecording(
+        id: UUID? = nil,
         audioData: Data,
         type: Recording.RecordingType,
         duration: TimeInterval,
         transcriptionText: String? = nil
     ) {
-        let id = UUID()
-        let fileName = "\(id.uuidString).wav"
+        let recordingID = id ?? UUID()
+        let fileName = "\(recordingID.uuidString).wav"
         let fileURL = recordingsDir.appendingPathComponent(fileName)
 
         do {
@@ -51,7 +52,7 @@ final class RecordingsLibraryStorage {
 
         let status: Recording.ProcessingStatus = transcriptionText != nil ? .transcribed : .unprocessed
         let recording = Recording(
-            id: id,
+            id: recordingID,
             createdAt: Date(),
             type: type,
             audioFileName: fileName,
@@ -70,14 +71,15 @@ final class RecordingsLibraryStorage {
     // MARK: - Save (from URL — meetings, copies file)
 
     func saveRecording(
+        id: UUID? = nil,
         audioURL: URL,
         type: Recording.RecordingType,
         duration: TimeInterval,
         transcriptionText: String? = nil
     ) {
-        let id = UUID()
+        let recordingID = id ?? UUID()
         let ext = audioURL.pathExtension.isEmpty ? "wav" : audioURL.pathExtension
-        let fileName = "\(id.uuidString).\(ext)"
+        let fileName = "\(recordingID.uuidString).\(ext)"
         let destURL = recordingsDir.appendingPathComponent(fileName)
 
         do {
@@ -104,7 +106,7 @@ final class RecordingsLibraryStorage {
         }
 
         let recording = Recording(
-            id: id,
+            id: recordingID,
             createdAt: Date(),
             type: type,
             audioFileName: fileName,
@@ -127,6 +129,9 @@ final class RecordingsLibraryStorage {
         try? fileManager.removeItem(at: fileURL)
         recordings.removeAll { $0.id == recording.id }
         saveMetadata()
+        Task {
+            await RecordingDebugStore.shared.clear(for: recording.id)
+        }
     }
 
     func deleteRecordings(_ ids: Set<UUID>) {
@@ -138,6 +143,11 @@ final class RecordingsLibraryStorage {
         }
         recordings.removeAll { ids.contains($0.id) }
         saveMetadata()
+        Task {
+            for id in ids {
+                await RecordingDebugStore.shared.clear(for: id)
+            }
+        }
     }
 
     // MARK: - Update

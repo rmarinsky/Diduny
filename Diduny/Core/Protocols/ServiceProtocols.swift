@@ -37,10 +37,14 @@ protocol HotkeyServiceProtocol {
     func registerMeetingHotkey(handler: @escaping () -> Void)
     func registerMeetingTranslationHotkey(handler: @escaping () -> Void)
     func registerTranslationHotkey(handler: @escaping () -> Void)
+    func registerHistoryPaletteHotkey(handler: @escaping () -> Void)
     func unregisterRecordingHotkey()
     func unregisterMeetingHotkey()
     func unregisterMeetingTranslationHotkey()
     func unregisterTranslationHotkey()
+    func unregisterHistoryPaletteHotkey()
+    func registerChapterHotkey(handler: @escaping () -> Void)
+    func unregisterChapterHotkey()
     func unregisterAll()
 }
 

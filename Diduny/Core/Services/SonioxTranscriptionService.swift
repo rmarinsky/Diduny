@@ -8,6 +8,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
     private let model = "stt-async-v4"
     private let pollingInterval: TimeInterval = 1.0
     private let maxPollingAttempts = 60 // 60 seconds max wait
+    private var paragraphPauseThresholdMs: Int { SettingsStorage.shared.pauseParagraphThresholdMs }
     private let maxAudioBytesForSpeechPrecheck = 25 * 1024 * 1024
     private let strictSpeechPrecheck = false
 
@@ -45,8 +46,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
     // swiftlint:enable line_length
 
     private var voiceNoteContext: String {
-        let custom = SettingsStorage.shared.sonioxPrompt
-        return custom.isEmpty ? Self.defaultVoiceNoteContext : custom
+        Self.defaultVoiceNoteContext
     }
 
     // Protocol conformance method
@@ -56,9 +56,11 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
     func transcribe(audioData: Data, language: String?) async throws -> String {
         Log.transcription.info("transcribe: BEGIN, audioData size = \(audioData.count) bytes")
+        RecordingDebugLog.app("Soniox transcribe start, audioBytes=\(audioData.count)", source: "Soniox")
 
         guard let apiKey, !apiKey.isEmpty else {
             Log.transcription.error("transcribe: No API key!")
+            RecordingDebugLog.app("Soniox transcribe failed: missing API key", source: "Soniox")
             throw TranscriptionError.noAPIKey
         }
 
@@ -88,6 +90,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         Log.transcription.info("Step 4: Retrieving transcript...")
         let text = try await getTranscript(transcriptionId: transcriptionId, apiKey: apiKey)
         Log.transcription.info("Transcript retrieved: \(text.prefix(50))...")
+        RecordingDebugLog.app("Soniox transcribe complete, chars=\(text.count)", source: "Soniox")
 
         return text
     }
@@ -95,9 +98,11 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
     /// Transcribe meeting audio with speaker diarization
     func transcribeMeeting(audioData: Data) async throws -> String {
         Log.transcription.info("transcribeMeeting: BEGIN, audioData size = \(audioData.count) bytes")
+        RecordingDebugLog.app("Soniox transcribeMeeting start, audioBytes=\(audioData.count)", source: "Soniox")
 
         guard let apiKey, !apiKey.isEmpty else {
             Log.transcription.error("transcribeMeeting: No API key!")
+            RecordingDebugLog.app("Soniox transcribeMeeting failed: missing API key", source: "Soniox")
             throw TranscriptionError.noAPIKey
         }
 
@@ -125,6 +130,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         Log.transcription.info("Step 4: Retrieving diarized transcript...")
         let text = try await getDiarizedTranscript(transcriptionId: transcriptionId, apiKey: apiKey)
         Log.transcription.info("Diarized transcript retrieved: \(text.prefix(100))...")
+        RecordingDebugLog.app("Soniox transcribeMeeting complete, chars=\(text.count)", source: "Soniox")
 
         return text
     }
@@ -137,9 +143,14 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
     /// Transcribe and translate to a specific target language
     func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String {
         Log.transcription.info("translateAndTranscribe: BEGIN, audioData size = \(audioData.count) bytes, targetLanguage = \(targetLanguage)")
+        RecordingDebugLog.app(
+            "Soniox translateAndTranscribe start, audioBytes=\(audioData.count), target=\(targetLanguage)",
+            source: "Soniox"
+        )
 
         guard let apiKey, !apiKey.isEmpty else {
             Log.transcription.error("translateAndTranscribe: No API key!")
+            RecordingDebugLog.app("Soniox translateAndTranscribe failed: missing API key", source: "Soniox")
             throw TranscriptionError.noAPIKey
         }
 
@@ -168,6 +179,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         Log.transcription.info("Step 4: Retrieving translated transcript...")
         let text = try await getTranslatedTranscript(transcriptionId: transcriptionId, apiKey: apiKey)
         Log.transcription.info("Translated transcript retrieved: \(text.prefix(50))...")
+        RecordingDebugLog.app("Soniox translateAndTranscribe complete, chars=\(text.count)", source: "Soniox")
 
         return text
     }
@@ -179,6 +191,10 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
             Log.transcription.info(
                 "\(context): skipping speech pre-check for large audio (\(audioData.count) bytes)"
             )
+            RecordingDebugLog.decision(
+                "\(context): skip speech pre-check (audio too large: \(audioData.count) bytes)",
+                source: "Soniox"
+            )
             return
         }
 
@@ -186,12 +202,16 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         guard hasSpeech else {
             if strictSpeechPrecheck {
                 Log.transcription.info("\(context): no speech detected, skipping Soniox request")
+                RecordingDebugLog.decision("\(context): speech not detected, strict mode -> fail", source: "Soniox")
                 throw TranscriptionError.emptyTranscription
             }
 
             Log.transcription.info("\(context): no speech confidently detected, continuing with Soniox")
+            RecordingDebugLog.decision("\(context): speech not detected confidently, continuing", source: "Soniox")
             return
         }
+
+        RecordingDebugLog.decision("\(context): speech detected", source: "Soniox")
     }
 
     // MARK: - Step 1: Upload File
@@ -221,11 +241,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
         request.httpBody = body
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw TranscriptionError.invalidResponse
-        }
+        let (data, httpResponse) = try await performRequest(request, label: "uploadFile")
 
         Log.transcription.info("uploadFile: HTTP status = \(httpResponse.statusCode)")
 
@@ -273,11 +289,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw TranscriptionError.invalidResponse
-        }
+        let (data, httpResponse) = try await performRequest(request, label: "createTranscription")
 
         Log.transcription.info("createTranscription: HTTP status = \(httpResponse.statusCode)")
 
@@ -321,11 +333,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw TranscriptionError.invalidResponse
-        }
+        let (data, httpResponse) = try await performRequest(request, label: "createTranscriptionWithDiarization")
 
         Log.transcription.info("createTranscriptionWithDiarization: HTTP status = \(httpResponse.statusCode)")
 
@@ -388,11 +396,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw TranscriptionError.invalidResponse
-        }
+        let (data, httpResponse) = try await performRequest(request, label: "createTranscriptionWithTranslation")
 
         Log.transcription.info("createTranscriptionWithTranslation: HTTP status = \(httpResponse.statusCode)")
 
@@ -418,10 +422,8 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
         for attempt in 1 ... maxPollingAttempts {
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200
+            let (data, httpResponse) = try await performRequest(request, label: "waitForCompletion.poll")
+            guard httpResponse.statusCode == 200
             else {
                 let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
                 Log.transcription.error("Poll error: \(errorBody)")
@@ -460,11 +462,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         request.httpMethod = "GET"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw TranscriptionError.invalidResponse
-        }
+        let (data, httpResponse) = try await performRequest(request, label: "getTranscript")
 
         Log.transcription.info("getTranscript: HTTP status = \(httpResponse.statusCode)")
 
@@ -476,11 +474,13 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
         let transcriptResponse = try JSONDecoder().decode(TranscriptResponse.self, from: data)
 
-        guard !transcriptResponse.text.isEmpty else {
+        let formattedText = formatTextWithPauseParagraphs(tokens: transcriptResponse.tokens, fallback: transcriptResponse.text)
+
+        guard !formattedText.isEmpty else {
             throw TranscriptionError.emptyTranscription
         }
 
-        return transcriptResponse.text
+        return formattedText
     }
 
     // MARK: - Get Diarized Transcript
@@ -494,11 +494,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         request.httpMethod = "GET"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw TranscriptionError.invalidResponse
-        }
+        let (data, httpResponse) = try await performRequest(request, label: "getDiarizedTranscript")
 
         Log.transcription.info("getDiarizedTranscript: HTTP status = \(httpResponse.statusCode)")
 
@@ -580,11 +576,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         request.httpMethod = "GET"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw TranscriptionError.invalidResponse
-        }
+        let (data, httpResponse) = try await performRequest(request, label: "getTranslatedTranscript")
 
         Log.transcription.info("getTranslatedTranscript: HTTP status = \(httpResponse.statusCode)")
 
@@ -608,7 +600,10 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
             return transcriptResponse.text
         }
 
-        let translatedText = translatedTokens.map(\.text).joined()
+        let translatedText = formatTranslatedTextWithPauseParagraphs(
+            tokens: translatedTokens,
+            fallback: translatedTokens.map(\.text).joined()
+        )
         Log.transcription.info("Translated text extracted: \(translatedText.prefix(50))...")
 
         guard !translatedText.isEmpty else {
@@ -616,6 +611,88 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         }
 
         return translatedText
+    }
+
+    private func formatTextWithPauseParagraphs(tokens: [TranscriptToken], fallback: String) -> String {
+        guard !tokens.isEmpty else {
+            return fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        var result = ""
+        var previousEndMs: Int?
+
+        for token in tokens {
+            if let previousEndMs,
+               token.start_ms > 0,
+               previousEndMs > 0,
+               token.start_ms - previousEndMs >= paragraphPauseThresholdMs,
+               !result.isEmpty,
+               !result.hasSuffix("\n")
+            {
+                result += "\n"
+            }
+
+            result += token.text
+            previousEndMs = token.end_ms > 0 ? token.end_ms : token.start_ms
+        }
+
+        let formatted = normalizeParagraphSpacing(result)
+        if !formatted.isEmpty {
+            RecordingDebugLog.decision("Pause paragraph formatting applied for transcript tokens", source: "Soniox")
+            return formatted
+        }
+
+        return fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func formatTranslatedTextWithPauseParagraphs(
+        tokens: [TranslatedTranscriptToken],
+        fallback: String
+    ) -> String {
+        guard !tokens.isEmpty else {
+            return fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        var result = ""
+        var previousEndMs: Int?
+
+        for token in tokens {
+            if let previousEndMs,
+               let startMs = token.start_ms,
+               startMs > 0,
+               previousEndMs > 0,
+               startMs - previousEndMs >= paragraphPauseThresholdMs,
+               !result.isEmpty,
+               !result.hasSuffix("\n")
+            {
+                result += "\n"
+            }
+
+            result += token.text
+            if let endMs = token.end_ms, endMs > 0 {
+                previousEndMs = endMs
+            } else if let startMs = token.start_ms, startMs > 0 {
+                previousEndMs = startMs
+            }
+        }
+
+        let formatted = normalizeParagraphSpacing(result)
+        if !formatted.isEmpty {
+            RecordingDebugLog.decision("Pause paragraph formatting applied for translated tokens", source: "Soniox")
+            return formatted
+        }
+
+        return fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizeParagraphSpacing(_ text: String) -> String {
+        var result = text.replacingOccurrences(of: "\u{00A0}", with: " ")
+        result = result.replacingOccurrences(of: "\r\n", with: "\n")
+        result = result.replacingOccurrences(of: "\r", with: "\n")
+        result = result.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        result = result.replacingOccurrences(of: " \n", with: "\n")
+        result = result.replacingOccurrences(of: "\n ", with: "\n")
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Audio Format Detection
@@ -671,7 +748,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         if let forcedLanguageHints {
             let hints = forcedLanguageHints.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            return (hints, SettingsStorage.shared.sonioxLanguageHintsStrict)
+            return (hints, !hints.isEmpty)
         }
 
         if let explicitLanguage {
@@ -681,11 +758,54 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
             }
         }
 
-        let hints = SettingsStorage.shared.sonioxLanguageHints
+        let hints = SettingsStorage.shared.favoriteLanguages
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
-        return (hints, SettingsStorage.shared.sonioxLanguageHintsStrict)
+        return (hints, !hints.isEmpty)
+    }
+
+    // MARK: - HTTP Debug Wrapper
+
+    private func performRequest(_ request: URLRequest, label: String) async throws -> (Data, HTTPURLResponse) {
+        let startedAt = Date()
+        let method = request.httpMethod ?? "GET"
+        let path = request.url?.path ?? "<unknown>"
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                RecordingDebugLog.http("\(label): \(method) \(path) -> invalid response (\(elapsedMs) ms)", source: "SonioxREST")
+                throw TranscriptionError.invalidResponse
+            }
+
+            var message = "\(label): \(method) \(path) -> \(httpResponse.statusCode) (\(elapsedMs) ms)"
+            if !(200 ... 299).contains(httpResponse.statusCode) {
+                let snippet = Self.responseSnippet(from: data)
+                if !snippet.isEmpty {
+                    message += " body=\(snippet)"
+                }
+            }
+            RecordingDebugLog.http(message, source: "SonioxREST")
+            return (data, httpResponse)
+        } catch {
+            let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+            RecordingDebugLog.http(
+                "\(label): \(method) \(path) -> error \(error.localizedDescription) (\(elapsedMs) ms)",
+                source: "SonioxREST"
+            )
+            throw error
+        }
+    }
+
+    private static func responseSnippet(from data: Data) -> String {
+        guard let text = String(data: data, encoding: .utf8) else { return "" }
+        let singleLine = text.replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !singleLine.isEmpty else { return "" }
+        return String(singleLine.prefix(220))
     }
 
     // MARK: - Test Connection
@@ -704,11 +824,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         request.httpMethod = "GET"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            return false
-        }
+        let (data, httpResponse) = try await performRequest(request, label: "testConnection")
 
         // 200 = success, 401/403 = bad API key
         if httpResponse.statusCode == 200 {

@@ -5,13 +5,13 @@ struct HistoryPaletteView: View {
     @State private var storage = RecordingsLibraryStorage.shared
 
     private var filteredRecordings: [Recording] {
-        let withText = storage.recordings.filter { $0.transcriptionText != nil && !$0.transcriptionText!.isEmpty }
+        let withText = storage.recordings.filter { $0.transcriptionText?.isEmpty == false }
         if searchText.isEmpty {
             return Array(withText.prefix(20))
         }
         let query = searchText.lowercased()
         return withText.filter {
-            $0.transcriptionText!.lowercased().contains(query)
+            $0.transcriptionText?.lowercased().contains(query) == true
                 || $0.type.displayName.lowercased().contains(query)
         }
     }
@@ -98,7 +98,7 @@ struct HistoryPaletteView: View {
 
     private func copyAndClose(_ recording: Recording) {
         guard let text = recording.transcriptionText else { return }
-        ClipboardService.shared.copy(text: text)
+        ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
         HistoryPaletteWindowController.shared.closeWindow()
     }
 }

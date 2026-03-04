@@ -5,14 +5,42 @@ import Foundation
 @available(macOS 13.0, *)
 actor RealtimeVoiceAccumulator {
     private var finalText: String = ""
+    private var pendingSegmentBoundary = false
+    private var lastFinalEndMs: Int?
 
     func process(tokens: [RealtimeToken]) {
         let finalTokens = tokens.filter(\.isFinal)
         guard !finalTokens.isEmpty else { return }
+        let pauseBoundaryThresholdMs = SettingsStorage.shared.pauseParagraphThresholdMs
 
         for token in finalTokens {
+            let hasPauseBoundary: Bool = {
+                guard let previousEndMs = lastFinalEndMs,
+                      previousEndMs > 0,
+                      token.startMs > 0
+                else {
+                    return false
+                }
+
+                return token.startMs - previousEndMs >= pauseBoundaryThresholdMs
+            }()
+
+            if (pendingSegmentBoundary || hasPauseBoundary), !finalText.isEmpty, !finalText.hasSuffix("\n") {
+                finalText += "\n"
+            }
+
+            pendingSegmentBoundary = false
             finalText += token.text
+            if token.endMs > 0 {
+                lastFinalEndMs = token.endMs
+            } else if token.startMs > 0 {
+                lastFinalEndMs = token.startMs
+            }
         }
+    }
+
+    func markSegmentBoundary() {
+        pendingSegmentBoundary = true
     }
 
     func bestText() -> String {
@@ -25,7 +53,8 @@ actor RealtimeVoiceAccumulator {
 extension AppDelegate {
     @objc func toggleRecording() {
         Log.app.info("toggleRecording called, current state: \(self.appState.recordingState)")
-        Task {
+        voicePipelineTask?.cancel()
+        voicePipelineTask = Task {
             await self.performToggleRecording()
         }
     }
@@ -50,6 +79,13 @@ extension AppDelegate {
     func cancelRecording() async {
         Log.app.info("cancelRecording: BEGIN")
 
+        // Cancel any in-flight pipeline task
+        voicePipelineTask?.cancel()
+        voicePipelineTask = nil
+
+        let recordingStartTime = appState.recordingStartTime
+        let stopTime = Date()
+
         // Stop audio level piping
         audioLevelCancellable?.cancel()
         audioLevelCancellable = nil
@@ -60,8 +96,24 @@ extension AppDelegate {
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
 
-        // Cancel audio recorder
-        audioRecorder.cancelRecording()
+        if SettingsStorage.shared.escapeCancelSaveAudio, audioRecorder.isRecording {
+            do {
+                let audioData = try await audioRecorder.stopRecording()
+                let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+                RecordingsLibraryStorage.shared.saveRecording(
+                    audioData: audioData,
+                    type: .voice,
+                    duration: duration
+                )
+                Log.app.info("cancelRecording: audio saved after cancel")
+            } catch {
+                Log.app.warning("cancelRecording: failed to save audio on cancel - \(error.localizedDescription)")
+                audioRecorder.cancelRecording()
+            }
+        } else {
+            // Cancel audio recorder without persisting
+            audioRecorder.cancelRecording()
+        }
 
         // End App Nap prevention
         if let token = recordingActivityToken {
@@ -227,6 +279,16 @@ extension AppDelegate {
             Log.app.info("startRecording: Recording started successfully")
 
             // Only set recording state AFTER audio engine is confirmed working
+            guard appState.recordingState == .processing else {
+                Log.app.warning("startRecording: state changed during init (now \(self.appState.recordingState)), aborting")
+                audioRecorder.cancelRecording()
+                _ = await stopVoiceRealtimeSession(finalize: false)
+                if let token = recordingActivityToken {
+                    ProcessInfo.processInfo.endActivity(token)
+                    recordingActivityToken = nil
+                }
+                return
+            }
             await MainActor.run {
                 appState.recordingState = .recording
                 appState.recordingStartTime = Date()
@@ -320,105 +382,173 @@ extension AppDelegate {
 
         // Capture audio data first so it's available in both success and error paths
         var capturedAudioData: Data?
+        let recordingId = UUID()
 
-        do {
-            Log.app.info("stopRecording: Stopping audio recorder")
-            let audioData = try await audioRecorder.stopRecording()
-            capturedAudioData = audioData
-            Log.app.info("stopRecording: Got audio data, size = \(audioData.count) bytes")
+        await RecordingDebugScope.$recordingID.withValue(recordingId) {
+            RecordingDebugLog.app("Voice stop pipeline started", source: "Voice")
+            do {
+                Log.app.info("stopRecording: Stopping audio recorder")
+                let audioData = try await audioRecorder.stopRecording()
+                capturedAudioData = audioData
+                Log.app.info("stopRecording: Got audio data, size = \(audioData.count) bytes")
+                RecordingDebugLog.app("Audio captured, bytes=\(audioData.count)", source: "Voice")
 
-            let realtimeText = await stopVoiceRealtimeSession(finalize: true)
+                let realtimeResult = await stopVoiceRealtimeSession(finalize: true)
+                RecordingDebugLog.decision(
+                    "Realtime result: chars=\(realtimeResult.text.count), finalized=\(realtimeResult.didReceiveFinalization)",
+                    source: "Voice"
+                )
+                let recordingDurationSeconds = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
 
-            let text: String
-            if !realtimeText.isEmpty {
-                text = realtimeText
-                Log.app.info("stopRecording: Using realtime transcription (\(realtimeText.count) chars)")
-            } else {
-                var service = activeTranscriptionService
-                if SettingsStorage.shared.transcriptionProvider == .soniox {
-                    guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                        Log.app.error("stopRecording: No API key!")
-                        throw TranscriptionError.noAPIKey
+                let text: String
+                let useRealtimeWithoutFinalize = shouldUseRealtimeFallbackText(
+                    realtimeResult.text,
+                    didReceiveFinalization: realtimeResult.didReceiveFinalization,
+                    recordingDurationSeconds: recordingDurationSeconds
+                )
+
+                if useRealtimeWithoutFinalize {
+                    text = realtimeResult.text
+                    if realtimeResult.didReceiveFinalization {
+                        Log.app.info("stopRecording: Using realtime transcription (\(realtimeResult.text.count) chars)")
+                        RecordingDebugLog.decision("Using realtime transcription result (finalized)", source: "Voice")
+                    } else {
+                        Log.app.warning(
+                            "stopRecording: Finalize delayed, using realtime fallback text (\(realtimeResult.text.count) chars)"
+                        )
+                        RecordingDebugLog.decision(
+                            "Using realtime fallback text despite incomplete finalize (policy matched)",
+                            source: "Voice"
+                        )
                     }
-                    service.apiKey = apiKey
+                } else {
+                    var service = activeTranscriptionService
+                    if SettingsStorage.shared.transcriptionProvider == .soniox {
+                        guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
+                            Log.app.error("stopRecording: No API key!")
+                            throw TranscriptionError.noAPIKey
+                        }
+                        service.apiKey = apiKey
+                    }
+
+                    if !realtimeResult.didReceiveFinalization {
+                        Log.app.warning("stopRecording: Realtime finalize was incomplete, forcing async transcription fallback")
+                        RecordingDebugLog.decision("Fallback to async: realtime finalize incomplete", source: "Voice")
+                    } else if realtimeResult.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Log.app.info("stopRecording: Realtime transcription empty, using async fallback")
+                        RecordingDebugLog.decision("Fallback to async: realtime result empty", source: "Voice")
+                    } else {
+                        Log.app.warning(
+                            "stopRecording: Realtime finalized text too short (\(realtimeResult.text.count) chars) for \(String(format: "%.2f", recordingDurationSeconds))s recording, using async fallback"
+                        )
+                        RecordingDebugLog.decision("Fallback to async: realtime finalized text too short", source: "Voice")
+                    }
+
+                    do {
+                        text = try await service.transcribe(audioData: audioData)
+                    } catch {
+                        if !realtimeResult.text.isEmpty {
+                            Log.app.warning(
+                                "stopRecording: Async fallback failed, using partial realtime text (\(realtimeResult.text.count) chars)"
+                            )
+                            RecordingDebugLog.decision(
+                                "Async fallback failed, using partial realtime text",
+                                source: "Voice"
+                            )
+                            text = realtimeResult.text
+                        } else {
+                            throw error
+                        }
+                    }
+                }
+                Log.app.info("stopRecording: Transcription received: \(text.prefix(50))...")
+                RecordingDebugLog.app("Text ready, chars=\(text.count)", source: "Voice")
+
+                clipboardService.copy(text: text)
+                Log.app.info("stopRecording: Text copied to clipboard")
+
+                if SettingsStorage.shared.autoPaste {
+                    Log.app.info("stopRecording: Auto-pasting")
+                    do {
+                        try await clipboardService.paste()
+                    } catch ClipboardError.accessibilityNotGranted {
+                        Log.app.warning("stopRecording: Accessibility permission needed")
+                        PermissionManager.shared.showPermissionAlert(for: .accessibility)
+                    } catch {
+                        Log.app.error("stopRecording: Paste failed - \(error.localizedDescription)")
+                    }
                 }
 
-                Log.app.info("stopRecording: Calling transcription service (\(SettingsStorage.shared.transcriptionProvider.rawValue))")
-                text = try await service.transcribe(audioData: audioData)
-            }
-            Log.app.info("stopRecording: Transcription received: \(text.prefix(50))...")
-
-            clipboardService.copy(text: text)
-            Log.app.info("stopRecording: Text copied to clipboard")
-
-            if SettingsStorage.shared.autoPaste {
-                Log.app.info("stopRecording: Auto-pasting")
-                do {
-                    try await clipboardService.paste()
-                } catch ClipboardError.accessibilityNotGranted {
-                    Log.app.warning("stopRecording: Accessibility permission needed")
-                    PermissionManager.shared.showPermissionAlert(for: .accessibility)
-                } catch {
-                    Log.app.error("stopRecording: Paste failed - \(error.localizedDescription)")
+                // Update state to success IMMEDIATELY after text is available
+                // This ensures the UI shows checkmark right when user can work with the text
+                guard appState.recordingState == .processing else {
+                    Log.app.warning("stopRecording: state changed during processing (now \(self.appState.recordingState)), dropping result")
+                    return
                 }
-            }
+                await MainActor.run {
+                    appState.lastTranscription = text
+                    appState.isEmptyTranscription = false
+                    appState.deviceFallbackWarning = nil
+                    appState.recordingState = .success
+                    appState.recordingStartTime = nil
+                    handleRecordingStateChange(.success)
+                }
+                Log.app.info("stopRecording: SUCCESS")
 
-            // Update state to success IMMEDIATELY after text is available
-            // This ensures the UI shows checkmark right when user can work with the text
-            await MainActor.run {
-                appState.lastTranscription = text
-                appState.isEmptyTranscription = false
-                appState.deviceFallbackWarning = nil
-                appState.recordingState = .success
-                appState.recordingStartTime = nil
-                handleRecordingStateChange(.success)
-            }
-            Log.app.info("stopRecording: SUCCESS")
-
-            // Save to recordings library
-            let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
-            RecordingsLibraryStorage.shared.saveRecording(
-                audioData: audioData,
-                type: .voice,
-                duration: duration,
-                transcriptionText: text
-            )
-
-            // Optional operations run after state change (non-blocking for UI)
-            if SettingsStorage.shared.playSoundOnCompletion {
-                Log.app.info("stopRecording: Playing sound")
-                NSSound(named: .init("Funk"))?.play()
-            }
-
-            // Clear recovery state on success
-            RecoveryStateManager.shared.clearState()
-
-        } catch {
-            _ = await stopVoiceRealtimeSession(finalize: false)
-            Log.app.error("stopRecording: ERROR - \(error.localizedDescription)")
-            let isEmptyTranscription: Bool = {
-                guard case .emptyTranscription = error as? TranscriptionError else { return false }
-                return true
-            }()
-
-            // Save recording without transcription so user can process later
-            if let audioData = capturedAudioData {
+                // Save to recordings library
                 let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                 RecordingsLibraryStorage.shared.saveRecording(
+                    id: recordingId,
                     audioData: audioData,
                     type: .voice,
-                    duration: duration
+                    duration: duration,
+                    transcriptionText: text
                 )
-                RecoveryStateManager.shared.clearState()
-            }
+                RecordingDebugLog.app("Recording saved to library", source: "Voice")
 
-            await MainActor.run {
-                appState.errorMessage = error.localizedDescription
-                appState.isEmptyTranscription = isEmptyTranscription
-                appState.deviceFallbackWarning = nil
-                appState.recordingState = .error
-                appState.recordingStartTime = nil
-                handleRecordingStateChange(.error)
+                // Optional operations run after state change (non-blocking for UI)
+                if SettingsStorage.shared.playSoundOnCompletion {
+                    Log.app.info("stopRecording: Playing sound")
+                    NSSound(named: .init("Funk"))?.play()
+                }
+
+                // Clear recovery state on success
+                RecoveryStateManager.shared.clearState()
+
+            } catch {
+                _ = await stopVoiceRealtimeSession(finalize: false)
+                Log.app.error("stopRecording: ERROR - \(error.localizedDescription)")
+                RecordingDebugLog.app("Stop pipeline failed: \(error.localizedDescription)", source: "Voice")
+                let isEmptyTranscription: Bool = {
+                    guard case .emptyTranscription = error as? TranscriptionError else { return false }
+                    return true
+                }()
+
+                // Save recording without transcription so user can process later
+                if let audioData = capturedAudioData {
+                    let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+                    RecordingsLibraryStorage.shared.saveRecording(
+                        id: recordingId,
+                        audioData: audioData,
+                        type: .voice,
+                        duration: duration
+                    )
+                    RecoveryStateManager.shared.clearState()
+                    RecordingDebugLog.app("Saved audio-only after failure", source: "Voice")
+                }
+
+                guard appState.recordingState == .processing else {
+                    Log.app.warning("stopRecording: state changed during processing (now \(self.appState.recordingState)), dropping error")
+                    return
+                }
+                await MainActor.run {
+                    appState.errorMessage = error.localizedDescription
+                    appState.isEmptyTranscription = isEmptyTranscription
+                    appState.deviceFallbackWarning = nil
+                    appState.recordingState = .error
+                    appState.recordingStartTime = nil
+                    handleRecordingStateChange(.error)
+                }
             }
         }
 
@@ -462,20 +592,27 @@ extension AppDelegate {
             Log.transcription.info("Dictation RT status: \(String(describing: status))")
         }
 
+        rtService.onSegmentBoundary = { [weak accumulator] _ in
+            guard let accumulator else { return }
+            Task {
+                await accumulator.markSegmentBoundary()
+            }
+        }
+
         rtService.onError = { error in
             Log.transcription.error("Dictation RT error: \(error.localizedDescription)")
         }
 
         do {
-            let languageHints = SettingsStorage.shared.sonioxLanguageHints
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
+            let languageHints = SettingsStorage.shared.favoriteLanguages
 
             try await rtService.connect(
                 apiKey: apiKey,
                 languageHints: languageHints,
-                strictLanguageHints: SettingsStorage.shared.sonioxLanguageHintsStrict,
-                audioConfig: .defaultPCM16kMono
+                strictLanguageHints: !languageHints.isEmpty,
+                audioConfig: .defaultPCM16kMono,
+                enableEndpointDetection: true,
+                maxEndpointDelayMs: SettingsStorage.shared.sonioxEndpointDelayMs
             )
 
             voiceRealtimeSessionEnabled = true
@@ -490,11 +627,12 @@ extension AppDelegate {
         }
     }
 
-    private func stopVoiceRealtimeSession(finalize: Bool) async -> String {
+    private func stopVoiceRealtimeSession(finalize: Bool) async -> (text: String, didReceiveFinalization: Bool) {
         audioRecorder.onRealtimeAudioData = nil
 
         let accumulator = voiceRealtimeAccumulator
         let wasEnabled = voiceRealtimeSessionEnabled
+        var didReceiveFinalization = false
 
         defer {
             voiceRealtimeSessionEnabled = false
@@ -502,19 +640,20 @@ extension AppDelegate {
             realtimeTranscriptionService.onTokensReceived = nil
             realtimeTranscriptionService.onError = nil
             realtimeTranscriptionService.onConnectionStatusChanged = nil
+            realtimeTranscriptionService.onSegmentBoundary = nil
         }
 
         guard wasEnabled else {
-            return ""
+            return ("", false)
         }
 
         if finalize {
-            await realtimeTranscriptionService.finalize()
+            didReceiveFinalization = await realtimeTranscriptionService.finalize()
         }
         await realtimeTranscriptionService.disconnect()
 
         let text = await accumulator?.bestText() ?? ""
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (text.trimmingCharacters(in: .whitespacesAndNewlines), didReceiveFinalization)
     }
 
     // MARK: - Escape Cancel Handler
@@ -526,10 +665,10 @@ extension AppDelegate {
             return
         }
 
-        // On first escape: show confirmation notification
+        // On first shortcut press: show confirmation notification
         escapeService.onFirstEscape = { [weak self] in
             NotchManager.shared.showInfo(
-                message: "Press ESC again to cancel",
+                message: SettingsStorage.shared.escapeCancelShortcut.repeatHint,
                 duration: 1.5
             )
 
@@ -542,14 +681,64 @@ extension AppDelegate {
             }
         }
 
-        // On second escape (confirmed cancel): cancel recording
+        // On second shortcut press (confirmed cancel): cancel recording
         escapeService.onCancel = { [weak self] in
             Task { @MainActor in
+                let shouldSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
                 await self?.cancelRecording()
-                NotchManager.shared.showInfo(message: "Recording cancelled")
+                let message = shouldSaveAudio ? "Recording cancelled and saved" : "Recording cancelled"
+                NotchManager.shared.showInfo(message: message)
             }
         }
 
         escapeService.activate()
+    }
+
+    private func shouldUseRealtimeFallbackText(
+        _ text: String,
+        didReceiveFinalization: Bool,
+        recordingDurationSeconds: TimeInterval
+    ) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let wordCount = trimmed.split { $0.isWhitespace || $0.isNewline }.count
+        let charCount = trimmed.count
+        let hasSentenceEnding = trimmed.hasSuffix(".")
+            || trimmed.hasSuffix("!")
+            || trimmed.hasSuffix("?")
+            || trimmed.contains("\n")
+
+        if didReceiveFinalization {
+            // Finalized realtime output can occasionally be a very short fragment (e.g. "But.").
+            // For recordings longer than a short utterance, require a minimal text quality bar
+            // and fall back to async full-audio transcription otherwise.
+            if recordingDurationSeconds <= 1.2 {
+                return true
+            }
+            if wordCount >= 2 {
+                return true
+            }
+            if charCount >= 12 {
+                return true
+            }
+            return false
+        }
+
+        // Fallback policy when finalize is delayed:
+        // 1) sentence-like chunk with at least 4 words
+        // 2) or sufficiently long chunk (>= 8 words)
+        // 3) or raw length safety net (>= 48 chars)
+        if hasSentenceEnding, wordCount >= 4 {
+            return true
+        }
+        if wordCount >= 8 {
+            return true
+        }
+        if charCount >= 48 {
+            return true
+        }
+
+        return false
     }
 }

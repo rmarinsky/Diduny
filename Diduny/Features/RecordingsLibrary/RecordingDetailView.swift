@@ -7,6 +7,10 @@ struct RecordingDetailView: View {
     @State private var queueService = RecordingQueueService.shared
     @State private var modelManager = WhisperModelManager.shared
     @State private var selectedWhisperModel: String = SettingsStorage.shared.selectedWhisperModel
+#if DEBUG
+    @State private var debugEntries: [RecordingDebugEntry] = []
+    @State private var selectedDebugCategory: DebugCategoryFilter = .all
+#endif
 
     private let storage = RecordingsLibraryStorage.shared
 
@@ -47,10 +51,22 @@ struct RecordingDetailView: View {
 
             Divider()
 
+#if DEBUG
+            debugLogsSection
+                .padding(12)
+
+            Divider()
+#endif
+
             // Actions
             actionsSection
                 .padding(12)
         }
+#if DEBUG
+        .task(id: recording.id) {
+            await refreshDebugEntries()
+        }
+#endif
     }
 
     // MARK: - Header
@@ -124,6 +140,76 @@ struct RecordingDetailView: View {
         .frame(maxHeight: .infinity)
     }
 
+#if DEBUG
+    private enum DebugCategoryFilter: String, CaseIterable {
+        case all = "All"
+        case app = "App"
+        case decision = "Decision"
+        case http = "HTTP"
+
+        var category: RecordingDebugCategory? {
+            switch self {
+            case .all: nil
+            case .app: .app
+            case .decision: .decision
+            case .http: .http
+            }
+        }
+    }
+
+    private var filteredDebugEntries: [RecordingDebugEntry] {
+        let base = debugEntries.sorted { $0.timestamp > $1.timestamp }
+        guard let category = selectedDebugCategory.category else { return base }
+        return base.filter { $0.category == category }
+    }
+
+    private var debugLogsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Dev Logs")
+                    .font(.headline)
+
+                Spacer()
+
+                Picker("Category", selection: $selectedDebugCategory) {
+                    ForEach(DebugCategoryFilter.allCases, id: \.self) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 260)
+
+                Button("Refresh") {
+                    Task {
+                        await refreshDebugEntries()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            if filteredDebugEntries.isEmpty {
+                Text("No debug logs for this recording yet.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .italic()
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        ForEach(filteredDebugEntries) { entry in
+                            Text("\(formattedDebugTime(entry.timestamp)) [\(entry.category.title)] \(entry.source.map { "\($0): " } ?? "")\(entry.message)")
+                                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .frame(minHeight: 120, maxHeight: 180)
+            }
+        }
+    }
+#endif
+
     // MARK: - Actions
 
     private var actionsSection: some View {
@@ -142,7 +228,7 @@ struct RecordingDetailView: View {
                 HStack {
                     Spacer()
                     Button("Copy Text") {
-                        ClipboardService.shared.copy(text: text)
+                        ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
                     }
                 }
             }
@@ -270,11 +356,15 @@ struct RecordingDetailView: View {
         }
     }
 
-    private var formattedDate: String {
+    private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
-        return formatter.string(from: recording.createdAt)
+        return formatter
+    }()
+
+    private var formattedDate: String {
+        Self.dateFormatter.string(from: recording.createdAt)
     }
 
     private var formattedDuration: String {
@@ -286,5 +376,17 @@ struct RecordingDetailView: View {
     private var formattedSize: String {
         ByteCountFormatter.string(fromByteCount: recording.fileSizeBytes, countStyle: .file)
     }
+
+#if DEBUG
+    private func refreshDebugEntries() async {
+        debugEntries = await RecordingDebugStore.shared.entries(for: recording.id)
+    }
+
+    private func formattedDebugTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter.string(from: date)
+    }
+#endif
 
 }

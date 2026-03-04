@@ -132,7 +132,7 @@ open Diduny.xcodeproj
 ### Development Build (Script)
 ```bash
 # Build and install "Diduny DEV" to /Applications
-./build_and_install.sh
+./scripts/dev_install.sh
 ```
 
 ### Test/QA Build

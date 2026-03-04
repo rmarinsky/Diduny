@@ -6,13 +6,12 @@ struct TranscriptionSettingsView: View {
     @State private var modelSort: ModelSort = .speed
     @State private var whisperLanguage: String = SettingsStorage.shared.whisperLanguage
     @State private var whisperPrompt: String = SettingsStorage.shared.whisperPrompt
-    @State private var sonioxPrompt: String = SettingsStorage.shared.sonioxPrompt
     @State private var favoriteLanguageCodes: Set<String> = Set(SettingsStorage.shared.favoriteLanguages)
-    @State private var sonioxLanguageHintCodes: Set<String> = Set(SettingsStorage.shared.sonioxLanguageHints)
-    @State private var sonioxLanguageHintsStrict: Bool = SettingsStorage.shared.sonioxLanguageHintsStrict
     @State private var translationRealtimeSocketEnabled: Bool = SettingsStorage.shared.translationRealtimeSocketEnabled
     @State private var transcriptionRealtimeSocketEnabled: Bool = SettingsStorage.shared.transcriptionRealtimeSocketEnabled
     @State private var meetingCloudModeEnabled: Bool = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
+    @State private var pauseParagraphThresholdMs: Double = Double(SettingsStorage.shared.pauseParagraphThresholdMs)
+    @State private var sonioxEndpointDelayMs: Double = Double(SettingsStorage.shared.sonioxEndpointDelayMs)
 
     enum ModelSort: String, CaseIterable {
         case speed, accuracy
@@ -71,7 +70,7 @@ struct TranscriptionSettingsView: View {
                         }
                         .disabled(!hasSonioxKey)
 
-                    Text("When enabled, dictation is streamed live via cloud socket. If unavailable, app falls back to async cloud transcription.")
+                    Text("When enabled, dictation is streamed live via cloud socket. Socket mode can improve paragraph detection from pauses/endpoints. If unavailable, app falls back to async cloud transcription.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -100,9 +99,49 @@ struct TranscriptionSettingsView: View {
                     }
                     .disabled(!hasSonioxKey)
 
-                Text("When enabled, translation is streamed live via cloud socket. If unavailable, app falls back to async cloud translation.")
+                Text("When enabled, translation is streamed live via cloud socket. Socket mode can improve paragraph detection from pauses/endpoints. If unavailable, app falls back to async cloud translation.")
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+
+            Section("Text Formatting") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Endpoint sensitivity")
+                        Spacer()
+                        Text("\(Int(sonioxEndpointDelayMs)) ms")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Slider(value: $sonioxEndpointDelayMs, in: 500 ... 5000, step: 100)
+                        .onChange(of: sonioxEndpointDelayMs) { _, newValue in
+                            SettingsStorage.shared.sonioxEndpointDelayMs = Int(newValue.rounded())
+                        }
+
+                    Text("How long Soniox waits before placing a period. Higher values = fewer periods, more natural text.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Pause for new paragraph")
+                        Spacer()
+                        Text("\(Int(pauseParagraphThresholdMs)) ms")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Slider(value: $pauseParagraphThresholdMs, in: 300 ... 3000, step: 50)
+                        .onChange(of: pauseParagraphThresholdMs) { _, newValue in
+                            SettingsStorage.shared.pauseParagraphThresholdMs = Int(newValue.rounded())
+                        }
+
+                    Text("Longer pause than this value creates a new line. Applied to realtime socket output and async cloud fallback formatting.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
 
             // Favorite languages for quick translation
@@ -124,57 +163,9 @@ struct TranscriptionSettingsView: View {
                     .toggleStyle(.checkbox)
                 }
 
-                Text("Selected languages appear as quick-translate buttons in the Recordings detail view.")
+                Text("Selected languages are used as quick-translate buttons and as language hints for cloud transcription.")
                     .font(.caption)
                     .foregroundColor(.secondary)
-            }
-
-            // Soniox cloud language restrictions
-            Section("Cloud Language Restrictions") {
-                ForEach(SupportedLanguage.allLanguages) { lang in
-                    Toggle(lang.name, isOn: Binding(
-                        get: { sonioxLanguageHintCodes.contains(lang.code) },
-                        set: { isOn in
-                            if isOn {
-                                sonioxLanguageHintCodes.insert(lang.code)
-                            } else {
-                                sonioxLanguageHintCodes.remove(lang.code)
-                            }
-
-                            SettingsStorage.shared.sonioxLanguageHints = SupportedLanguage.allLanguages
-                                .map(\.code)
-                                .filter { sonioxLanguageHintCodes.contains($0) }
-
-                            if sonioxLanguageHintCodes.isEmpty {
-                                sonioxLanguageHintsStrict = false
-                                SettingsStorage.shared.sonioxLanguageHintsStrict = false
-                            }
-                        }
-                    ))
-                    .toggleStyle(.checkbox)
-                }
-
-                Toggle("Strict mode (only selected languages)", isOn: $sonioxLanguageHintsStrict)
-                    .onChange(of: sonioxLanguageHintsStrict) { _, newValue in
-                        let strict = !sonioxLanguageHintCodes.isEmpty && newValue
-                        sonioxLanguageHintsStrict = strict
-                        SettingsStorage.shared.sonioxLanguageHintsStrict = strict
-                    }
-                    .disabled(sonioxLanguageHintCodes.isEmpty)
-
-                if sonioxLanguageHintCodes.isEmpty {
-                    Text("No language selected: Soniox auto-detects any language.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } else if sonioxLanguageHintsStrict {
-                    Text("Strict mode enabled: cloud recognition is limited to selected languages only.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } else {
-                    Text("Selected languages are hints; Soniox can still detect other languages.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
 
             // Meeting Recording
@@ -222,11 +213,11 @@ struct TranscriptionSettingsView: View {
         .onAppear {
             sonioxAPIKey = KeychainManager.shared.getSonioxAPIKey() ?? ""
             keychainAccessible = KeychainManager.shared.isKeychainAccessible()
-            sonioxLanguageHintCodes = Set(SettingsStorage.shared.sonioxLanguageHints)
-            sonioxLanguageHintsStrict = SettingsStorage.shared.sonioxLanguageHintsStrict
             translationRealtimeSocketEnabled = SettingsStorage.shared.translationRealtimeSocketEnabled
             transcriptionRealtimeSocketEnabled = SettingsStorage.shared.transcriptionRealtimeSocketEnabled
             meetingCloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
+            pauseParagraphThresholdMs = Double(SettingsStorage.shared.pauseParagraphThresholdMs)
+            sonioxEndpointDelayMs = Double(SettingsStorage.shared.sonioxEndpointDelayMs)
         }
     }
 
@@ -517,35 +508,6 @@ struct TranscriptionSettingsView: View {
 
     @ViewBuilder
     private var promptsSection: some View {
-        if needsSoniox {
-            Section("Soniox Prompt") {
-                VStack(alignment: .leading, spacing: 6) {
-                    TextEditor(text: $sonioxPrompt)
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(minHeight: 80, maxHeight: 160)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(.quaternary, lineWidth: 1)
-                        )
-                        .onChange(of: sonioxPrompt) { _, newValue in
-                            SettingsStorage.shared.sonioxPrompt = newValue
-                        }
-
-                    Text("Context prompt sent with every Soniox transcription in Voice Note mode. Leave empty to use the built-in default.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    if !sonioxPrompt.isEmpty {
-                        Button("Reset to default") {
-                            sonioxPrompt = ""
-                            SettingsStorage.shared.sonioxPrompt = ""
-                        }
-                        .font(.caption)
-                    }
-                }
-            }
-        }
-
         if needsWhisper {
             Section("Whisper Language & Prompt") {
                 Picker("Language", selection: $whisperLanguage) {

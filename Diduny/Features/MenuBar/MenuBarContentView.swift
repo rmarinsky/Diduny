@@ -68,7 +68,7 @@ struct MenuBarContentView: View {
                     ForEach(Array(recent)) { recording in
                         Button {
                             if let text = recording.transcriptionText {
-                                ClipboardService.shared.copy(text: text)
+                                ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
                             }
                         } label: {
                             let preview = transcriptionPreview(recording.transcriptionText ?? "")

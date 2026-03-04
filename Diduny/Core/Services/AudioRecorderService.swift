@@ -230,6 +230,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         // Remove tap and stop engine
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        engine.reset()
 
         // Remove configuration observer
         if let observer = configurationObserver {
@@ -265,6 +266,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        engine.reset()
 
         if let observer = configurationObserver {
             NotificationCenter.default.removeObserver(observer)

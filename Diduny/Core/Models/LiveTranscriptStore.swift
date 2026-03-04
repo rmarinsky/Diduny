@@ -5,11 +5,13 @@ import os
 @Observable
 @MainActor
 final class LiveTranscriptStore {
+    let createdAt = Date()
     var segments: [TranscriptSegment] = []
     var provisionalText: String = ""
     var provisionalSpeaker: String?
     var isActive: Bool = false
     var connectionStatus: RealtimeConnectionStatus = .disconnected
+    private var forceNewSegmentForNextFinalToken = false
 
     var wordCount: Int {
         let finalWords = segments.reduce(0) { count, segment in
@@ -53,6 +55,17 @@ final class LiveTranscriptStore {
     }
 
     private func appendFinalToken(_ token: RealtimeToken) {
+        if forceNewSegmentForNextFinalToken {
+            forceNewSegmentForNextFinalToken = false
+            let segment = TranscriptSegment(
+                speaker: token.speaker,
+                tokens: [token],
+                startMs: token.startMs
+            )
+            segments.append(segment)
+            return
+        }
+
         // If current segment has same speaker, append
         if let lastIndex = segments.indices.last,
            segments[lastIndex].speaker == token.speaker
@@ -69,6 +82,11 @@ final class LiveTranscriptStore {
         }
     }
 
+    func markSegmentBoundary() {
+        guard !segments.isEmpty else { return }
+        forceNewSegmentForNextFinalToken = true
+    }
+
     // MARK: - Reset
 
     func reset() {
@@ -77,5 +95,6 @@ final class LiveTranscriptStore {
         provisionalSpeaker = nil
         isActive = false
         connectionStatus = .disconnected
+        forceNewSegmentForNextFinalToken = false
     }
 }

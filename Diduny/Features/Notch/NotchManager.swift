@@ -1,3 +1,4 @@
+import AppKit
 import DynamicNotchKit
 import Observation
 import SwiftUI
@@ -56,6 +57,8 @@ final class NotchManager {
 
     private var notch: DynamicNotch<NotchExpandedView, NotchCompactLeadingView, NotchCompactTrailingView>?
     private var autoDismissTask: Task<Void, Never>?
+    private var onStopRequested: (@MainActor () async -> Void)?
+    private var operationSequence: UInt64 = 0
 
     private init() {}
 
@@ -105,8 +108,23 @@ final class NotchManager {
         recordingStartTime = nil
         audioLevel = 0
         state = .idle
+        operationSequence &+= 1
+        let seq = operationSequence
         Task {
+            guard self.operationSequence == seq else { return }
             await notch?.hide()
+        }
+    }
+
+    func setStopHandler(_ handler: (@MainActor () async -> Void)?) {
+        onStopRequested = handler
+    }
+
+    func requestStopActiveRecording() {
+        guard case .recording = state else { return }
+        guard let onStopRequested else { return }
+        Task { @MainActor in
+            await onStopRequested()
         }
     }
 
@@ -122,28 +140,44 @@ final class NotchManager {
         }
     }
 
-    private var screenHasNotch: Bool {
-        NSScreen.main?.auxiliaryTopLeftArea != nil && NSScreen.main?.auxiliaryTopRightArea != nil
+    private func activeScreen() -> NSScreen? {
+        let mouseLocation = NSEvent.mouseLocation
+        if let mouseScreen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }) {
+            return mouseScreen
+        }
+
+        return NSScreen.main ?? NSScreen.screens.first
+    }
+
+    private func screenHasNotch(_ screen: NSScreen) -> Bool {
+        screen.auxiliaryTopLeftArea != nil && screen.auxiliaryTopRightArea != nil
     }
 
     private func showCompact() {
         ensureNotch()
-        if screenHasNotch {
-            Task {
-                await notch?.compact()
-            }
-        } else {
-            // Floating style doesn't support compact — use expanded instead
-            Task {
-                await notch?.expand()
+        guard let screen = activeScreen() else { return }
+
+        operationSequence &+= 1
+        let seq = operationSequence
+        Task {
+            guard self.operationSequence == seq else { return }
+            if screenHasNotch(screen) {
+                await notch?.compact(on: screen)
+            } else {
+                // Floating style doesn't support compact — use expanded instead.
+                await notch?.expand(on: screen)
             }
         }
     }
 
     private func showExpanded() {
         ensureNotch()
+        guard let screen = activeScreen() else { return }
+        operationSequence &+= 1
+        let seq = operationSequence
         Task {
-            await notch?.expand()
+            guard self.operationSequence == seq else { return }
+            await notch?.expand(on: screen)
         }
     }
 

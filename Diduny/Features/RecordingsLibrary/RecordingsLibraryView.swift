@@ -40,12 +40,16 @@ struct RecordingsLibraryView: View {
         }
     }
 
-    /// Recordings grouped by date (day), sorted newest first
-    private var groupedRecordings: [(date: String, recordings: [Recording])] {
-        let calendar = Calendar.current
+    private static let groupDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
+        return formatter
+    }()
+
+    /// Recordings grouped by date (day), sorted newest first
+    private var groupedRecordings: [(date: String, recordings: [Recording])] {
+        let calendar = Calendar.current
 
         let grouped = Dictionary(grouping: filteredRecordings) { recording in
             calendar.startOfDay(for: recording.createdAt)
@@ -53,7 +57,7 @@ struct RecordingsLibraryView: View {
 
         return grouped
             .sorted { $0.key > $1.key }
-            .map { (date: formatter.string(from: $0.key), recordings: $0.value) }
+            .map { (date: Self.groupDateFormatter.string(from: $0.key), recordings: $0.value) }
     }
 
     private var singleSelectedRecording: Recording? {
@@ -193,7 +197,7 @@ struct RecordingsLibraryView: View {
         if let text = recording.transcriptionText, !text.isEmpty {
             Divider()
             Button("Copy Text") {
-                ClipboardService.shared.copy(text: text)
+                ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
             }
         }
 

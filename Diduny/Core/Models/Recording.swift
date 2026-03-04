@@ -42,6 +42,15 @@ struct Recording: Identifiable, Codable, Equatable {
             case .meeting: "Meeting"
             }
         }
+
+        var clipboardCopyBehavior: ClipboardCopyBehavior {
+            switch self {
+            case .voice, .translation:
+                .cleaned
+            case .meeting:
+                .raw
+            }
+        }
     }
 
     enum ProcessingStatus: String, Codable {
