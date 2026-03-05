@@ -38,6 +38,10 @@ final class PermissionManager {
                 await self.refreshStatus()
             }
         }
+
+        Task { @MainActor in
+            await self.refreshStatus()
+        }
     }
 
     // MARK: - Individual Permission Requests (Async)

@@ -60,7 +60,32 @@ final class SettingsStorage {
         case sonioxEndpointDelayMs
     }
 
-    private init() {}
+    private init() {
+        migrateSelectedDeviceIfNeeded()
+    }
+
+    /// One-time migration from legacy `selectedDeviceID` (AudioDeviceID int) to `selectedDeviceUID` (String).
+    private func migrateSelectedDeviceIfNeeded() {
+        let legacyKey = "selectedDeviceID"
+        let legacyValue = defaults.integer(forKey: legacyKey)
+        guard legacyValue > 0,
+              defaults.string(forKey: Key.selectedDeviceUID.rawValue) == nil else { return }
+
+        // Resolve UID from AudioDeviceID via CoreAudio
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceUID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var uid: CFString = "" as CFString
+        var size = UInt32(MemoryLayout<CFString>.size)
+        let deviceID = AudioDeviceID(legacyValue)
+        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, &uid)
+        if status == noErr {
+            defaults.set(uid as String, forKey: Key.selectedDeviceUID.rawValue)
+        }
+        defaults.removeObject(forKey: legacyKey)
+    }
 
     // MARK: - Audio Device
 

@@ -81,8 +81,14 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
             return (device, false)
         }
 
-        // Fallback to best available device
+        // Device list may be stale — refresh and re-check before falling back
         refreshDevices()
+        if let uid = selectedUID,
+           let device = device(forUID: uid),
+           isDeviceAlive(device.id) {
+            return (device, false)
+        }
+
         return (bestDevice() ?? defaultDevice, selectedUID != nil)
     }
 

@@ -41,11 +41,13 @@ struct NotchCompactTrailingView: View {
                         RecordingTimerView(startTime: manager.recordingStartTime)
                     }
                     .opacity(isHovering ? 0 : 1)
+                    .allowsHitTesting(!isHovering)
 
                     StopCompactButton {
                         manager.requestStopActiveRecording()
                     }
                     .opacity(isHovering ? 1 : 0)
+                    .allowsHitTesting(isHovering)
                 }
 
             case .processing:
