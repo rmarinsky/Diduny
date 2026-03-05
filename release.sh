@@ -160,6 +160,11 @@ VERSION=$(defaults read "${APP_PATH}/Contents/Info.plist" CFBundleShortVersionSt
 BUILD_NUM=$(defaults read "${APP_PATH}/Contents/Info.plist" CFBundleVersion)
 DMG_PATH="${BUILD_DIR}/${DISPLAY_NAME}-${VERSION}.dmg"
 
+# Remove Xcode export artifacts so only the .app ends up in the DMG
+rm -f "${EXPORT_PATH}/DistributionSummary.plist" \
+      "${EXPORT_PATH}/ExportOptions.plist" \
+      "${EXPORT_PATH}/Packaging.log"
+
 echo -e "${YELLOW}[7/7] Creating DMG...${NC}"
 
 if ! command -v create-dmg &> /dev/null; then
