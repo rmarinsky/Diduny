@@ -50,9 +50,10 @@ final class AppState {
         }
     }
 
-    var selectedDeviceID: AudioDeviceID? {
+    /// Stable device UID string — persisted across reboots (unlike AudioDeviceID).
+    var selectedDeviceUID: String? {
         didSet {
-            SettingsStorage.shared.selectedDeviceID = selectedDeviceID
+            SettingsStorage.shared.selectedDeviceUID = selectedDeviceUID
         }
     }
 
@@ -119,10 +120,10 @@ final class AppState {
 
     init() {
         let settings = SettingsStorage.shared
-        selectedDeviceID = settings.selectedDeviceID
+        selectedDeviceUID = settings.selectedDeviceUID
         Log.app
             .debug(
-                "Initialized: selectedDeviceID=\(String(describing: self.selectedDeviceID))"
+                "Initialized: selectedDeviceUID=\(String(describing: self.selectedDeviceUID))"
             )
     }
 }

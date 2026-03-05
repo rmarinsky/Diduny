@@ -10,7 +10,6 @@ struct TranscriptionSettingsView: View {
     @State private var translationRealtimeSocketEnabled: Bool = SettingsStorage.shared.translationRealtimeSocketEnabled
     @State private var transcriptionRealtimeSocketEnabled: Bool = SettingsStorage.shared.transcriptionRealtimeSocketEnabled
     @State private var meetingCloudModeEnabled: Bool = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
-    @State private var pauseParagraphThresholdMs: Double = Double(SettingsStorage.shared.pauseParagraphThresholdMs)
     @State private var sonioxEndpointDelayMs: Double = Double(SettingsStorage.shared.sonioxEndpointDelayMs)
 
     enum ModelSort: String, CaseIterable {
@@ -123,25 +122,6 @@ struct TranscriptionSettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Pause for new paragraph")
-                        Spacer()
-                        Text("\(Int(pauseParagraphThresholdMs)) ms")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Slider(value: $pauseParagraphThresholdMs, in: 300 ... 3000, step: 50)
-                        .onChange(of: pauseParagraphThresholdMs) { _, newValue in
-                            SettingsStorage.shared.pauseParagraphThresholdMs = Int(newValue.rounded())
-                        }
-
-                    Text("Longer pause than this value creates a new line. Applied to realtime socket output and async cloud fallback formatting.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
 
             // Favorite languages for quick translation
@@ -216,7 +196,6 @@ struct TranscriptionSettingsView: View {
             translationRealtimeSocketEnabled = SettingsStorage.shared.translationRealtimeSocketEnabled
             transcriptionRealtimeSocketEnabled = SettingsStorage.shared.transcriptionRealtimeSocketEnabled
             meetingCloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
-            pauseParagraphThresholdMs = Double(SettingsStorage.shared.pauseParagraphThresholdMs)
             sonioxEndpointDelayMs = Double(SettingsStorage.shared.sonioxEndpointDelayMs)
         }
     }

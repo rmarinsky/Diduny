@@ -8,7 +8,6 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
     private let model = "stt-async-v4"
     private let pollingInterval: TimeInterval = 1.0
     private let maxPollingAttempts = 60 // 60 seconds max wait
-    private var paragraphPauseThresholdMs: Int { SettingsStorage.shared.pauseParagraphThresholdMs }
     private let maxAudioBytesForSpeechPrecheck = 25 * 1024 * 1024
     private let strictSpeechPrecheck = false
 
@@ -474,13 +473,13 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
 
         let transcriptResponse = try JSONDecoder().decode(TranscriptResponse.self, from: data)
 
-        let formattedText = formatTextWithPauseParagraphs(tokens: transcriptResponse.tokens, fallback: transcriptResponse.text)
+        let text = transcriptResponse.text.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !formattedText.isEmpty else {
+        guard !text.isEmpty else {
             throw TranscriptionError.emptyTranscription
         }
 
-        return formattedText
+        return text
     }
 
     // MARK: - Get Diarized Transcript
@@ -600,10 +599,7 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
             return transcriptResponse.text
         }
 
-        let translatedText = formatTranslatedTextWithPauseParagraphs(
-            tokens: translatedTokens,
-            fallback: translatedTokens.map(\.text).joined()
-        )
+        let translatedText = translatedTokens.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
         Log.transcription.info("Translated text extracted: \(translatedText.prefix(50))...")
 
         guard !translatedText.isEmpty else {
@@ -611,88 +607,6 @@ final class SonioxTranscriptionService: TranscriptionServiceProtocol {
         }
 
         return translatedText
-    }
-
-    private func formatTextWithPauseParagraphs(tokens: [TranscriptToken], fallback: String) -> String {
-        guard !tokens.isEmpty else {
-            return fallback.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        var result = ""
-        var previousEndMs: Int?
-
-        for token in tokens {
-            if let previousEndMs,
-               token.start_ms > 0,
-               previousEndMs > 0,
-               token.start_ms - previousEndMs >= paragraphPauseThresholdMs,
-               !result.isEmpty,
-               !result.hasSuffix("\n")
-            {
-                result += "\n"
-            }
-
-            result += token.text
-            previousEndMs = token.end_ms > 0 ? token.end_ms : token.start_ms
-        }
-
-        let formatted = normalizeParagraphSpacing(result)
-        if !formatted.isEmpty {
-            RecordingDebugLog.decision("Pause paragraph formatting applied for transcript tokens", source: "Soniox")
-            return formatted
-        }
-
-        return fallback.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func formatTranslatedTextWithPauseParagraphs(
-        tokens: [TranslatedTranscriptToken],
-        fallback: String
-    ) -> String {
-        guard !tokens.isEmpty else {
-            return fallback.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        var result = ""
-        var previousEndMs: Int?
-
-        for token in tokens {
-            if let previousEndMs,
-               let startMs = token.start_ms,
-               startMs > 0,
-               previousEndMs > 0,
-               startMs - previousEndMs >= paragraphPauseThresholdMs,
-               !result.isEmpty,
-               !result.hasSuffix("\n")
-            {
-                result += "\n"
-            }
-
-            result += token.text
-            if let endMs = token.end_ms, endMs > 0 {
-                previousEndMs = endMs
-            } else if let startMs = token.start_ms, startMs > 0 {
-                previousEndMs = startMs
-            }
-        }
-
-        let formatted = normalizeParagraphSpacing(result)
-        if !formatted.isEmpty {
-            RecordingDebugLog.decision("Pause paragraph formatting applied for translated tokens", source: "Soniox")
-            return formatted
-        }
-
-        return fallback.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func normalizeParagraphSpacing(_ text: String) -> String {
-        var result = text.replacingOccurrences(of: "\u{00A0}", with: " ")
-        result = result.replacingOccurrences(of: "\r\n", with: "\n")
-        result = result.replacingOccurrences(of: "\r", with: "\n")
-        result = result.replacingOccurrences(of: "\n\n\n", with: "\n\n")
-        result = result.replacingOccurrences(of: " \n", with: "\n")
-        result = result.replacingOccurrences(of: "\n ", with: "\n")
-        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Audio Format Detection

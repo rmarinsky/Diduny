@@ -54,11 +54,12 @@ protocol AudioDeviceManagerProtocol: AnyObject {
     var availableDevices: [AudioDevice] { get }
     var defaultDevice: AudioDevice? { get }
     func refreshDevices()
-    func isDeviceAvailable(_ deviceID: AudioDeviceID) -> Bool
-    func device(for deviceID: AudioDeviceID) -> AudioDevice?
+    func isDeviceAvailable(uid: String) -> Bool
+    func device(forUID uid: String) -> AudioDevice?
     func getCurrentDefaultDevice() -> AudioDevice?
+    func bestDevice() -> AudioDevice?
     func isDeviceAlive(_ deviceID: AudioDeviceID) -> Bool
-    func getValidDevice(selectedID: AudioDeviceID?) -> (device: AudioDevice?, didFallback: Bool)
+    func getValidDevice(selectedUID: String?) -> (device: AudioDevice?, didFallback: Bool)
 }
 
 // MARK: - Push To Talk Service Protocol

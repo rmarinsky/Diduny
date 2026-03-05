@@ -21,6 +21,7 @@ final class TextTranslationWindowController: NSObject, NSWindowDelegate {
             viewModel.errorMessage = nil
             viewModel.showCopiedConfirmation = false
             viewModel.updateDetectedLanguage()
+            viewModel.translate()
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -30,6 +31,7 @@ final class TextTranslationWindowController: NSObject, NSWindowDelegate {
 
         let vm = TextTranslationViewModel(sourceText: sourceText)
         viewModel = vm
+        vm.translate()
 
         let view = TextTranslationView(viewModel: vm) { [weak self] in
             self?.closeWindow()

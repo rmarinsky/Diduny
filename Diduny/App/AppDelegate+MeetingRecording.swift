@@ -151,10 +151,13 @@ extension AppDelegate {
             meetingRecorderService.onRealtimeAudioData = nil
 
             // Set microphone device for mixed recording
-            if let deviceID = appState.selectedDeviceID {
-                meetingRecorderService.microphoneDevice = audioDeviceManager.device(for: deviceID)
+            if let selectedUID = appState.selectedDeviceUID {
+                meetingRecorderService.microphoneDevice = audioDeviceManager.device(forUID: selectedUID)
+                    ?? audioDeviceManager.bestDevice()
+                    ?? audioDeviceManager.getCurrentDefaultDevice()
             } else {
-                meetingRecorderService.microphoneDevice = audioDeviceManager.getCurrentDefaultDevice()
+                meetingRecorderService.microphoneDevice = audioDeviceManager.bestDevice()
+                    ?? audioDeviceManager.getCurrentDefaultDevice()
             }
 
             try await meetingRecorderService.startRecording()

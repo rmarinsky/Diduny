@@ -79,22 +79,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         setupNotchStopHandler()
 
-        // Auto-select system default device if none selected
-        if appState.selectedDeviceID == nil, let defaultDevice = audioDeviceManager.defaultDevice {
-            appState.selectedDeviceID = defaultDevice.id
+        // Auto-select best device if none selected
+        if appState.selectedDeviceUID == nil,
+           let best = audioDeviceManager.bestDevice() ?? audioDeviceManager.defaultDevice {
+            appState.selectedDeviceUID = best.uid
         }
 
-        // Watch for device changes and auto-select default if selected device is disconnected
+        // Watch for device changes and auto-select best if selected device is disconnected
         audioDeviceManager.onDevicesChanged = { [weak self] devices in
             guard let self else { return }
-            // If selected device is no longer available, switch to default
-            if let selectedID = self.appState.selectedDeviceID,
-               !devices.contains(where: { $0.id == selectedID }) {
-                self.appState.selectedDeviceID = self.audioDeviceManager.defaultDevice?.id
+            // If selected device is no longer available, switch to best available
+            if let selectedUID = self.appState.selectedDeviceUID,
+               !devices.contains(where: { $0.uid == selectedUID }) {
+                let best = self.audioDeviceManager.bestDevice() ?? self.audioDeviceManager.defaultDevice
+                self.appState.selectedDeviceUID = best?.uid
             }
-            // If no device selected and devices are available, select default
-            if self.appState.selectedDeviceID == nil, let defaultDevice = self.audioDeviceManager.defaultDevice {
-                self.appState.selectedDeviceID = defaultDevice.id
+            // If no device selected and devices are available, select best
+            if self.appState.selectedDeviceUID == nil,
+               let best = self.audioDeviceManager.bestDevice() ?? self.audioDeviceManager.defaultDevice {
+                self.appState.selectedDeviceUID = best.uid
             }
         }
 
@@ -489,7 +492,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Device Selection (exposed for SwiftUI)
 
     func selectDevice(_ device: AudioDevice) {
-        appState.selectedDeviceID = device.id
+        appState.selectedDeviceUID = device.uid
     }
 
     // MARK: - Settings

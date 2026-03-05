@@ -15,17 +15,15 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
     @ObservationIgnored
     var onDevicesChanged: (([AudioDevice]) -> Void)?
 
-    private var deviceChangeObserver: Any?
+    @ObservationIgnored
+    private var debounceWorkItem: DispatchWorkItem?
+
+    /// Debounce interval for device change notifications (CoreAudio can fire multiple rapid events).
+    private let debounceInterval: TimeInterval = 0.3
 
     init() {
         refreshDevices()
         setupDeviceChangeListener()
-    }
-
-    deinit {
-        if let observer = deviceChangeObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
     }
 
     // MARK: - Public Methods
@@ -35,14 +33,14 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
         defaultDevice = availableDevices.first { $0.isDefault }
     }
 
-    /// Check if a device with the given ID is currently available
-    func isDeviceAvailable(_ deviceID: AudioDeviceID) -> Bool {
-        availableDevices.contains { $0.id == deviceID }
+    /// Check if a device with the given UID is currently available
+    func isDeviceAvailable(uid: String) -> Bool {
+        availableDevices.contains { $0.uid == uid }
     }
 
-    /// Get device by ID, returns nil if not available
-    func device(for deviceID: AudioDeviceID) -> AudioDevice? {
-        availableDevices.first { $0.id == deviceID }
+    /// Get device by UID, returns nil if not available
+    func device(forUID uid: String) -> AudioDevice? {
+        availableDevices.first { $0.uid == uid }
     }
 
     /// Get the current system default input device (refreshes first to ensure accuracy)
@@ -52,7 +50,6 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
     }
 
     /// Check if device is alive using CoreAudio property
-    /// This is more reliable than checking the cached device list
     func isDeviceAlive(_ deviceID: AudioDeviceID) -> Bool {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceIsAlive,
@@ -75,19 +72,35 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
         return status == noErr && isAlive == 1
     }
 
-    /// Get a valid device, falling back to default if selected is unavailable
-    /// Returns tuple with device and whether fallback was used
-    func getValidDevice(selectedID: AudioDeviceID?) -> (device: AudioDevice?, didFallback: Bool) {
-        // First try the selected device
-        if let selectedID = selectedID,
-           isDeviceAlive(selectedID),
-           let device = device(for: selectedID) {
+    /// Get a valid device by UID, falling back to best available device.
+    /// Returns tuple with device and whether fallback was used.
+    func getValidDevice(selectedUID: String?) -> (device: AudioDevice?, didFallback: Bool) {
+        if let uid = selectedUID,
+           let device = device(forUID: uid),
+           isDeviceAlive(device.id) {
             return (device, false)
         }
 
-        // Fallback to default device
+        // Fallback to best available device
         refreshDevices()
-        return (defaultDevice, selectedID != nil)
+        return (bestDevice() ?? defaultDevice, selectedUID != nil)
+    }
+
+    /// Score-based auto-detection: picks the best microphone based on transport type and capabilities.
+    /// Priority: USB > Thunderbolt/FireWire > Built-in > Bluetooth > Aggregate/Virtual
+    /// Tie-breaking: higher sample rate wins, then more input channels.
+    func bestDevice() -> AudioDevice? {
+        availableDevices
+            .filter { $0.transportType != .aggregate && $0.transportType != .virtual }
+            .min { lhs, rhs in
+                if lhs.transportType != rhs.transportType {
+                    return lhs.transportType < rhs.transportType
+                }
+                if lhs.sampleRate != rhs.sampleRate {
+                    return lhs.sampleRate > rhs.sampleRate
+                }
+                return lhs.inputChannels > rhs.inputChannels
+            }
     }
 
     // MARK: - Private Methods
@@ -128,6 +141,7 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
 
         return deviceIDs.compactMap { deviceID -> AudioDevice? in
             guard let name = getDeviceName(deviceID),
+                  let uid = getDeviceUID(deviceID),
                   let inputChannels = getInputChannelCount(deviceID),
                   inputChannels > 0
             else {
@@ -135,12 +149,15 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
             }
 
             let sampleRate = getDeviceSampleRate(deviceID) ?? 44100
+            let transportType = getTransportType(deviceID)
 
             return AudioDevice(
+                uid: uid,
                 id: deviceID,
                 name: name,
                 inputChannels: inputChannels,
                 sampleRate: sampleRate,
+                transportType: transportType,
                 isDefault: deviceID == defaultInputID
             )
         }
@@ -191,6 +208,64 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
 
         guard status == noErr, let unmanagedName = name else { return nil }
         return unmanagedName.takeRetainedValue() as String
+    }
+
+    private func getDeviceUID(_ deviceID: AudioDeviceID) -> String? {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceUID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var uid: Unmanaged<CFString>?
+        var dataSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+
+        let status = withUnsafeMutablePointer(to: &uid) { uidPtr in
+            AudioObjectGetPropertyData(
+                deviceID,
+                &propertyAddress,
+                0,
+                nil,
+                &dataSize,
+                uidPtr
+            )
+        }
+
+        guard status == noErr, let unmanagedUID = uid else { return nil }
+        return unmanagedUID.takeRetainedValue() as String
+    }
+
+    private func getTransportType(_ deviceID: AudioDeviceID) -> AudioTransportType {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var transportType: UInt32 = 0
+        var dataSize = UInt32(MemoryLayout<UInt32>.size)
+
+        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &dataSize, &transportType)
+        guard status == noErr else { return .unknown }
+
+        switch transportType {
+        case kAudioDeviceTransportTypeUSB:
+            return .usb
+        case kAudioDeviceTransportTypeThunderbolt:
+            return .thunderbolt
+        case kAudioDeviceTransportTypeFireWire:
+            return .firewire
+        case kAudioDeviceTransportTypeBuiltIn:
+            return .builtIn
+        case kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE:
+            return .bluetooth
+        case kAudioDeviceTransportTypeAggregate:
+            return .aggregate
+        case kAudioDeviceTransportTypeVirtual:
+            return .virtual
+        default:
+            return .unknown
+        }
     }
 
     private func getInputChannelCount(_ deviceID: AudioDeviceID) -> Int? {
@@ -249,7 +324,16 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
             &propertyAddress,
             DispatchQueue.main
         ) { [weak self] _, _ in
+            self?.debouncedRefresh()
+        }
+    }
+
+    private func debouncedRefresh() {
+        debounceWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
             self?.refreshDevices()
         }
+        debounceWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: workItem)
     }
 }
