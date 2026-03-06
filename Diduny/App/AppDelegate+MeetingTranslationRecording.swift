@@ -156,11 +156,10 @@ extension AppDelegate {
             meetingRecorderService.onRealtimeAudioData = nil
 
             // Set microphone device for mixed recording
-            if let deviceID = appState.selectedDeviceID {
-                meetingRecorderService.microphoneDevice = audioDeviceManager.device(for: deviceID)
-            } else {
-                meetingRecorderService.microphoneDevice = audioDeviceManager.getCurrentDefaultDevice()
-            }
+            let (device, _) = audioDeviceManager.getValidDevice(selectedUID: appState.selectedDeviceUID)
+            meetingRecorderService.microphoneDevice = device
+                ?? audioDeviceManager.bestDevice()
+                ?? audioDeviceManager.getCurrentDefaultDevice()
 
             try await meetingRecorderService.startRecording()
             Log.app.info("Meeting translation recording started")

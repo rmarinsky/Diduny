@@ -6,58 +6,26 @@ import Foundation
 actor RealtimeTranslationAccumulator {
     private var finalOriginalText: String = ""
     private var finalTranslatedText: String = ""
-    private var pendingSegmentBoundary = false
-    private var lastFinalEndMs: Int?
 
     func process(tokens: [RealtimeToken]) {
         let finalTokens = tokens.filter(\.isFinal)
         guard !finalTokens.isEmpty else { return }
-        let pauseBoundaryThresholdMs = SettingsStorage.shared.pauseParagraphThresholdMs
 
         for token in finalTokens {
-            let hasPauseBoundary: Bool = {
-                guard let previousEndMs = lastFinalEndMs,
-                      previousEndMs > 0,
-                      token.startMs > 0
-                else {
-                    return false
-                }
-
-                return token.startMs - previousEndMs >= pauseBoundaryThresholdMs
-            }()
-
-            let applyBoundary: (inout String) -> Void = { text in
-                if (self.pendingSegmentBoundary || hasPauseBoundary), !text.isEmpty, !text.hasSuffix("\n") {
-                    text += "\n"
-                }
-            }
-
             let status = token.translationStatus?.lowercased()
             switch status {
             case "translation":
-                applyBoundary(&finalTranslatedText)
-                pendingSegmentBoundary = false
                 finalTranslatedText += token.text
             case "transcription", "source", "original", "none", nil:
-                applyBoundary(&finalOriginalText)
-                pendingSegmentBoundary = false
                 finalOriginalText += token.text
             default:
-                applyBoundary(&finalOriginalText)
-                pendingSegmentBoundary = false
                 finalOriginalText += token.text
-            }
-
-            if token.endMs > 0 {
-                lastFinalEndMs = token.endMs
-            } else if token.startMs > 0 {
-                lastFinalEndMs = token.startMs
             }
         }
     }
 
     func markSegmentBoundary() {
-        pendingSegmentBoundary = true
+        // No-op: pause-based formatting removed
     }
 
     func bestText() -> String {
@@ -209,29 +177,23 @@ extension AppDelegate {
         Log.app.info("startTranslationRecording: Soniox API key found")
         translationRealtimeSessionEnabled = false
 
-        // Determine device with fallback to system default
+        // Determine device with fallback to best available
         var device: AudioDevice?
 
-        if let deviceID = appState.selectedDeviceID {
-            // Refresh device list to ensure we have current state
-            audioDeviceManager.refreshDevices()
+        if let selectedUID = appState.selectedDeviceUID {
+            let (validDevice, didFallback) = audioDeviceManager.getValidDevice(selectedUID: selectedUID)
+            device = validDevice
 
-            if audioDeviceManager.isDeviceAvailable(deviceID) {
-                device = audioDeviceManager.device(for: deviceID)
-                Log.app.info("startTranslationRecording: Using selected device: \(device?.name ?? "none")")
+            if didFallback {
+                NSLog("[Diduny] startTranslationRecording: Selected device (UID: %@) not available, using %@", selectedUID, device?.name ?? "default")
             } else {
-                // Selected device is no longer available - fallback to system default
-                Log.app.warning("startTranslationRecording: Selected device (ID: \(deviceID)) not available, falling back to default")
-                device = audioDeviceManager.getCurrentDefaultDevice()
-                Log.app.info("startTranslationRecording: Fallback to default device: \(device?.name ?? "none")")
+                NSLog("[Diduny] startTranslationRecording: Using selected device: %@", device?.name ?? "none")
             }
         } else {
-            // No device selected - use system default
-            Log.app.info("startTranslationRecording: No device selected, using system default")
-            device = audioDeviceManager.getCurrentDefaultDevice()
+            NSLog("[Diduny] startTranslationRecording: No device selected, using best available")
+            device = audioDeviceManager.bestDevice() ?? audioDeviceManager.getCurrentDefaultDevice()
         }
 
-        // If still no device available, try last resort or show error
         if device == nil {
             if audioDeviceManager.availableDevices.isEmpty {
                 Log.app.error("startTranslationRecording: No audio input devices available")
@@ -242,7 +204,6 @@ extension AppDelegate {
                 }
                 return
             }
-            // Last resort: pick first available device
             device = audioDeviceManager.availableDevices.first
             Log.app.info("startTranslationRecording: Using first available device: \(device?.name ?? "none")")
         }

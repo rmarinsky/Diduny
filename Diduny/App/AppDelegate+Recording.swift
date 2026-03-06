@@ -5,42 +5,18 @@ import Foundation
 @available(macOS 13.0, *)
 actor RealtimeVoiceAccumulator {
     private var finalText: String = ""
-    private var pendingSegmentBoundary = false
-    private var lastFinalEndMs: Int?
 
     func process(tokens: [RealtimeToken]) {
         let finalTokens = tokens.filter(\.isFinal)
         guard !finalTokens.isEmpty else { return }
-        let pauseBoundaryThresholdMs = SettingsStorage.shared.pauseParagraphThresholdMs
 
         for token in finalTokens {
-            let hasPauseBoundary: Bool = {
-                guard let previousEndMs = lastFinalEndMs,
-                      previousEndMs > 0,
-                      token.startMs > 0
-                else {
-                    return false
-                }
-
-                return token.startMs - previousEndMs >= pauseBoundaryThresholdMs
-            }()
-
-            if (pendingSegmentBoundary || hasPauseBoundary), !finalText.isEmpty, !finalText.hasSuffix("\n") {
-                finalText += "\n"
-            }
-
-            pendingSegmentBoundary = false
             finalText += token.text
-            if token.endMs > 0 {
-                lastFinalEndMs = token.endMs
-            } else if token.startMs > 0 {
-                lastFinalEndMs = token.startMs
-            }
         }
     }
 
     func markSegmentBoundary() {
-        pendingSegmentBoundary = true
+        // No-op: pause-based formatting removed
     }
 
     func bestText() -> String {
@@ -208,19 +184,15 @@ extension AppDelegate {
             Log.app.info("startRecording: Whisper model ready")
         }
 
-        // Determine device with fallback to system default
+        // Determine device with fallback to best available
         var device: AudioDevice?
 
-        if let deviceID = appState.selectedDeviceID {
-            // Validate selected device is still available using hardware-level check
-            let (validDevice, didFallback) = audioDeviceManager.getValidDevice(selectedID: deviceID)
+        if let selectedUID = appState.selectedDeviceUID {
+            let (validDevice, didFallback) = audioDeviceManager.getValidDevice(selectedUID: selectedUID)
             device = validDevice
 
             if didFallback {
-                // Device changed - notify user
-                Log.app.warning("startRecording: Selected device (ID: \(deviceID)) unavailable, using \(device?.name ?? "default")")
-
-                // Show warning notification to user
+                Log.app.warning("startRecording: Selected device (UID: \(selectedUID)) unavailable, using \(device?.name ?? "default")")
                 if let fallbackName = device?.name {
                     await MainActor.run {
                         appState.deviceFallbackWarning = "Using \(fallbackName)"
@@ -230,12 +202,10 @@ extension AppDelegate {
                 Log.app.info("startRecording: Using selected device: \(device?.name ?? "none")")
             }
         } else {
-            // No device selected - use system default
-            Log.app.info("startRecording: No device selected, using system default")
-            device = audioDeviceManager.getCurrentDefaultDevice()
+            Log.app.info("startRecording: No device selected, using best available")
+            device = audioDeviceManager.bestDevice() ?? audioDeviceManager.getCurrentDefaultDevice()
         }
 
-        // If still no device available, try last resort or show error
         if device == nil {
             if audioDeviceManager.availableDevices.isEmpty {
                 Log.app.error("startRecording: No audio input devices available")
@@ -246,7 +216,6 @@ extension AppDelegate {
                 }
                 return
             }
-            // Last resort: pick first available device
             device = audioDeviceManager.availableDevices.first
             Log.app.info("startRecording: Using first available device: \(device?.name ?? "none")")
         }

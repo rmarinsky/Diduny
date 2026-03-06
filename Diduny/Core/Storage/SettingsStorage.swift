@@ -33,7 +33,7 @@ final class SettingsStorage {
     private static let defaultFillerWords = normalizedFillerWords(baseFillerWords + englishFillerWordPreset)
 
     private enum Key: String {
-        case selectedDeviceID
+        case selectedDeviceUID
         case autoPaste
         case playSoundOnCompletion
         case launchAtLogin
@@ -57,24 +57,47 @@ final class SettingsStorage {
         case escapeCancelSaveAudio
         case textCleanupEnabled
         case fillerWords
-        case pauseParagraphThresholdMs
         case sonioxEndpointDelayMs
     }
 
-    private init() {}
+    private init() {
+        migrateSelectedDeviceIfNeeded()
+    }
+
+    /// One-time migration from legacy `selectedDeviceID` (AudioDeviceID int) to `selectedDeviceUID` (String).
+    private func migrateSelectedDeviceIfNeeded() {
+        let legacyKey = "selectedDeviceID"
+        let legacyValue = defaults.integer(forKey: legacyKey)
+        guard legacyValue > 0,
+              defaults.string(forKey: Key.selectedDeviceUID.rawValue) == nil else { return }
+
+        // Resolve UID from AudioDeviceID via CoreAudio
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceUID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var uid: CFString = "" as CFString
+        var size = UInt32(MemoryLayout<CFString>.size)
+        let deviceID = AudioDeviceID(legacyValue)
+        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, &uid)
+        guard status == noErr else { return } // keep legacy key for retry on next launch
+        defaults.set(uid as String, forKey: Key.selectedDeviceUID.rawValue)
+        defaults.removeObject(forKey: legacyKey)
+    }
 
     // MARK: - Audio Device
 
-    var selectedDeviceID: AudioDeviceID? {
+    /// Stable device UID string persisted across reboots (replaces old AudioDeviceID storage).
+    var selectedDeviceUID: String? {
         get {
-            let value = defaults.integer(forKey: Key.selectedDeviceID.rawValue)
-            return value > 0 ? AudioDeviceID(value) : nil
+            defaults.string(forKey: Key.selectedDeviceUID.rawValue)
         }
         set {
-            if let id = newValue {
-                defaults.set(Int(id), forKey: Key.selectedDeviceID.rawValue)
+            if let uid = newValue {
+                defaults.set(uid, forKey: Key.selectedDeviceUID.rawValue)
             } else {
-                defaults.removeObject(forKey: Key.selectedDeviceID.rawValue)
+                defaults.removeObject(forKey: Key.selectedDeviceUID.rawValue)
             }
         }
     }
@@ -306,25 +329,6 @@ final class SettingsStorage {
         set { defaults.set(newValue, forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) }
     }
 
-    // MARK: - Pause Paragraph Segmentation
-
-    /// Pause duration (ms) that triggers a new paragraph/line in transcription formatting.
-    /// Applied to realtime socket mode and async Soniox token formatting.
-    var pauseParagraphThresholdMs: Int {
-        get {
-            if defaults.object(forKey: Key.pauseParagraphThresholdMs.rawValue) == nil {
-                return 1200
-            }
-            return Self.sanitizedPauseThresholdMs(defaults.integer(forKey: Key.pauseParagraphThresholdMs.rawValue))
-        }
-        set {
-            defaults.set(
-                Self.sanitizedPauseThresholdMs(newValue),
-                forKey: Key.pauseParagraphThresholdMs.rawValue
-            )
-        }
-    }
-
     // MARK: - Meeting Cloud Mode
 
     /// `true` = Cloud mode (realtime websocket + async fallback when API key exists).
@@ -432,10 +436,6 @@ final class SettingsStorage {
                 forKey: Key.sonioxEndpointDelayMs.rawValue
             )
         }
-    }
-
-    private static func sanitizedPauseThresholdMs(_ value: Int) -> Int {
-        min(max(value, 250), 3000)
     }
 
     private static func sanitizedEndpointDelayMs(_ value: Int) -> Int {

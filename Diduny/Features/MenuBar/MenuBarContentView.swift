@@ -39,13 +39,13 @@ struct MenuBarContentView: View {
 
             // Audio device menu
             Menu("Audio Device") {
-                ForEach(audioDeviceManager.availableDevices, id: \.id) { device in
+                ForEach(audioDeviceManager.availableDevices, id: \.uid) { device in
                     Button {
                         onSelectDevice(device)
                     } label: {
                         HStack {
-                            Text(device.name)
-                            if appState.selectedDeviceID == device.id {
+                            Text(deviceMenuLabel(device))
+                            if appState.selectedDeviceUID == device.uid {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -270,6 +270,17 @@ struct MenuBarContentView: View {
     private func reloadTextCleanupSettings() {
         textCleanupEnabled = SettingsStorage.shared.textCleanupEnabled
         fillerWords = SettingsStorage.shared.fillerWords
+    }
+
+    private func deviceMenuLabel(_ device: AudioDevice) -> String {
+        var label = device.name
+        if device.transportType != .unknown && device.transportType != .builtIn {
+            label += " (\(device.transportType.displayName))"
+        }
+        if device.isDefault {
+            label += " — Default"
+        }
+        return label
     }
 
     private func promptToAddFillerWord() {

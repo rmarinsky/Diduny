@@ -17,32 +17,41 @@ struct AudioSettingsView: View {
             Section {
                 // Device list
                 ForEach(deviceManager.availableDevices) { device in
+                    let isSelected = appState.selectedDeviceUID == device.uid
+
                     HStack {
-                        RadioButton(isSelected: appState.selectedDeviceID == device.id) {
-                            appState.selectedDeviceID = device.id
+                        RadioButton(isSelected: isSelected) {
+                            appState.selectedDeviceUID = device.uid
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(device.name)
-                                .foregroundColor(appState.selectedDeviceID == device.id ? .primary : .secondary)
+                                .foregroundColor(isSelected ? .primary : .secondary)
 
-                            if device.isDefault {
-                                Text("System Default")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                            HStack(spacing: 4) {
+                                if device.isDefault {
+                                    Text("System Default")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                if device.transportType != .unknown {
+                                    Text(device.transportType.displayName)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
 
                         Spacer()
 
-                        if appState.selectedDeviceID == device.id {
+                        if isSelected {
                             Image(systemName: "checkmark")
                                 .foregroundColor(.accentColor)
                         }
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        appState.selectedDeviceID = device.id
+                        appState.selectedDeviceUID = device.uid
                     }
                 }
             } header: {
@@ -145,10 +154,10 @@ struct AudioSettingsView: View {
     // MARK: - Test Recording Methods
 
     private func startTestRecording() {
-        let device: AudioDevice? = if let selectedID = appState.selectedDeviceID {
-            deviceManager.availableDevices.first { $0.id == selectedID }
+        let device: AudioDevice? = if let selectedUID = appState.selectedDeviceUID {
+            deviceManager.device(forUID: selectedUID)
         } else {
-            deviceManager.defaultDevice
+            deviceManager.bestDevice() ?? deviceManager.defaultDevice
         }
 
         testStatusMessage = "Starting test recording..."

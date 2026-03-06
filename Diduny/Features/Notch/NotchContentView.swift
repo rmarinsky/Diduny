@@ -35,16 +35,22 @@ struct NotchCompactTrailingView: View {
         Group {
             switch manager.state {
             case .recording:
-                if isHovering {
-                    StopCompactButton {
-                        manager.requestStopActiveRecording()
-                    }
-                } else {
+                ZStack {
                     HStack(spacing: 6) {
                         PulsingDotView()
                         RecordingTimerView(startTime: manager.recordingStartTime)
                     }
+                    .opacity(isHovering ? 0 : 1)
+                    .allowsHitTesting(!isHovering)
+
+                    StopCompactButton {
+                        manager.requestStopActiveRecording()
+                    }
+                    .opacity(isHovering ? 1 : 0)
+                    .allowsHitTesting(isHovering)
                 }
+                .frame(minWidth: 58, minHeight: 16)
+                .contentShape(Rectangle())
 
             case .processing:
                 ProgressView()
