@@ -49,6 +49,8 @@ struct NotchCompactTrailingView: View {
                     .opacity(isHovering ? 1 : 0)
                     .allowsHitTesting(isHovering)
                 }
+                .frame(minWidth: 58, minHeight: 16)
+                .contentShape(Rectangle())
 
             case .processing:
                 ProgressView()

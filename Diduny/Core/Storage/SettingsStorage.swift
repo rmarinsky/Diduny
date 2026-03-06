@@ -81,9 +81,8 @@ final class SettingsStorage {
         var size = UInt32(MemoryLayout<CFString>.size)
         let deviceID = AudioDeviceID(legacyValue)
         let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, &uid)
-        if status == noErr {
-            defaults.set(uid as String, forKey: Key.selectedDeviceUID.rawValue)
-        }
+        guard status == noErr else { return } // keep legacy key for retry on next launch
+        defaults.set(uid as String, forKey: Key.selectedDeviceUID.rawValue)
         defaults.removeObject(forKey: legacyKey)
     }
 

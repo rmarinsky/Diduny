@@ -2,7 +2,6 @@ import AppKit
 import ApplicationServices
 import AVFAudio
 import Foundation
-import os
 
 /// Manages all permission requests for the app
 @MainActor
@@ -51,17 +50,17 @@ final class PermissionManager {
 
         switch recordPermission {
         case .granted:
-            Log.permissions.info("Microphone permission already granted")
+            NSLog("[Diduny] Microphone permission already granted")
             return true
 
         case .undetermined:
-            Log.permissions.info("Microphone permission not determined, requesting...")
+            NSLog("[Diduny] Microphone permission not determined, requesting...")
             let granted = await AVAudioApplication.requestRecordPermission()
-            Log.permissions.info("Microphone permission request result: \(granted)")
+            NSLog("[Diduny] Microphone permission request result: %@", granted ? "true" : "false")
             return granted
 
         case .denied:
-            Log.permissions.warning("Microphone permission denied")
+            NSLog("[Diduny] Microphone permission denied")
             return false
 
         @unknown default:
@@ -84,11 +83,11 @@ final class PermissionManager {
             return true
 
         case .undetermined:
-            Log.permissions.info("Requesting microphone permission...")
+            NSLog("[Diduny] Requesting microphone permission...")
             return await AVAudioApplication.requestRecordPermission()
 
         case .denied:
-            Log.permissions.info("Microphone permission denied, prompting user to open Settings")
+            NSLog("[Diduny] Microphone permission denied, prompting user to open Settings")
             await MainActor.run {
                 showPermissionAlert(for: .microphone)
             }
@@ -121,17 +120,17 @@ final class PermissionManager {
     /// by attempting to access SCShareableContent
     func requestScreenRecordingPermission() async -> Bool {
         guard #available(macOS 13.0, *) else {
-            Log.permissions.warning("Screen recording requires macOS 13.0+")
+            NSLog("[Diduny] Screen recording requires macOS 13.0+")
             return false
         }
 
         // Skip if already granted
         if status.screenRecording {
-            Log.permissions.info("Screen recording permission already granted")
+            NSLog("[Diduny] Screen recording permission already granted")
             return true
         }
 
-        Log.permissions.info("Requesting screen recording permission...")
+        NSLog("[Diduny] Requesting screen recording permission...")
 
         // Calling SCShareableContent.excludingDesktopWindows triggers the permission dialog
         // if permission hasn't been determined yet
@@ -141,9 +140,9 @@ final class PermissionManager {
         status.screenRecording = granted
 
         if granted {
-            Log.permissions.info("Screen recording permission granted")
+            NSLog("[Diduny] Screen recording permission granted")
         } else {
-            Log.permissions.warning("Screen recording permission not granted")
+            NSLog("[Diduny] Screen recording permission not granted")
         }
 
         return granted
@@ -160,7 +159,7 @@ final class PermissionManager {
 
         if !granted {
             // If not granted, show alert to open System Settings
-            Log.permissions.warning("Screen recording permission denied, prompting user to open Settings")
+            NSLog("[Diduny] Screen recording permission denied, prompting user to open Settings")
             await MainActor.run {
                 showPermissionAlert(for: .screenRecording)
             }

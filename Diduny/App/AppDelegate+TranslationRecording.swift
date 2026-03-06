@@ -185,12 +185,12 @@ extension AppDelegate {
             device = validDevice
 
             if didFallback {
-                Log.app.warning("startTranslationRecording: Selected device (UID: \(selectedUID)) not available, using \(device?.name ?? "default")")
+                NSLog("[Diduny] startTranslationRecording: Selected device (UID: %@) not available, using %@", selectedUID, device?.name ?? "default")
             } else {
-                Log.app.info("startTranslationRecording: Using selected device: \(device?.name ?? "none")")
+                NSLog("[Diduny] startTranslationRecording: Using selected device: %@", device?.name ?? "none")
             }
         } else {
-            Log.app.info("startTranslationRecording: No device selected, using best available")
+            NSLog("[Diduny] startTranslationRecording: No device selected, using best available")
             device = audioDeviceManager.bestDevice() ?? audioDeviceManager.getCurrentDefaultDevice()
         }
 
