@@ -18,12 +18,14 @@ struct Recording: Identifiable, Codable, Equatable {
         case voice
         case translation
         case meeting
+        case fileTranscription
 
         var displayName: String {
             switch self {
             case .voice: "Voice"
             case .translation: "Translation"
             case .meeting: "Meeting"
+            case .fileTranscription: "File Transcription"
             }
         }
 
@@ -32,6 +34,7 @@ struct Recording: Identifiable, Codable, Equatable {
             case .voice: "mic.fill"
             case .translation: "globe"
             case .meeting: "person.3.fill"
+            case .fileTranscription: "doc.fill"
             }
         }
 
@@ -40,12 +43,13 @@ struct Recording: Identifiable, Codable, Equatable {
             case .voice: "Transcribe"
             case .translation: "Translate"
             case .meeting: "Meeting"
+            case .fileTranscription: "File"
             }
         }
 
         var clipboardCopyBehavior: ClipboardCopyBehavior {
             switch self {
-            case .voice, .translation:
+            case .voice, .translation, .fileTranscription:
                 .cleaned
             case .meeting:
                 .raw

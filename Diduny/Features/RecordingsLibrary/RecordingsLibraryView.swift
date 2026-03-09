@@ -13,6 +13,7 @@ struct RecordingsLibraryView: View {
         case voice = "Voice"
         case translation = "Translation"
         case meeting = "Meeting"
+        case fileTranscription = "File"
     }
 
     private var filteredRecordings: [Recording] {
@@ -24,6 +25,7 @@ struct RecordingsLibraryView: View {
             case .voice: matchesType = recording.type == .voice
             case .translation: matchesType = recording.type == .translation
             case .meeting: matchesType = recording.type == .meeting
+            case .fileTranscription: matchesType = recording.type == .fileTranscription
             }
 
             // Search filter

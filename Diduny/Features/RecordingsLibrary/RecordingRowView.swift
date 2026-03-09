@@ -46,6 +46,7 @@ struct RecordingRowView: View {
         case .voice: .blue
         case .translation: .green
         case .meeting: .orange
+        case .fileTranscription: .purple
         }
     }
 

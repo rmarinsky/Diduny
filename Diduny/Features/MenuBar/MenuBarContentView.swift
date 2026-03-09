@@ -12,6 +12,7 @@ struct MenuBarContentView: View {
     var onToggleTranslationRecording: @MainActor () -> Void
     var onToggleMeetingRecording: @MainActor () -> Void
     var onToggleMeetingTranslationRecording: @MainActor () -> Void
+    var onTranscribeFile: @MainActor () -> Void
     var onSelectDevice: @MainActor (AudioDevice) -> Void
 
     var body: some View {
@@ -34,6 +35,12 @@ struct MenuBarContentView: View {
             Button(meetingTranslationButtonTitle, action: onToggleMeetingTranslationRecording)
             .globalKeyboardShortcut(.toggleMeetingTranslation)
             .disabled(isMeetingTranslationButtonDisabled)
+
+            Divider()
+
+            // Transcribe file from disk
+            Button("Transcribe File...", action: onTranscribeFile)
+                .disabled(appState.recordingState == .processing)
 
             Divider()
 
