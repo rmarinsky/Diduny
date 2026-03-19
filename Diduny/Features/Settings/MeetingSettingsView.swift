@@ -2,6 +2,7 @@ import AVFoundation
 import SwiftUI
 
 struct MeetingSettingsView: View {
+    @State private var meetingCloudModeEnabled: Bool = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
     @State private var audioSource = SettingsStorage.shared.meetingAudioSource
     @State private var micGain = SettingsStorage.shared.meetingMicGain
     @State private var systemGain = SettingsStorage.shared.meetingSystemGain
@@ -16,6 +17,27 @@ struct MeetingSettingsView: View {
 
     var body: some View {
         Form {
+            Section("Meeting Provider") {
+                Picker("Provider", selection: $meetingCloudModeEnabled) {
+                    Text("Cloud").tag(true)
+                    Text("Local").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: meetingCloudModeEnabled) { _, newValue in
+                    SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = newValue
+                }
+
+                if meetingCloudModeEnabled {
+                    Text("Cloud mode streams transcription during recording. If realtime is unavailable, app falls back to cloud transcription after stop.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Local mode records audio only. You can process it later from Recordings using local Whisper models.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
             Section {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Audio Source")
@@ -187,6 +209,9 @@ struct MeetingSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            meetingCloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
+        }
         .onDisappear {
             cleanupTestCapture()
         }

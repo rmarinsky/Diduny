@@ -24,6 +24,10 @@ struct AboutSettingsView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
+                    Button("Check for Updates...") {
+                        (NSApp.delegate as? AppDelegate)?.updaterManager.checkForUpdates()
+                    }
+
                     Text("Voice dictation for macOS")
                         .font(.body)
                         .foregroundStyle(.secondary)

@@ -73,7 +73,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         Log.recording.info("Starting meeting recording, source: \(self.audioSource.displayName)")
 
         // Create output file URL
-        let fileExtension = "wav" // WAV format - reliable and Soniox handles it well
+        let fileExtension = "wav" // WAV format - reliable and widely supported
         let fileName = "meeting_\(Date().timeIntervalSince1970).\(fileExtension)"
         let tempDir = FileManager.default.temporaryDirectory
         outputURL = tempDir.appendingPathComponent(fileName)

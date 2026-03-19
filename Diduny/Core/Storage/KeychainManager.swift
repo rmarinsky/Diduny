@@ -4,122 +4,63 @@ import Security
 final class KeychainManager {
     static let shared = KeychainManager()
 
-    private let serviceName = "ua.com.rmarinsky.diduny"
-
-    private enum Key: String {
-        case sonioxAPIKey = "soniox_api_key"
-    }
-
-    private var cachedKey: String?
-    private var cacheLoaded = false
+    private let serviceName = Bundle.main.bundleIdentifier ?? "ua.com.rmarinsky.diduny"
 
     private init() {}
 
-    // MARK: - Soniox API Key
+    // MARK: - Generic String Storage
 
-    /// Returns the API key, reading from Keychain only on first access (lazy cache).
-    func getSonioxAPIKey() -> String? {
-        if cacheLoaded {
-            return cachedKey
-        }
-        cachedKey = get(key: .sonioxAPIKey)
-        cacheLoaded = true
-        SettingsStorage.shared.hasCloudAPIKey = (cachedKey?.isEmpty == false)
-        return cachedKey
-    }
+    func save(key: String, value: String) throws {
+        guard let data = value.data(using: .utf8) else { return }
 
-    func setSonioxAPIKey(_ value: String) throws {
-        try save(key: .sonioxAPIKey, value: value)
-        cachedKey = value
-        cacheLoaded = true
-        SettingsStorage.shared.hasCloudAPIKey = true
-    }
-
-    func deleteSonioxAPIKey() throws {
-        try delete(key: .sonioxAPIKey)
-        cachedKey = nil
-        cacheLoaded = true
-        SettingsStorage.shared.hasCloudAPIKey = false
-    }
-
-    /// Lightweight check using UserDefaults flag — no Keychain access.
-    func hasAPIKeyFast() -> Bool {
-        SettingsStorage.shared.hasCloudAPIKey
-    }
-
-    /// Checks whether the app can read/write to the macOS Keychain.
-    func isKeychainAccessible() -> Bool {
-        let testKey = "keychain_access_check"
+        // Try to update existing item first
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: testKey,
+            kSecAttrAccount as String: key,
+        ]
+
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+        ]
+
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+
+        if updateStatus == errSecItemNotFound {
+            // Item doesn't exist yet — add it
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            guard addStatus == errSecSuccess else {
+                throw KeychainError.saveFailed
+            }
+        } else if updateStatus != errSecSuccess {
+            throw KeychainError.saveFailed
+        }
+    }
+
+    func read(key: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: key,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        let status = SecItemCopyMatching(query as CFDictionary, nil)
-        // errSecItemNotFound means keychain is accessible but no item exists — that's fine
-        return status == errSecSuccess || status == errSecItemNotFound
-    }
-
-    // MARK: - Private Methods
-
-    private func save(key: Key, value: String) throws {
-        guard let data = value.data(using: .utf8) else {
-            throw KeychainError.saveFailed
-        }
-
-        // Delete existing item first
-        try? delete(key: key)
-
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: key.rawValue,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked
-        ]
-
-        let status = SecItemAdd(query as CFDictionary, nil)
-
-        guard status == errSecSuccess else {
-            throw KeychainError.saveFailed
-        }
-    }
-
-    private func get(key: Key) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: key.rawValue,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
         ]
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        guard status == errSecSuccess,
-              let data = result as? Data,
-              let string = String(data: data, encoding: .utf8)
-        else {
-            return nil
-        }
-
-        return string
+        guard status == errSecSuccess, let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
-    private func delete(key: Key) throws {
+    func delete(key: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: key.rawValue
+            kSecAttrAccount as String: key,
         ]
-
-        let status = SecItemDelete(query as CFDictionary)
-
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw KeychainError.deleteFailed
-        }
+        SecItemDelete(query as CFDictionary)
     }
 }
+

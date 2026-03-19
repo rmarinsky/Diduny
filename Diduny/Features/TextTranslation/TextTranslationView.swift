@@ -20,14 +20,15 @@ private enum TranslationError: LocalizedError {
     }
 }
 
-// MARK: - Google Translate Response
+// MARK: - Translation Response
 
-private struct GoogleTranslateResponse: Decodable {
+private struct TranslationResponse: Decodable {
     struct Sentence: Decodable {
         let trans: String?
     }
 
     let sentences: [Sentence]
+    let src: String?
 }
 
 // MARK: - View Model
@@ -132,17 +133,18 @@ final class TextTranslationViewModel: ObservableObject {
     // MARK: - Translation API
 
     private static func requestTranslation(sourceText: String, targetLanguage: String) async throws -> String {
-        guard var components = URLComponents(string: "https://translate.googleapis.com/translate_a/single") else {
+        let settings = SettingsStorage.shared
+        let proxyBase = settings.proxyBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let translateURL = "\(proxyBase)/api/v1/translations"
+
+        guard var components = URLComponents(string: translateURL) else {
             throw TranslationError.invalidRequest
         }
 
         components.queryItems = [
-            URLQueryItem(name: "client", value: "gtx"),
-            URLQueryItem(name: "sl", value: "auto"),
-            URLQueryItem(name: "tl", value: targetLanguage),
-            URLQueryItem(name: "dt", value: "t"),
-            URLQueryItem(name: "dj", value: "1"),
             URLQueryItem(name: "q", value: sourceText),
+            URLQueryItem(name: "tl", value: targetLanguage),
+            URLQueryItem(name: "sl", value: "auto"),
         ]
 
         guard let url = components.url else {
@@ -152,6 +154,8 @@ final class TextTranslationViewModel: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 20
+
+        await AuthService.shared.authenticatedRequest(&request)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -164,7 +168,7 @@ final class TextTranslationViewModel: ObservableObject {
             throw TranslationError.requestFailed(errorBody)
         }
 
-        let payload = try JSONDecoder().decode(GoogleTranslateResponse.self, from: data)
+        let payload = try JSONDecoder().decode(TranslationResponse.self, from: data)
         let translatedText = payload.sentences
             .compactMap(\.trans)
             .joined()
@@ -176,6 +180,7 @@ final class TextTranslationViewModel: ObservableObject {
 
         return translatedText
     }
+
 }
 
 // MARK: - View

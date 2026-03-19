@@ -2,25 +2,29 @@ import Foundation
 import os
 
 @available(macOS 13.0, *)
-final class SonioxRealtimeService: NSObject, @unchecked Sendable {
-    private let wsURL = "wss://stt-rt.soniox.com/transcribe-websocket"
-    private let model = "stt-rt-v4"
+final class CloudRealtimeService: NSObject, @unchecked Sendable {
+    private var wsURL: String {
+        let settings = SettingsStorage.shared
+        let proxyBase = settings.proxyBaseURL
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .replacingOccurrences(of: "https://", with: "wss://")
+            .replacingOccurrences(of: "http://", with: "ws://")
+        return "\(proxyBase)/api/v1/realtime"
+    }
     private var webSocketTask: URLSessionWebSocketTask?
     private var urlSession: URLSession?
     private var receiveTask: Task<Void, Never>?
     private var pingTask: Task<Void, Never>?
+    private var proxyReady = false
 
     private var isConnected = false
     private var reconnectAttempt = 0
     private let maxReconnectAttempts = 3
 
-    private var apiKey: String?
     private var languageHints: [String] = []
     private var strictLanguageHints = false
     private var audioConfig: RealtimeAudioConfig = .defaultPCM16kMono
     private var translationConfig: RealtimeTranslationConfig?
-    private var endpointDetectionEnabled = false
-    private var maxEndpointDelayMs: Int?
     private let finalizeStateLock = NSLock()
     private var awaitingFinalizeResponse = false
     private var didReceiveFinishedSignal = false
@@ -54,28 +58,26 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
     // MARK: - Connect
 
     func connect(
-        apiKey: String,
         languageHints: [String] = [],
         strictLanguageHints: Bool = false,
         audioConfig: RealtimeAudioConfig = .defaultPCM16kMono,
-        translationConfig: RealtimeTranslationConfig? = nil,
-        enableEndpointDetection: Bool = false,
-        maxEndpointDelayMs: Int? = nil
+        translationConfig: RealtimeTranslationConfig? = nil
     ) async throws {
-        self.apiKey = apiKey
         self.languageHints = languageHints
         self.strictLanguageHints = strictLanguageHints
         self.audioConfig = audioConfig
         self.translationConfig = translationConfig
-        endpointDetectionEnabled = enableEndpointDetection
-        self.maxEndpointDelayMs = maxEndpointDelayMs
         reconnectAttempt = 0
         try await connectWebSocket()
     }
 
     private func connectWebSocket() async throws {
-        guard let apiKey else {
-            throw RealtimeTranscriptionError.apiKeyMissing
+        // Pre-check cached usage to avoid unnecessary connection attempt
+        if let usage = await UsageService.shared.cachedUsage, !usage.isWhitelisted,
+           let remaining = usage.remainingMs, remaining <= 0 {
+            throw RealtimeTranscriptionError.usageLimitExceeded(
+                usedHours: usage.usedHours, limitHours: usage.limitHours ?? 5
+            )
         }
 
         // Clean up any existing connection before reconnecting
@@ -89,13 +91,22 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
         urlSession = nil
         audioBytesSent = 0
         audioChunkCount = 0
+        proxyReady = false
 
         onConnectionStatusChanged?(.connecting)
 
         let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         self.urlSession = session
 
-        guard let url = URL(string: wsURL) else {
+        var wsURLString = wsURL
+
+        // Pass auth token as query param (WebSocket headers are limited)
+        if let accessToken = await AuthService.shared.getAccessToken() {
+            let separator = wsURLString.contains("?") ? "&" : "?"
+            wsURLString += "\(separator)token=\(accessToken)"
+        }
+
+        guard let url = URL(string: wsURLString) else {
             throw RealtimeTranscriptionError.connectionFailed("Invalid WebSocket URL")
         }
 
@@ -104,8 +115,6 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
         task.resume()
 
         var config: [String: Any] = [
-            "api_key": apiKey,
-            "model": model,
             "audio_format": audioConfig.audioFormat,
             "sample_rate": audioConfig.sampleRate,
             "num_channels": audioConfig.numChannels,
@@ -114,33 +123,34 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
 
         if !languageHints.isEmpty {
             config["language_hints"] = languageHints
-            config["language_hints_strict"] = strictLanguageHints
         }
 
         if let translationPayload = makeTranslationPayload(from: translationConfig) {
             config["translation"] = translationPayload
         }
 
-        if endpointDetectionEnabled {
-            config["enable_endpoint_detection"] = true
-        }
-
-        if let maxEndpointDelayMs {
-            config["max_endpoint_delay_ms"] = max(0, maxEndpointDelayMs)
-        }
-
         let configData = try JSONSerialization.data(withJSONObject: config)
         let configString = String(data: configData, encoding: .utf8) ?? "{}"
 
-        NSLog("[Soniox RT] Sending config: %@", configString)
+        NSLog("[Cloud RT] Sending config: %@", configString)
         try await task.send(.string(configString))
-        NSLog("[Soniox RT] Config sent successfully, WebSocket connected")
+        NSLog("[Cloud RT] Config sent successfully, WebSocket connected")
 
         isConnected = true
-        onConnectionStatusChanged?(.connected)
 
         startReceiveLoop()
         startPingLoop()
+
+        // Wait for proxy_ready before marking connected
+        let deadline = Date().addingTimeInterval(10)
+        while !proxyReady && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        guard proxyReady else {
+            throw RealtimeTranscriptionError.connectionFailed("Proxy did not send ready signal")
+        }
+
+        onConnectionStatusChanged?(.connected)
     }
 
     // MARK: - Send Audio Data
@@ -157,7 +167,7 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
 
         if audioChunkCount <= 5 || audioChunkCount % 100 == 0 {
             NSLog(
-                "[Soniox RT] Sending audio chunk #%d, size=%d, total=%d bytes",
+                "[Cloud RT] Sending audio chunk #%d, size=%d, total=%d bytes",
                 audioChunkCount,
                 data.count,
                 audioBytesSent
@@ -166,7 +176,7 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
 
         task.send(.data(data)) { [weak self] error in
             if let error {
-                Log.transcription.error("Soniox RT: Send error - \(error.localizedDescription)")
+                Log.transcription.error("Cloud RT: Send error - \(error.localizedDescription)")
                 self?.onError?(error)
             }
         }
@@ -183,13 +193,13 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
             let finalizePayloadData = try JSONSerialization.data(withJSONObject: ["type": "finalize"])
             if let finalizePayload = String(data: finalizePayloadData, encoding: .utf8) {
                 try await task.send(.string(finalizePayload))
-                Log.transcription.info("Soniox RT: Finalize control message sent")
+                Log.transcription.info("Cloud RT: Finalize control message sent")
                 try? await Task.sleep(for: .milliseconds(350))
             }
 
             // Empty frame ends the stream and flushes pending final tokens.
             try await task.send(.data(Data()))
-            Log.transcription.info("Soniox RT: Empty frame sent (finalize)")
+            Log.transcription.info("Cloud RT: Empty frame sent (finalize)")
 
             // Wait for explicit finished signal and a short quiet window for final tokens.
             let timeoutSeconds = 5.0
@@ -214,13 +224,13 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
             let timedOutSnapshot = readFinalizeState()
             setFinalizeState(awaiting: false, finished: false)
             if !timedOutSnapshot.finished {
-                Log.transcription.warning("Soniox RT: Finalize timeout — finished signal was not received")
+                Log.transcription.warning("Cloud RT: Finalize timeout — finished signal was not received")
             } else {
-                Log.transcription.warning("Soniox RT: Finalize timeout — finished received but quiet window not reached")
+                Log.transcription.warning("Cloud RT: Finalize timeout — finished received but quiet window not reached")
             }
             return timedOutSnapshot.finished
         } catch {
-            Log.transcription.error("Soniox RT: Finalize error - \(error.localizedDescription)")
+            Log.transcription.error("Cloud RT: Finalize error - \(error.localizedDescription)")
             setFinalizeState(awaiting: false, finished: false)
             return false
         }
@@ -229,7 +239,7 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
     // MARK: - Disconnect
 
     func disconnect() async {
-        Log.transcription.info("Soniox RT: Disconnecting...")
+        Log.transcription.info("Cloud RT: Disconnecting...")
 
         pingTask?.cancel()
         pingTask = nil
@@ -246,7 +256,7 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
         isConnected = false
         onConnectionStatusChanged?(.disconnected)
 
-        Log.transcription.info("Soniox RT: Disconnected")
+        Log.transcription.info("Cloud RT: Disconnected")
     }
 
     // MARK: - Receive Loop
@@ -263,7 +273,7 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
                     self.handleMessage(message)
                 } catch {
                     if Task.isCancelled { break }
-                    NSLog("[Soniox RT] Receive error: %@", error.localizedDescription)
+                    NSLog("[Cloud RT] Receive error: %@", error.localizedDescription)
                     self.handleDisconnect()
                     break
                 }
@@ -274,10 +284,10 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
         switch message {
         case let .string(text):
-            NSLog("[Soniox RT] Received message: %@", String(text.prefix(300)))
+            NSLog("[Cloud RT] Received message: %@", String(text.prefix(300)))
             parseResponse(text)
         case let .data(data):
-            NSLog("[Soniox RT] Received binary data: %d bytes", data.count)
+            NSLog("[Cloud RT] Received binary data: %d bytes", data.count)
             if let text = String(data: data, encoding: .utf8) {
                 parseResponse(text)
             }
@@ -289,13 +299,32 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
     private func parseResponse(_ text: String) {
         guard let data = text.data(using: .utf8) else { return }
 
+        // Handle proxy_ready signal
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           json["type"] as? String == "proxy_ready" {
+            proxyReady = true
+            NSLog("[Cloud RT] Received proxy_ready signal")
+            return
+        }
+
+        // Handle proxy error frames
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let errorMsg = json["error"] as? String,
+           json["tokens"] == nil {
+            let error = RealtimeTranscriptionError.connectionFailed(errorMsg)
+            Log.transcription.error("Cloud RT: Proxy error - \(errorMsg)")
+            onError?(error)
+            onConnectionStatusChanged?(.failed(errorMsg))
+            return
+        }
+
         do {
-            let response = try JSONDecoder().decode(SonioxRealtimeResponse.self, from: data)
+            let response = try JSONDecoder().decode(RealtimeResponse.self, from: data)
 
             if let errorMessage = response.errorMessage {
                 let code = response.errorCode ?? "unknown"
                 let error = RealtimeTranscriptionError.connectionFailed("\(code): \(errorMessage)")
-                Log.transcription.error("Soniox RT: Server error - \(code): \(errorMessage)")
+                Log.transcription.error("Cloud RT: Server error - \(code): \(errorMessage)")
                 onError?(error)
                 onConnectionStatusChanged?(.failed(error.localizedDescription))
                 return
@@ -339,11 +368,11 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
 
             if response.finished == true {
                 markFinishedSignalReceived()
-                Log.transcription.info("Soniox RT: Received finished signal")
+                Log.transcription.info("Cloud RT: Received finished signal")
                 onSegmentBoundary?(.endpoint)
             }
         } catch {
-            Log.transcription.error("Soniox RT: Parse error - \(error.localizedDescription), text: \(text.prefix(200))")
+            Log.transcription.error("Cloud RT: Parse error - \(error.localizedDescription), text: \(text.prefix(200))")
         }
     }
 
@@ -356,7 +385,7 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
                 guard !Task.isCancelled else { break }
                 self?.webSocketTask?.sendPing { error in
                     if let error {
-                        Log.transcription.warning("Soniox RT: Ping failed - \(error.localizedDescription)")
+                        Log.transcription.warning("Cloud RT: Ping failed - \(error.localizedDescription)")
                     }
                 }
             }
@@ -370,7 +399,7 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
         isConnected = false
 
         guard reconnectAttempt < maxReconnectAttempts else {
-            Log.transcription.error("Soniox RT: Max reconnect attempts reached")
+            Log.transcription.error("Cloud RT: Max reconnect attempts reached")
             onConnectionStatusChanged?(.failed("Connection lost after \(maxReconnectAttempts) attempts"))
             return
         }
@@ -378,7 +407,7 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
         reconnectAttempt += 1
         let delay = pow(2.0, Double(reconnectAttempt)) // 2s, 4s, 8s
 
-        Log.transcription.info("Soniox RT: Reconnecting (attempt \(self.reconnectAttempt))...")
+        Log.transcription.info("Cloud RT: Reconnecting (attempt \(self.reconnectAttempt))...")
         onConnectionStatusChanged?(.reconnecting(attempt: reconnectAttempt))
 
         Task { [weak self] in
@@ -388,9 +417,9 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
             do {
                 try await self.connectWebSocket()
                 self.reconnectAttempt = 0
-                Log.transcription.info("Soniox RT: Reconnected successfully")
+                Log.transcription.info("Cloud RT: Reconnected successfully")
             } catch {
-                Log.transcription.error("Soniox RT: Reconnect failed - \(error.localizedDescription)")
+                Log.transcription.error("Cloud RT: Reconnect failed - \(error.localizedDescription)")
                 self.onError?(error)
                 self.handleDisconnect()
             }
@@ -464,13 +493,13 @@ final class SonioxRealtimeService: NSObject, @unchecked Sendable {
 // MARK: - URLSessionWebSocketDelegate
 
 @available(macOS 13.0, *)
-extension SonioxRealtimeService: URLSessionWebSocketDelegate {
+extension CloudRealtimeService: URLSessionWebSocketDelegate {
     nonisolated func urlSession(
         _: URLSession,
         webSocketTask _: URLSessionWebSocketTask,
         didOpenWithProtocol protocol: String?
     ) {
-        Log.transcription.info("Soniox RT: WebSocket opened, protocol: \(String(describing: `protocol`))")
+        Log.transcription.info("Cloud RT: WebSocket opened, protocol: \(String(describing: `protocol`))")
     }
 
     nonisolated func urlSession(
@@ -480,6 +509,6 @@ extension SonioxRealtimeService: URLSessionWebSocketDelegate {
         reason: Data?
     ) {
         let reasonStr = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "none"
-        Log.transcription.info("Soniox RT: WebSocket closed, code: \(closeCode.rawValue), reason: \(reasonStr)")
+        Log.transcription.info("Cloud RT: WebSocket closed, code: \(closeCode.rawValue), reason: \(reasonStr)")
     }
 }

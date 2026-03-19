@@ -34,5 +34,11 @@
     <true/>
     <key>NSSupportsSuddenTermination</key>
     <true/>
+    <key>SUFeedURL</key>
+    <string>https://rmarinsky.github.io/Diduny/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>E+U25RLLvknFBaJXFMZ5YnpN4gRJLsavDNEGc+M2xk0=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
 </dict>
 </plist>

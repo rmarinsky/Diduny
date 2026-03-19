@@ -104,10 +104,10 @@ struct RealtimeTranslationConfig: Equatable {
     let mode: Mode
 }
 
-// MARK: - Soniox RT API Response
+// MARK: - RT API Response
 
-struct SonioxRealtimeResponse: Decodable {
-    let tokens: [SonioxRealtimeToken]?
+struct RealtimeResponse: Decodable {
+    let tokens: [RealtimeResponseToken]?
     let finished: Bool?
     let errorCode: String?
     let errorMessage: String?
@@ -127,14 +127,14 @@ struct SonioxRealtimeResponse: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        tokens = (try? container.decode([SonioxRealtimeToken].self, forKey: .tokens))
-            ?? (try? container.decode([SonioxRealtimeToken].self, forKey: .words))
+        tokens = (try? container.decode([RealtimeResponseToken].self, forKey: .tokens))
+            ?? (try? container.decode([RealtimeResponseToken].self, forKey: .words))
         finished = container.decodeBoolIfPresent(forKeys: [.finished, .isFinished])
         errorCode = container.decodeStringIfPresent(forKeys: [.errorCode, .errorCodeCamel])
         errorMessage = container.decodeStringIfPresent(forKeys: [.errorMessage, .errorMessageCamel, .message])
     }
 
-    struct SonioxRealtimeToken: Decodable {
+    struct RealtimeResponseToken: Decodable {
         let text: String
         let isFinal: Bool
         let speaker: String?

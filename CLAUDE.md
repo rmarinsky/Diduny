@@ -2,12 +2,12 @@
 
 ## Project Overview
 
-**Diduny** is a native macOS menu bar application for voice dictation. It records audio, transcribes it using the Soniox API, and pastes the result.
+**Diduny** is a native macOS menu bar application for voice dictation. It records audio, transcribes it via a cloud proxy, and pastes the result.
 
 - **Platform:** macOS 14.0+ (Sonoma)
 - **Language:** Swift / SwiftUI
 - **App Type:** Menu bar app (LSUIElement = YES, no dock icon)
-- **Transcription Service:** Soniox only (async STT API)
+- **Transcription:** Proxy-only (all cloud API calls routed through proxy)
 
 ## Key Architecture
 
@@ -23,7 +23,7 @@
    - Push-to-talk key (Right Option by default)
 2. `AppDelegate.toggleRecording()` → `startRecording()` or `stopRecording()`
 3. `AudioRecorderService` captures audio to WAV
-4. `SonioxTranscriptionService.transcribe()` sends to API
+4. `CloudTranscriptionService.transcribe()` sends to proxy API
 5. `ClipboardService` copies result and optionally pastes
 
 ### Push-to-Talk Mode
@@ -45,7 +45,8 @@
 |---------|---------|
 | `AudioDeviceManager` | Lists input devices, auto-detects best microphone |
 | `AudioRecorderService` | Records audio using AVAudioEngine |
-| `SonioxTranscriptionService` | 4-step async transcription: upload → create job → poll → get text |
+| `CloudTranscriptionService` | Proxy-based async transcription |
+| `CloudRealtimeService` | Proxy-based realtime WebSocket transcription |
 | `WhisperTranscriptionService` | Local on-device transcription using whisper.cpp |
 | `ClipboardService` | Copy to clipboard, simulate Cmd+V paste |
 | `HotkeyService` | Global hotkey registration using Carbon |
@@ -63,25 +64,27 @@
 | `WhisperModelManager.swift` | Model catalog (12 models), download/delete/select, progress tracking |
 
 ### Transcription Provider Routing
-- `TranscriptionProvider` enum: `.soniox` (default) or `.whisperLocal`
+- `TranscriptionProvider` enum: `.cloud` (default) or `.local`
 - `AppDelegate.activeTranscriptionService` routes to the correct service
-- Provider-specific validation at recording start (API key vs downloaded model)
-- Meeting recording always uses Soniox (real-time WebSocket)
+- Provider-specific validation at recording start (proxy config vs downloaded model)
+- All cloud API calls go through proxy (no direct API connections)
 - Translation with Whisper falls back to plain transcription (Whisper only translates TO English)
 
-### Soniox API Integration
-- **Base URL:** `https://api.soniox.com/v1`
-- **Model:** `stt-async-preview`
-- **Flow:** POST /files → POST /transcriptions → GET /transcriptions/{id} (poll) → GET /transcriptions/{id}/transcript
-- **Auth:** Bearer token in Authorization header
+### Cloud Proxy Integration
+- **Proxy URL:** Configured in settings (proxyBaseURL)
+- **Auth:** X-Proxy-Token header
+- **Transcription:** POST /api/v1/transcriptions (multipart)
+- **Realtime:** WebSocket /api/v1/realtime
+- **Translation:** GET /api/v1/translations
+- **Config:** GET /api/v1/config
 
 ### Storage (Diduny/Core/Storage/)
-- `KeychainManager` - Stores Soniox API key securely
-- `SettingsStorage` - UserDefaults for preferences (audio quality, hotkey, auto-paste, etc.)
+- `KeychainManager` - Keychain accessibility check utility
+- `SettingsStorage` - UserDefaults for preferences (audio quality, hotkey, auto-paste, proxy config, etc.)
 
 ### UI (Diduny/Features/)
-- `SettingsView` - TabView with General, Audio, Meetings, API tabs
-- `APISettingsView` - Soniox API key input with test connection button
+- `SettingsView` - TabView with General, Transcription tabs
+- `TranscriptionSettingsView` - Provider selection, proxy config, Whisper models
 - `MeetingSettingsView` - Meeting audio source selection
 - `RecordingIndicatorView` - Floating pill showing recording/processing status
 
@@ -95,7 +98,7 @@ MeetingRecordingState: idle → recording → processing → success/error → i
 
 | Task | Files |
 |------|-------|
-| Change transcription logic | `SonioxTranscriptionService.swift`, `WhisperTranscriptionService.swift` |
+| Change transcription logic | `CloudTranscriptionService.swift`, `WhisperTranscriptionService.swift` |
 | Modify recording behavior | `AudioRecorderService.swift`, `AppDelegate.swift` |
 | Add settings | `SettingsStorage.swift`, relevant settings view |
 | Change hotkey | `HotkeyService.swift`, `GeneralSettingsView.swift` |
@@ -157,13 +160,12 @@ open Diduny.xcodeproj
 - Microphone (NSMicrophoneUsageDescription)
 - Screen Recording (for meeting audio capture via ScreenCaptureKit)
 - Accessibility (for auto-paste Cmd+V simulation)
-- Keychain (for API key storage)
-- Network (for Soniox API)
+- Network (for proxy API)
 
 ## Logging
 App uses `NSLog()` with prefixes:
 - `[Diduny]` - AppDelegate flow
-- `[Transcription]` - Soniox API calls
+- `[Transcription]` - Cloud API calls
 - `[AppState]` - State changes
 
 ## Common Issues

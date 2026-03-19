@@ -24,6 +24,8 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Select Xcode
         run: |
@@ -37,8 +39,9 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
         run: |
-          for var in APPLE_ID APPLE_APP_PASSWORD APPLE_TEAM_ID MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD; do
+          for var in APPLE_ID APPLE_APP_PASSWORD APPLE_TEAM_ID MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD SPARKLE_EDDSA_PRIVATE_KEY; do
             if [ -z "${!var}" ]; then
               echo "::error::Missing required secret: ${var}"
               exit 1
@@ -99,6 +102,7 @@ jobs:
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          BUILD_NUMBER=$(git rev-list --count HEAD)
           xcodebuild archive \
             -project "$PROJECT_FILE" \
             -scheme "$SCHEME" \
@@ -109,7 +113,8 @@ jobs:
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Developer ID Application" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
 
       - name: Export and verify app
         run: |
@@ -148,8 +153,80 @@ jobs:
             "build/${DISPLAY_NAME}-${VERSION}.dmg" \
             "$EXPORT_DIR/"
 
-          cp "build/${DISPLAY_NAME}-${VERSION}.dmg" "build/${DISPLAY_NAME}-latest.dmg"
           shasum -a 256 "build/${DISPLAY_NAME}-${VERSION}.dmg" | awk '{print $1}' > "build/${DISPLAY_NAME}-${VERSION}.sha256"
+
+      - name: Sign DMG with Sparkle EdDSA
+        env:
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          DMG_PATH="build/${DISPLAY_NAME}-${VERSION}.dmg"
+
+          # Download Sparkle tools
+          SPARKLE_VERSION="2.6.4"
+          curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" -o sparkle.tar.xz
+          mkdir -p sparkle_tools
+          tar -xf sparkle.tar.xz -C sparkle_tools
+
+          # Sign the DMG and capture signature info
+          SIGN_OUTPUT=$(echo "$SPARKLE_EDDSA_PRIVATE_KEY" | sparkle_tools/bin/sign_update "$DMG_PATH" -f -)
+          echo "Sparkle signature: $SIGN_OUTPUT"
+          # Use heredoc for safe GITHUB_ENV (output contains quotes and special chars)
+          {
+            echo 'SPARKLE_SIGN_OUTPUT<<SPARKLE_EOF'
+            echo "$SIGN_OUTPUT"
+            echo 'SPARKLE_EOF'
+          } >> "$GITHUB_ENV"
+
+      - name: Update appcast.xml
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+          DMG_PATH="build/${DISPLAY_NAME}-${VERSION}.dmg"
+          DMG_SIZE=$(stat -f%z "$DMG_PATH")
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${DISPLAY_NAME}-${VERSION}.dmg"
+
+          # Parse edSignature and length from sign_update output
+          ED_SIGNATURE=$(echo "$SPARKLE_SIGN_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+          ED_LENGTH=$(echo "$SPARKLE_SIGN_OUTPUT" | sed -n 's/.*length="\([^"]*\)".*/\1/p')
+
+          # Insert new item into appcast.xml using Python (sed can't handle multiline)
+          python3 -c "
+          import datetime, pathlib
+          appcast = pathlib.Path('docs/appcast.xml')
+          content = appcast.read_text()
+          pub_date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S %z')
+          item = '''    <item>
+              <title>Version ${VERSION}</title>
+              <pubDate>{pub_date}</pubDate>
+              <sparkle:version>${BUILD_NUMBER}</sparkle:version>
+              <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+              <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+              <enclosure
+                url=\"${DOWNLOAD_URL}\"
+                sparkle:edSignature=\"${ED_SIGNATURE}\"
+                length=\"${ED_LENGTH:-$DMG_SIZE}\"
+                type=\"application/octet-stream\" />
+            </item>'''.format(pub_date=pub_date)
+          content = content.replace('</channel>', item + '\n  </channel>')
+          appcast.write_text(content)
+          "
+
+          echo "Updated appcast.xml with version ${VERSION}"
+          cat docs/appcast.xml
+
+      - name: Commit and push appcast.xml
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # We're on detached HEAD (tag checkout), so stash the updated appcast,
+          # switch to main, apply it, commit and push
+          cp docs/appcast.xml /tmp/appcast.xml
+          git checkout main
+          cp /tmp/appcast.xml docs/appcast.xml
+          git add docs/appcast.xml
+          git commit -m "Update appcast.xml for ${GITHUB_REF_NAME}"
+          git push origin main
 
       - name: Create GitHub release
         env:
@@ -159,7 +236,6 @@ jobs:
 
           gh release create "${GITHUB_REF_NAME}" \
             "build/${DISPLAY_NAME}-${VERSION}.dmg" \
-            "build/${DISPLAY_NAME}-latest.dmg" \
             "build/${DISPLAY_NAME}-${VERSION}.sha256" \
             --title "${APP_NAME} ${VERSION}" \
             --generate-notes

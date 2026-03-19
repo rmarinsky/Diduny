@@ -155,22 +155,10 @@ extension AppDelegate {
         }
 
         // Provider-specific validation
-        var sonioxAPIKey: String?
-
         switch SettingsStorage.shared.transcriptionProvider {
-        case .soniox:
-            guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
-                Log.app.warning("startRecording: No API key found")
-                await MainActor.run {
-                    appState.errorMessage = "Please add your Soniox API key in Settings"
-                    appState.recordingState = .error
-                    handleRecordingStateChange(.error)
-                }
-                return
-            }
-            sonioxAPIKey = apiKey
-            Log.app.info("startRecording: Soniox API key found")
-        case .whisperLocal:
+        case .cloud:
+            Log.app.info("startRecording: Cloud provider selected")
+        case .local:
             guard WhisperModelManager.shared.selectedModel() != nil else {
                 Log.app.warning("startRecording: No Whisper model selected")
                 await MainActor.run {
@@ -180,7 +168,6 @@ extension AppDelegate {
                 }
                 return
             }
-            sonioxAPIKey = nil
             Log.app.info("startRecording: Whisper model ready")
         }
 
@@ -235,15 +222,9 @@ extension AppDelegate {
         }
 
         do {
-            if let apiKey = sonioxAPIKey {
-                // Configure realtime websocket BEFORE starting recorder.
-                // AudioRecorderService snapshots onRealtimeAudioData at start time.
-                await setupVoiceRealtimeTranscriptionIfNeeded(apiKey: apiKey)
-            } else {
-                audioRecorder.onRealtimeAudioData = nil
-                voiceRealtimeSessionEnabled = false
-                voiceRealtimeAccumulator = nil
-            }
+            // Configure realtime websocket BEFORE starting recorder.
+            // AudioRecorderService snapshots onRealtimeAudioData at start time.
+            await setupVoiceRealtimeTranscriptionIfNeeded()
 
             Log.app.info("startRecording: Starting audio recording")
             try await audioRecorder.startRecording(device: device)
@@ -355,175 +336,206 @@ extension AppDelegate {
         var capturedAudioData: Data?
         let recordingId = UUID()
 
-        await RecordingDebugScope.$recordingID.withValue(recordingId) {
-            RecordingDebugLog.app("Voice stop pipeline started", source: "Voice")
-            do {
-                Log.app.info("stopRecording: Stopping audio recorder")
-                let audioData = try await audioRecorder.stopRecording()
-                capturedAudioData = audioData
-                Log.app.info("stopRecording: Got audio data, size = \(audioData.count) bytes")
-                RecordingDebugLog.app("Audio captured, bytes=\(audioData.count)", source: "Voice")
+        do {
+            Log.app.info("stopRecording: Stopping audio recorder")
+            let audioData = try await audioRecorder.stopRecording()
+            capturedAudioData = audioData
+            Log.app.info("stopRecording: Got audio data, size = \(audioData.count) bytes")
 
-                let realtimeResult = await stopVoiceRealtimeSession(finalize: true)
-                RecordingDebugLog.decision(
-                    "Realtime result: chars=\(realtimeResult.text.count), finalized=\(realtimeResult.didReceiveFinalization)",
-                    source: "Voice"
-                )
-                let recordingDurationSeconds = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            let realtimeResult = await stopVoiceRealtimeSession(finalize: true)
+            let recordingDurationSeconds = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
 
-                let text: String
-                let useRealtimeWithoutFinalize = shouldUseRealtimeFallbackText(
-                    realtimeResult.text,
-                    didReceiveFinalization: realtimeResult.didReceiveFinalization,
-                    recordingDurationSeconds: recordingDurationSeconds
-                )
+            let text: String
+            let useRealtimeWithoutFinalize = shouldUseRealtimeFallbackText(
+                realtimeResult.text,
+                didReceiveFinalization: realtimeResult.didReceiveFinalization,
+                recordingDurationSeconds: recordingDurationSeconds
+            )
 
-                if useRealtimeWithoutFinalize {
-                    text = realtimeResult.text
-                    if realtimeResult.didReceiveFinalization {
-                        Log.app.info("stopRecording: Using realtime transcription (\(realtimeResult.text.count) chars)")
-                        RecordingDebugLog.decision("Using realtime transcription result (finalized)", source: "Voice")
-                    } else {
-                        Log.app.warning(
-                            "stopRecording: Finalize delayed, using realtime fallback text (\(realtimeResult.text.count) chars)"
-                        )
-                        RecordingDebugLog.decision(
-                            "Using realtime fallback text despite incomplete finalize (policy matched)",
-                            source: "Voice"
-                        )
-                    }
+            if useRealtimeWithoutFinalize {
+                text = realtimeResult.text
+                if realtimeResult.didReceiveFinalization {
+                    Log.app.info("stopRecording: Using realtime transcription (\(realtimeResult.text.count) chars)")
                 } else {
-                    var service = activeTranscriptionService
-                    if SettingsStorage.shared.transcriptionProvider == .soniox {
-                        guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                            Log.app.error("stopRecording: No API key!")
-                            throw TranscriptionError.noAPIKey
-                        }
-                        service.apiKey = apiKey
-                    }
+                    Log.app.warning(
+                        "stopRecording: Finalize delayed, using realtime fallback text (\(realtimeResult.text.count) chars)"
+                    )
+                }
+            } else {
+                let service = activeTranscriptionService
 
-                    if !realtimeResult.didReceiveFinalization {
-                        Log.app.warning("stopRecording: Realtime finalize was incomplete, forcing async transcription fallback")
-                        RecordingDebugLog.decision("Fallback to async: realtime finalize incomplete", source: "Voice")
-                    } else if realtimeResult.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Log.app.info("stopRecording: Realtime transcription empty, using async fallback")
-                        RecordingDebugLog.decision("Fallback to async: realtime result empty", source: "Voice")
-                    } else {
+                if !realtimeResult.didReceiveFinalization {
+                    Log.app.warning("stopRecording: Realtime finalize was incomplete, forcing async transcription fallback")
+                } else if realtimeResult.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Log.app.info("stopRecording: Realtime transcription empty, using async fallback")
+                } else {
+                    Log.app.warning(
+                        "stopRecording: Realtime finalized text too short (\(realtimeResult.text.count) chars) for \(String(format: "%.2f", recordingDurationSeconds))s recording, using async fallback"
+                    )
+                }
+
+                do {
+                    text = try await service.transcribe(audioData: audioData)
+                } catch {
+                    if !realtimeResult.text.isEmpty {
                         Log.app.warning(
-                            "stopRecording: Realtime finalized text too short (\(realtimeResult.text.count) chars) for \(String(format: "%.2f", recordingDurationSeconds))s recording, using async fallback"
+                            "stopRecording: Async fallback failed, using partial realtime text (\(realtimeResult.text.count) chars)"
                         )
-                        RecordingDebugLog.decision("Fallback to async: realtime finalized text too short", source: "Voice")
-                    }
-
-                    do {
-                        text = try await service.transcribe(audioData: audioData)
-                    } catch {
-                        if !realtimeResult.text.isEmpty {
-                            Log.app.warning(
-                                "stopRecording: Async fallback failed, using partial realtime text (\(realtimeResult.text.count) chars)"
-                            )
-                            RecordingDebugLog.decision(
-                                "Async fallback failed, using partial realtime text",
-                                source: "Voice"
-                            )
-                            text = realtimeResult.text
-                        } else {
-                            throw error
-                        }
+                        text = realtimeResult.text
+                    } else {
+                        throw error
                     }
                 }
-                Log.app.info("stopRecording: Transcription received (\(text.count) chars)")
-                RecordingDebugLog.app("Text ready, chars=\(text.count)", source: "Voice")
+            }
+            Log.app.info("stopRecording: Transcription received (\(text.count) chars)")
 
-                clipboardService.copy(text: text)
-                Log.app.info("stopRecording: Text copied to clipboard")
+            clipboardService.copy(text: text)
+            Log.app.info("stopRecording: Text copied to clipboard")
 
-                if SettingsStorage.shared.autoPaste {
-                    Log.app.info("stopRecording: Auto-pasting")
-                    do {
-                        try await clipboardService.paste()
-                    } catch ClipboardError.accessibilityNotGranted {
-                        Log.app.warning("stopRecording: Accessibility permission needed")
-                        PermissionManager.shared.showPermissionAlert(for: .accessibility)
-                    } catch {
-                        Log.app.error("stopRecording: Paste failed - \(error.localizedDescription)")
-                    }
+            if SettingsStorage.shared.autoPaste {
+                Log.app.info("stopRecording: Auto-pasting")
+                do {
+                    try await clipboardService.paste()
+                } catch ClipboardError.accessibilityNotGranted {
+                    Log.app.warning("stopRecording: Accessibility permission needed")
+                    PermissionManager.shared.showPermissionAlert(for: .accessibility)
+                } catch {
+                    Log.app.error("stopRecording: Paste failed - \(error.localizedDescription)")
                 }
+            }
 
-                // Update state to success IMMEDIATELY after text is available
-                // This ensures the UI shows checkmark right when user can work with the text
-                guard appState.recordingState == .processing else {
-                    Log.app.warning("stopRecording: state changed during processing (now \(self.appState.recordingState)), dropping result")
-                    return
-                }
-                await MainActor.run {
-                    appState.lastTranscription = text
-                    appState.isEmptyTranscription = false
-                    appState.deviceFallbackWarning = nil
-                    appState.recordingState = .success
-                    appState.recordingStartTime = nil
-                    handleRecordingStateChange(.success)
-                }
-                Log.app.info("stopRecording: SUCCESS")
-
-                // Save to recordings library
-                let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
-                RecordingsLibraryStorage.shared.saveRecording(
-                    id: recordingId,
-                    audioData: audioData,
-                    type: .voice,
-                    duration: duration,
-                    transcriptionText: text
-                )
-                RecordingDebugLog.app("Recording saved to library", source: "Voice")
-
-                // Optional operations run after state change (non-blocking for UI)
-                if SettingsStorage.shared.playSoundOnCompletion {
-                    Log.app.info("stopRecording: Playing sound")
-                    NSSound(named: .init("Funk"))?.play()
-                }
-
-                // Clear recovery state on success
-                RecoveryStateManager.shared.clearState()
-
-            } catch is CancellationError {
-                _ = await stopVoiceRealtimeSession(finalize: false)
-                Log.app.info("stopRecording: Cancelled")
+            guard appState.recordingState == .processing else {
+                Log.app.warning("stopRecording: state changed during processing (now \(self.appState.recordingState)), dropping result")
                 return
-            } catch {
-                _ = await stopVoiceRealtimeSession(finalize: false)
-                Log.app.error("stopRecording: ERROR - \(error.localizedDescription)")
-                RecordingDebugLog.app("Stop pipeline failed: \(error.localizedDescription)", source: "Voice")
-                let isEmptyTranscription: Bool = {
-                    guard case .emptyTranscription = error as? TranscriptionError else { return false }
-                    return true
-                }()
+            }
+            await MainActor.run {
+                appState.lastTranscription = text
+                appState.isEmptyTranscription = false
+                appState.deviceFallbackWarning = nil
+                appState.recordingState = .success
+                appState.recordingStartTime = nil
+                handleRecordingStateChange(.success)
+            }
+            Log.app.info("stopRecording: SUCCESS")
 
-                // Save recording without transcription so user can process later
+            // Save to recordings library
+            let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            RecordingsLibraryStorage.shared.saveRecording(
+                id: recordingId,
+                audioData: audioData,
+                type: .voice,
+                duration: duration,
+                transcriptionText: text
+            )
+
+            if SettingsStorage.shared.playSoundOnCompletion {
+                Log.app.info("stopRecording: Playing sound")
+                NSSound(named: .init("Funk"))?.play()
+            }
+
+            RecoveryStateManager.shared.clearState()
+
+        } catch is CancellationError {
+            _ = await stopVoiceRealtimeSession(finalize: false)
+            Log.app.info("stopRecording: Cancelled")
+            await MainActor.run {
+                appState.recordingState = .idle
+                appState.recordingStartTime = nil
+                appState.deviceFallbackWarning = nil
+                handleRecordingStateChange(.idle)
+            }
+            return
+        } catch let limitError as TranscriptionError where limitError.isUsageLimitExceeded {
+            _ = await stopVoiceRealtimeSession(finalize: false)
+            Log.app.warning("stopRecording: Usage limit exceeded, attempting Whisper fallback")
+
+            // Try falling back to local Whisper model
+            if let audioData = capturedAudioData, WhisperModelManager.shared.selectedModel() != nil {
+                NotchManager.shared.showInfo(message: "Cloud limit reached. Switching to local model.", duration: 2.0)
+                do {
+                    let text = try await whisperTranscriptionService.transcribe(audioData: audioData)
+                    Log.app.info("stopRecording: Whisper fallback succeeded (\(text.count) chars)")
+                    clipboardService.copy(text: text)
+                    if SettingsStorage.shared.autoPaste {
+                        try? await clipboardService.paste()
+                    }
+                    guard appState.recordingState == .processing else { return }
+                    await MainActor.run {
+                        appState.lastTranscription = text
+                        appState.isEmptyTranscription = false
+                        appState.deviceFallbackWarning = nil
+                        appState.recordingState = .success
+                        appState.recordingStartTime = nil
+                        handleRecordingStateChange(.success)
+                    }
+                    let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+                    RecordingsLibraryStorage.shared.saveRecording(
+                        id: recordingId, audioData: audioData, type: .voice,
+                        duration: duration, transcriptionText: text
+                    )
+                    RecoveryStateManager.shared.clearState()
+                    Task { await UsageService.shared.refresh() }
+                } catch {
+                    Log.app.error("stopRecording: Whisper fallback also failed - \(error.localizedDescription)")
+                    guard appState.recordingState == .processing else { return }
+                    await MainActor.run {
+                        appState.errorMessage = limitError.localizedDescription
+                        appState.isEmptyTranscription = false
+                        appState.deviceFallbackWarning = nil
+                        appState.recordingState = .error
+                        appState.recordingStartTime = nil
+                        handleRecordingStateChange(.error)
+                    }
+                }
+            } else {
+                // No local model available
                 if let audioData = capturedAudioData {
                     let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                     RecordingsLibraryStorage.shared.saveRecording(
-                        id: recordingId,
-                        audioData: audioData,
-                        type: .voice,
-                        duration: duration
+                        id: recordingId, audioData: audioData, type: .voice, duration: duration
                     )
                     RecoveryStateManager.shared.clearState()
-                    RecordingDebugLog.app("Saved audio-only after failure", source: "Voice")
                 }
-
-                guard appState.recordingState == .processing else {
-                    Log.app.warning("stopRecording: state changed during processing (now \(self.appState.recordingState)), dropping error")
-                    return
-                }
+                guard appState.recordingState == .processing else { return }
                 await MainActor.run {
-                    appState.errorMessage = error.localizedDescription
-                    appState.isEmptyTranscription = isEmptyTranscription
+                    appState.errorMessage = "Cloud limit reached. Download a local model in Settings to continue."
+                    appState.isEmptyTranscription = false
                     appState.deviceFallbackWarning = nil
                     appState.recordingState = .error
                     appState.recordingStartTime = nil
                     handleRecordingStateChange(.error)
                 }
+            }
+        } catch {
+            _ = await stopVoiceRealtimeSession(finalize: false)
+            Log.app.error("stopRecording: ERROR - \(error.localizedDescription)")
+            let isEmptyTranscription: Bool = {
+                guard case .emptyTranscription = error as? TranscriptionError else { return false }
+                return true
+            }()
+
+            if let audioData = capturedAudioData {
+                let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+                RecordingsLibraryStorage.shared.saveRecording(
+                    id: recordingId,
+                    audioData: audioData,
+                    type: .voice,
+                    duration: duration
+                )
+                RecoveryStateManager.shared.clearState()
+            }
+
+            guard appState.recordingState == .processing else {
+                Log.app.warning("stopRecording: state changed during processing (now \(self.appState.recordingState)), dropping error")
+                return
+            }
+            await MainActor.run {
+                appState.errorMessage = error.localizedDescription
+                appState.isEmptyTranscription = isEmptyTranscription
+                appState.deviceFallbackWarning = nil
+                appState.recordingState = .error
+                appState.recordingStartTime = nil
+                handleRecordingStateChange(.error)
             }
         }
 
@@ -538,8 +550,8 @@ extension AppDelegate {
 
     // MARK: - Realtime Transcription (WebSocket)
 
-    private func setupVoiceRealtimeTranscriptionIfNeeded(apiKey: String) async {
-        guard SettingsStorage.shared.transcriptionProvider == .soniox,
+    private func setupVoiceRealtimeTranscriptionIfNeeded() async {
+        guard SettingsStorage.shared.transcriptionProvider == .cloud,
               SettingsStorage.shared.transcriptionRealtimeSocketEnabled
         else {
             audioRecorder.onRealtimeAudioData = nil
@@ -582,12 +594,9 @@ extension AppDelegate {
             let languageHints = SettingsStorage.shared.favoriteLanguages
 
             try await rtService.connect(
-                apiKey: apiKey,
                 languageHints: languageHints,
                 strictLanguageHints: !languageHints.isEmpty,
                 audioConfig: .defaultPCM16kMono,
-                enableEndpointDetection: true,
-                maxEndpointDelayMs: SettingsStorage.shared.sonioxEndpointDelayMs
             )
 
             voiceRealtimeSessionEnabled = true
