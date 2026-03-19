@@ -334,6 +334,14 @@ extension AppDelegate {
             store?.isActive = false
         }
 
+        // Ensure App Nap prevention is always cleaned up
+        defer {
+            if let token = meetingActivityToken {
+                ProcessInfo.processInfo.endActivity(token)
+                meetingActivityToken = nil
+            }
+        }
+
         // Track audioURL for library save in error path
         var capturedAudioURL: URL?
         let stopTime = Date()
@@ -360,7 +368,7 @@ extension AppDelegate {
                 Log.app.info("Meeting recording size = \(audioData.count) bytes")
 
                 text = try await transcriptionService.transcribeMeeting(audioData: audioData)
-                Log.app.info("Async meeting transcription received: \(text?.prefix(100) ?? "")...")
+                Log.app.info("Async meeting transcription received (\(text?.count ?? 0) chars)")
             } else {
                 text = nil
                 Log.app.info("Saving meeting recording without automatic transcription")
@@ -464,14 +472,6 @@ extension AppDelegate {
                 handleMeetingStateChange(.error)
             }
         }
-
-        // End App Nap prevention
-        if let token = meetingActivityToken {
-            ProcessInfo.processInfo.endActivity(token)
-            meetingActivityToken = nil
-        }
-
-        // Keep transcript window open — user closes manually
 
         Log.app.info("stopMeetingRecording: END")
     }

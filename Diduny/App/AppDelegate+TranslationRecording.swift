@@ -392,6 +392,11 @@ extension AppDelegate {
             }
             Log.app.info("stopTranslationRecording: Translation received (\(text.count) chars)")
 
+            guard appState.translationRecordingState == .processing else {
+                Log.app.warning("stopTranslationRecording: state changed during processing (now \(self.appState.translationRecordingState)), dropping result")
+                return
+            }
+
             clipboardService.copy(text: text)
             Log.app.info("stopTranslationRecording: Text copied to clipboard")
 
@@ -407,10 +412,6 @@ extension AppDelegate {
                 }
             }
 
-            guard appState.translationRecordingState == .processing else {
-                Log.app.warning("stopTranslationRecording: state changed during processing (now \(self.appState.translationRecordingState)), dropping result")
-                return
-            }
             await MainActor.run {
                 appState.lastTranscription = text
                 appState.isEmptyTranscription = false

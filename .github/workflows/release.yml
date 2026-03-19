@@ -192,9 +192,13 @@ jobs:
 
           # Insert new item into appcast.xml using Python (sed can't handle multiline)
           python3 -c "
-          import datetime, pathlib
+          import datetime, pathlib, sys
           appcast = pathlib.Path('docs/appcast.xml')
           content = appcast.read_text()
+          marker = '<sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>'
+          if marker in content:
+              print('Version ${VERSION} already in appcast, skipping')
+              sys.exit(0)
           pub_date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S %z')
           item = '''    <item>
               <title>Version ${VERSION}</title>
@@ -225,8 +229,10 @@ jobs:
           git checkout main
           cp /tmp/appcast.xml docs/appcast.xml
           git add docs/appcast.xml
-          git commit -m "Update appcast.xml for ${GITHUB_REF_NAME}"
-          git push origin main
+          if ! git diff --quiet --cached -- docs/appcast.xml; then
+            git commit -m "Update appcast.xml for ${GITHUB_REF_NAME}"
+            git push origin main
+          fi
 
       - name: Create GitHub release
         env:

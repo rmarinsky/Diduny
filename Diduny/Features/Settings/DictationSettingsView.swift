@@ -209,6 +209,7 @@ struct DictationSettingsView: View {
                     modelManager.deleteModel(model)
                     if selectedModel == model.name {
                         selectedModel = ""
+                        SettingsStorage.shared.selectedWhisperModel = ""
                     }
                 } label: {
                     Image(systemName: "trash")

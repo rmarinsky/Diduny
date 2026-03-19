@@ -332,6 +332,14 @@ extension AppDelegate {
             handleRecordingStateChange(.processing)
         }
 
+        // Ensure App Nap prevention is always cleaned up
+        defer {
+            if let token = recordingActivityToken {
+                ProcessInfo.processInfo.endActivity(token)
+                recordingActivityToken = nil
+            }
+        }
+
         // Capture audio data first so it's available in both success and error paths
         var capturedAudioData: Data?
         let recordingId = UUID()
@@ -537,12 +545,6 @@ extension AppDelegate {
                 appState.recordingStartTime = nil
                 handleRecordingStateChange(.error)
             }
-        }
-
-        // End App Nap prevention
-        if let token = recordingActivityToken {
-            ProcessInfo.processInfo.endActivity(token)
-            recordingActivityToken = nil
         }
 
         Log.app.info("stopRecording: END")

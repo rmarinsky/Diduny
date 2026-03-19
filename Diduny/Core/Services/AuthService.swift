@@ -163,11 +163,7 @@ final class AuthService {
 
         if Self.isTokenExpired(token) {
             do {
-                try await MainActor.run {
-                    // Need to call refreshTokens which is @MainActor
-                }
-                // Refresh on main actor
-                try await refreshTokens()
+                try await self.refreshTokens()
                 return KeychainManager.shared.read(key: Keys.accessToken)
             } catch {
                 Log.app.error("[Auth] Token refresh failed: \(error.localizedDescription)")
