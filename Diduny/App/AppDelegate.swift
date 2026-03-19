@@ -48,9 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Services (exposed for SwiftUI access)
 
+    lazy var updaterManager = UpdaterManager()
     lazy var audioDeviceManager = AudioDeviceManager()
     lazy var audioRecorder = AudioRecorderService()
-    lazy var transcriptionService = SonioxTranscriptionService()
+    lazy var transcriptionService = CloudTranscriptionService()
     lazy var whisperTranscriptionService = WhisperTranscriptionService()
     lazy var clipboardService = ClipboardService()
     lazy var hotkeyService = HotkeyService()
@@ -59,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @available(macOS 13.0, *)
     lazy var meetingRecorderService = MeetingRecorderService()
     @available(macOS 13.0, *)
-    lazy var realtimeTranscriptionService = SonioxRealtimeService()
+    lazy var realtimeTranscriptionService = CloudRealtimeService()
     @available(macOS 13.0, *)
     var voiceRealtimeAccumulator: RealtimeVoiceAccumulator?
     var voiceRealtimeSessionEnabled: Bool = false
@@ -69,14 +70,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
         switch SettingsStorage.shared.transcriptionProvider {
-        case .soniox: transcriptionService
-        case .whisperLocal: whisperTranscriptionService
+        case .cloud: transcriptionService
+        case .local: whisperTranscriptionService
         }
     }
 
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_: Notification) {
+        // Start Sparkle updater (access lazy var to trigger init)
+        _ = updaterManager
+
         setupNotchStopHandler()
 
         // Auto-select best device if none selected
@@ -152,14 +156,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Check for orphaned recordings from previous crash
         checkForOrphanedRecordings()
 
-        // Check for API key - prompt if transcription uses Soniox (translation always needs it)
-        let needsSoniox = SettingsStorage.shared.transcriptionProvider == .soniox
-        if needsSoniox,
-           !KeychainManager.shared.hasAPIKeyFast() {
-            Task {
-                try? await Task.sleep(for: .milliseconds(500))
-                openSettings()
+        // Fetch remote config (non-blocking)
+        Task {
+            await RemoteConfigService.shared.fetchIfNeeded()
+            if let msg = RemoteConfigService.shared.maintenanceMessage {
+                NotchManager.shared.showInfo(message: msg, duration: 5.0)
             }
+        }
+
+        // Warn if cloud provider requires auth but user is not logged in
+        if SettingsStorage.shared.transcriptionProvider == .cloud,
+           !AuthService.shared.isLoggedIn
+        {
+            Log.app.warning("[Auth] Cloud provider selected but user is not logged in — open Settings to authenticate")
+            NotchManager.shared.showInfo(message: "Please log in via Settings to use cloud transcription", duration: 4.0)
         }
     }
 
@@ -208,30 +218,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let text: String
                 switch state.recordingType {
                 case .voice:
-                    var service = activeTranscriptionService
-                    if SettingsStorage.shared.transcriptionProvider == .soniox {
-                        guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                            throw TranscriptionError.noAPIKey
-                        }
-                        service.apiKey = apiKey
-                    }
+                    let service = activeTranscriptionService
                     text = try await service.transcribe(audioData: audioData)
                 case .meeting:
-                    if SettingsStorage.shared.transcriptionProvider == .soniox {
-                        guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                            throw TranscriptionError.noAPIKey
-                        }
-                        transcriptionService.apiKey = apiKey
+                    if SettingsStorage.shared.transcriptionProvider == .cloud {
                         text = try await transcriptionService.transcribeMeeting(audioData: audioData)
                     } else {
                         text = try await whisperTranscriptionService.transcribe(audioData: audioData)
                     }
                 case .translation, .meetingTranslation:
-                    var service: TranscriptionServiceProtocol = transcriptionService
-                    guard let apiKey = KeychainManager.shared.getSonioxAPIKey() else {
-                        throw TranscriptionError.noAPIKey
-                    }
-                    service.apiKey = apiKey
+                    let service = activeTranscriptionService
                     text = try await service.translateAndTranscribe(audioData: audioData, targetLanguage: "uk")
                 }
 

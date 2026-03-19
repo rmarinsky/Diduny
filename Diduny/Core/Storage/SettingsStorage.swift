@@ -48,7 +48,6 @@ final class SettingsStorage {
         case whisperLanguage
         case whisperPrompt
         case favoriteLanguages
-        case hasCloudAPIKey
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
         case meetingRealtimeTranscriptionEnabled
@@ -57,11 +56,13 @@ final class SettingsStorage {
         case escapeCancelSaveAudio
         case textCleanupEnabled
         case fillerWords
-        case sonioxEndpointDelayMs
+        case proxyBaseURL
+        case remoteConfigURL
     }
 
     private init() {
         migrateSelectedDeviceIfNeeded()
+        migrateTranscriptionProviderIfNeeded()
     }
 
     /// One-time migration from legacy `selectedDeviceID` (AudioDeviceID int) to `selectedDeviceUID` (String).
@@ -84,6 +85,19 @@ final class SettingsStorage {
         guard status == noErr else { return } // keep legacy key for retry on next launch
         defaults.set(uid as String, forKey: Key.selectedDeviceUID.rawValue)
         defaults.removeObject(forKey: legacyKey)
+    }
+
+    /// Migrate old provider rawValues: "soniox" → "cloud", "whisper_local" → "local"
+    private func migrateTranscriptionProviderIfNeeded() {
+        guard let stored = defaults.string(forKey: Key.transcriptionProvider.rawValue) else { return }
+        switch stored {
+        case "soniox":
+            defaults.set(TranscriptionProvider.cloud.rawValue, forKey: Key.transcriptionProvider.rawValue)
+        case "whisper_local":
+            defaults.set(TranscriptionProvider.local.rawValue, forKey: Key.transcriptionProvider.rawValue)
+        default:
+            break
+        }
     }
 
     // MARK: - Audio Device
@@ -281,7 +295,7 @@ final class SettingsStorage {
             guard let rawValue = defaults.string(forKey: Key.transcriptionProvider.rawValue),
                   let provider = TranscriptionProvider(rawValue: rawValue)
             else {
-                return .whisperLocal
+                return .local
             }
             return provider
         }
@@ -309,7 +323,7 @@ final class SettingsStorage {
 
     // MARK: - Translation Realtime Socket
 
-    /// Enables cloud realtime translation over Soniox websocket during translation recording.
+    /// Enables cloud realtime translation over websocket during translation recording.
     var translationRealtimeSocketEnabled: Bool {
         get {
             if defaults.object(forKey: Key.translationRealtimeSocketEnabled.rawValue) == nil {
@@ -322,7 +336,7 @@ final class SettingsStorage {
 
     // MARK: - Transcription Realtime Socket
 
-    /// Enables cloud realtime transcription over Soniox websocket during voice dictation.
+    /// Enables cloud realtime transcription over websocket during voice dictation.
     /// Disabled by default to keep existing async cloud behavior unless explicitly enabled.
     var transcriptionRealtimeSocketEnabled: Bool {
         get { defaults.bool(forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) }
@@ -331,9 +345,8 @@ final class SettingsStorage {
 
     // MARK: - Meeting Cloud Mode
 
-    /// `true` = Cloud mode (realtime websocket + async fallback when API key exists).
+    /// `true` = Cloud mode (realtime websocket + async fallback).
     /// `false` = Local mode (audio recording only, process later from Recordings).
-    /// If API key is missing, recording still works as audio-only in both modes.
     var meetingRealtimeTranscriptionEnabled: Bool {
         get { defaults.bool(forKey: Key.meetingRealtimeTranscriptionEnabled.rawValue) }
         set { defaults.set(newValue, forKey: Key.meetingRealtimeTranscriptionEnabled.rawValue) }
@@ -387,13 +400,6 @@ final class SettingsStorage {
         set { defaults.set(newValue, forKey: Key.favoriteLanguages.rawValue) }
     }
 
-    // MARK: - Cloud API Key Flag
-
-    var hasCloudAPIKey: Bool {
-        get { defaults.bool(forKey: Key.hasCloudAPIKey.rawValue) }
-        set { defaults.set(newValue, forKey: Key.hasCloudAPIKey.rawValue) }
-    }
-
     private static func normalizedFillerWords(_ words: [String]) -> [String] {
         var result: [String] = []
         var seen = Set<String>()
@@ -419,28 +425,30 @@ final class SettingsStorage {
         return min(max(value, 0), 2.0)
     }
 
-    // MARK: - Soniox Endpoint Delay
+    // MARK: - Proxy Settings
 
-    /// Delay (ms) that Soniox uses to detect speech endpoints and place periods.
-    /// Higher values = fewer periods from Soniox. Range: 500–5000ms.
-    var sonioxEndpointDelayMs: Int {
-        get {
-            if defaults.object(forKey: Key.sonioxEndpointDelayMs.rawValue) == nil {
-                return 1200
-            }
-            return Self.sanitizedEndpointDelayMs(defaults.integer(forKey: Key.sonioxEndpointDelayMs.rawValue))
-        }
+    #if DEV_BUILD
+    private static let defaultProxyBaseURL = "http://localhost:3000"
+    #else
+    private static let defaultProxyBaseURL = "https://diduny-ears-proxy.fly.dev"
+    #endif
+
+    var proxyBaseURL: String {
+        get { defaults.string(forKey: Key.proxyBaseURL.rawValue) ?? Self.defaultProxyBaseURL }
+        set { defaults.set(newValue, forKey: Key.proxyBaseURL.rawValue) }
+    }
+
+    var remoteConfigURL: String? {
+        get { defaults.string(forKey: Key.remoteConfigURL.rawValue) }
         set {
-            defaults.set(
-                Self.sanitizedEndpointDelayMs(newValue),
-                forKey: Key.sonioxEndpointDelayMs.rawValue
-            )
+            if let url = newValue {
+                defaults.set(url, forKey: Key.remoteConfigURL.rawValue)
+            } else {
+                defaults.removeObject(forKey: Key.remoteConfigURL.rawValue)
+            }
         }
     }
 
-    private static func sanitizedEndpointDelayMs(_ value: Int) -> Int {
-        min(max(value, 500), 5000)
-    }
 }
 
 extension Notification.Name {

@@ -129,9 +129,6 @@ extension AppDelegate {
             return
         }
 
-        // API key is optional — recording always works, cloud mode requires key
-        let apiKey = KeychainManager.shared.getSonioxAPIKey()
-        let hasApiKey = apiKey?.isEmpty == false
         let cloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
 
         // Prevent App Nap during meeting recording
@@ -159,12 +156,10 @@ extension AppDelegate {
             try await meetingRecorderService.startRecording()
             Log.app.info("Meeting recording started")
 
-            // Setup real-time transcription only in Cloud mode with API key
+            // Setup real-time transcription in Cloud mode
             var store: LiveTranscriptStore?
-            if hasApiKey, cloudModeEnabled, let key = apiKey {
-                store = await setupRealtimeTranscription(apiKey: key)
-            } else if cloudModeEnabled {
-                Log.app.info("Cloud mode selected, but API key missing — recording audio only")
+            if cloudModeEnabled {
+                store = await setupRealtimeTranscription()
             } else {
                 Log.app.info("Local mode selected — recording audio only")
             }
@@ -235,7 +230,7 @@ extension AppDelegate {
     // MARK: - Real-Time Transcription Setup
 
     @available(macOS 13.0, *)
-    private func setupRealtimeTranscription(apiKey: String) async -> LiveTranscriptStore {
+    private func setupRealtimeTranscription() async -> LiveTranscriptStore {
         let store = await MainActor.run { LiveTranscriptStore() }
 
         let rtService = realtimeTranscriptionService
@@ -274,11 +269,8 @@ extension AppDelegate {
             let languageHints = SettingsStorage.shared.favoriteLanguages
 
             try await rtService.connect(
-                apiKey: apiKey,
                 languageHints: languageHints,
                 strictLanguageHints: !languageHints.isEmpty,
-                enableEndpointDetection: true,
-                maxEndpointDelayMs: SettingsStorage.shared.sonioxEndpointDelayMs
             )
             await MainActor.run {
                 store.isActive = true
@@ -342,163 +334,144 @@ extension AppDelegate {
             store?.isActive = false
         }
 
+        // Ensure App Nap prevention is always cleaned up
+        defer {
+            if let token = meetingActivityToken {
+                ProcessInfo.processInfo.endActivity(token)
+                meetingActivityToken = nil
+            }
+        }
+
         // Track audioURL for library save in error path
         var capturedAudioURL: URL?
         let stopTime = Date()
         let recordingId = UUID()
 
-        await RecordingDebugScope.$recordingID.withValue(recordingId) {
-            RecordingDebugLog.app("Meeting stop pipeline started", source: "Meeting")
-            do {
-                guard let audioURL = try await meetingRecorderService.stopRecording() else {
-                    throw MeetingRecorderError.recordingFailed
-                }
-                capturedAudioURL = audioURL
+        do {
+            guard let audioURL = try await meetingRecorderService.stopRecording() else {
+                throw MeetingRecorderError.recordingFailed
+            }
+            capturedAudioURL = audioURL
 
-                Log.app.info("Meeting recording stopped")
+            Log.app.info("Meeting recording stopped")
 
-                // Check if we have real-time transcript
-                let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
+            let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
+            let cloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
 
-                let apiKey = KeychainManager.shared.getSonioxAPIKey()
-                let hasApiKey = apiKey?.isEmpty == false
-                let cloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
-                RecordingDebugLog.decision(
-                    "Realtime chars=\(realtimeText.count), cloudMode=\(cloudModeEnabled), hasApiKey=\(hasApiKey)",
-                    source: "Meeting"
-                )
+            let text: String?
+            if !realtimeText.isEmpty {
+                text = realtimeText
+                Log.app.info("Using real-time transcript (\(realtimeText.count) chars)")
+            } else if cloudModeEnabled {
+                Log.app.info("No real-time transcript, falling back to async API...")
+                let audioData = try await loadAudioData(from: audioURL)
+                Log.app.info("Meeting recording size = \(audioData.count) bytes")
 
-                let text: String?
-                if !realtimeText.isEmpty {
-                    // Use real-time transcript
-                    text = realtimeText
-                    Log.app.info("Using real-time transcript (\(realtimeText.count) chars)")
-                    RecordingDebugLog.decision("Using realtime transcript", source: "Meeting")
-                } else if hasApiKey, cloudModeEnabled {
-                    // Fallback: upload WAV to async REST API
-                    Log.app.info("No real-time transcript, falling back to async API...")
-                    RecordingDebugLog.decision("Fallback to async Soniox meeting transcription", source: "Meeting")
-                    let audioData = try await loadAudioData(from: audioURL)
-                    Log.app.info("Meeting recording size = \(audioData.count) bytes")
+                text = try await transcriptionService.transcribeMeeting(audioData: audioData)
+                Log.app.info("Async meeting transcription received (\(text?.count ?? 0) chars)")
+            } else {
+                text = nil
+                Log.app.info("Saving meeting recording without automatic transcription")
+            }
 
-                    transcriptionService.apiKey = apiKey
-                    text = try await transcriptionService.transcribeMeeting(audioData: audioData)
-                    Log.app.info("Async meeting transcription received: \(text?.prefix(100) ?? "")...")
-                } else {
-                    // Local mode or missing API key — save audio only, user can transcribe later from Recordings
-                    text = nil
-                    Log.app.info("Saving meeting recording without automatic transcription")
-                    RecordingDebugLog.decision("No transcription path (local mode or missing API key)", source: "Meeting")
-                }
+            guard appState.meetingRecordingState == .processing else {
+                Log.app.warning("stopMeetingRecording: state changed during processing (now \(self.appState.meetingRecordingState)), dropping result")
+                return
+            }
 
-                guard appState.meetingRecordingState == .processing else {
-                    Log.app.warning("stopMeetingRecording: state changed during processing (now \(self.appState.meetingRecordingState)), dropping result")
-                    return
-                }
+            if let text {
+                clipboardService.copy(text: text, behavior: .raw)
+                Log.app.info("stopMeetingRecording: Text copied to clipboard")
 
-                if let text {
-                    clipboardService.copy(text: text, behavior: .raw)
-                    Log.app.info("stopMeetingRecording: Text copied to clipboard")
-                    RecordingDebugLog.app("Text ready, chars=\(text.count)", source: "Meeting")
-
-                    if SettingsStorage.shared.autoPaste {
-                        Log.app.info("stopMeetingRecording: Auto-pasting")
-                        do {
-                            try await clipboardService.paste()
-                        } catch ClipboardError.accessibilityNotGranted {
-                            Log.app.warning("stopMeetingRecording: Accessibility permission needed")
-                            PermissionManager.shared.showPermissionAlert(for: .accessibility)
-                        } catch {
-                            Log.app.error("stopMeetingRecording: Paste failed - \(error.localizedDescription)")
-                        }
-                    }
-
-                    // Update state to success
-                    await MainActor.run {
-                        appState.lastTranscription = text
-                        appState.meetingRecordingState = .success
-                        appState.meetingRecordingStartTime = nil
-                        handleMeetingStateChange(.success)
-                    }
-                } else {
-                    // No transcription — still success (audio was recorded)
-                    await MainActor.run {
-                        appState.lastTranscription = nil
-                        appState.meetingRecordingState = .success
-                        appState.meetingRecordingStartTime = nil
-                        handleMeetingStateChange(.success)
-                    }
-
-                    if !cloudModeEnabled {
-                        NotchManager.shared.showInfo(
-                            message: "Recording saved. Open Recordings and choose a local model to transcribe.",
-                            duration: 3.0
-                        )
+                if SettingsStorage.shared.autoPaste {
+                    Log.app.info("stopMeetingRecording: Auto-pasting")
+                    do {
+                        try await clipboardService.paste()
+                    } catch ClipboardError.accessibilityNotGranted {
+                        Log.app.warning("stopMeetingRecording: Accessibility permission needed")
+                        PermissionManager.shared.showPermissionAlert(for: .accessibility)
+                    } catch {
+                        Log.app.error("stopMeetingRecording: Paste failed - \(error.localizedDescription)")
                     }
                 }
-                Log.app.info("stopMeetingRecording: SUCCESS")
 
-                // Save to recordings library (copies file before we delete temp)
+                await MainActor.run {
+                    appState.lastTranscription = text
+                    appState.meetingRecordingState = .success
+                    appState.meetingRecordingStartTime = nil
+                    handleMeetingStateChange(.success)
+                }
+            } else {
+                await MainActor.run {
+                    appState.lastTranscription = nil
+                    appState.meetingRecordingState = .success
+                    appState.meetingRecordingStartTime = nil
+                    handleMeetingStateChange(.success)
+                }
+
+                if !cloudModeEnabled {
+                    NotchManager.shared.showInfo(
+                        message: "Recording saved. Open Recordings and choose a local model to transcribe.",
+                        duration: 3.0
+                    )
+                }
+            }
+            Log.app.info("stopMeetingRecording: SUCCESS")
+
+            let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            RecordingsLibraryStorage.shared.saveRecording(
+                id: recordingId,
+                audioURL: audioURL,
+                type: .meeting,
+                duration: duration,
+                transcriptionText: text
+            )
+
+            if SettingsStorage.shared.playSoundOnCompletion {
+                NSSound(named: .init("Funk"))?.play()
+            }
+
+            RecoveryStateManager.shared.clearState()
+            try? FileManager.default.removeItem(at: audioURL)
+
+        } catch is CancellationError {
+            Log.app.info("stopMeetingRecording: Cancelled")
+            if let audioURL = capturedAudioURL {
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+            RecoveryStateManager.shared.clearState()
+            await MainActor.run {
+                appState.meetingRecordingState = .idle
+                appState.meetingRecordingStartTime = nil
+                handleMeetingStateChange(.idle)
+            }
+            return
+        } catch {
+            Log.app.error("Meeting transcription failed: \(error)")
+
+            if let audioURL = capturedAudioURL {
                 let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                 RecordingsLibraryStorage.shared.saveRecording(
                     id: recordingId,
                     audioURL: audioURL,
                     type: .meeting,
-                    duration: duration,
-                    transcriptionText: text
+                    duration: duration
                 )
-                RecordingDebugLog.app("Recording saved to library", source: "Meeting")
-
-                // Optional operations run after state change (non-blocking for UI)
-                if SettingsStorage.shared.playSoundOnCompletion {
-                    NSSound(named: .init("Funk"))?.play()
-                }
-
-                // Clear recovery state on success
-                RecoveryStateManager.shared.clearState()
-
-                // Clean up temp file (after library save copied it)
                 try? FileManager.default.removeItem(at: audioURL)
+                RecoveryStateManager.shared.clearState()
+            }
 
-            } catch {
-                Log.app.error("Meeting transcription failed: \(error)")
-                RecordingDebugLog.app("Stop pipeline failed: \(error.localizedDescription)", source: "Meeting")
-
-                // Save recording without transcription so user can process later
-                if let audioURL = capturedAudioURL {
-                    let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
-                    RecordingsLibraryStorage.shared.saveRecording(
-                        id: recordingId,
-                        audioURL: audioURL,
-                        type: .meeting,
-                        duration: duration
-                    )
-                    // Clean up temp file after library save
-                    try? FileManager.default.removeItem(at: audioURL)
-                    RecoveryStateManager.shared.clearState()
-                    RecordingDebugLog.app("Saved audio-only after failure", source: "Meeting")
-                }
-
-                guard appState.meetingRecordingState == .processing else {
-                    Log.app.warning("stopMeetingRecording: state changed during processing (now \(self.appState.meetingRecordingState)), dropping error")
-                    return
-                }
-                await MainActor.run {
-                    appState.errorMessage = error.localizedDescription
-                    appState.meetingRecordingState = .error
-                    appState.meetingRecordingStartTime = nil
-                    handleMeetingStateChange(.error)
-                }
+            guard appState.meetingRecordingState == .processing else {
+                Log.app.warning("stopMeetingRecording: state changed during processing (now \(self.appState.meetingRecordingState)), dropping error")
+                return
+            }
+            await MainActor.run {
+                appState.errorMessage = error.localizedDescription
+                appState.meetingRecordingState = .error
+                appState.meetingRecordingStartTime = nil
+                handleMeetingStateChange(.error)
             }
         }
-
-        // End App Nap prevention
-        if let token = meetingActivityToken {
-            ProcessInfo.processInfo.endActivity(token)
-            meetingActivityToken = nil
-        }
-
-        // Keep transcript window open — user closes manually
 
         Log.app.info("stopMeetingRecording: END")
     }

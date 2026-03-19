@@ -12,6 +12,9 @@ struct AudioSettingsView: View {
     @State private var testAudioPlayer: AVAudioPlayer?
     @State private var testStatusMessage = ""
 
+    // Live level monitors per device
+    @State private var levelMonitors: [String: DeviceLevelMonitor] = [:]
+
     var body: some View {
         Form {
             Section {
@@ -19,7 +22,7 @@ struct AudioSettingsView: View {
                 ForEach(deviceManager.availableDevices) { device in
                     let isSelected = appState.selectedDeviceUID == device.uid
 
-                    HStack {
+                    HStack(spacing: 10) {
                         RadioButton(isSelected: isSelected) {
                             appState.selectedDeviceUID = device.uid
                         }
@@ -43,6 +46,9 @@ struct AudioSettingsView: View {
                         }
 
                         Spacer()
+
+                        DeviceLevelBar(level: levelMonitors[device.uid]?.audioLevel ?? 0)
+                            .frame(width: 50)
 
                         if isSelected {
                             Image(systemName: "checkmark")
@@ -130,8 +136,15 @@ struct AudioSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            startLevelMonitors()
+        }
         .onDisappear {
+            stopLevelMonitors()
             cleanupTestRecording()
+        }
+        .onChange(of: deviceManager.availableDevices) {
+            startLevelMonitors()
         }
     }
 
@@ -226,6 +239,24 @@ struct AudioSettingsView: View {
         testStatusMessage = ""
     }
 
+    // MARK: - Level Monitors
+
+    private func startLevelMonitors() {
+        stopLevelMonitors()
+        for device in deviceManager.availableDevices {
+            let monitor = DeviceLevelMonitor()
+            monitor.startMonitoring(deviceID: device.id)
+            levelMonitors[device.uid] = monitor
+        }
+    }
+
+    private func stopLevelMonitors() {
+        for monitor in levelMonitors.values {
+            monitor.stopMonitoring()
+        }
+        levelMonitors.removeAll()
+    }
+
     private func cleanupTestRecording() {
         testRecorderService.cancelRecording()
 
@@ -235,6 +266,36 @@ struct AudioSettingsView: View {
         if let url = testRecordingURL {
             try? FileManager.default.removeItem(at: url)
             testRecordingURL = nil
+        }
+    }
+}
+
+// MARK: - Device Level Bar
+
+private struct DeviceLevelBar: View {
+    let level: Float
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.gray.opacity(0.3))
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(barColor)
+                    .frame(width: geometry.size.width * CGFloat(level))
+            }
+        }
+        .frame(height: 6)
+        .animation(.linear(duration: 0.05), value: level)
+    }
+
+    private var barColor: Color {
+        if level > 0.8 {
+            .red
+        } else if level > 0.5 {
+            .yellow
+        } else {
+            .green
         }
     }
 }

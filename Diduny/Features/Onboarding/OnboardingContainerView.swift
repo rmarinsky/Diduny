@@ -41,15 +41,13 @@ struct OnboardingContainerView: View {
                 case .shortcutSetup:
                     ShortcutStepView(
                         onBack: { navigate(to: .screenRecordingPermission, markCurrentAsComplete: false) },
-                        onContinue: { navigate(to: .apiSetup) },
-                        onSkip: { navigate(to: .apiSetup) }
-                    )
-
-                case .apiSetup:
-                    APISetupStepView(
                         onContinue: { navigate(to: .complete) },
                         onSkip: { navigate(to: .complete) }
                     )
+
+                case .apiSetup:
+                    // Legacy step — skip directly to complete
+                    CompleteStepView(onFinish: onComplete)
 
                 case .complete:
                     CompleteStepView(onFinish: onComplete)
@@ -66,22 +64,21 @@ struct OnboardingContainerView: View {
     }
 
     private func restoreCurrentStep() {
-        // Migrate legacy in-progress users to the new combined setup step.
         let savedStep = OnboardingManager.shared.currentStep
+        // The .accessibilityPermission step is handled together with .microphonePermission
         if savedStep == .accessibilityPermission {
             currentStep = .microphonePermission
-            OnboardingManager.shared.currentStep = .microphonePermission
-            return
+        } else {
+            currentStep = savedStep
         }
-        currentStep = savedStep
     }
 
     private func navigate(to step: OnboardingStep, markCurrentAsComplete: Bool = true) {
         if markCurrentAsComplete {
             OnboardingManager.shared.completeStep(currentStep)
-        } else {
-            OnboardingManager.shared.currentStep = step
         }
+        // Always persist the actual destination step
+        OnboardingManager.shared.currentStep = step
 
         withAnimation(.easeInOut(duration: 0.28)) {
             currentStep = step
@@ -115,7 +112,7 @@ private struct OnboardingHeaderBar: View {
     var body: some View {
         ZStack {
             OnboardingStyle.brandBlue
-            Text("diduny desktop")
+            Text("Diduny app")
                 .font(.system(size: 20, weight: .semibold))
                 .tracking(0.6)
                 .foregroundColor(.white.opacity(0.95))
@@ -612,14 +609,8 @@ struct ShortcutStepView: View {
 
     @State private var selectedKey: PushToTalkKey = .rightShift
     @State private var selectedMode: ShortcutMode = .pushToTalk
-    @State private var demoText = ""
-    @State private var isRecordingDemo = false
-    @State private var lastTapTime: Date?
-    @State private var localMonitor: Any?
-    @State private var globalMonitor: Any?
 
     private let availableKeys: [PushToTalkKey] = [.rightShift, .rightCommand, .rightOption, .rightControl]
-    private let doubleTapInterval: TimeInterval = 0.4
 
     enum ShortcutMode: String {
         case pushToTalk
@@ -645,7 +636,7 @@ struct ShortcutStepView: View {
     }
 
     var body: some View {
-        OnboardingSplitFrame {
+        OnboardingWindowFrame {
             VStack(alignment: .leading, spacing: 22) {
                 Spacer(minLength: 0)
 
@@ -712,177 +703,10 @@ struct ShortcutStepView: View {
             }
             .padding(.horizontal, 60)
             .padding(.vertical, 46)
-        } right: {
-            VStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Click the text field, then use \(selectedMode == .pushToTalk ? "hold" : "double-tap") \(selectedKey.symbol).")
-                        .font(.system(size: 18))
-                        .foregroundColor(OnboardingStyle.titleColor.opacity(0.82))
-
-                    TextEditor(text: $demoText)
-                        .font(.system(size: 20))
-                        .scrollContentBackground(.hidden)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 8)
-                        .frame(height: 150)
-                        .background(Color.white.opacity(0.98))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(
-                                    isRecordingDemo ? OnboardingStyle.brandBlueDark : OnboardingStyle.brandBlueDark.opacity(0.5),
-                                    lineWidth: isRecordingDemo ? 2 : 1.5
-                                )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(alignment: .topLeading) {
-                            if demoText.isEmpty {
-                                Text(selectedMode == .pushToTalk ? "Now hold down the shortcut and speak" : "Now double-tap the shortcut and speak")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.gray.opacity(0.72))
-                                    .padding(.leading, 14)
-                                    .padding(.top, 18)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                }
-                .padding(24)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(0.95))
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-
-                Button {
-                    demoText = ""
-                    isRecordingDemo = false
-                    lastTapTime = nil
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrow.counterclockwise")
-                        Text("Reset")
-                    }
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OnboardingStyle.brandBlueDark)
-                }
-                .buttonStyle(.plain)
-
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(isRecordingDemo ? Color.red : Color.gray.opacity(0.65))
-                        .frame(width: 10, height: 10)
-                    Text(isRecordingDemo ? "Listening..." : "Idle")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(OnboardingStyle.titleColor.opacity(0.7))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 54)
-            .padding(.vertical, 44)
         }
         .onAppear {
             selectedKey = SettingsStorage.shared.pushToTalkKey == .none ? .rightShift : SettingsStorage.shared.pushToTalkKey
             selectedMode = SettingsStorage.shared.handsFreeModeEnabled ? .handsFree : .pushToTalk
-            setupKeyMonitor()
-        }
-        .onDisappear(perform: removeKeyMonitor)
-    }
-
-    private func setupKeyMonitor() {
-        removeKeyMonitor()
-
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-            handleKeyEvent(event)
-            return event
-        }
-
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { event in
-            handleKeyEvent(event)
-        }
-    }
-
-    private func removeKeyMonitor() {
-        if let localMonitor {
-            NSEvent.removeMonitor(localMonitor)
-            self.localMonitor = nil
-        }
-        if let globalMonitor {
-            NSEvent.removeMonitor(globalMonitor)
-            self.globalMonitor = nil
-        }
-    }
-
-    private func handleKeyEvent(_ event: NSEvent) {
-        guard isSelectedKey(event) else { return }
-        let keyPressed = isKeyPressed(event)
-        let now = Date()
-
-        if selectedMode == .pushToTalk {
-            handlePushToTalkDemo(keyPressed: keyPressed)
-            return
-        }
-
-        // Hands-free demo mode (double tap)
-        guard keyPressed else { return }
-        defer { lastTapTime = now }
-
-        if let lastTap = lastTapTime, now.timeIntervalSince(lastTap) < doubleTapInterval {
-            if isRecordingDemo {
-                isRecordingDemo = false
-                appendDemoPhrase()
-            } else {
-                isRecordingDemo = true
-            }
-        }
-    }
-
-    private func handlePushToTalkDemo(keyPressed: Bool) {
-        if keyPressed && !isRecordingDemo {
-            isRecordingDemo = true
-            return
-        }
-
-        if !keyPressed && isRecordingDemo {
-            isRecordingDemo = false
-            appendDemoPhrase()
-        }
-    }
-
-    private func appendDemoPhrase() {
-        let phrase = samplePhrase
-        if demoText.isEmpty {
-            demoText = phrase
-        } else {
-            if !demoText.hasSuffix(" ") && !demoText.hasSuffix("\n") {
-                demoText += " "
-            }
-            demoText += phrase
-        }
-    }
-
-    private var samplePhrase: String {
-        if selectedMode == .pushToTalk {
-            return "Це тест вставки тексту в push-to-talk режимі."
-        }
-        return "Це тест вставки тексту в hands-free режимі."
-    }
-
-    private func isSelectedKey(_ event: NSEvent) -> Bool {
-        switch selectedKey {
-        case .rightShift: return event.keyCode == 60
-        case .rightCommand: return event.keyCode == 54
-        case .rightOption: return event.keyCode == 61
-        case .rightControl: return event.keyCode == 62
-        default: return false
-        }
-    }
-
-    private func isKeyPressed(_ event: NSEvent) -> Bool {
-        switch selectedKey {
-        case .rightShift: return event.modifierFlags.contains(.shift)
-        case .rightCommand: return event.modifierFlags.contains(.command)
-        case .rightOption: return event.modifierFlags.contains(.option)
-        case .rightControl: return event.modifierFlags.contains(.control)
-        default: return false
         }
     }
 
@@ -959,135 +783,6 @@ private struct ShortcutModeOption: View {
     }
 }
 
-// MARK: - API Setup Step
-
-struct APISetupStepView: View {
-    let onContinue: () -> Void
-    let onSkip: () -> Void
-
-    @State private var apiKey = ""
-    @State private var isTesting = false
-    @State private var testResult: TestResult = .none
-
-    enum TestResult {
-        case none, success, error(String)
-    }
-
-    var body: some View {
-        VStack(spacing: 24) {
-            ProgressDots(total: 6, current: 5)
-                .padding(.top, 30)
-
-            Spacer()
-
-            VStack(spacing: 20) {
-                ZStack {
-                    Circle()
-                        .fill(Color.accentColor.opacity(0.1))
-                        .frame(width: 70, height: 70)
-
-                    Image(systemName: "key.fill")
-                        .font(.system(size: 28))
-                        .foregroundColor(.accentColor)
-                }
-
-                VStack(spacing: 8) {
-                    Text("Connect to Soniox")
-                        .font(.title2)
-                        .fontWeight(.bold)
-
-                    Text("Enter your Soniox API key for transcription.\nGet a free key at soniox.com")
-                        .font(.callout)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                // API Key input
-                VStack(spacing: 12) {
-                    SecureField("Paste your API key here", text: $apiKey)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 320)
-
-                    // Status
-                    if case let .error(message) = testResult {
-                        HStack(spacing: 4) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.red)
-                            Text(message)
-                                .font(.caption)
-                                .foregroundColor(.red)
-                        }
-                    } else if case .success = testResult {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("API key saved!")
-                                .font(.caption)
-                                .foregroundColor(.green)
-                        }
-                    }
-
-                    Link(destination: URL(string: "https://soniox.com")!) {
-                        HStack(spacing: 4) {
-                            Text("Get a free API key")
-                            Image(systemName: "arrow.up.right")
-                                .font(.caption)
-                        }
-                        .font(.subheadline)
-                    }
-                }
-            }
-
-            Spacer()
-
-            VStack(spacing: 12) {
-                OnboardingPrimaryButton(title: apiKey.isEmpty ? "Skip for now" : "Save & Continue") {
-                    if apiKey.isEmpty {
-                        onSkip()
-                    } else {
-                        saveAndContinue()
-                    }
-                }
-                .disabled(isTesting)
-            }
-            .padding(.bottom, 30)
-        }
-        .padding(.horizontal, 20)
-        .onAppear {
-            if let existing = KeychainManager.shared.getSonioxAPIKey() {
-                apiKey = existing
-            }
-        }
-    }
-
-    private func saveAndContinue() {
-        guard !apiKey.isEmpty else {
-            onSkip()
-            return
-        }
-
-        isTesting = true
-        Task {
-            do {
-                try KeychainManager.shared.setSonioxAPIKey(apiKey)
-                await MainActor.run {
-                    isTesting = false
-                    testResult = .success
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(500))
-                        onContinue()
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    isTesting = false
-                    testResult = .error("Failed to save")
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Complete Step
 
 struct CompleteStepView: View {
@@ -1130,6 +825,27 @@ struct CompleteStepView: View {
             }
             .padding(.horizontal, 40)
             .padding(.top, 20)
+
+            // Privacy & security info
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Your data stays on your device", systemImage: "lock.shield.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(OnboardingStyle.titleColor)
+
+                Text("All your data \u{2014} recordings, transcriptions, and usage stats \u{2014} is stored only on your Mac and never sent to our servers. We only use your email for authorization. Credentials are stored securely in the macOS Keychain.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(maxWidth: 420, alignment: .leading)
+            .background(Color.green.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.green.opacity(0.2), lineWidth: 1)
+            )
+            .padding(.top, 8)
 
             Spacer()
 

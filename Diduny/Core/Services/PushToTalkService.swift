@@ -12,7 +12,7 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
     // Double-tap detection for toggle mode
     private var lastKeyUpTime: TimeInterval?
-    private let doubleTapThreshold: TimeInterval = 0.4
+    private let doubleTapThreshold: TimeInterval = 0.2
     private var isHandsFreeMode = false
 
     var selectedKey: PushToTalkKey = .none

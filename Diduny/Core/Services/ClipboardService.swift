@@ -140,10 +140,6 @@ private enum ClipboardTextNormalizer {
     static func normalize(_ text: String) -> String {
         var normalized = normalizeSpacing(in: text)
 
-        guard SettingsStorage.shared.textCleanupEnabled else {
-            return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
         normalized = removeSingleLetterStutters(in: normalized)
 
         for fillerWord in SettingsStorage.shared.fillerWords {

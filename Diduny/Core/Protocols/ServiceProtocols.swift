@@ -17,7 +17,6 @@ protocol AudioRecorderProtocol: AnyObject {
 // MARK: - Transcription Service Protocol
 
 protocol TranscriptionServiceProtocol {
-    var apiKey: String? { get set }
     func transcribe(audioData: Data) async throws -> String
     func translateAndTranscribe(audioData: Data) async throws -> String
     func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String

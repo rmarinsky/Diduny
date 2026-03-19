@@ -47,13 +47,7 @@ extension AppDelegate {
             let audioData = try await loadAudioData(from: fileURL)
             Log.app.info("transcribeFile: Loaded \(audioData.count) bytes")
 
-            var service = activeTranscriptionService
-            if SettingsStorage.shared.transcriptionProvider == .soniox {
-                guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
-                    throw TranscriptionError.noAPIKey
-                }
-                service.apiKey = apiKey
-            }
+            let service = activeTranscriptionService
 
             let text = try await service.transcribe(audioData: audioData)
             Log.app.info("transcribeFile: Transcription received (\(text.count) chars)")
@@ -109,6 +103,11 @@ extension AppDelegate {
 
         } catch is CancellationError {
             Log.app.info("transcribeFile: Cancelled")
+            await MainActor.run {
+                appState.recordingState = .idle
+                appState.recordingStartTime = nil
+                NotchManager.shared.hide()
+            }
             return
         } catch {
             Log.app.error("transcribeFile: ERROR - \(error.localizedDescription)")

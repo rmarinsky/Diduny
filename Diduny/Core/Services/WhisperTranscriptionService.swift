@@ -1,7 +1,6 @@
 import Foundation
 
 final class WhisperTranscriptionService: TranscriptionServiceProtocol {
-    var apiKey: String? // Unused for local transcription, required by protocol
     var modelNameOverride: String?
 
     private var whisperContext: WhisperContext?
@@ -38,7 +37,7 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
     }
 
     func translateAndTranscribe(audioData: Data) async throws -> String {
-        // Whisper can only translate TO English, not bidirectional like Soniox
+        // Whisper can only translate TO English, not bidirectional like cloud
         Log.whisper.warning("Translation requested but Whisper only supports translate-to-English. Using plain transcription.")
         return try await transcribe(audioData: audioData)
     }

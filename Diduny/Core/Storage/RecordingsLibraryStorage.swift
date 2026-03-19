@@ -134,9 +134,6 @@ final class RecordingsLibraryStorage {
         try? fileManager.removeItem(at: fileURL)
         recordings.removeAll { $0.id == recording.id }
         saveMetadata()
-        Task {
-            await RecordingDebugStore.shared.clear(for: recording.id)
-        }
     }
 
     func deleteRecordings(_ ids: Set<UUID>) {
@@ -148,11 +145,6 @@ final class RecordingsLibraryStorage {
         }
         recordings.removeAll { ids.contains($0.id) }
         saveMetadata()
-        Task {
-            for id in ids {
-                await RecordingDebugStore.shared.clear(for: id)
-            }
-        }
     }
 
     // MARK: - Update

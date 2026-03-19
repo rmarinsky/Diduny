@@ -128,16 +128,7 @@ extension AppDelegate {
             return
         }
 
-        // Hardcoded meeting mode: realtime translation to Ukrainian requires Soniox API key
-        guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
-            Log.app.warning("startMeetingTranslationRecording: No API key found")
-            await MainActor.run {
-                appState.errorMessage = "Meeting translation requires a Soniox API key. Add one in Settings."
-                appState.meetingTranslationRecordingState = .error
-                handleMeetingTranslationStateChange(.error)
-            }
-            return
-        }
+        // Meeting translation uses cloud realtime by default
 
         // Prevent App Nap during meeting translation recording
         meetingTranslationActivityToken = ProcessInfo.processInfo.beginActivity(
@@ -164,8 +155,8 @@ extension AppDelegate {
             try await meetingRecorderService.startRecording()
             Log.app.info("Meeting translation recording started")
 
-            // Hardcoded: stream realtime meeting translation (EN -> UK)
-            let store = await setupRealtimeMeetingTranslation(apiKey: apiKey)
+            // Stream realtime meeting translation (EN -> UK)
+            let store = await setupRealtimeMeetingTranslation()
 
             // Only set recording state AFTER confirmed working
             guard appState.meetingTranslationRecordingState == .processing else {
@@ -222,7 +213,7 @@ extension AppDelegate {
     // MARK: - Real-Time Meeting Translation Setup
 
     @available(macOS 13.0, *)
-    private func setupRealtimeMeetingTranslation(apiKey: String) async -> LiveTranscriptStore {
+    private func setupRealtimeMeetingTranslation() async -> LiveTranscriptStore {
         let store = await MainActor.run { LiveTranscriptStore() }
 
         let rtService = realtimeTranscriptionService
@@ -271,15 +262,12 @@ extension AppDelegate {
             }
 
             try await rtService.connect(
-                apiKey: apiKey,
                 languageHints: languageHints,
                 strictLanguageHints: !languageHints.isEmpty,
                 audioConfig: .defaultPCM16kMono,
                 translationConfig: RealtimeTranslationConfig(
                     mode: .oneWay(sourceLanguage: "en", targetLanguage: "uk")
                 ),
-                enableEndpointDetection: true,
-                maxEndpointDelayMs: SettingsStorage.shared.sonioxEndpointDelayMs
             )
             await MainActor.run {
                 store.isActive = true
@@ -379,132 +367,112 @@ extension AppDelegate {
         let stopTime = Date()
         let recordingId = UUID()
 
-        await RecordingDebugScope.$recordingID.withValue(recordingId) {
-            RecordingDebugLog.app("Meeting translation stop pipeline started", source: "MeetingTranslation")
-            do {
-                guard let audioURL = try await meetingRecorderService.stopRecording() else {
-                    throw MeetingRecorderError.recordingFailed
+        do {
+            guard let audioURL = try await meetingRecorderService.stopRecording() else {
+                throw MeetingRecorderError.recordingFailed
+            }
+            capturedAudioURL = audioURL
+
+            Log.app.info("Meeting translation recording stopped")
+
+            let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
+
+            let text: String
+            if !realtimeText.isEmpty {
+                text = realtimeText
+                Log.app.info("Using real-time meeting translation (\(realtimeText.count) chars)")
+            } else {
+                Log.app.info("No real-time meeting translation, falling back to async API...")
+                let audioData = try await loadAudioData(from: audioURL)
+                Log.app.info("Meeting translation recording size = \(audioData.count) bytes")
+
+                text = try await transcriptionService.translateAndTranscribe(audioData: audioData, targetLanguage: "uk")
+                Log.app.info("Async meeting translation received (\(text.count) chars)")
+            }
+
+            clipboardService.copy(text: text, behavior: .raw)
+            Log.app.info("stopMeetingTranslationRecording: Text copied to clipboard")
+
+            if SettingsStorage.shared.autoPaste {
+                Log.app.info("stopMeetingTranslationRecording: Auto-pasting")
+                do {
+                    try await clipboardService.paste()
+                } catch ClipboardError.accessibilityNotGranted {
+                    Log.app.warning("stopMeetingTranslationRecording: Accessibility permission needed")
+                    PermissionManager.shared.showPermissionAlert(for: .accessibility)
+                } catch {
+                    Log.app.error("stopMeetingTranslationRecording: Paste failed - \(error.localizedDescription)")
                 }
-                capturedAudioURL = audioURL
+            }
 
-                Log.app.info("Meeting translation recording stopped")
-
-                // Check if we have real-time translated text
-                let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
-                RecordingDebugLog.decision("Realtime translation chars=\(realtimeText.count)", source: "MeetingTranslation")
-
-                let text: String
-                if !realtimeText.isEmpty {
-                    // Use real-time translation
-                    text = realtimeText
-                    Log.app.info("Using real-time meeting translation (\(realtimeText.count) chars)")
-                    RecordingDebugLog.decision("Using realtime meeting translation", source: "MeetingTranslation")
-                } else {
-                    // Fallback: upload WAV to async REST API translation
-                    Log.app.info("No real-time meeting translation, falling back to async API...")
-                    RecordingDebugLog.decision("Fallback to async Soniox meeting translation", source: "MeetingTranslation")
-                    let audioData = try await loadAudioData(from: audioURL)
-                    Log.app.info("Meeting translation recording size = \(audioData.count) bytes")
-
-                    guard let apiKey = KeychainManager.shared.getSonioxAPIKey(), !apiKey.isEmpty else {
-                        throw TranscriptionError.noAPIKey
-                    }
-                    transcriptionService.apiKey = apiKey
-                    text = try await transcriptionService.translateAndTranscribe(audioData: audioData, targetLanguage: "uk")
-                    Log.app.info("Async meeting translation received (\(text.count) chars)")
-                }
-
-                clipboardService.copy(text: text, behavior: .raw)
-                Log.app.info("stopMeetingTranslationRecording: Text copied to clipboard")
-                RecordingDebugLog.app("Text ready, chars=\(text.count)", source: "MeetingTranslation")
-
-                if SettingsStorage.shared.autoPaste {
-                    Log.app.info("stopMeetingTranslationRecording: Auto-pasting")
-                    do {
-                        try await clipboardService.paste()
-                    } catch ClipboardError.accessibilityNotGranted {
-                        Log.app.warning("stopMeetingTranslationRecording: Accessibility permission needed")
-                        PermissionManager.shared.showPermissionAlert(for: .accessibility)
-                    } catch {
-                        Log.app.error("stopMeetingTranslationRecording: Paste failed - \(error.localizedDescription)")
-                    }
-                }
-
-                // Update state to success
-                guard appState.meetingTranslationRecordingState == .processing else {
-                    Log.app.warning("stopMeetingTranslationRecording: state changed during processing (now \(self.appState.meetingTranslationRecordingState)), dropping result")
-                    if let audioURL = capturedAudioURL {
-                        try? FileManager.default.removeItem(at: audioURL)
-                    }
-                    RecoveryStateManager.shared.clearState()
-                    return
-                }
-                await MainActor.run {
-                    appState.lastTranscription = text
-                    appState.meetingTranslationRecordingState = .success
-                    appState.meetingTranslationRecordingStartTime = nil
-                    handleMeetingTranslationStateChange(.success)
-                }
-                Log.app.info("stopMeetingTranslationRecording: SUCCESS")
-
-                // Save to recordings library (copies file before we delete temp)
-                let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
-                RecordingsLibraryStorage.shared.saveRecording(
-                    id: recordingId,
-                    audioURL: audioURL,
-                    type: .meeting,
-                    duration: duration,
-                    transcriptionText: text
-                )
-                RecordingDebugLog.app("Recording saved to library", source: "MeetingTranslation")
-
-                // Optional operations run after state change (non-blocking for UI)
-                if SettingsStorage.shared.playSoundOnCompletion {
-                    NSSound(named: .init("Funk"))?.play()
-                }
-
-                // Clear recovery state on success
-                RecoveryStateManager.shared.clearState()
-
-                // Clean up temp file (after library save copied it)
-                try? FileManager.default.removeItem(at: audioURL)
-
-            } catch is CancellationError {
-                Log.app.info("stopMeetingTranslationRecording: Cancelled")
+            guard appState.meetingTranslationRecordingState == .processing else {
+                Log.app.warning("stopMeetingTranslationRecording: state changed during processing (now \(self.appState.meetingTranslationRecordingState)), dropping result")
                 if let audioURL = capturedAudioURL {
                     try? FileManager.default.removeItem(at: audioURL)
                 }
                 RecoveryStateManager.shared.clearState()
                 return
-            } catch {
-                Log.app.error("Meeting translation failed: \(error)")
-                RecordingDebugLog.app("Stop pipeline failed: \(error.localizedDescription)", source: "MeetingTranslation")
+            }
+            await MainActor.run {
+                appState.lastTranscription = text
+                appState.meetingTranslationRecordingState = .success
+                appState.meetingTranslationRecordingStartTime = nil
+                handleMeetingTranslationStateChange(.success)
+            }
+            Log.app.info("stopMeetingTranslationRecording: SUCCESS")
 
-                // Save recording without translation so user can process later
-                if let audioURL = capturedAudioURL {
-                    let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
-                    RecordingsLibraryStorage.shared.saveRecording(
-                        id: recordingId,
-                        audioURL: audioURL,
-                        type: .meeting,
-                        duration: duration
-                    )
-                    // Clean up temp file after library save
-                    try? FileManager.default.removeItem(at: audioURL)
-                    RecoveryStateManager.shared.clearState()
-                    RecordingDebugLog.app("Saved audio-only after failure", source: "MeetingTranslation")
-                }
+            let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            RecordingsLibraryStorage.shared.saveRecording(
+                id: recordingId,
+                audioURL: audioURL,
+                type: .meeting,
+                duration: duration,
+                transcriptionText: text
+            )
 
-                guard appState.meetingTranslationRecordingState == .processing else {
-                    Log.app.warning("stopMeetingTranslationRecording: state changed during processing (now \(self.appState.meetingTranslationRecordingState)), dropping error")
-                    return
-                }
-                await MainActor.run {
-                    appState.errorMessage = error.localizedDescription
-                    appState.meetingTranslationRecordingState = .error
-                    appState.meetingTranslationRecordingStartTime = nil
-                    handleMeetingTranslationStateChange(.error)
-                }
+            if SettingsStorage.shared.playSoundOnCompletion {
+                NSSound(named: .init("Funk"))?.play()
+            }
+
+            RecoveryStateManager.shared.clearState()
+            try? FileManager.default.removeItem(at: audioURL)
+
+        } catch is CancellationError {
+            Log.app.info("stopMeetingTranslationRecording: Cancelled")
+            if let audioURL = capturedAudioURL {
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+            RecoveryStateManager.shared.clearState()
+            await MainActor.run {
+                appState.meetingTranslationRecordingState = .idle
+                appState.meetingTranslationRecordingStartTime = nil
+                handleMeetingTranslationStateChange(.idle)
+            }
+            return
+        } catch {
+            Log.app.error("Meeting translation failed: \(error)")
+
+            if let audioURL = capturedAudioURL {
+                let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+                RecordingsLibraryStorage.shared.saveRecording(
+                    id: recordingId,
+                    audioURL: audioURL,
+                    type: .meeting,
+                    duration: duration
+                )
+                try? FileManager.default.removeItem(at: audioURL)
+                RecoveryStateManager.shared.clearState()
+            }
+
+            guard appState.meetingTranslationRecordingState == .processing else {
+                Log.app.warning("stopMeetingTranslationRecording: state changed during processing (now \(self.appState.meetingTranslationRecordingState)), dropping error")
+                return
+            }
+            await MainActor.run {
+                appState.errorMessage = error.localizedDescription
+                appState.meetingTranslationRecordingState = .error
+                appState.meetingTranslationRecordingStartTime = nil
+                handleMeetingTranslationStateChange(.error)
             }
         }
 

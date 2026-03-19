@@ -305,7 +305,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
             return nil
         }
 
-        // Convert any incoming PCM layout to mono s16le (what Soniox realtime expects).
+        // Convert any incoming PCM layout to mono s16le (what cloud realtime expects).
         let channelCount = max(1, Int(asbd.pointee.mChannelsPerFrame))
         let bitsPerChannel = Int(asbd.pointee.mBitsPerChannel)
         let bytesPerSample = max(1, bitsPerChannel / 8)

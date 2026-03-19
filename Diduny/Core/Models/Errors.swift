@@ -1,17 +1,15 @@
 import Foundation
 
 enum TranscriptionError: LocalizedError {
-    case noAPIKey
     case networkError(Error)
     case apiError(String)
     case invalidResponse
     case emptyTranscription
     case invalidURL
+    case usageLimitExceeded(usedHours: Double, limitHours: Double)
 
     var errorDescription: String? {
         switch self {
-        case .noAPIKey:
-            "Please add your Soniox API key in Settings"
         case let .networkError(error):
             "Network error: \(error.localizedDescription)"
         case let .apiError(message):
@@ -22,7 +20,16 @@ enum TranscriptionError: LocalizedError {
             "No speech detected"
         case .invalidURL:
             "Invalid API URL"
+        case let .usageLimitExceeded(usedHours, limitHours):
+            "Cloud usage limit reached (\(String(format: "%.1f", usedHours))h / \(String(format: "%.0f", limitHours))h). Using local model."
         }
+    }
+}
+
+extension TranscriptionError {
+    var isUsageLimitExceeded: Bool {
+        guard case .usageLimitExceeded = self else { return false }
+        return true
     }
 }
 
@@ -49,7 +56,7 @@ enum AudioError: LocalizedError {
 enum RealtimeTranscriptionError: LocalizedError {
     case connectionFailed(String)
     case webSocketError(Error)
-    case apiKeyMissing
+    case usageLimitExceeded(usedHours: Double, limitHours: Double)
 
     var errorDescription: String? {
         switch self {
@@ -57,8 +64,8 @@ enum RealtimeTranscriptionError: LocalizedError {
             "Real-time connection failed: \(reason)"
         case let .webSocketError(error):
             "WebSocket error: \(error.localizedDescription)"
-        case .apiKeyMissing:
-            "API key required for real-time transcription"
+        case let .usageLimitExceeded(usedHours, limitHours):
+            "Cloud usage limit reached (\(String(format: "%.1f", usedHours))h / \(String(format: "%.0f", limitHours))h). Using local model."
         }
     }
 }
