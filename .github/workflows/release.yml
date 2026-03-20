@@ -167,7 +167,7 @@ jobs:
           DMG_PATH="build/${DISPLAY_NAME}-${VERSION}.dmg"
 
           # Download Sparkle tools
-          SPARKLE_VERSION="2.6.4"
+          SPARKLE_VERSION="2.9.0"
           curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" -o sparkle.tar.xz
           mkdir -p sparkle_tools
           tar -xf sparkle.tar.xz -C sparkle_tools
@@ -224,6 +224,7 @@ jobs:
           cat docs/appcast.xml
 
       - name: Commit and push appcast.xml
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
