@@ -501,7 +501,7 @@ extension AppDelegate {
         translationRealtimeConnectionError = nil
 
         // Connect WebSocket in background — don't block recording start
-        Task {
+        translationRealtimeConnectionTask = Task {
             do {
                 try await rtService.connect(
                     languageHints: [pair.languageA, pair.languageB],
@@ -515,7 +515,7 @@ extension AppDelegate {
                 await MainActor.run {
                     self.translationRealtimeSessionEnabled = true
                 }
-                Log.transcription.info("Translation RT connected (\(pair.languageA) <-> \(pair.languageB))")
+                NSLog("[Transcription] Translation RT connected (%@ <-> %@)", pair.languageA, pair.languageB)
             } catch {
                 await MainActor.run {
                     self.audioRecorder.onRealtimeAudioData = nil
@@ -523,14 +523,14 @@ extension AppDelegate {
                     self.translationRealtimeAccumulator = nil
                     self.translationRealtimeConnectionError = error.localizedDescription
                 }
-                Log.transcription.warning(
-                    "Translation RT connection failed: \(error.localizedDescription)"
-                )
+                NSLog("[Transcription] Translation RT connection failed: %@", error.localizedDescription)
             }
         }
     }
 
     private func stopTranslationRealtimeSession(finalize: Bool) async -> (text: String, didReceiveFinalization: Bool) {
+        translationRealtimeConnectionTask?.cancel()
+        translationRealtimeConnectionTask = nil
         audioRecorder.onRealtimeAudioData = nil
 
         let accumulator = translationRealtimeAccumulator

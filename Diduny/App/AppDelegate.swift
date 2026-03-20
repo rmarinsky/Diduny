@@ -69,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var translationRealtimeAccumulator: RealtimeTranslationAccumulator?
     var translationRealtimeSessionEnabled: Bool = false
     var translationRealtimeConnectionError: String?
+    var translationRealtimeConnectionTask: Task<Void, Never>?
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
         switch SettingsStorage.shared.transcriptionProvider {
