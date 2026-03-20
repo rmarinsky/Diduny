@@ -48,6 +48,8 @@ final class SettingsStorage {
         case whisperLanguage
         case whisperPrompt
         case favoriteLanguages
+        case translationLanguageA
+        case translationLanguageB
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
         case meetingRealtimeTranscriptionEnabled
@@ -398,6 +400,18 @@ final class SettingsStorage {
     var favoriteLanguages: [String] {
         get { defaults.stringArray(forKey: Key.favoriteLanguages.rawValue) ?? ["en", "uk"] }
         set { defaults.set(newValue, forKey: Key.favoriteLanguages.rawValue) }
+    }
+
+    // MARK: - Translation Language Pair
+
+    var translationLanguageA: String {
+        get { defaults.string(forKey: Key.translationLanguageA.rawValue) ?? "en" }
+        set { defaults.set(newValue, forKey: Key.translationLanguageA.rawValue) }
+    }
+
+    var translationLanguageB: String {
+        get { defaults.string(forKey: Key.translationLanguageB.rawValue) ?? "uk" }
+        set { defaults.set(newValue, forKey: Key.translationLanguageB.rawValue) }
     }
 
     private static func normalizedFillerWords(_ words: [String]) -> [String] {

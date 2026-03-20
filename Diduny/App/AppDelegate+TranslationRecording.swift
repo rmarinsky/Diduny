@@ -38,7 +38,7 @@ actor RealtimeTranslationAccumulator {
     }
 }
 
-// MARK: - Translation Recording (EN <-> UK)
+// MARK: - Translation Recording
 
 extension AppDelegate {
     @objc func toggleTranslationRecording() {
@@ -225,9 +225,9 @@ extension AppDelegate {
         }
 
         do {
-            // Configure realtime websocket BEFORE starting recorder.
-            // AudioRecorderService snapshots onRealtimeAudioData at start time.
-            await setupRealtimeTranslationIfNeeded()
+            // Set up realtime callback BEFORE starting recorder (AudioRecorderService
+            // snapshots onRealtimeAudioData at start time). WebSocket connects in background.
+            setupRealtimeTranslationIfNeeded()
 
             Log.app.info("startTranslationRecording: Starting audio recording")
             try await audioRecorder.startRecording(device: device)
@@ -346,49 +346,19 @@ extension AppDelegate {
             Log.app.info("stopTranslationRecording: Got audio data, size = \(audioData.count) bytes")
 
             let realtimeResult = await stopTranslationRealtimeSession(finalize: true)
-            let recordingDurationSeconds = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
 
             let text: String
-            let useRealtimeWithoutFinalize = shouldUseRealtimeFallbackText(
-                realtimeResult.text,
-                didReceiveFinalization: realtimeResult.didReceiveFinalization,
-                recordingDurationSeconds: recordingDurationSeconds
-            )
-
-            if useRealtimeWithoutFinalize {
+            if !realtimeResult.text.isEmpty {
                 text = realtimeResult.text
-                if realtimeResult.didReceiveFinalization {
-                    Log.app.info("stopTranslationRecording: Using realtime translation (\(realtimeResult.text.count) chars)")
-                } else {
-                    Log.app.warning(
-                        "stopTranslationRecording: Finalize delayed, using realtime fallback text (\(realtimeResult.text.count) chars)"
-                    )
-                }
+                Log.app.info("stopTranslationRecording: Using realtime translation (\(text.count) chars)")
+            } else if SettingsStorage.shared.transcriptionProvider == .local {
+                // Local Whisper — no WebSocket, transcribe from audio
+                text = try await whisperTranscriptionService.translateAndTranscribe(audioData: audioData)
+                Log.app.info("stopTranslationRecording: Local Whisper translation (\(text.count) chars)")
+            } else if let connectionError = translationRealtimeConnectionError {
+                throw TranscriptionError.cloudConnectionFailed(connectionError)
             } else {
-                let service = activeTranscriptionService
-
-                if !realtimeResult.didReceiveFinalization {
-                    Log.app.warning("stopTranslationRecording: Realtime finalize was incomplete, forcing async translation fallback")
-                } else if realtimeResult.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Log.app.info("stopTranslationRecording: Realtime translation empty, using async fallback")
-                } else {
-                    Log.app.warning(
-                        "stopTranslationRecording: Realtime finalized text too short (\(realtimeResult.text.count) chars) for \(String(format: "%.2f", recordingDurationSeconds))s recording, using async fallback"
-                    )
-                }
-
-                do {
-                    text = try await service.translateAndTranscribe(audioData: audioData)
-                } catch {
-                    if !realtimeResult.text.isEmpty {
-                        Log.app.warning(
-                            "stopTranslationRecording: Async fallback failed, using partial realtime text (\(realtimeResult.text.count) chars)"
-                        )
-                        text = realtimeResult.text
-                    } else {
-                        throw error
-                    }
-                }
+                throw TranscriptionError.emptyTranscription
             }
             Log.app.info("stopTranslationRecording: Translation received (\(text.count) chars)")
 
@@ -489,9 +459,8 @@ extension AppDelegate {
 
     // MARK: - Realtime Translation (WebSocket)
 
-    private func setupRealtimeTranslationIfNeeded() async {
-        guard SettingsStorage.shared.transcriptionProvider == .cloud,
-              SettingsStorage.shared.translationRealtimeSocketEnabled else {
+    private func setupRealtimeTranslationIfNeeded() {
+        guard SettingsStorage.shared.transcriptionProvider == .cloud else {
             audioRecorder.onRealtimeAudioData = nil
             translationRealtimeSessionEnabled = false
             translationRealtimeAccumulator = nil
@@ -529,29 +498,39 @@ extension AppDelegate {
             Log.transcription.error("Translation RT error: \(error.localizedDescription)")
         }
 
-        do {
-            try await rtService.connect(
-                languageHints: [pair.languageA, pair.languageB],
-                strictLanguageHints: true,
-                audioConfig: .defaultPCM16kMono,
-                translationConfig: RealtimeTranslationConfig(
-                    mode: .twoWay(languageA: pair.languageA, languageB: pair.languageB)
-                ),
-            )
+        translationRealtimeConnectionError = nil
 
-            translationRealtimeSessionEnabled = true
-            Log.transcription.info("Translation RT connected (\(pair.languageA) <-> \(pair.languageB))")
-        } catch {
-            audioRecorder.onRealtimeAudioData = nil
-            translationRealtimeSessionEnabled = false
-            translationRealtimeAccumulator = nil
-            Log.transcription.warning(
-                "Translation RT unavailable (\(error.localizedDescription)); fallback to async translation will be used"
-            )
+        // Connect WebSocket in background — don't block recording start
+        translationRealtimeConnectionTask = Task {
+            do {
+                try await rtService.connect(
+                    languageHints: [pair.languageA, pair.languageB],
+                    strictLanguageHints: true,
+                    audioConfig: .defaultPCM16kMono,
+                    translationConfig: RealtimeTranslationConfig(
+                        mode: .twoWay(languageA: pair.languageA, languageB: pair.languageB)
+                    ),
+                )
+
+                await MainActor.run {
+                    self.translationRealtimeSessionEnabled = true
+                }
+                NSLog("[Transcription] Translation RT connected (%@ <-> %@)", pair.languageA, pair.languageB)
+            } catch {
+                await MainActor.run {
+                    self.audioRecorder.onRealtimeAudioData = nil
+                    self.translationRealtimeSessionEnabled = false
+                    self.translationRealtimeAccumulator = nil
+                    self.translationRealtimeConnectionError = error.localizedDescription
+                }
+                NSLog("[Transcription] Translation RT connection failed: %@", error.localizedDescription)
+            }
         }
     }
 
     private func stopTranslationRealtimeSession(finalize: Bool) async -> (text: String, didReceiveFinalization: Bool) {
+        translationRealtimeConnectionTask?.cancel()
+        translationRealtimeConnectionTask = nil
         audioRecorder.onRealtimeAudioData = nil
 
         let accumulator = translationRealtimeAccumulator
@@ -580,12 +559,11 @@ extension AppDelegate {
         return (text.trimmingCharacters(in: .whitespacesAndNewlines), didReceiveFinalization)
     }
 
-    private func translationLanguagePair(targetLanguage: String = "uk") -> (languageA: String, languageB: String) {
-        if targetLanguage == "en" {
-            let primary = SettingsStorage.shared.favoriteLanguages.first(where: { $0 != "en" }) ?? "uk"
-            return (primary, "en")
-        }
-        return ("en", targetLanguage)
+    private func translationLanguagePair() -> (languageA: String, languageB: String) {
+        return (
+            SettingsStorage.shared.translationLanguageA,
+            SettingsStorage.shared.translationLanguageB
+        )
     }
 
     // MARK: - Escape Cancel Handler
@@ -609,7 +587,7 @@ extension AppDelegate {
                 try? await Task.sleep(for: .seconds(1.6))
                 guard let self,
                       self.appState.translationRecordingState == .recording else { return }
-                NotchManager.shared.startRecording(mode: .translation(languagePair: "EN <-> UK"))
+                NotchManager.shared.startRecording(mode: .translation(languagePair: self.translationPairLabel))
             }
         }
 
@@ -626,46 +604,4 @@ extension AppDelegate {
         escapeService.activate()
     }
 
-    private func shouldUseRealtimeFallbackText(
-        _ text: String,
-        didReceiveFinalization: Bool,
-        recordingDurationSeconds: TimeInterval
-    ) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-
-        let wordCount = trimmed.split { $0.isWhitespace || $0.isNewline }.count
-        let charCount = trimmed.count
-        let hasSentenceEnding = trimmed.hasSuffix(".")
-            || trimmed.hasSuffix("!")
-            || trimmed.hasSuffix("?")
-            || trimmed.contains("\n")
-
-        if didReceiveFinalization {
-            // Same guard as voice mode: avoid accepting tiny finalized websocket fragments.
-            if recordingDurationSeconds <= 1.2 {
-                return true
-            }
-            if wordCount >= 2 {
-                return true
-            }
-            if charCount >= 12 {
-                return true
-            }
-            return false
-        }
-
-        // Slightly softer thresholds for translation output.
-        if hasSentenceEnding, wordCount >= 3 {
-            return true
-        }
-        if wordCount >= 6 {
-            return true
-        }
-        if charCount >= 36 {
-            return true
-        }
-
-        return false
-    }
 }

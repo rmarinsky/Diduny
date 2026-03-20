@@ -63,6 +63,7 @@
 		AA8C95710FD8D22B9FF8242A /* AudioMixerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE04DF44C896CD368ED16901 /* AudioMixerService.swift */; };
 		ACAD1265239FA9A32565242B /* AccountSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7074B6A737CE72D77BD9AE8F /* AccountSettingsView.swift */; };
 		B11EF2458AEAF401E1A03FD2 /* HistoryPaletteWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9357A98372102BF3B285A2AD /* HistoryPaletteWindowController.swift */; };
+		BF3538E2F19CF3EB9D232E7A /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = 22385D60DC75174064B0DF0F /* ObjCExceptionCatcher.m */; };
 		C24B6F611448AF8CAD8E3DB9 /* MeetingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA64DC6EAB5D1FB38CF7F517 /* MeetingSettingsView.swift */; };
 		C5FA530A98A4A76DD9DEA952 /* AppDelegate+MeetingRecording.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18174CC5740A330799589646 /* AppDelegate+MeetingRecording.swift */; };
 		C6297FB1BED3D932E43C6C7E /* ClipboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 459B59FAABA91EB9AD4EB4EF /* ClipboardService.swift */; };
@@ -112,6 +113,7 @@
 		1999FC4728C79F46A514A1E4 /* AppDelegate+MeetingTranslationRecording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+MeetingTranslationRecording.swift"; sourceTree = "<group>"; };
 		1A1643A987A23A64D7D9F7B8 /* DoubleCopyDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoubleCopyDetector.swift; sourceTree = "<group>"; };
 		1A7E2F21047194B8A5423BF5 /* OnboardingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingManager.swift; sourceTree = "<group>"; };
+		22385D60DC75174064B0DF0F /* ObjCExceptionCatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ObjCExceptionCatcher.m; sourceTree = "<group>"; };
 		2430641841403AB68C61B536 /* KeychainManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManager.swift; sourceTree = "<group>"; };
 		26809CA162E096F4EA668768 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
 		2A69C86E608DDD0D38D8AB54 /* WhisperBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WhisperBridge.h; sourceTree = "<group>"; };
@@ -135,6 +137,7 @@
 		54C08AEA7B3D9495385E0990 /* LiveTranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptView.swift; sourceTree = "<group>"; };
 		583D24D80FE19BB49505E371 /* TextTranslationWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextTranslationWindowController.swift; sourceTree = "<group>"; };
 		58445C3A1AF119838326EC9F /* RemoteConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteConfig.swift; sourceTree = "<group>"; };
+		5B4AFAFBB376B839E41C6BDA /* ObjCExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjCExceptionCatcher.h; sourceTree = "<group>"; };
 		5D808ED223F5466862CE124F /* CloudTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudTranscriptionService.swift; sourceTree = "<group>"; };
 		622FD84CF56FC17420114B9C /* NotchContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchContentView.swift; sourceTree = "<group>"; };
 		67216EAEE79FD497A77BD7D6 /* PushToTalkKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushToTalkKey.swift; sourceTree = "<group>"; };
@@ -366,6 +369,8 @@
 			isa = PBXGroup;
 			children = (
 				AB584F0BDA9252D1D71CE50D /* Logger.swift */,
+				5B4AFAFBB376B839E41C6BDA /* ObjCExceptionCatcher.h */,
+				22385D60DC75174064B0DF0F /* ObjCExceptionCatcher.m */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -605,6 +610,7 @@
 				DB3964EFB7C60E392C41A920 /* MenuBarIconView.swift in Sources */,
 				8CAA1C227A9788C6A9687E7D /* NotchContentView.swift in Sources */,
 				9876807751B2F948878C2BDF /* NotchManager.swift in Sources */,
+				BF3538E2F19CF3EB9D232E7A /* ObjCExceptionCatcher.m in Sources */,
 				214683A40F227DDAE1D64C8B /* OnboardingComponents.swift in Sources */,
 				22F85E040AEC97503AF68835 /* OnboardingContainerView.swift in Sources */,
 				03EBBAC2178925692C5B0F28 /* OnboardingManager.swift in Sources */,
@@ -722,7 +728,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.11.0;
+				MARKETING_VERSION = 1.12.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -808,7 +814,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.11.0;
+				MARKETING_VERSION = 1.12.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -874,7 +880,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.11.0;
+				MARKETING_VERSION = 1.12.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

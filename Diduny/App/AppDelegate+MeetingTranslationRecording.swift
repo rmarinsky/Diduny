@@ -155,7 +155,7 @@ extension AppDelegate {
             try await meetingRecorderService.startRecording()
             Log.app.info("Meeting translation recording started")
 
-            // Stream realtime meeting translation (EN -> UK)
+            // Stream realtime meeting translation
             let store = await setupRealtimeMeetingTranslation()
 
             // Only set recording state AFTER confirmed working
@@ -252,13 +252,16 @@ extension AppDelegate {
 
         // Connect WebSocket (recording continues even if translation socket is unavailable)
         do {
+            let sourceLanguage = SettingsStorage.shared.translationLanguageA
+            let targetLanguage = SettingsStorage.shared.translationLanguageB
+
             var languageHints = SettingsStorage.shared.favoriteLanguages
 
-            if !languageHints.contains("en") {
-                languageHints.append("en")
+            if !languageHints.contains(sourceLanguage) {
+                languageHints.append(sourceLanguage)
             }
-            if !languageHints.contains("uk") {
-                languageHints.append("uk")
+            if !languageHints.contains(targetLanguage) {
+                languageHints.append(targetLanguage)
             }
 
             try await rtService.connect(
@@ -266,13 +269,13 @@ extension AppDelegate {
                 strictLanguageHints: !languageHints.isEmpty,
                 audioConfig: .defaultPCM16kMono,
                 translationConfig: RealtimeTranslationConfig(
-                    mode: .oneWay(sourceLanguage: "en", targetLanguage: "uk")
+                    mode: .oneWay(sourceLanguage: sourceLanguage, targetLanguage: targetLanguage)
                 ),
             )
             await MainActor.run {
                 store.isActive = true
             }
-            Log.transcription.info("Meeting real-time translation connected successfully (EN -> UK)")
+            Log.transcription.info("Meeting real-time translation connected successfully (\(sourceLanguage.uppercased()) -> \(targetLanguage.uppercased()))")
         } catch {
             Log.transcription.error("Meeting real-time translation FAILED to connect: \(error.localizedDescription)")
             await MainActor.run {
@@ -320,8 +323,9 @@ extension AppDelegate {
         }
 
         // Additional fallback: prefer target-language tokens if status exists but format changed.
+        let targetLang = SettingsStorage.shared.translationLanguageB
         let targetLanguageTokens = tokens.filter {
-            $0.language?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "uk"
+            $0.language?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == targetLang
         }
         if !targetLanguageTokens.isEmpty {
             return targetLanguageTokens
@@ -386,7 +390,7 @@ extension AppDelegate {
                 let audioData = try await loadAudioData(from: audioURL)
                 Log.app.info("Meeting translation recording size = \(audioData.count) bytes")
 
-                text = try await transcriptionService.translateAndTranscribe(audioData: audioData, targetLanguage: "uk")
+                text = try await transcriptionService.translateAndTranscribe(audioData: audioData)
                 Log.app.info("Async meeting translation received (\(text.count) chars)")
             }
 
@@ -468,8 +472,16 @@ extension AppDelegate {
                 Log.app.warning("stopMeetingTranslationRecording: state changed during processing (now \(self.appState.meetingTranslationRecordingState)), dropping error")
                 return
             }
+
+            let userMessage: String
+            if let transcriptionError = error as? TranscriptionError {
+                userMessage = transcriptionError.localizedDescription
+            } else {
+                userMessage = "Translation failed: \(error.localizedDescription). Audio saved to Recordings."
+            }
+
             await MainActor.run {
-                appState.errorMessage = error.localizedDescription
+                appState.errorMessage = userMessage
                 appState.meetingTranslationRecordingState = .error
                 appState.meetingTranslationRecordingStartTime = nil
                 handleMeetingTranslationStateChange(.error)
