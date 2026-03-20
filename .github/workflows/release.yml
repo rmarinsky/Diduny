@@ -83,11 +83,12 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          KEYCHAIN_PATH="$(security list-keychains -d user | head -1 | tr -d '[:space:]"')"
           xcrun notarytool store-credentials "$APP_NAME" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_APP_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
-            --keychain "$KEYCHAIN_NAME"
+            --keychain "$KEYCHAIN_PATH"
 
       - name: Generate Xcode project (XcodeGen)
         if: env.USES_XCODEGEN == 'true'
@@ -130,9 +131,10 @@ jobs:
         run: |
           ditto -c -k --keepParent "$EXPORT_DIR/$APP_BUNDLE_NAME" "build/${APP_NAME}-notary.zip"
 
+          KEYCHAIN_PATH="$(security list-keychains -d user | head -1 | tr -d '[:space:]"')"
           xcrun notarytool submit "build/${APP_NAME}-notary.zip" \
             --keychain-profile "$APP_NAME" \
-            --keychain "$KEYCHAIN_NAME" \
+            --keychain "$KEYCHAIN_PATH" \
             --wait
 
           xcrun stapler staple "$EXPORT_DIR/$APP_BUNDLE_NAME"
