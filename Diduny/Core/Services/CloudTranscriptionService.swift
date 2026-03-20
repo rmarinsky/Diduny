@@ -61,28 +61,26 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
         return text
     }
 
-    /// Transcribe and translate between English and Ukrainian (auto-detects language)
+    /// Transcribe and translate using the configured language pair from settings
     func translateAndTranscribe(audioData: Data) async throws -> String {
-        try await translateAndTranscribe(audioData: audioData, targetLanguage: "uk")
+        let langA = SettingsStorage.shared.translationLanguageA
+        let langB = SettingsStorage.shared.translationLanguageB
+        return try await translateAndTranscribe(audioData: audioData, languageA: langA, languageB: langB)
     }
 
-    /// Transcribe and translate to a specific target language
+    /// Transcribe and translate to a specific target language (legacy, pairs with stored Language A)
     func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String {
-        Log.transcription.info("translateAndTranscribe: BEGIN, audioData size = \(audioData.count) bytes, targetLanguage = \(targetLanguage)")
+        let langA = SettingsStorage.shared.translationLanguageA
+        return try await translateAndTranscribe(audioData: audioData, languageA: langA, languageB: targetLanguage)
+    }
+
+    private func translateAndTranscribe(audioData: Data, languageA: String, languageB: String) async throws -> String {
+        Log.transcription.info("translateAndTranscribe: BEGIN, audioData size = \(audioData.count) bytes, pair = \(languageA) <-> \(languageB)")
 
         try await ensureSpeechDetected(audioData, context: "translateAndTranscribe")
 
-        // Resolve language pair for two-way translation
-        let langA: String
-        let langB: String
-        if targetLanguage == "en" {
-            let primary = SettingsStorage.shared.favoriteLanguages.first(where: { $0 != "en" }) ?? "uk"
-            langA = primary
-            langB = "en"
-        } else {
-            langA = "en"
-            langB = targetLanguage
-        }
+        let langA = languageA
+        let langB = languageB
 
         let languageConfig = resolveLanguageConfig(forcedLanguageHints: [langA, langB])
         var config: [String: Any] = [

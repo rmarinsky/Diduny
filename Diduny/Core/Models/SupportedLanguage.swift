@@ -6,7 +6,7 @@ struct SupportedLanguage: Identifiable, Hashable {
 
     var id: String { code }
 
-    /// All languages supported by Soniox cloud transcription & translation (60 languages).
+    /// All languages supported by cloud transcription & translation (60 languages).
     static let cloudLanguages: [SupportedLanguage] = [
         SupportedLanguage(code: "af", name: "Afrikaans"),
         SupportedLanguage(code: "sq", name: "Albanian"),

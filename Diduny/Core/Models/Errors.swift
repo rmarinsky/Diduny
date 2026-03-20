@@ -5,6 +5,7 @@ enum TranscriptionError: LocalizedError {
     case apiError(String)
     case invalidResponse
     case emptyTranscription
+    case cloudConnectionFailed(String)
     case invalidURL
     case usageLimitExceeded(usedHours: Double, limitHours: Double)
 
@@ -18,6 +19,8 @@ enum TranscriptionError: LocalizedError {
             "Invalid response from server"
         case .emptyTranscription:
             "No speech detected"
+        case let .cloudConnectionFailed(reason):
+            "Cloud connection failed: \(reason)"
         case .invalidURL:
             "Invalid API URL"
         case let .usageLimitExceeded(usedHours, limitHours):

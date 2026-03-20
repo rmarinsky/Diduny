@@ -106,11 +106,29 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
             wsURLString += "\(separator)token=\(accessToken)"
         }
 
-        guard let url = URL(string: wsURLString) else {
-            throw RealtimeTranscriptionError.connectionFailed("Invalid WebSocket URL")
+        guard let url = URL(string: wsURLString),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "ws" || scheme == "wss" else {
+            throw RealtimeTranscriptionError.connectionFailed("Invalid WebSocket URL: \(wsURLString)")
         }
 
-        let task = session.webSocketTask(with: url)
+        // URLSession.webSocketTask(with:) can throw an ObjC NSException that Swift
+        // cannot catch with do/catch. Wrap in ObjC exception catcher to prevent crash.
+        var task: URLSessionWebSocketTask?
+        do {
+            try ObjCExceptionCatcher.catchException {
+                task = session.webSocketTask(with: url)
+            }
+        } catch {
+            throw RealtimeTranscriptionError.connectionFailed(
+                "WebSocket task creation failed: \(error.localizedDescription)"
+            )
+        }
+
+        guard let task else {
+            throw RealtimeTranscriptionError.connectionFailed("Failed to create WebSocket task")
+        }
+
         self.webSocketTask = task
         task.resume()
 

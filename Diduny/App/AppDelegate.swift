@@ -64,9 +64,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @available(macOS 13.0, *)
     var voiceRealtimeAccumulator: RealtimeVoiceAccumulator?
     var voiceRealtimeSessionEnabled: Bool = false
+    var voiceRealtimeConnectionError: String?
     @available(macOS 13.0, *)
     var translationRealtimeAccumulator: RealtimeTranslationAccumulator?
     var translationRealtimeSessionEnabled: Bool = false
+    var translationRealtimeConnectionError: String?
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
         switch SettingsStorage.shared.transcriptionProvider {
@@ -164,12 +166,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Warn if cloud provider requires auth but user is not logged in
-        if SettingsStorage.shared.transcriptionProvider == .cloud,
-           !AuthService.shared.isLoggedIn
-        {
-            Log.app.warning("[Auth] Cloud provider selected but user is not logged in — open Settings to authenticate")
-            NotchManager.shared.showInfo(message: "Please log in via Settings to use cloud transcription", duration: 4.0)
+        // Enforce local provider if not logged in (cloud requires auth)
+        if !AuthService.shared.isLoggedIn {
+            if SettingsStorage.shared.transcriptionProvider == .cloud {
+                SettingsStorage.shared.transcriptionProvider = .local
+                Log.app.warning("[Auth] Not logged in — switched to local provider")
+            }
+            if SettingsStorage.shared.meetingRealtimeTranscriptionEnabled {
+                SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = false
+                Log.app.warning("[Auth] Not logged in — disabled meeting cloud mode")
+            }
         }
     }
 
@@ -228,7 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 case .translation, .meetingTranslation:
                     let service = activeTranscriptionService
-                    text = try await service.translateAndTranscribe(audioData: audioData, targetLanguage: "uk")
+                    text = try await service.translateAndTranscribe(audioData: audioData)
                 }
 
                 let copyBehavior: ClipboardCopyBehavior
@@ -325,7 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            let translationMode: RecordingMode = .translation(languagePair: "EN <-> UK")
+            let translationMode: RecordingMode = .translation(languagePair: self.translationPairLabel)
             if self.appState.translationRecordingState == .recording {
                 NotchManager.shared.startRecording(mode: translationMode)
                 return
@@ -472,11 +478,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    var translationPairLabel: String {
+        let a = SettingsStorage.shared.translationLanguageA.uppercased()
+        let b = SettingsStorage.shared.translationLanguageB.uppercased()
+        return "\(a) <-> \(b)"
+    }
+
     func handleTranslationStateChange(_ state: RecordingState) {
         translationAutoResetTask?.cancel()
         handleStateChange(
             state,
-            mode: .translation(languagePair: "EN <-> UK"),
+            mode: .translation(languagePair: translationPairLabel),
             currentStateGetter: { self.appState.translationRecordingState },
             stateResetter: { self.appState.translationRecordingState = $0 },
             autoResetTaskSetter: { self.translationAutoResetTask = $0 },

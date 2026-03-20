@@ -2,17 +2,35 @@ import SwiftUI
 
 struct TranslationSettingsView: View {
     @State private var favoriteLanguageCodes: Set<String> = Set(SettingsStorage.shared.favoriteLanguages)
-    @State private var translationRealtimeSocketEnabled: Bool = SettingsStorage.shared.translationRealtimeSocketEnabled
+    @State private var translationLanguageA: String = SettingsStorage.shared.translationLanguageA
+    @State private var translationLanguageB: String = SettingsStorage.shared.translationLanguageB
+
+    private var translationPairLabel: String {
+        "\(translationLanguageA.uppercased()) <-> \(translationLanguageB.uppercased())"
+    }
 
     var body: some View {
         Form {
-            Section("Realtime Translation") {
-                Toggle("Realtime translation via WebSocket", isOn: $translationRealtimeSocketEnabled)
-                    .onChange(of: translationRealtimeSocketEnabled) { _, newValue in
-                        SettingsStorage.shared.translationRealtimeSocketEnabled = newValue
+            Section("Default Translation Pair") {
+                Picker("Language A", selection: $translationLanguageA) {
+                    ForEach(SupportedLanguage.cloudLanguages.filter { $0.code != translationLanguageB }) { lang in
+                        Text(lang.name).tag(lang.code)
                     }
+                }
+                .onChange(of: translationLanguageA) { _, newValue in
+                    SettingsStorage.shared.translationLanguageA = newValue
+                }
 
-                Text("When enabled, translation is streamed live via cloud socket. Socket mode can improve paragraph detection from pauses/endpoints. If unavailable, app falls back to async cloud translation.")
+                Picker("Language B", selection: $translationLanguageB) {
+                    ForEach(SupportedLanguage.cloudLanguages.filter { $0.code != translationLanguageA }) { lang in
+                        Text(lang.name).tag(lang.code)
+                    }
+                }
+                .onChange(of: translationLanguageB) { _, newValue in
+                    SettingsStorage.shared.translationLanguageB = newValue
+                }
+
+                Text("Translation pair: \(translationPairLabel)")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -35,15 +53,12 @@ struct TranslationSettingsView: View {
                     .toggleStyle(.checkbox)
                 }
 
-                Text("Selected languages are used as quick-translate buttons and as language hints for cloud transcription. Supports 60 languages via Soniox.")
+                Text("Selected languages are used as language hints for cloud transcription. Supports 60 languages.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            translationRealtimeSocketEnabled = SettingsStorage.shared.translationRealtimeSocketEnabled
-        }
     }
 }
 

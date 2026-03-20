@@ -465,8 +465,16 @@ extension AppDelegate {
                 Log.app.warning("stopMeetingRecording: state changed during processing (now \(self.appState.meetingRecordingState)), dropping error")
                 return
             }
+
+            let userMessage: String
+            if let transcriptionError = error as? TranscriptionError {
+                userMessage = transcriptionError.localizedDescription
+            } else {
+                userMessage = "Transcription failed: \(error.localizedDescription). Audio saved to Recordings."
+            }
+
             await MainActor.run {
-                appState.errorMessage = error.localizedDescription
+                appState.errorMessage = userMessage
                 appState.meetingRecordingState = .error
                 appState.meetingRecordingStartTime = nil
                 handleMeetingStateChange(.error)

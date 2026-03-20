@@ -2,7 +2,6 @@ import SwiftUI
 
 struct DictationSettingsView: View {
     @State private var transcriptionProvider: TranscriptionProvider = SettingsStorage.shared.transcriptionProvider
-    @State private var transcriptionRealtimeSocketEnabled: Bool = SettingsStorage.shared.transcriptionRealtimeSocketEnabled
     @State private var selectedModel: String = SettingsStorage.shared.selectedWhisperModel
     @State private var modelSort: ModelSort = .speed
     @State private var whisperLanguage: String = SettingsStorage.shared.whisperLanguage
@@ -38,16 +37,6 @@ struct DictationSettingsView: View {
                     SettingsStorage.shared.transcriptionProvider = newValue
                 }
 
-                if transcriptionProvider == .cloud {
-                    Toggle("Realtime dictation via WebSocket", isOn: $transcriptionRealtimeSocketEnabled)
-                        .onChange(of: transcriptionRealtimeSocketEnabled) { _, newValue in
-                            SettingsStorage.shared.transcriptionRealtimeSocketEnabled = newValue
-                        }
-
-                    Text("When enabled, dictation is streamed live via cloud socket. Socket mode can improve paragraph detection from pauses/endpoints. If unavailable, app falls back to async cloud transcription.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
 
             if needsWhisper {
@@ -56,9 +45,6 @@ struct DictationSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            transcriptionRealtimeSocketEnabled = SettingsStorage.shared.transcriptionRealtimeSocketEnabled
-        }
     }
 
     // MARK: - Whisper Models

@@ -96,6 +96,7 @@ final class AuthService {
 
         // Switch to cloud processing now that the user is authenticated
         SettingsStorage.shared.transcriptionProvider = .cloud
+        SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = true
 
         Log.app.info("[Auth] Logged in as \(email), switched to cloud processing")
     }
@@ -152,7 +153,12 @@ final class AuthService {
         }
 
         clearTokens()
-        Log.app.info("[Auth] Logged out")
+
+        // Switch to local providers since cloud requires auth
+        SettingsStorage.shared.transcriptionProvider = .local
+        SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = false
+
+        Log.app.info("[Auth] Logged out, switched to local provider")
     }
 
     // MARK: - Token Access

@@ -222,9 +222,9 @@ extension AppDelegate {
         }
 
         do {
-            // Configure realtime websocket BEFORE starting recorder.
-            // AudioRecorderService snapshots onRealtimeAudioData at start time.
-            await setupVoiceRealtimeTranscriptionIfNeeded()
+            // Set up realtime callback BEFORE starting recorder (AudioRecorderService
+            // snapshots onRealtimeAudioData at start time). WebSocket connects in background.
+            setupVoiceRealtimeTranscriptionIfNeeded()
 
             Log.app.info("startRecording: Starting audio recording")
             try await audioRecorder.startRecording(device: device)
@@ -351,49 +351,19 @@ extension AppDelegate {
             Log.app.info("stopRecording: Got audio data, size = \(audioData.count) bytes")
 
             let realtimeResult = await stopVoiceRealtimeSession(finalize: true)
-            let recordingDurationSeconds = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
 
             let text: String
-            let useRealtimeWithoutFinalize = shouldUseRealtimeFallbackText(
-                realtimeResult.text,
-                didReceiveFinalization: realtimeResult.didReceiveFinalization,
-                recordingDurationSeconds: recordingDurationSeconds
-            )
-
-            if useRealtimeWithoutFinalize {
+            if !realtimeResult.text.isEmpty {
                 text = realtimeResult.text
-                if realtimeResult.didReceiveFinalization {
-                    Log.app.info("stopRecording: Using realtime transcription (\(realtimeResult.text.count) chars)")
-                } else {
-                    Log.app.warning(
-                        "stopRecording: Finalize delayed, using realtime fallback text (\(realtimeResult.text.count) chars)"
-                    )
-                }
+                Log.app.info("stopRecording: Using realtime transcription (\(text.count) chars)")
+            } else if SettingsStorage.shared.transcriptionProvider == .local {
+                // Local Whisper — no WebSocket, transcribe from audio
+                text = try await whisperTranscriptionService.transcribe(audioData: audioData)
+                Log.app.info("stopRecording: Local Whisper transcription (\(text.count) chars)")
+            } else if let connectionError = voiceRealtimeConnectionError {
+                throw TranscriptionError.cloudConnectionFailed(connectionError)
             } else {
-                let service = activeTranscriptionService
-
-                if !realtimeResult.didReceiveFinalization {
-                    Log.app.warning("stopRecording: Realtime finalize was incomplete, forcing async transcription fallback")
-                } else if realtimeResult.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Log.app.info("stopRecording: Realtime transcription empty, using async fallback")
-                } else {
-                    Log.app.warning(
-                        "stopRecording: Realtime finalized text too short (\(realtimeResult.text.count) chars) for \(String(format: "%.2f", recordingDurationSeconds))s recording, using async fallback"
-                    )
-                }
-
-                do {
-                    text = try await service.transcribe(audioData: audioData)
-                } catch {
-                    if !realtimeResult.text.isEmpty {
-                        Log.app.warning(
-                            "stopRecording: Async fallback failed, using partial realtime text (\(realtimeResult.text.count) chars)"
-                        )
-                        text = realtimeResult.text
-                    } else {
-                        throw error
-                    }
-                }
+                throw TranscriptionError.emptyTranscription
             }
             Log.app.info("stopRecording: Transcription received (\(text.count) chars)")
 
@@ -552,10 +522,8 @@ extension AppDelegate {
 
     // MARK: - Realtime Transcription (WebSocket)
 
-    private func setupVoiceRealtimeTranscriptionIfNeeded() async {
-        guard SettingsStorage.shared.transcriptionProvider == .cloud,
-              SettingsStorage.shared.transcriptionRealtimeSocketEnabled
-        else {
+    private func setupVoiceRealtimeTranscriptionIfNeeded() {
+        guard SettingsStorage.shared.transcriptionProvider == .cloud else {
             audioRecorder.onRealtimeAudioData = nil
             voiceRealtimeSessionEnabled = false
             voiceRealtimeAccumulator = nil
@@ -592,24 +560,34 @@ extension AppDelegate {
             Log.transcription.error("Dictation RT error: \(error.localizedDescription)")
         }
 
-        do {
-            let languageHints = SettingsStorage.shared.favoriteLanguages
+        voiceRealtimeConnectionError = nil
 
-            try await rtService.connect(
-                languageHints: languageHints,
-                strictLanguageHints: !languageHints.isEmpty,
-                audioConfig: .defaultPCM16kMono,
-            )
+        // Connect WebSocket in background — don't block recording start
+        Task {
+            do {
+                let languageHints = SettingsStorage.shared.favoriteLanguages
 
-            voiceRealtimeSessionEnabled = true
-            Log.transcription.info("Dictation RT connected")
-        } catch {
-            audioRecorder.onRealtimeAudioData = nil
-            voiceRealtimeSessionEnabled = false
-            voiceRealtimeAccumulator = nil
-            Log.transcription.warning(
-                "Dictation RT unavailable (\(error.localizedDescription)); fallback to async transcription will be used"
-            )
+                try await rtService.connect(
+                    languageHints: languageHints,
+                    strictLanguageHints: !languageHints.isEmpty,
+                    audioConfig: .defaultPCM16kMono,
+                )
+
+                await MainActor.run {
+                    self.voiceRealtimeSessionEnabled = true
+                }
+                Log.transcription.info("Dictation RT connected")
+            } catch {
+                await MainActor.run {
+                    self.audioRecorder.onRealtimeAudioData = nil
+                    self.voiceRealtimeSessionEnabled = false
+                    self.voiceRealtimeAccumulator = nil
+                    self.voiceRealtimeConnectionError = error.localizedDescription
+                }
+                Log.transcription.warning(
+                    "Dictation RT connection failed: \(error.localizedDescription)"
+                )
+            }
         }
     }
 
@@ -680,51 +658,4 @@ extension AppDelegate {
         escapeService.activate()
     }
 
-    private func shouldUseRealtimeFallbackText(
-        _ text: String,
-        didReceiveFinalization: Bool,
-        recordingDurationSeconds: TimeInterval
-    ) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-
-        let wordCount = trimmed.split { $0.isWhitespace || $0.isNewline }.count
-        let charCount = trimmed.count
-        let hasSentenceEnding = trimmed.hasSuffix(".")
-            || trimmed.hasSuffix("!")
-            || trimmed.hasSuffix("?")
-            || trimmed.contains("\n")
-
-        if didReceiveFinalization {
-            // Finalized realtime output can occasionally be a very short fragment (e.g. "But.").
-            // For recordings longer than a short utterance, require a minimal text quality bar
-            // and fall back to async full-audio transcription otherwise.
-            if recordingDurationSeconds <= 1.2 {
-                return true
-            }
-            if wordCount >= 2 {
-                return true
-            }
-            if charCount >= 12 {
-                return true
-            }
-            return false
-        }
-
-        // Fallback policy when finalize is delayed:
-        // 1) sentence-like chunk with at least 4 words
-        // 2) or sufficiently long chunk (>= 8 words)
-        // 3) or raw length safety net (>= 48 chars)
-        if hasSentenceEnding, wordCount >= 4 {
-            return true
-        }
-        if wordCount >= 8 {
-            return true
-        }
-        if charCount >= 48 {
-            return true
-        }
-
-        return false
-    }
 }
