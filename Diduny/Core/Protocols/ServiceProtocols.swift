@@ -55,10 +55,8 @@ protocol AudioDeviceManagerProtocol: AnyObject {
     func refreshDevices()
     func isDeviceAvailable(uid: String) -> Bool
     func device(forUID uid: String) -> AudioDevice?
-    func getCurrentDefaultDevice() -> AudioDevice?
     func bestDevice() -> AudioDevice?
-    func isDeviceAlive(_ deviceID: AudioDeviceID) -> Bool
-    func getValidDevice(selectedUID: String?) -> (device: AudioDevice?, didFallback: Bool)
+    func resolveDevice(preferredUID: String?) -> (device: AudioDevice?, didFallback: Bool)
 }
 
 // MARK: - Push To Talk Service Protocol

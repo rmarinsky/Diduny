@@ -62,7 +62,7 @@ struct NotchCompactTrailingView: View {
             }
         }
         .contentShape(Rectangle())
-        .onHover { hovering in
+        .nativeOnHover { hovering in
             guard case .recording = manager.state else {
                 isHovering = false
                 return
@@ -238,7 +238,7 @@ private struct RecordingExpandedView: View {
             }
         }
         .contentShape(Rectangle())
-        .onHover { hovering in
+        .nativeOnHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovering = hovering
             }
@@ -430,5 +430,56 @@ private struct InfoExpandedView: View {
                 appeared = true
             }
         }
+    }
+}
+
+// MARK: - Native Hover Tracking
+
+/// Uses NSTrackingArea instead of SwiftUI's .onHover to avoid
+/// EXC_BAD_ACCESS crash in HoverResponder.updatePhase during view transitions.
+private struct NativeHoverModifier: ViewModifier {
+    let onHover: (Bool) -> Void
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            NativeHoverRepresentable(onHover: onHover)
+        }
+    }
+}
+
+private struct NativeHoverRepresentable: NSViewRepresentable {
+    let onHover: (Bool) -> Void
+
+    func makeNSView(context: Context) -> HoverTrackingNSView {
+        let view = HoverTrackingNSView()
+        view.onHover = onHover
+        return view
+    }
+
+    func updateNSView(_ nsView: HoverTrackingNSView, context: Context) {
+        nsView.onHover = onHover
+    }
+}
+
+private final class HoverTrackingNSView: NSView {
+    var onHover: ((Bool) -> Void)?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach { removeTrackingArea($0) }
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
+}
+
+extension View {
+    func nativeOnHover(perform action: @escaping (Bool) -> Void) -> some View {
+        modifier(NativeHoverModifier(onHover: action))
     }
 }

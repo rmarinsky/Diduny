@@ -86,28 +86,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupNotchStopHandler()
 
-        // Auto-select best device if none selected
-        if appState.selectedDeviceUID == nil,
-           let best = audioDeviceManager.bestDevice() ?? audioDeviceManager.defaultDevice {
-            appState.selectedDeviceUID = best.uid
-        }
-
-        // Watch for device changes and auto-select best if selected device is disconnected
-        audioDeviceManager.onDevicesChanged = { [weak self] devices in
-            guard let self else { return }
-            // If selected device is no longer available, switch to best available
-            if let selectedUID = self.appState.selectedDeviceUID,
-               !devices.contains(where: { $0.uid == selectedUID }) {
-                let best = self.audioDeviceManager.bestDevice() ?? self.audioDeviceManager.defaultDevice
-                self.appState.selectedDeviceUID = best?.uid
-            }
-            // If no device selected and devices are available, select best
-            if self.appState.selectedDeviceUID == nil,
-               let best = self.audioDeviceManager.bestDevice() ?? self.audioDeviceManager.defaultDevice {
-                self.appState.selectedDeviceUID = best.uid
-            }
-        }
-
         // Listen for push-to-talk key changes
         NotificationCenter.default.addObserver(
             self,
@@ -173,6 +151,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 SettingsStorage.shared.transcriptionProvider = .local
                 Log.app.warning("[Auth] Not logged in — switched to local provider")
             }
+            if SettingsStorage.shared.translationProvider == .cloud {
+                SettingsStorage.shared.translationProvider = .local
+                Log.app.warning("[Auth] Not logged in — switched translation to local provider")
+            }
             if SettingsStorage.shared.meetingRealtimeTranscriptionEnabled {
                 SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = false
                 Log.app.warning("[Auth] Not logged in — disabled meeting cloud mode")
@@ -234,7 +216,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         text = try await whisperTranscriptionService.transcribe(audioData: audioData)
                     }
                 case .translation, .meetingTranslation:
-                    let service = activeTranscriptionService
+                    let service: TranscriptionServiceProtocol = SettingsStorage.shared.translationProvider == .local
+                        ? whisperTranscriptionService : transcriptionService
                     text = try await service.translateAndTranscribe(audioData: audioData)
                 }
 
@@ -280,6 +263,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try await Task.detached(priority: .userInitiated) {
             try Data(contentsOf: url)
         }.value
+    }
+
+    // MARK: - Shared Recording Helpers
+
+    func wireDeviceLostNotification() {
+        audioRecorder.onDeviceLost = {
+            Task { @MainActor in
+                NotchManager.shared.showInfo(message: "Microphone disconnected", duration: 2.0)
+            }
+        }
     }
 
     // MARK: - Cross-Mode Recording Guard
@@ -496,12 +489,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             successDelay: 1.5,
             errorDelay: 2.0
         )
-    }
-
-    // MARK: - Device Selection (exposed for SwiftUI)
-
-    func selectDevice(_ device: AudioDevice) {
-        appState.selectedDeviceUID = device.uid
     }
 
     // MARK: - Settings

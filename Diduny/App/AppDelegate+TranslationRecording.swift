@@ -165,11 +165,20 @@ extension AppDelegate {
         }
 
         // Provider-specific validation for Local mode
-        if SettingsStorage.shared.transcriptionProvider == .local {
-            guard WhisperModelManager.shared.selectedModel() != nil else {
+        if SettingsStorage.shared.translationProvider == .local {
+            guard let model = WhisperModelManager.shared.selectedModel() else {
                 Log.app.warning("startTranslationRecording: No Whisper model selected")
                 await MainActor.run {
                     appState.errorMessage = "No Whisper model downloaded. Please download one in Settings."
+                    appState.translationRecordingState = .error
+                    handleTranslationStateChange(.error)
+                }
+                return
+            }
+            if model.isEnglishOnly {
+                Log.app.warning("startTranslationRecording: English-only model cannot translate")
+                await MainActor.run {
+                    appState.errorMessage = WhisperError.modelDoesNotSupportTranslation.localizedDescription
                     appState.translationRecordingState = .error
                     handleTranslationStateChange(.error)
                 }
@@ -179,35 +188,19 @@ extension AppDelegate {
         Log.app.info("startTranslationRecording: Provider ready")
         translationRealtimeSessionEnabled = false
 
-        // Determine device with fallback to best available
-        var device: AudioDevice?
-
-        if let selectedUID = appState.selectedDeviceUID {
-            let (validDevice, didFallback) = audioDeviceManager.getValidDevice(selectedUID: selectedUID)
-            device = validDevice
-
-            if didFallback {
-                NSLog("[Diduny] startTranslationRecording: Selected device (UID: %@) not available, using %@", selectedUID, device?.name ?? "default")
-            } else {
-                NSLog("[Diduny] startTranslationRecording: Using selected device: %@", device?.name ?? "none")
-            }
-        } else {
-            NSLog("[Diduny] startTranslationRecording: No device selected, using best available")
-            device = audioDeviceManager.bestDevice() ?? audioDeviceManager.getCurrentDefaultDevice()
+        // Resolve device (nil preference = System Default)
+        let (device, didFallback) = audioDeviceManager.resolveDevice(preferredUID: appState.preferredDeviceUID)
+        if didFallback, let name = device?.name {
+            Log.app.warning("startTranslationRecording: Preferred device unavailable, using \(name)")
         }
-
-        if device == nil {
-            if audioDeviceManager.availableDevices.isEmpty {
-                Log.app.error("startTranslationRecording: No audio input devices available")
-                await MainActor.run {
-                    appState.errorMessage = "No microphone found. Please connect a microphone."
-                    appState.translationRecordingState = .error
-                    handleTranslationStateChange(.error)
-                }
-                return
+        guard device != nil else {
+            Log.app.error("startTranslationRecording: No audio input devices available")
+            await MainActor.run {
+                appState.errorMessage = "No microphone found. Please connect a microphone."
+                appState.translationRecordingState = .error
+                handleTranslationStateChange(.error)
             }
-            device = audioDeviceManager.availableDevices.first
-            Log.app.info("startTranslationRecording: Using first available device: \(device?.name ?? "none")")
+            return
         }
 
         Log.app.info("startTranslationRecording: Setting state to processing")
@@ -256,6 +249,8 @@ extension AppDelegate {
                         NotchManager.shared.audioLevel = level
                     }
             }
+
+            wireDeviceLostNotification()
 
             // Activate escape cancel handler
             await MainActor.run {
@@ -351,7 +346,7 @@ extension AppDelegate {
             if !realtimeResult.text.isEmpty {
                 text = realtimeResult.text
                 Log.app.info("stopTranslationRecording: Using realtime translation (\(text.count) chars)")
-            } else if SettingsStorage.shared.transcriptionProvider == .local {
+            } else if SettingsStorage.shared.translationProvider == .local {
                 // Local Whisper — no WebSocket, transcribe from audio
                 text = try await whisperTranscriptionService.translateAndTranscribe(audioData: audioData)
                 Log.app.info("stopTranslationRecording: Local Whisper translation (\(text.count) chars)")
@@ -460,7 +455,7 @@ extension AppDelegate {
     // MARK: - Realtime Translation (WebSocket)
 
     private func setupRealtimeTranslationIfNeeded() {
-        guard SettingsStorage.shared.transcriptionProvider == .cloud else {
+        guard SettingsStorage.shared.translationProvider == .cloud else {
             audioRecorder.onRealtimeAudioData = nil
             translationRealtimeSessionEnabled = false
             translationRealtimeAccumulator = nil

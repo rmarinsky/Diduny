@@ -171,40 +171,18 @@ extension AppDelegate {
             Log.app.info("startRecording: Whisper model ready")
         }
 
-        // Determine device with fallback to best available
-        var device: AudioDevice?
-
-        if let selectedUID = appState.selectedDeviceUID {
-            let (validDevice, didFallback) = audioDeviceManager.getValidDevice(selectedUID: selectedUID)
-            device = validDevice
-
-            if didFallback {
-                Log.app.warning("startRecording: Selected device (UID: \(selectedUID)) unavailable, using \(device?.name ?? "default")")
-                if let fallbackName = device?.name {
-                    await MainActor.run {
-                        appState.deviceFallbackWarning = "Using \(fallbackName)"
-                    }
-                }
-            } else {
-                Log.app.info("startRecording: Using selected device: \(device?.name ?? "none")")
-            }
-        } else {
-            Log.app.info("startRecording: No device selected, using best available")
-            device = audioDeviceManager.bestDevice() ?? audioDeviceManager.getCurrentDefaultDevice()
+        // Resolve device (nil preference = System Default)
+        let (device, didFallback) = audioDeviceManager.resolveDevice(preferredUID: appState.preferredDeviceUID)
+        if didFallback, let name = device?.name {
+            Log.app.warning("startRecording: Preferred device unavailable, using \(name)")
+            appState.deviceFallbackWarning = "Using \(name)"
         }
-
-        if device == nil {
-            if audioDeviceManager.availableDevices.isEmpty {
-                Log.app.error("startRecording: No audio input devices available")
-                await MainActor.run {
-                    appState.errorMessage = "No microphone found. Please connect a microphone."
-                    appState.recordingState = .error
-                    handleRecordingStateChange(.error)
-                }
-                return
-            }
-            device = audioDeviceManager.availableDevices.first
-            Log.app.info("startRecording: Using first available device: \(device?.name ?? "none")")
+        guard device != nil else {
+            Log.app.error("startRecording: No audio input devices available")
+            appState.errorMessage = "No microphone found. Please connect a microphone."
+            appState.recordingState = .error
+            handleRecordingStateChange(.error)
+            return
         }
 
         Log.app.info("startRecording: Setting state to recording")
@@ -253,6 +231,8 @@ extension AppDelegate {
                         NotchManager.shared.audioLevel = level
                     }
             }
+
+            wireDeviceLostNotification()
 
             // Activate escape cancel handler
             await MainActor.run {
@@ -347,8 +327,11 @@ extension AppDelegate {
         do {
             Log.app.info("stopRecording: Stopping audio recorder")
             let audioData = try await audioRecorder.stopRecording()
-            capturedAudioData = audioData
             Log.app.info("stopRecording: Got audio data, size = \(audioData.count) bytes")
+
+            // Compress WAV → FLAC for smaller storage (skipped for < 1MB)
+            let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
+            capturedAudioData = compressedData
 
             let realtimeResult = await stopVoiceRealtimeSession(finalize: true)
 
@@ -357,7 +340,7 @@ extension AppDelegate {
                 text = realtimeResult.text
                 Log.app.info("stopRecording: Using realtime transcription (\(text.count) chars)")
             } else if SettingsStorage.shared.transcriptionProvider == .local {
-                // Local Whisper — no WebSocket, transcribe from audio
+                // Local Whisper — needs original WAV data
                 text = try await whisperTranscriptionService.transcribe(audioData: audioData)
                 Log.app.info("stopRecording: Local Whisper transcription (\(text.count) chars)")
             } else if let connectionError = voiceRealtimeConnectionError {
@@ -396,11 +379,11 @@ extension AppDelegate {
             }
             Log.app.info("stopRecording: SUCCESS")
 
-            // Save to recordings library
+            // Save to recordings library (uses compressed data if available)
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
-                audioData: audioData,
+                audioData: compressedData,
                 type: .voice,
                 duration: duration,
                 transcriptionText: text

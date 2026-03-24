@@ -38,58 +38,37 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
         availableDevices.contains { $0.uid == uid }
     }
 
+    /// Returns the preferred UID if that device is still available, otherwise `nil` (System Default).
+    func effectiveDeviceUID(preferred: String?) -> String? {
+        guard let uid = preferred else { return nil }
+        return isDeviceAvailable(uid: uid) ? uid : nil
+    }
+
     /// Get device by UID, returns nil if not available
     func device(forUID uid: String) -> AudioDevice? {
         availableDevices.first { $0.uid == uid }
     }
 
-    /// Get the current system default input device (refreshes first to ensure accuracy)
-    func getCurrentDefaultDevice() -> AudioDevice? {
-        refreshDevices()
-        return defaultDevice
-    }
-
-    /// Check if device is alive using CoreAudio property
-    func isDeviceAlive(_ deviceID: AudioDeviceID) -> Bool {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceIsAlive,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        var isAlive: UInt32 = 0
-        var propertySize = UInt32(MemoryLayout<UInt32>.size)
-
-        let status = AudioObjectGetPropertyData(
-            deviceID,
-            &address,
-            0,
-            nil,
-            &propertySize,
-            &isAlive
-        )
-
-        return status == noErr && isAlive == 1
-    }
-
-    /// Get a valid device by UID, falling back to best available device.
-    /// Returns tuple with device and whether fallback was used.
-    func getValidDevice(selectedUID: String?) -> (device: AudioDevice?, didFallback: Bool) {
-        if let uid = selectedUID,
-           let device = device(forUID: uid),
-           isDeviceAlive(device.id) {
-            return (device, false)
+    /// Resolve the device to use for recording.
+    /// - `nil` preferredUID → System Default path (default → best → first), `didFallback = false`
+    /// - non-nil preferredUID → look up in list; if missing, fallback chain with `didFallback = true`
+    func resolveDevice(preferredUID: String?) -> (device: AudioDevice?, didFallback: Bool) {
+        if let uid = preferredUID {
+            // Preferred device set — try to find it
+            if let device = device(forUID: uid) {
+                return (device, false)
+            }
+            // Stale list? Refresh and retry
+            refreshDevices()
+            if let device = device(forUID: uid) {
+                return (device, false)
+            }
+            // Preferred device unavailable — fallback
+            return (defaultDevice ?? bestDevice() ?? availableDevices.first, true)
         }
 
-        // Device list may be stale — refresh and re-check before falling back
-        refreshDevices()
-        if let uid = selectedUID,
-           let device = device(forUID: uid),
-           isDeviceAlive(device.id) {
-            return (device, false)
-        }
-
-        return (bestDevice() ?? defaultDevice, selectedUID != nil)
+        // nil = System Default
+        return (defaultDevice ?? bestDevice() ?? availableDevices.first, false)
     }
 
     /// Score-based auto-detection: picks the best microphone based on transport type and capabilities.
@@ -156,6 +135,12 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
 
             let sampleRate = getDeviceSampleRate(deviceID) ?? 44100
             let transportType = getTransportType(deviceID)
+
+            // Hide virtual and aggregate devices — they are internal plumbing
+            // (e.g. Teams Audio, ScreenCaptureKit aggregates) not useful for dictation.
+            if transportType == .virtual || transportType == .aggregate {
+                return nil
+            }
 
             return AudioDevice(
                 uid: uid,

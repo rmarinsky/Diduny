@@ -3,7 +3,7 @@ import SwiftUI
 
 struct AudioSettingsView: View {
     @Environment(AppState.self) var appState
-    @State private var deviceManager = AudioDeviceManager()
+    @Environment(AudioDeviceManager.self) var deviceManager
     @StateObject private var testRecorderService = AudioRecorderService()
 
     // Test recording state
@@ -12,19 +12,41 @@ struct AudioSettingsView: View {
     @State private var testAudioPlayer: AVAudioPlayer?
     @State private var testStatusMessage = ""
 
-    // Live level monitors per device
-    @State private var levelMonitors: [String: DeviceLevelMonitor] = [:]
-
     var body: some View {
         Form {
             Section {
+                // System Default option
+                let isSystemDefault = deviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID) == nil
+                HStack(spacing: 10) {
+                    RadioButton(isSelected: isSystemDefault) {
+                        appState.preferredDeviceUID = nil
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("System Default")
+                            .foregroundColor(isSystemDefault ? .primary : .secondary)
+
+                        if let defaultName = deviceManager.defaultDevice?.name {
+                            Text(defaultName)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    appState.preferredDeviceUID = nil
+                }
+
                 // Device list
                 ForEach(deviceManager.availableDevices) { device in
-                    let isSelected = appState.selectedDeviceUID == device.uid
+                    let isSelected = deviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID) == device.uid
 
                     HStack(spacing: 10) {
                         RadioButton(isSelected: isSelected) {
-                            appState.selectedDeviceUID = device.uid
+                            appState.preferredDeviceUID = device.uid
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
@@ -33,7 +55,7 @@ struct AudioSettingsView: View {
 
                             HStack(spacing: 4) {
                                 if device.isDefault {
-                                    Text("System Default")
+                                    Text("Default")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
@@ -46,22 +68,18 @@ struct AudioSettingsView: View {
                         }
 
                         Spacer()
-
-                        DeviceLevelBar(level: levelMonitors[device.uid]?.audioLevel ?? 0)
-                            .frame(width: 50)
-
-                        if isSelected {
-                            Image(systemName: "checkmark")
-                                .foregroundColor(.accentColor)
-                        }
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        appState.selectedDeviceUID = device.uid
+                        appState.preferredDeviceUID = device.uid
                     }
                 }
             } header: {
                 Text("Input Device")
+            } footer: {
+                Text("Virtual and aggregate audio devices are hidden as they are not suitable for voice dictation.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             // Test Recording Section
@@ -136,15 +154,8 @@ struct AudioSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            startLevelMonitors()
-        }
         .onDisappear {
-            stopLevelMonitors()
             cleanupTestRecording()
-        }
-        .onChange(of: deviceManager.availableDevices) {
-            startLevelMonitors()
         }
     }
 
@@ -167,11 +178,7 @@ struct AudioSettingsView: View {
     // MARK: - Test Recording Methods
 
     private func startTestRecording() {
-        let device: AudioDevice? = if let selectedUID = appState.selectedDeviceUID {
-            deviceManager.device(forUID: selectedUID)
-        } else {
-            deviceManager.bestDevice() ?? deviceManager.defaultDevice
-        }
+        let (device, _) = deviceManager.resolveDevice(preferredUID: appState.preferredDeviceUID)
 
         testStatusMessage = "Starting test recording..."
 
@@ -239,24 +246,6 @@ struct AudioSettingsView: View {
         testStatusMessage = ""
     }
 
-    // MARK: - Level Monitors
-
-    private func startLevelMonitors() {
-        stopLevelMonitors()
-        for device in deviceManager.availableDevices {
-            let monitor = DeviceLevelMonitor()
-            monitor.startMonitoring(deviceID: device.id)
-            levelMonitors[device.uid] = monitor
-        }
-    }
-
-    private func stopLevelMonitors() {
-        for monitor in levelMonitors.values {
-            monitor.stopMonitoring()
-        }
-        levelMonitors.removeAll()
-    }
-
     private func cleanupTestRecording() {
         testRecorderService.cancelRecording()
 
@@ -266,36 +255,6 @@ struct AudioSettingsView: View {
         if let url = testRecordingURL {
             try? FileManager.default.removeItem(at: url)
             testRecordingURL = nil
-        }
-    }
-}
-
-// MARK: - Device Level Bar
-
-private struct DeviceLevelBar: View {
-    let level: Float
-
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.gray.opacity(0.3))
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(barColor)
-                    .frame(width: geometry.size.width * CGFloat(level))
-            }
-        }
-        .frame(height: 6)
-        .animation(.linear(duration: 0.05), value: level)
-    }
-
-    private var barColor: Color {
-        if level > 0.8 {
-            .red
-        } else if level > 0.5 {
-            .yellow
-        } else {
-            .green
         }
     }
 }
@@ -335,5 +294,6 @@ class AudioPlayerDelegate: NSObject, AVAudioPlayerDelegate {
 #Preview {
     AudioSettingsView()
         .environment(AppState())
+        .environment(AudioDeviceManager())
         .frame(width: 450, height: 450)
 }

@@ -16,6 +16,12 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
     private let maxAudioBytesForSpeechPrecheck = 25 * 1024 * 1024
     private let strictSpeechPrecheck = false
 
+    private lazy var longRunningSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 1200 // 20 min for large file upload + processing
+        return URLSession(configuration: config)
+    }()
+
     // Protocol conformance method
     func transcribe(audioData: Data) async throws -> String {
         try await transcribe(audioData: audioData, language: nil)
@@ -264,7 +270,10 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
     // MARK: - HTTP Debug Wrapper
 
     private func performRequest(_ request: URLRequest, label: String) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let session = (request.httpBody?.count ?? 0) > 10 * 1024 * 1024
+            ? longRunningSession
+            : URLSession.shared
+        let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TranscriptionError.invalidResponse
