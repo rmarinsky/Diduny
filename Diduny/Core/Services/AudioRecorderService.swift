@@ -306,7 +306,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
                 Log.audio.info("Audio engine restarted after configuration change")
             } catch {
                 Log.audio.error("Failed to restart engine after config change: \(error.localizedDescription)")
-                // Recording will continue to fail, but we don't want to crash
+                onDeviceLost?()
             }
         }
     }

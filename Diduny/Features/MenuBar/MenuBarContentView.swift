@@ -298,7 +298,6 @@ struct MenuBarContentView: View {
         guard AuthService.shared.isLoggedIn else {
             NotchManager.shared.showInfo(message: "Log in to use cloud processing", duration: 3.0)
             appState.settingsTabToOpen = .account
-            appState.shouldOpenSettings = true
             return
         }
         let settings = SettingsStorage.shared

@@ -322,12 +322,16 @@ extension AppDelegate {
 
         // Capture audio data first so it's available in both success and error paths
         var capturedAudioData: Data?
+        var originalWAVData: Data?
         let recordingId = UUID()
 
         do {
             Log.app.info("stopRecording: Stopping audio recorder")
             let audioData = try await audioRecorder.stopRecording()
             Log.app.info("stopRecording: Got audio data, size = \(audioData.count) bytes")
+
+            // Preserve original WAV for potential Whisper fallback (Whisper can't parse FLAC)
+            originalWAVData = audioData
 
             // Compress WAV → FLAC for smaller storage (skipped for < 1MB)
             let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
@@ -410,11 +414,11 @@ extension AppDelegate {
             _ = await stopVoiceRealtimeSession(finalize: false)
             Log.app.warning("stopRecording: Usage limit exceeded, attempting Whisper fallback")
 
-            // Try falling back to local Whisper model
-            if let audioData = capturedAudioData, WhisperModelManager.shared.selectedModel() != nil {
+            // Try falling back to local Whisper model (use original WAV since Whisper can't parse FLAC)
+            if let wavData = originalWAVData, WhisperModelManager.shared.selectedModel() != nil {
                 NotchManager.shared.showInfo(message: "Cloud limit reached. Switching to local model.", duration: 2.0)
                 do {
-                    let text = try await whisperTranscriptionService.transcribe(audioData: audioData)
+                    let text = try await whisperTranscriptionService.transcribe(audioData: wavData)
                     Log.app.info("stopRecording: Whisper fallback succeeded (\(text.count) chars)")
                     clipboardService.copy(text: text)
                     if SettingsStorage.shared.autoPaste {

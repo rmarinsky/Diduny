@@ -464,6 +464,10 @@ private struct NativeHoverRepresentable: NSViewRepresentable {
 private final class HoverTrackingNSView: NSView {
     var onHover: ((Bool) -> Void)?
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach { removeTrackingArea($0) }
