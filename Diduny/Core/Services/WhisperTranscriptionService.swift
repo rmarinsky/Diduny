@@ -7,6 +7,43 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
     private var loadedModelPath: String?
 
     func transcribe(audioData: Data) async throws -> String {
+        try await performTranscription(audioData: audioData, translate: false)
+    }
+
+    func transcribeRawSamples(_ samples: [Float]) async throws -> String {
+        let context = try await ensureContext()
+        guard !samples.isEmpty else {
+            throw TranscriptionError.emptyTranscription
+        }
+        return try await context.transcribe(samples: samples)
+    }
+
+    func translateAndTranscribe(audioData: Data) async throws -> String {
+        try validateModelSupportsTranslation()
+        return try await performTranscription(audioData: audioData, translate: true)
+    }
+
+    func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String {
+        if targetLanguage != "en" {
+            Log.whisper.warning("Whisper can only translate to English, ignoring target language '\(targetLanguage)'")
+        }
+        return try await translateAndTranscribe(audioData: audioData)
+    }
+
+    // MARK: - Translation Validation
+
+    private func validateModelSupportsTranslation() throws {
+        guard let model = WhisperModelManager.shared.selectedModel() else {
+            throw WhisperError.modelNotFound
+        }
+        if model.isEnglishOnly {
+            throw WhisperError.modelDoesNotSupportTranslation
+        }
+    }
+
+    // MARK: - Private
+
+    private func performTranscription(audioData: Data, translate: Bool) async throws -> String {
         let context = try await ensureContext()
         let samples = try AudioConverter.convertToWhisperFormat(audioData: audioData)
 
@@ -18,7 +55,7 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         let language = settings.whisperLanguage.isEmpty || settings.whisperLanguage == "auto" ? nil : settings.whisperLanguage
         let prompt = settings.whisperPrompt.isEmpty ? nil : settings.whisperPrompt
 
-        let text = try await context.transcribe(samples: samples, language: language, initialPrompt: prompt)
+        let text = try await context.transcribe(samples: samples, language: language, initialPrompt: prompt, translate: translate)
 
         guard !text.isEmpty else {
             throw TranscriptionError.emptyTranscription
@@ -26,29 +63,6 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
 
         return text
     }
-
-    func transcribeRawSamples(_ samples: [Float]) async throws -> String {
-        let context = try await ensureContext()
-        guard !samples.isEmpty else {
-            throw TranscriptionError.emptyTranscription
-        }
-        // Ambient listening uses minimal settings — no language/prompt override
-        return try await context.transcribe(samples: samples)
-    }
-
-    func translateAndTranscribe(audioData: Data) async throws -> String {
-        // Whisper can only translate TO English, not bidirectional like cloud
-        Log.whisper.warning("Translation requested but Whisper only supports translate-to-English. Using plain transcription.")
-        return try await transcribe(audioData: audioData)
-    }
-
-    func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String {
-        // Whisper ignores target language — it can only translate to English
-        Log.whisper.warning("Translation to \(targetLanguage) requested but Whisper only supports translate-to-English. Using plain transcription.")
-        return try await transcribe(audioData: audioData)
-    }
-
-    // MARK: - Private
 
     private func ensureContext() async throws -> WhisperContext {
         let model: WhisperModelManager.WhisperModel

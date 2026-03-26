@@ -11,7 +11,6 @@ struct MenuBarContentView: View {
     var onToggleMeetingRecording: @MainActor () -> Void
     var onToggleMeetingTranslationRecording: @MainActor () -> Void
     var onTranscribeFile: @MainActor () -> Void
-    var onSelectDevice: @MainActor (AudioDevice) -> Void
     var onCheckForUpdates: @MainActor () -> Void
 
     var body: some View {
@@ -41,17 +40,56 @@ struct MenuBarContentView: View {
             Button("Transcribe File...", action: onTranscribeFile)
                 .disabled(appState.recordingState == .processing)
 
+            // Processing mode switcher
+            Menu("Processing Mode") {
+                Button {
+                    selectCloudMode()
+                } label: {
+                    HStack {
+                        Text("Cloud")
+                        if isCloudMode {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+
+                Button {
+                    selectLocalMode()
+                } label: {
+                    HStack {
+                        Text("Local (Whisper)")
+                        if !isCloudMode {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+
             Divider()
 
             // Audio device menu
             Menu("Audio Device") {
+                let effectiveUID = audioDeviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID)
+                Button {
+                    appState.preferredDeviceUID = nil
+                } label: {
+                    HStack {
+                        Text("System Default")
+                        if effectiveUID == nil {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+
+                Divider()
+
                 ForEach(audioDeviceManager.availableDevices, id: \.uid) { device in
                     Button {
-                        onSelectDevice(device)
+                        appState.preferredDeviceUID = device.uid
                     } label: {
                         HStack {
                             Text(deviceMenuLabel(device))
-                            if appState.selectedDeviceUID == device.uid {
+                            if effectiveUID == device.uid {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -245,6 +283,34 @@ struct MenuBarContentView: View {
             label += " — Default"
         }
         return label
+    }
+
+    // MARK: - Processing Mode
+
+    private var isCloudMode: Bool {
+        let settings = SettingsStorage.shared
+        return settings.transcriptionProvider == .cloud
+            && settings.translationProvider == .cloud
+            && settings.meetingRealtimeTranscriptionEnabled
+    }
+
+    private func selectCloudMode() {
+        guard AuthService.shared.isLoggedIn else {
+            NotchManager.shared.showInfo(message: "Log in to use cloud processing", duration: 3.0)
+            appState.settingsTabToOpen = .account
+            return
+        }
+        let settings = SettingsStorage.shared
+        settings.transcriptionProvider = .cloud
+        settings.translationProvider = .cloud
+        settings.meetingRealtimeTranscriptionEnabled = true
+    }
+
+    private func selectLocalMode() {
+        let settings = SettingsStorage.shared
+        settings.transcriptionProvider = .local
+        settings.translationProvider = .local
+        settings.meetingRealtimeTranscriptionEnabled = false
     }
 
 }

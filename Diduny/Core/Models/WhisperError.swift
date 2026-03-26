@@ -7,6 +7,7 @@ enum WhisperError: LocalizedError {
     case audioConversionFailed
     case modelNotFound
     case downloadFailed(String)
+    case modelDoesNotSupportTranslation
 
     var errorDescription: String? {
         switch self {
@@ -22,6 +23,8 @@ enum WhisperError: LocalizedError {
             "No Whisper model downloaded. Please download one in Settings."
         case let .downloadFailed(reason):
             "Model download failed: \(reason)"
+        case .modelDoesNotSupportTranslation:
+            "Selected model is English-only and cannot translate. Please select a multilingual model."
         }
     }
 }

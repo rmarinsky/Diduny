@@ -27,6 +27,11 @@ final class DeviceLevelMonitor {
             UInt32(MemoryLayout<AudioDeviceID>.size)
         )
 
+        // Prepare preallocates resources and forces the audio unit to fully
+        // configure with the new device — without this, outputFormat can
+        // return an empty format on the first engine created in the process.
+        engine.prepare()
+
         let format = node.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { return }
 

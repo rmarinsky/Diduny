@@ -148,10 +148,8 @@ extension AppDelegate {
             meetingRecorderService.onRealtimeAudioData = nil
 
             // Set microphone device for mixed recording
-            let (device, _) = audioDeviceManager.getValidDevice(selectedUID: appState.selectedDeviceUID)
+            let (device, _) = audioDeviceManager.resolveDevice(preferredUID: appState.preferredDeviceUID)
             meetingRecorderService.microphoneDevice = device
-                ?? audioDeviceManager.bestDevice()
-                ?? audioDeviceManager.getCurrentDefaultDevice()
 
             try await meetingRecorderService.startRecording()
             Log.app.info("Meeting recording started")
@@ -342,8 +340,9 @@ extension AppDelegate {
             }
         }
 
-        // Track audioURL for library save in error path
+        // Track URLs for library save and cleanup in error/cancel paths
         var capturedAudioURL: URL?
+        var originalWavURL: URL?
         let stopTime = Date()
         let recordingId = UUID()
 
@@ -355,6 +354,14 @@ extension AppDelegate {
 
             Log.app.info("Meeting recording stopped")
 
+            // Compress WAV → FLAC before loading into memory (saves RAM and upload time)
+            let compressedURL = await AudioCompressionService.compressToFLAC(wavURL: audioURL)
+            let didCompress = compressedURL != audioURL
+            if didCompress {
+                originalWavURL = audioURL
+                capturedAudioURL = compressedURL
+            }
+
             let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
             let cloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
 
@@ -364,7 +371,7 @@ extension AppDelegate {
                 Log.app.info("Using real-time transcript (\(realtimeText.count) chars)")
             } else if cloudModeEnabled {
                 Log.app.info("No real-time transcript, falling back to async API...")
-                let audioData = try await loadAudioData(from: audioURL)
+                let audioData = try await loadAudioData(from: compressedURL)
                 Log.app.info("Meeting recording size = \(audioData.count) bytes")
 
                 text = try await transcriptionService.transcribeMeeting(audioData: audioData)
@@ -421,7 +428,7 @@ extension AppDelegate {
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
-                audioURL: audioURL,
+                audioURL: compressedURL,
                 type: .meeting,
                 duration: duration,
                 transcriptionText: text
@@ -432,10 +439,16 @@ extension AppDelegate {
             }
 
             RecoveryStateManager.shared.clearState()
-            try? FileManager.default.removeItem(at: audioURL)
+            if didCompress {
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+            try? FileManager.default.removeItem(at: compressedURL)
 
         } catch is CancellationError {
             Log.app.info("stopMeetingRecording: Cancelled")
+            if let wavURL = originalWavURL {
+                try? FileManager.default.removeItem(at: wavURL)
+            }
             if let audioURL = capturedAudioURL {
                 try? FileManager.default.removeItem(at: audioURL)
             }
@@ -457,6 +470,9 @@ extension AppDelegate {
                     type: .meeting,
                     duration: duration
                 )
+                if let wavURL = originalWavURL {
+                    try? FileManager.default.removeItem(at: wavURL)
+                }
                 try? FileManager.default.removeItem(at: audioURL)
                 RecoveryStateManager.shared.clearState()
             }

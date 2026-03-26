@@ -33,7 +33,8 @@ final class SettingsStorage {
     private static let defaultFillerWords = normalizedFillerWords(baseFillerWords + englishFillerWordPreset)
 
     private enum Key: String {
-        case selectedDeviceUID
+        case selectedDeviceUID // Legacy — kept for migration only
+        case preferredDeviceUID
         case autoPaste
         case playSoundOnCompletion
         case launchAtLogin
@@ -50,6 +51,7 @@ final class SettingsStorage {
         case favoriteLanguages
         case translationLanguageA
         case translationLanguageB
+        case translationProvider
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
         case meetingRealtimeTranscriptionEnabled
@@ -64,6 +66,7 @@ final class SettingsStorage {
 
     private init() {
         migrateSelectedDeviceIfNeeded()
+        migratePreferredDeviceKeyIfNeeded()
         migrateTranscriptionProviderIfNeeded()
     }
 
@@ -89,6 +92,14 @@ final class SettingsStorage {
         defaults.removeObject(forKey: legacyKey)
     }
 
+    /// One-time migration from `selectedDeviceUID` → `preferredDeviceUID`.
+    private func migratePreferredDeviceKeyIfNeeded() {
+        guard let oldValue = defaults.string(forKey: Key.selectedDeviceUID.rawValue),
+              defaults.string(forKey: Key.preferredDeviceUID.rawValue) == nil else { return }
+        defaults.set(oldValue, forKey: Key.preferredDeviceUID.rawValue)
+        defaults.removeObject(forKey: Key.selectedDeviceUID.rawValue)
+    }
+
     /// Migrate old provider rawValues: "soniox" → "cloud", "whisper_local" → "local"
     private func migrateTranscriptionProviderIfNeeded() {
         guard let stored = defaults.string(forKey: Key.transcriptionProvider.rawValue) else { return }
@@ -104,16 +115,16 @@ final class SettingsStorage {
 
     // MARK: - Audio Device
 
-    /// Stable device UID string persisted across reboots (replaces old AudioDeviceID storage).
-    var selectedDeviceUID: String? {
+    /// Preferred device UID. `nil` means "follow System Default".
+    var preferredDeviceUID: String? {
         get {
-            defaults.string(forKey: Key.selectedDeviceUID.rawValue)
+            defaults.string(forKey: Key.preferredDeviceUID.rawValue)
         }
         set {
             if let uid = newValue {
-                defaults.set(uid, forKey: Key.selectedDeviceUID.rawValue)
+                defaults.set(uid, forKey: Key.preferredDeviceUID.rawValue)
             } else {
-                defaults.removeObject(forKey: Key.selectedDeviceUID.rawValue)
+                defaults.removeObject(forKey: Key.preferredDeviceUID.rawValue)
             }
         }
     }
@@ -321,6 +332,22 @@ final class SettingsStorage {
     var whisperPrompt: String {
         get { defaults.string(forKey: Key.whisperPrompt.rawValue) ?? "" }
         set { defaults.set(newValue, forKey: Key.whisperPrompt.rawValue) }
+    }
+
+    // MARK: - Translation Provider
+
+    var translationProvider: TranscriptionProvider {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.translationProvider.rawValue),
+                  let provider = TranscriptionProvider(rawValue: rawValue)
+            else {
+                return .cloud
+            }
+            return provider
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.translationProvider.rawValue)
+        }
     }
 
     // MARK: - Translation Realtime Socket

@@ -38,6 +38,9 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     /// Real-time PCM stream in `s16le`, 16kHz, mono for cloud websocket transcription/translation.
     var onRealtimeAudioData: ((Data) -> Void)?
 
+    /// Called when the recording device is lost mid-recording (engine failed to restart).
+    var onDeviceLost: (() -> Void)?
+
     // MARK: - Public Methods
 
     func startRecording(device: AudioDevice?) async throws {
@@ -243,6 +246,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
         isRecording = false
         audioLevel = 0
+        onDeviceLost = nil
 
         // Read audio data
         Log.audio.info("stopRecording: Reading audio data from \(url.path)")
@@ -284,6 +288,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         realtimeAudioStreamer = nil
         isRecording = false
         audioLevel = 0
+        onDeviceLost = nil
     }
 
     // MARK: - Private Methods
@@ -301,7 +306,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
                 Log.audio.info("Audio engine restarted after configuration change")
             } catch {
                 Log.audio.error("Failed to restart engine after config change: \(error.localizedDescription)")
-                // Recording will continue to fail, but we don't want to crash
+                onDeviceLost?()
             }
         }
     }
