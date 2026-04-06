@@ -108,9 +108,6 @@ final class PermissionManager {
     }
 
     func checkScreenRecordingPermission() async -> Bool {
-        guard #available(macOS 13.0, *) else {
-            return false
-        }
         let granted = await SystemAudioCaptureService.checkPermission()
         status.screenRecording = granted
         return granted
@@ -119,11 +116,6 @@ final class PermissionManager {
     /// Request screen recording permission - this triggers the system permission dialog
     /// by attempting to access SCShareableContent
     func requestScreenRecordingPermission() async -> Bool {
-        guard #available(macOS 13.0, *) else {
-            NSLog("[Diduny] Screen recording requires macOS 13.0+")
-            return false
-        }
-
         // Skip if already granted
         if status.screenRecording {
             NSLog("[Diduny] Screen recording permission already granted")
@@ -150,10 +142,6 @@ final class PermissionManager {
 
     /// Ensure screen recording permission - request if not determined, or prompt to open Settings if denied
     func ensureScreenRecordingPermission() async -> Bool {
-        guard #available(macOS 13.0, *) else {
-            return false
-        }
-
         // First, try to get permission (this will trigger the dialog if not determined)
         let granted = await requestScreenRecordingPermission()
 

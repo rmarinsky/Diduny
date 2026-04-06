@@ -112,6 +112,7 @@ final class NotchManager {
         recordingStartTime = nil
         audioLevel = 0
         state = .idle
+        updatePanelMouseEvents()
         operationSequence &+= 1
         let seq = operationSequence
         Task {
@@ -130,6 +131,13 @@ final class NotchManager {
         Task { @MainActor in
             await onStopRequested()
         }
+    }
+
+    /// The DynamicNotchKit panel is always non-interactive (ignoresMouseEvents = true)
+    /// to avoid blocking the upper screen.
+    private func updatePanelMouseEvents() {
+        guard let panel = notch?.windowController?.window else { return }
+        panel.ignoresMouseEvents = true
     }
 
     private func ensureNotch() {
@@ -168,9 +176,9 @@ final class NotchManager {
             if screenHasNotch(screen) {
                 await notch?.compact(on: screen)
             } else {
-                // Floating style doesn't support compact — use expanded instead.
                 await notch?.expand(on: screen)
             }
+            updatePanelMouseEvents()
         }
     }
 
@@ -182,6 +190,7 @@ final class NotchManager {
         Task {
             guard self.operationSequence == seq else { return }
             await notch?.expand(on: screen)
+            updatePanelMouseEvents()
         }
     }
 

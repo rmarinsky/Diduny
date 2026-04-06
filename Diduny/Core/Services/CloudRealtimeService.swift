@@ -1,7 +1,6 @@
 import Foundation
 import os
 
-@available(macOS 13.0, *)
 final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private var wsURL: String {
         let settings = SettingsStorage.shared
@@ -510,7 +509,6 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
 
 // MARK: - URLSessionWebSocketDelegate
 
-@available(macOS 13.0, *)
 extension CloudRealtimeService: URLSessionWebSocketDelegate {
     nonisolated func urlSession(
         _: URLSession,

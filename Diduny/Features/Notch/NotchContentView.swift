@@ -21,6 +21,7 @@ struct NotchCompactLeadingView: View {
                 EmptyView()
             }
         }
+        .allowsHitTesting(false)
         .animation(.easeInOut(duration: 0.2), value: manager.state)
     }
 }
@@ -29,28 +30,15 @@ struct NotchCompactLeadingView: View {
 
 struct NotchCompactTrailingView: View {
     var manager: NotchManager
-    @State private var isHovering = false
 
     var body: some View {
         Group {
             switch manager.state {
             case .recording:
-                ZStack {
-                    HStack(spacing: 6) {
-                        PulsingDotView()
-                        RecordingTimerView(startTime: manager.recordingStartTime)
-                    }
-                    .opacity(isHovering ? 0 : 1)
-                    .allowsHitTesting(!isHovering)
-
-                    StopCompactButton {
-                        manager.requestStopActiveRecording()
-                    }
-                    .opacity(isHovering ? 1 : 0)
-                    .allowsHitTesting(isHovering)
+                HStack(spacing: 6) {
+                    PulsingDotView()
+                    RecordingTimerView(startTime: manager.recordingStartTime)
                 }
-                .frame(minWidth: 58, minHeight: 16)
-                .contentShape(Rectangle())
 
             case .processing:
                 ProgressView()
@@ -61,22 +49,7 @@ struct NotchCompactTrailingView: View {
                 EmptyView()
             }
         }
-        .contentShape(Rectangle())
-        .nativeOnHover { hovering in
-            guard case .recording = manager.state else {
-                isHovering = false
-                return
-            }
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovering = hovering
-            }
-        }
-        .onChange(of: manager.state) { _, newState in
-            guard case .recording = newState else {
-                isHovering = false
-                return
-            }
-        }
+        .allowsHitTesting(false)
         .animation(.easeInOut(duration: 0.2), value: manager.state)
     }
 }
@@ -91,24 +64,27 @@ struct NotchExpandedView: View {
             switch manager.state {
             case let .success(text):
                 SuccessExpandedView(text: text)
+                    .allowsHitTesting(false)
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
 
             case let .error(message):
                 ErrorExpandedView(message: message)
+                    .allowsHitTesting(false)
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
 
             case let .info(message):
                 InfoExpandedView(message: message)
+                    .allowsHitTesting(false)
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
 
             case let .recording(mode):
-                RecordingExpandedView(mode: mode) {
-                    manager.requestStopActiveRecording()
-                }
+                RecordingExpandedView(mode: mode)
+                    .allowsHitTesting(false)
                     .transition(.opacity)
 
             case let .processing(mode):
                 ProcessingExpandedView(mode: mode)
+                    .allowsHitTesting(false)
                     .transition(.opacity)
 
             case .idle:
@@ -210,9 +186,7 @@ private struct RecordingTimerView: View {
 
 private struct RecordingExpandedView: View {
     let mode: RecordingMode
-    let onStop: () -> Void
     @State private var isPulsing = false
-    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -229,68 +203,12 @@ private struct RecordingExpandedView: View {
             Text(mode.label)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.primary)
-
-            Spacer(minLength: 6)
-
-            if isHovering {
-                StopExpandedButton(action: onStop)
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            }
-        }
-        .contentShape(Rectangle())
-        .nativeOnHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovering = hovering
-            }
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
         }
-    }
-}
-
-private struct StopCompactButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "stop.fill")
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 16, height: 16)
-                .background(
-                    Circle()
-                        .fill(.red.opacity(0.95))
-                )
-        }
-        .buttonStyle(.plain)
-        .help("Stop recording")
-    }
-}
-
-private struct StopExpandedButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: "stop.fill")
-                    .font(.system(size: 9, weight: .bold))
-                Text("Stop")
-                    .font(.system(size: 11, weight: .semibold))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(.red.opacity(0.95))
-            )
-        }
-        .buttonStyle(.plain)
-        .help("Stop recording")
     }
 }
 
@@ -433,57 +351,3 @@ private struct InfoExpandedView: View {
     }
 }
 
-// MARK: - Native Hover Tracking
-
-/// Uses NSTrackingArea instead of SwiftUI's .onHover to avoid
-/// EXC_BAD_ACCESS crash in HoverResponder.updatePhase during view transitions.
-private struct NativeHoverModifier: ViewModifier {
-    let onHover: (Bool) -> Void
-
-    func body(content: Content) -> some View {
-        content.overlay {
-            NativeHoverRepresentable(onHover: onHover)
-        }
-    }
-}
-
-private struct NativeHoverRepresentable: NSViewRepresentable {
-    let onHover: (Bool) -> Void
-
-    func makeNSView(context: Context) -> HoverTrackingNSView {
-        let view = HoverTrackingNSView()
-        view.onHover = onHover
-        return view
-    }
-
-    func updateNSView(_ nsView: HoverTrackingNSView, context: Context) {
-        nsView.onHover = onHover
-    }
-}
-
-private final class HoverTrackingNSView: NSView {
-    var onHover: ((Bool) -> Void)?
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        nil
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach { removeTrackingArea($0) }
-        addTrackingArea(NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
-            owner: self
-        ))
-    }
-
-    override func mouseEntered(with event: NSEvent) { onHover?(true) }
-    override func mouseExited(with event: NSEvent) { onHover?(false) }
-}
-
-extension View {
-    func nativeOnHover(perform action: @escaping (Bool) -> Void) -> some View {
-        modifier(NativeHoverModifier(onHover: action))
-    }
-}

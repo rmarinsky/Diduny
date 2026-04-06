@@ -270,14 +270,22 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
     // MARK: - HTTP Debug Wrapper
 
     private func performRequest(_ request: URLRequest, label: String) async throws -> (Data, HTTPURLResponse) {
+        var request = request
+        let requestId = HTTPLogger.attachRequestId(&request)
+        HTTPLogger.logRequest(request, requestId: requestId)
+
         let session = (request.httpBody?.count ?? 0) > 10 * 1024 * 1024
             ? longRunningSession
             : URLSession.shared
+
+        let startTime = ContinuousClock.now
         let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TranscriptionError.invalidResponse
         }
+
+        HTTPLogger.logResponse(data: data, response: httpResponse, requestId: requestId, startTime: startTime)
 
         return (data, httpResponse)
     }

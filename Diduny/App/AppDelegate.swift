@@ -57,15 +57,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var hotkeyService = HotkeyService()
     lazy var pushToTalkService = PushToTalkService()
     lazy var translationPushToTalkService = PushToTalkService()
-    @available(macOS 13.0, *)
     lazy var meetingRecorderService = MeetingRecorderService()
-    @available(macOS 13.0, *)
     lazy var realtimeTranscriptionService = CloudRealtimeService()
-    @available(macOS 13.0, *)
     var voiceRealtimeAccumulator: RealtimeVoiceAccumulator?
     var voiceRealtimeSessionEnabled: Bool = false
     var voiceRealtimeConnectionError: String?
-    @available(macOS 13.0, *)
     var translationRealtimeAccumulator: RealtimeTranslationAccumulator?
     var translationRealtimeSessionEnabled: Bool = false
     var translationRealtimeConnectionError: String?

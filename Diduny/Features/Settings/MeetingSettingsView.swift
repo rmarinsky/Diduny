@@ -142,70 +142,68 @@ struct MeetingSettingsView: View {
             }
 
             // Test System Audio Capture Section
-            if #available(macOS 13.0, *) {
-                Section {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Button {
+                            if isTestCapturing {
+                                Task { await stopTestCapture() }
+                            } else {
+                                Task { await startTestCapture() }
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: isTestCapturing ? "stop.circle.fill" : "waveform.circle.fill")
+                                    .foregroundColor(isTestCapturing ? .red : .accentColor)
+                                Text(isTestCapturing ? "Stop Capture" : "Test System Audio")
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(isTestCapturing ? .red : .accentColor)
+                        .disabled(isTestPlaying)
+
+                        if testCaptureURL != nil, !isTestCapturing {
                             Button {
-                                if isTestCapturing {
-                                    Task { await stopTestCapture() }
+                                if isTestPlaying {
+                                    stopTestPlayback()
                                 } else {
-                                    Task { await startTestCapture() }
+                                    playTestCapture()
                                 }
                             } label: {
                                 HStack {
-                                    Image(systemName: isTestCapturing ? "stop.circle.fill" : "waveform.circle.fill")
-                                        .foregroundColor(isTestCapturing ? .red : .accentColor)
-                                    Text(isTestCapturing ? "Stop Capture" : "Test System Audio")
+                                    Image(systemName: isTestPlaying ? "stop.fill" : "play.fill")
+                                    Text(isTestPlaying ? "Stop" : "Play")
                                 }
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(isTestCapturing ? .red : .accentColor)
-                            .disabled(isTestPlaying)
-
-                            if testCaptureURL != nil, !isTestCapturing {
-                                Button {
-                                    if isTestPlaying {
-                                        stopTestPlayback()
-                                    } else {
-                                        playTestCapture()
-                                    }
-                                } label: {
-                                    HStack {
-                                        Image(systemName: isTestPlaying ? "stop.fill" : "play.fill")
-                                        Text(isTestPlaying ? "Stop" : "Play")
-                                    }
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-
-                        if isTestCapturing {
-                            HStack {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                Text("Capturing system audio...")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-
-                        if !testStatusMessage.isEmpty {
-                            Text(testStatusMessage)
-                                .font(.caption)
-                                .foregroundColor(testStatusMessage.contains("Error") || testStatusMessage
-                                    .contains("permission") ? .red : .secondary)
+                            .buttonStyle(.bordered)
                         }
                     }
-                } header: {
-                    Text("Test System Audio Capture")
-                } footer: {
-                    Text(
-                        "Play audio on your Mac (music, video, etc.) while capturing to test. Requires Screen Recording permission."
-                    )
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+
+                    if isTestCapturing {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Capturing system audio...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    if !testStatusMessage.isEmpty {
+                        Text(testStatusMessage)
+                            .font(.caption)
+                            .foregroundColor(testStatusMessage.contains("Error") || testStatusMessage
+                                .contains("permission") ? .red : .secondary)
+                    }
                 }
+            } header: {
+                Text("Test System Audio Capture")
+            } footer: {
+                Text(
+                    "Play audio on your Mac (music, video, etc.) while capturing to test. Requires Screen Recording permission."
+                )
+                .font(.caption)
+                .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -219,7 +217,6 @@ struct MeetingSettingsView: View {
 
     // MARK: - Test Capture Methods
 
-    @available(macOS 13.0, *)
     private func startTestCapture() async {
         // Check permission first
         let hasPermission = await SystemAudioCaptureService.checkPermission()
@@ -259,7 +256,6 @@ struct MeetingSettingsView: View {
         }
     }
 
-    @available(macOS 13.0, *)
     private func stopTestCapture() async {
         do {
             _ = try await captureService?.stopCapture()
@@ -306,11 +302,9 @@ struct MeetingSettingsView: View {
     }
 
     private func cleanupTestCapture() {
-        if #available(macOS 13.0, *) {
-            if isTestCapturing {
-                Task {
-                    _ = try? await captureService?.stopCapture()
-                }
+        if isTestCapturing {
+            Task {
+                _ = try? await captureService?.stopCapture()
             }
         }
 

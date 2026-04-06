@@ -5,7 +5,8 @@ import Foundation
 
 extension AppDelegate {
     @objc func toggleMeetingRecording() {
-        Log.app.info("toggleMeetingRecording called, current state: \(self.appState.meetingRecordingState)")
+        let meetingRecordingState = appState.meetingRecordingState
+        Log.app.info("toggleMeetingRecording called, current state: \(meetingRecordingState)")
         meetingPipelineTask?.cancel()
         meetingPipelineTask = Task {
             await self.performToggleMeetingRecording()
@@ -13,7 +14,8 @@ extension AppDelegate {
     }
 
     func performToggleMeetingRecording() async {
-        switch appState.meetingRecordingState {
+        let meetingRecordingState = appState.meetingRecordingState
+        switch meetingRecordingState {
         case .idle:
             await startMeetingRecording()
         case .recording:
@@ -22,11 +24,10 @@ extension AppDelegate {
             Log.app.info("Meeting state is processing, canceling...")
             await cancelMeetingRecording()
         default:
-            Log.app.info("Meeting state is \(self.appState.meetingRecordingState), ignoring toggle")
+            Log.app.info("Meeting state is \(meetingRecordingState), ignoring toggle")
         }
     }
 
-    @available(macOS 13.0, *)
     func cancelMeetingRecording() async {
         Log.app.info("cancelMeetingRecording: BEGIN")
 
@@ -64,7 +65,8 @@ extension AppDelegate {
                     await meetingRecorderService.cancelRecording()
                 }
             } catch {
-                Log.app.warning("cancelMeetingRecording: failed to save audio on cancel - \(error.localizedDescription)")
+                Log.app
+                    .warning("cancelMeetingRecording: failed to save audio on cancel - \(error.localizedDescription)")
                 await meetingRecorderService.cancelRecording()
             }
         } else {
@@ -105,16 +107,6 @@ extension AppDelegate {
             return
         }
 
-        guard #available(macOS 13.0, *) else {
-            Log.app.warning("Meeting recording requires macOS 13.0+")
-            await MainActor.run {
-                appState.errorMessage = "Meeting recording requires macOS 13.0 or later"
-                appState.meetingRecordingState = .error
-                handleMeetingStateChange(.error)
-            }
-            return
-        }
-
         // Request screen capture permission on-demand
         let hasPermission = await PermissionManager.shared.ensureScreenRecordingPermission()
         appState.screenCapturePermissionGranted = hasPermission
@@ -148,7 +140,25 @@ extension AppDelegate {
             meetingRecorderService.onRealtimeAudioData = nil
 
             // Set microphone device for mixed recording
-            let (device, _) = audioDeviceManager.resolveDevice(preferredUID: appState.preferredDeviceUID)
+            let (device, didFallback) = audioDeviceManager.resolveDevice(
+                preferredUID: appState.preferredDeviceUID
+            )
+            if let device {
+                Log.app.info(
+                    "startMeetingRecording: Device resolution result = \(device.name), transport=\(device.transportType.displayName), sampleRate=\(Int(device.sampleRate)), uid=\(device.uid)"
+                )
+            }
+            if didFallback, let name = device?.name {
+                Log.app.warning("startMeetingRecording: Preferred device unavailable, using \(name)")
+                appState.deviceFallbackWarning = "Selected microphone unavailable. Using \(name)"
+                if device?.isDefault == true {
+                    appState.preferredDeviceUID = nil
+                    Log.app
+                        .info(
+                            "startMeetingRecording: Cleared stale preferred microphone UID and switched to System Default"
+                        )
+                }
+            }
             meetingRecorderService.microphoneDevice = device
 
             try await meetingRecorderService.startRecording()
@@ -163,8 +173,12 @@ extension AppDelegate {
             }
 
             // Only set recording state AFTER confirmed working
-            guard appState.meetingRecordingState == .processing else {
-                Log.app.warning("startMeetingRecording: state changed during init (now \(self.appState.meetingRecordingState)), aborting")
+            let recordingStateAfterStart = appState.meetingRecordingState
+            guard recordingStateAfterStart == .processing else {
+                Log.app
+                    .warning(
+                        "startMeetingRecording: state changed during init (now \(recordingStateAfterStart)), aborting"
+                    )
                 await meetingRecorderService.cancelRecording()
                 if let token = meetingActivityToken {
                     ProcessInfo.processInfo.endActivity(token)
@@ -227,7 +241,6 @@ extension AppDelegate {
 
     // MARK: - Real-Time Transcription Setup
 
-    @available(macOS 13.0, *)
     private func setupRealtimeTranscription() async -> LiveTranscriptStore {
         let store = await MainActor.run { LiveTranscriptStore() }
 
@@ -268,7 +281,7 @@ extension AppDelegate {
 
             try await rtService.connect(
                 languageHints: languageHints,
-                strictLanguageHints: !languageHints.isEmpty,
+                strictLanguageHints: !languageHints.isEmpty
             )
             await MainActor.run {
                 store.isActive = true
@@ -301,8 +314,6 @@ extension AppDelegate {
 
     func stopMeetingRecording() async {
         Log.app.info("stopMeetingRecording: BEGIN")
-
-        guard #available(macOS 13.0, *) else { return }
 
         // Deactivate chapter bookmark hotkey
         hotkeyService.unregisterChapterHotkey()
@@ -381,8 +392,12 @@ extension AppDelegate {
                 Log.app.info("Saving meeting recording without automatic transcription")
             }
 
-            guard appState.meetingRecordingState == .processing else {
-                Log.app.warning("stopMeetingRecording: state changed during processing (now \(self.appState.meetingRecordingState)), dropping result")
+            let processingState = appState.meetingRecordingState
+            guard processingState == .processing else {
+                Log.app
+                    .warning(
+                        "stopMeetingRecording: state changed during processing (now \(processingState)), dropping result"
+                    )
                 return
             }
 
@@ -477,16 +492,19 @@ extension AppDelegate {
                 RecoveryStateManager.shared.clearState()
             }
 
-            guard appState.meetingRecordingState == .processing else {
-                Log.app.warning("stopMeetingRecording: state changed during processing (now \(self.appState.meetingRecordingState)), dropping error")
+            let processingState = appState.meetingRecordingState
+            guard processingState == .processing else {
+                Log.app
+                    .warning(
+                        "stopMeetingRecording: state changed during processing (now \(processingState)), dropping error"
+                    )
                 return
             }
 
-            let userMessage: String
-            if let transcriptionError = error as? TranscriptionError {
-                userMessage = transcriptionError.localizedDescription
+            let userMessage: String = if let transcriptionError = error as? TranscriptionError {
+                transcriptionError.localizedDescription
             } else {
-                userMessage = "Transcription failed: \(error.localizedDescription). Audio saved to Recordings."
+                "Transcription failed: \(error.localizedDescription). Audio saved to Recordings."
             }
 
             await MainActor.run {
@@ -520,14 +538,13 @@ extension AppDelegate {
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(1.6))
                 guard let self,
-                      self.appState.meetingRecordingState == .recording else { return }
+                      appState.meetingRecordingState == .recording else { return }
                 NotchManager.shared.startRecording(mode: .meeting)
             }
         }
 
         // On second shortcut press (confirmed cancel): cancel recording
         escapeService.onCancel = { [weak self] in
-            guard #available(macOS 13.0, *) else { return }
             Task { @MainActor in
                 let shouldSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
                 await self?.cancelMeetingRecording()
@@ -538,5 +555,4 @@ extension AppDelegate {
 
         escapeService.activate()
     }
-
 }

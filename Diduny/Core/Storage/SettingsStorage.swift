@@ -10,7 +10,7 @@ final class SettingsStorage {
         "е-е",
         "ем",
         "мм",
-        "ммм",
+        "ммм"
     ]
     private static let englishFillerWordPreset = [
         "uh",
@@ -28,13 +28,14 @@ final class SettingsStorage {
         "you know",
         "i mean",
         "kind of",
-        "sort of",
+        "sort of"
     ]
     private static let defaultFillerWords = normalizedFillerWords(baseFillerWords + englishFillerWordPreset)
 
     private enum Key: String {
         case selectedDeviceUID // Legacy — kept for migration only
         case preferredDeviceUID
+        case microphoneSelectionStrategy
         case autoPaste
         case playSoundOnCompletion
         case launchAtLogin
@@ -83,12 +84,20 @@ final class SettingsStorage {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        var uid: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
+        var size = UInt32(MemoryLayout<CFString?>.size)
         let deviceID = AudioDeviceID(legacyValue)
-        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, &uid)
-        guard status == noErr else { return } // keep legacy key for retry on next launch
-        defaults.set(uid as String, forKey: Key.selectedDeviceUID.rawValue)
+        let uid: String? = withUnsafeTemporaryAllocation(
+            of: UInt8.self,
+            capacity: Int(size)
+        ) { buffer -> String? in
+            guard let baseAddress = buffer.baseAddress else { return nil }
+            let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, baseAddress)
+            guard status == noErr else { return nil }
+            let cfValue = baseAddress.withMemoryRebound(to: CFString?.self, capacity: 1) { $0.pointee }
+            return cfValue as String?
+        }
+        guard let uid else { return } // keep legacy key for retry on next launch
+        defaults.set(uid, forKey: Key.selectedDeviceUID.rawValue)
         defaults.removeObject(forKey: legacyKey)
     }
 
@@ -126,6 +135,20 @@ final class SettingsStorage {
             } else {
                 defaults.removeObject(forKey: Key.preferredDeviceUID.rawValue)
             }
+        }
+    }
+
+    var microphoneSelectionStrategy: MicrophoneSelectionStrategy {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.microphoneSelectionStrategy.rawValue),
+                  let strategy = MicrophoneSelectionStrategy(rawValue: rawValue)
+            else {
+                return .auto
+            }
+            return strategy
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.microphoneSelectionStrategy.rawValue)
         }
     }
 
@@ -469,9 +492,9 @@ final class SettingsStorage {
     // MARK: - Proxy Settings
 
     #if DEV_BUILD
-    private static let defaultProxyBaseURL = "http://localhost:3000"
+        private static let defaultProxyBaseURL = "http://localhost:3000"
     #else
-    private static let defaultProxyBaseURL = "https://diduny-ears-proxy.fly.dev"
+        private static let defaultProxyBaseURL = "https://diduny-ears-proxy.fly.dev"
     #endif
 
     var proxyBaseURL: String {
@@ -489,7 +512,6 @@ final class SettingsStorage {
             }
         }
     }
-
 }
 
 extension Notification.Name {

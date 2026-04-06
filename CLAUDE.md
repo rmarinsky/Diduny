@@ -4,7 +4,7 @@
 
 **Diduny** is a native macOS menu bar application for voice dictation. It records audio, transcribes it via a cloud proxy, and pastes the result.
 
-- **Platform:** macOS 14.0+ (Sonoma)
+- **Platform:** macOS 15.0+ (Sequoia)
 - **Language:** Swift / SwiftUI
 - **App Type:** Menu bar app (LSUIElement = YES, no dock icon)
 - **Transcription:** Proxy-only (all cloud API calls routed through proxy)

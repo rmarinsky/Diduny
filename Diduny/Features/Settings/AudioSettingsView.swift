@@ -16,17 +16,23 @@ struct AudioSettingsView: View {
         Form {
             Section {
                 // System Default option
-                let isSystemDefault = deviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID) == nil
-                HStack(spacing: 10) {
+                let effectiveUID = deviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID)
+                let isSystemDefault = effectiveUID == nil
+                let preferredIsStale = appState.preferredDeviceUID != nil && effectiveUID == nil
+                HStack(spacing: 8) {
                     RadioButton(isSelected: isSystemDefault) {
                         appState.preferredDeviceUID = nil
                     }
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text("System Default")
                             .foregroundColor(isSystemDefault ? .primary : .secondary)
 
-                        if let defaultName = deviceManager.defaultDevice?.name {
+                        if preferredIsStale {
+                            Text("Unavailable selection → System Default")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        } else if isSystemDefault, let defaultName = deviceManager.defaultDevice?.name {
                             Text(defaultName)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
@@ -42,29 +48,22 @@ struct AudioSettingsView: View {
 
                 // Device list
                 ForEach(deviceManager.availableDevices) { device in
-                    let isSelected = deviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID) == device.uid
+                    let isSelected = deviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID) == device
+                        .uid
 
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         RadioButton(isSelected: isSelected) {
                             appState.preferredDeviceUID = device.uid
                         }
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 1) {
                             Text(device.name)
                                 .foregroundColor(isSelected ? .primary : .secondary)
 
-                            HStack(spacing: 4) {
-                                if device.isDefault {
-                                    Text("Default")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                if device.transportType != .unknown {
-                                    Text(device.transportType.displayName)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
+                            Text(deviceSubtitle(for: device))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
                         }
 
                         Spacer()
@@ -76,10 +75,6 @@ struct AudioSettingsView: View {
                 }
             } header: {
                 Text("Input Device")
-            } footer: {
-                Text("Virtual and aggregate audio devices are hidden as they are not suitable for voice dictation.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
 
             // Test Recording Section
@@ -132,7 +127,10 @@ struct AudioSettingsView: View {
                                         .frame(height: 8)
                                     RoundedRectangle(cornerRadius: 4)
                                         .fill(levelColor)
-                                        .frame(width: geometry.size.width * CGFloat(testRecorderService.audioLevel), height: 8)
+                                        .frame(
+                                            width: geometry.size.width * CGFloat(testRecorderService.audioLevel),
+                                            height: 8
+                                        )
                                 }
                             }
                             .frame(height: 8)
@@ -173,6 +171,17 @@ struct AudioSettingsView: View {
 
     private var isTestRecording: Bool {
         testRecorderService.isRecording
+    }
+
+    private func deviceSubtitle(for device: AudioDevice) -> String {
+        var parts: [String] = []
+        if device.isDefault {
+            parts.append("Default")
+        }
+        if device.transportType != .unknown {
+            parts.append(device.transportType.displayName)
+        }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Test Recording Methods

@@ -10,6 +10,7 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
             onDevicesChanged?(availableDevices)
         }
     }
+
     private(set) var defaultDevice: AudioDevice?
 
     @ObservationIgnored
@@ -49,10 +50,60 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
         availableDevices.first { $0.uid == uid }
     }
 
+    func score(for device: AudioDevice, strategy: MicrophoneSelectionStrategy) -> AudioDeviceScore {
+        let score: Int
+        let summary: String
+
+        switch strategy {
+        case .manual:
+            score = 0
+            summary = "Manual selection"
+        case .auto:
+            score = autoScore(for: device)
+            summary = autoSummary(for: device)
+        case .preferNoiseReduction:
+            score = noiseReductionScore(for: device)
+            summary = noiseReductionSummary(for: device)
+        case .preferFidelity:
+            score = fidelityScore(for: device)
+            summary = fidelitySummary(for: device)
+        }
+
+        return AudioDeviceScore(total: score, summary: summary)
+    }
+
+    func recommendedDevice(strategy: MicrophoneSelectionStrategy) -> AudioDevice? {
+        guard !availableDevices.isEmpty else { return nil }
+        guard strategy != .manual else { return defaultDevice ?? bestDevice() ?? availableDevices.first }
+
+        return availableDevices.max { lhs, rhs in
+            let leftScore = score(for: lhs, strategy: strategy).total
+            let rightScore = score(for: rhs, strategy: strategy).total
+            if leftScore != rightScore {
+                return leftScore < rightScore
+            }
+            if lhs.transportType != rhs.transportType {
+                return lhs.transportType.priority > rhs.transportType.priority
+            }
+            if lhs.sampleRate != rhs.sampleRate {
+                return lhs.sampleRate < rhs.sampleRate
+            }
+            return lhs.inputChannels < rhs.inputChannels
+        }
+    }
+
     /// Resolve the device to use for recording.
     /// - `nil` preferredUID → System Default path (default → best → first), `didFallback = false`
     /// - non-nil preferredUID → look up in list; if missing, fallback chain with `didFallback = true`
     func resolveDevice(preferredUID: String?) -> (device: AudioDevice?, didFallback: Bool) {
+        resolveDevice(preferredUID: preferredUID, strategy: .manual)
+    }
+
+    /// Resolve the device to use for recording with strategy support.
+    /// Explicit device selection always wins; strategy is used only for System Default mode.
+    func resolveDevice(preferredUID: String?,
+                       strategy: MicrophoneSelectionStrategy) -> (device: AudioDevice?, didFallback: Bool)
+    {
         if let uid = preferredUID {
             // Preferred device set — try to find it
             if let device = device(forUID: uid) {
@@ -68,7 +119,15 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
         }
 
         // nil = System Default
-        return (defaultDevice ?? bestDevice() ?? availableDevices.first, false)
+        switch strategy {
+        case .manual:
+            return (defaultDevice ?? bestDevice() ?? availableDevices.first, false)
+        case .auto, .preferNoiseReduction, .preferFidelity:
+            return (
+                recommendedDevice(strategy: strategy) ?? defaultDevice ?? bestDevice() ?? availableDevices.first,
+                false
+            )
+        }
     }
 
     /// Score-based auto-detection: picks the best microphone based on transport type and capabilities.
@@ -304,7 +363,8 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
     }
 
     private func setupDeviceChangeListener() {
-        var propertyAddress = AudioObjectPropertyAddress(
+        // Listen for device list changes (connect/disconnect)
+        var devicesAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
@@ -312,7 +372,22 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
 
         AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
-            &propertyAddress,
+            &devicesAddress,
+            DispatchQueue.main
+        ) { [weak self] _, _ in
+            self?.debouncedRefresh()
+        }
+
+        // Listen for default input device changes (user switches in System Settings)
+        var defaultInputAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &defaultInputAddress,
             DispatchQueue.main
         ) { [weak self] _, _ in
             self?.debouncedRefresh()
@@ -326,5 +401,117 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
         }
         debounceWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: workItem)
+    }
+
+    private func autoScore(for device: AudioDevice) -> Int {
+        var score = baseHardwareScore(for: device)
+
+        if device.isAirPodsLike {
+            score += 24
+        } else if device.isHeadsetLike {
+            score += 18
+        }
+
+        if device.isBuiltInMic {
+            score += 12
+        }
+
+        if device.isBluetooth, !device.isHeadsetLike {
+            score -= 8
+        }
+
+        return score
+    }
+
+    private func noiseReductionScore(for device: AudioDevice) -> Int {
+        var score = baseHardwareScore(for: device)
+
+        if device.isAirPodsLike {
+            score += 32
+        } else if device.isHeadsetLike {
+            score += 24
+        }
+
+        if device.isBuiltInMic {
+            score -= 6
+        }
+
+        return score
+    }
+
+    private func fidelityScore(for device: AudioDevice) -> Int {
+        var score = baseHardwareScore(for: device)
+        score += Int(device.sampleRate / 2000)
+
+        switch device.transportType {
+        case .usb:
+            score += 28
+        case .thunderbolt, .firewire:
+            score += 24
+        case .builtIn:
+            score += 18
+        case .bluetooth:
+            score -= 20
+        case .aggregate, .virtual, .unknown:
+            break
+        }
+
+        if device.isAirPodsLike {
+            score -= 8
+        }
+
+        return score
+    }
+
+    private func baseHardwareScore(for device: AudioDevice) -> Int {
+        var score = 0
+        score += min(device.inputChannels, 2) * 4
+        score += Int(min(device.sampleRate, 48000) / 4000)
+        if device.isDefault {
+            score += 2
+        }
+        return score
+    }
+
+    private func autoSummary(for device: AudioDevice) -> String {
+        if device.isAirPodsLike {
+            return "Good balance for speech in noise"
+        }
+        if device.isHeadsetLike {
+            return "Headset mic with strong voice focus"
+        }
+        if device.isBuiltInMic {
+            return "Balanced fallback with wider capture"
+        }
+        if device.transportType == .usb || device.transportType == .thunderbolt || device.transportType == .firewire {
+            return "External mic with strong overall quality"
+        }
+        return device.qualityHint
+    }
+
+    private func noiseReductionSummary(for device: AudioDevice) -> String {
+        if device.isAirPodsLike {
+            return "Best for noisy places and close speech pickup"
+        }
+        if device.isHeadsetLike {
+            return "Headset-style mic preferred in noise"
+        }
+        if device.isBuiltInMic {
+            return "Usable, but may capture more room noise"
+        }
+        return device.qualityHint
+    }
+
+    private func fidelitySummary(for device: AudioDevice) -> String {
+        if device.transportType == .usb || device.transportType == .thunderbolt || device.transportType == .firewire {
+            return "Preferred for cleaner, fuller-band capture"
+        }
+        if device.isBuiltInMic {
+            return "Good bandwidth, but more room pickup"
+        }
+        if device.isBluetooth {
+            return "Voice-optimized, but bandwidth-limited"
+        }
+        return device.qualityHint
     }
 }

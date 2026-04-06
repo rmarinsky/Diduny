@@ -1,5 +1,14 @@
 import Foundation
 
+struct RecordingDeviceInfo: Codable, Equatable {
+    let uid: String
+    let name: String
+    let transportType: String
+    let sampleRate: Double
+    let channelCount: Int
+    let wasDefaultRoute: Bool
+}
+
 struct Recording: Identifiable, Codable, Equatable {
     let id: UUID
     let createdAt: Date
@@ -12,8 +21,9 @@ struct Recording: Identifiable, Codable, Equatable {
     var errorMessage: String?
     var processedAt: Date?
     var chapters: [MeetingChapter]?
+    let sourceDevice: RecordingDeviceInfo?
 
-    // Nested to avoid conflict with RecoveryState.RecordingType
+    /// Nested to avoid conflict with RecoveryState.RecordingType
     enum RecordingType: String, Codable, CaseIterable {
         case voice
         case translation

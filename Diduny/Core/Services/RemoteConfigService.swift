@@ -119,9 +119,9 @@ final class RemoteConfigService: @unchecked Sendable {
                 return
             }
 
-            lock.lock()
-            cachedConfig = config
-            lock.unlock()
+            lock.withLock {
+                cachedConfig = config
+            }
 
             UserDefaults.standard.set(data, forKey: cacheKey)
             UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: cacheTimestampKey)
