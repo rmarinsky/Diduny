@@ -439,7 +439,14 @@ final class SystemAudioCaptureService: NSObject {
 extension SystemAudioCaptureService: SCStreamDelegate {
     func stream(_: SCStream, didStopWithError error: Error) {
         Log.audio.error("Stream stopped with error: \(error)")
+        stopMicrophoneCapture()
+        stream = nil
         isCapturing = false
+        audioFile = nil
+        outputFormat = nil
+        systemBuffer.removeAll()
+        micBuffer.removeAll()
+        microphoneCaptureStarted = false
         onError?(error)
     }
 }
@@ -650,7 +657,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
         }
         guard frameCount > 0 else { return nil }
 
-        if self.sampleCount <= 3 {
+        if sampleCount <= 3 {
             Log.audio
                 .info(
                     "Audio sample \(self.sampleCount): frames=\(frameCount), sampleRate=\(asbd.pointee.mSampleRate), ch=\(channelCount), bits=\(bitsPerChannel), float=\(isFloat)"

@@ -171,7 +171,7 @@ extension AppDelegate {
         }
 
         // Provider-specific validation for Local mode
-        if SettingsStorage.shared.translationProvider == .local {
+        if SettingsStorage.shared.effectiveTranslationProvider == .local {
             guard let model = WhisperModelManager.shared.selectedModel() else {
                 Log.app.warning("startTranslationRecording: No Whisper model selected")
                 await MainActor.run {
@@ -359,7 +359,7 @@ extension AppDelegate {
             if !realtimeResult.text.isEmpty {
                 text = realtimeResult.text
                 Log.app.info("stopTranslationRecording: Using realtime translation (\(text.count) chars)")
-            } else if SettingsStorage.shared.translationProvider == .local {
+            } else if SettingsStorage.shared.effectiveTranslationProvider == .local {
                 // Local Whisper — no WebSocket, transcribe from audio
                 text = try await whisperTranscriptionService.translateAndTranscribe(audioData: audioData)
                 Log.app.info("stopTranslationRecording: Local Whisper translation (\(text.count) chars)")
@@ -478,7 +478,7 @@ extension AppDelegate {
     // MARK: - Realtime Translation (WebSocket)
 
     private func setupRealtimeTranslationIfNeeded() {
-        guard SettingsStorage.shared.translationProvider == .cloud else {
+        guard SettingsStorage.shared.effectiveTranslationProvider == .cloud else {
             audioRecorder.onRealtimeAudioData = nil
             translationRealtimeSessionEnabled = false
             translationRealtimeAccumulator = nil

@@ -121,7 +121,7 @@ extension AppDelegate {
             return
         }
 
-        let cloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
+        let cloudModeEnabled = SettingsStorage.shared.effectiveMeetingRealtimeTranscriptionEnabled
 
         // Prevent App Nap during meeting recording
         meetingActivityToken = ProcessInfo.processInfo.beginActivity(
@@ -139,27 +139,31 @@ extension AppDelegate {
             meetingRecorderService.audioSource = SettingsStorage.shared.meetingAudioSource
             meetingRecorderService.onRealtimeAudioData = nil
 
-            // Set microphone device for mixed recording
-            let (device, didFallback) = audioDeviceManager.resolveDevice(
-                preferredUID: appState.preferredDeviceUID
-            )
-            if let device {
-                Log.app.info(
-                    "startMeetingRecording: Device resolution result = \(device.name), transport=\(device.transportType.displayName), sampleRate=\(Int(device.sampleRate)), uid=\(device.uid)"
+            if meetingRecorderService.audioSource == .systemPlusMicrophone {
+                let (device, didFallback) = audioDeviceManager.resolveDevice(
+                    preferredUID: appState.preferredDeviceUID
                 )
-            }
-            if didFallback, let name = device?.name {
-                Log.app.warning("startMeetingRecording: Preferred device unavailable, using \(name)")
-                appState.deviceFallbackWarning = "Selected microphone unavailable. Using \(name)"
-                if device?.isDefault == true {
-                    appState.preferredDeviceUID = nil
-                    Log.app
-                        .info(
-                            "startMeetingRecording: Cleared stale preferred microphone UID and switched to System Default"
-                        )
+                if let device {
+                    Log.app.info(
+                        "startMeetingRecording: Device resolution result = \(device.name), transport=\(device.transportType.displayName), sampleRate=\(Int(device.sampleRate)), uid=\(device.uid)"
+                    )
                 }
+                if didFallback, let name = device?.name {
+                    Log.app.warning("startMeetingRecording: Preferred device unavailable, using \(name)")
+                    appState.deviceFallbackWarning = "Selected microphone unavailable. Using \(name)"
+                    if device?.isDefault == true {
+                        appState.preferredDeviceUID = nil
+                        Log.app
+                            .info(
+                                "startMeetingRecording: Cleared stale preferred microphone UID and switched to System Default"
+                            )
+                    }
+                }
+                meetingRecorderService.microphoneDevice = device
+            } else {
+                meetingRecorderService.microphoneDevice = nil
+                appState.deviceFallbackWarning = nil
             }
-            meetingRecorderService.microphoneDevice = device
 
             try await meetingRecorderService.startRecording()
             Log.app.info("Meeting recording started")
@@ -357,6 +361,15 @@ extension AppDelegate {
         let stopTime = Date()
         let recordingId = UUID()
 
+        func cleanupTemporaryAudio() {
+            if let wavURL = originalWavURL {
+                try? FileManager.default.removeItem(at: wavURL)
+            }
+            if let audioURL = capturedAudioURL {
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+        }
+
         do {
             guard let audioURL = try await meetingRecorderService.stopRecording() else {
                 throw MeetingRecorderError.recordingFailed
@@ -374,7 +387,7 @@ extension AppDelegate {
             }
 
             let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
-            let cloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
+            let cloudModeEnabled = SettingsStorage.shared.effectiveMeetingRealtimeTranscriptionEnabled
 
             let text: String?
             if !realtimeText.isEmpty {
@@ -398,6 +411,8 @@ extension AppDelegate {
                     .warning(
                         "stopMeetingRecording: state changed during processing (now \(processingState)), dropping result"
                     )
+                cleanupTemporaryAudio()
+                RecoveryStateManager.shared.clearState()
                 return
             }
 
@@ -461,12 +476,7 @@ extension AppDelegate {
 
         } catch is CancellationError {
             Log.app.info("stopMeetingRecording: Cancelled")
-            if let wavURL = originalWavURL {
-                try? FileManager.default.removeItem(at: wavURL)
-            }
-            if let audioURL = capturedAudioURL {
-                try? FileManager.default.removeItem(at: audioURL)
-            }
+            cleanupTemporaryAudio()
             RecoveryStateManager.shared.clearState()
             await MainActor.run {
                 appState.meetingRecordingState = .idle
@@ -485,10 +495,7 @@ extension AppDelegate {
                     type: .meeting,
                     duration: duration
                 )
-                if let wavURL = originalWavURL {
-                    try? FileManager.default.removeItem(at: wavURL)
-                }
-                try? FileManager.default.removeItem(at: audioURL)
+                cleanupTemporaryAudio()
                 RecoveryStateManager.shared.clearState()
             }
 

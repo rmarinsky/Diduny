@@ -340,6 +340,10 @@ final class SettingsStorage {
         }
     }
 
+    var effectiveTranscriptionProvider: TranscriptionProvider {
+        transcriptionProvider == .cloud && !AuthService.hasStoredSession ? .local : transcriptionProvider
+    }
+
     var selectedWhisperModel: String {
         get { defaults.string(forKey: Key.selectedWhisperModel.rawValue) ?? "" }
         set { defaults.set(newValue, forKey: Key.selectedWhisperModel.rawValue) }
@@ -373,6 +377,10 @@ final class SettingsStorage {
         }
     }
 
+    var effectiveTranslationProvider: TranscriptionProvider {
+        translationProvider == .cloud && !AuthService.hasStoredSession ? .local : translationProvider
+    }
+
     // MARK: - Translation Realtime Socket
 
     /// Enables cloud realtime translation over websocket during translation recording.
@@ -402,6 +410,10 @@ final class SettingsStorage {
     var meetingRealtimeTranscriptionEnabled: Bool {
         get { defaults.bool(forKey: Key.meetingRealtimeTranscriptionEnabled.rawValue) }
         set { defaults.set(newValue, forKey: Key.meetingRealtimeTranscriptionEnabled.rawValue) }
+    }
+
+    var effectiveMeetingRealtimeTranscriptionEnabled: Bool {
+        meetingRealtimeTranscriptionEnabled && AuthService.hasStoredSession
     }
 
     // MARK: - Escape Cancel

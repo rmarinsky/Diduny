@@ -252,9 +252,9 @@ struct MenuBarContentView: View {
 
     private var isCloudMode: Bool {
         let settings = SettingsStorage.shared
-        return settings.transcriptionProvider == .cloud
-            && settings.translationProvider == .cloud
-            && settings.meetingRealtimeTranscriptionEnabled
+        return settings.effectiveTranscriptionProvider == .cloud
+            && settings.effectiveTranslationProvider == .cloud
+            && settings.effectiveMeetingRealtimeTranscriptionEnabled
     }
 
     private func selectCloudMode() {

@@ -25,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let appState = AppState()
 
-    // Audio level piping to notch
+    /// Audio level piping to notch
     var audioLevelCancellable: AnyCancellable?
 
     // App Nap prevention tokens
@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var translationRealtimeConnectionTask: Task<Void, Never>?
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
-        switch SettingsStorage.shared.transcriptionProvider {
+        switch SettingsStorage.shared.effectiveTranscriptionProvider {
         case .cloud: transcriptionService
         case .local: whisperTranscriptionService
         }
@@ -141,20 +141,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Enforce local provider if not logged in (cloud requires auth)
         if !AuthService.shared.isLoggedIn {
-            if SettingsStorage.shared.transcriptionProvider == .cloud {
-                SettingsStorage.shared.transcriptionProvider = .local
-                Log.app.warning("[Auth] Not logged in — switched to local provider")
-            }
-            if SettingsStorage.shared.translationProvider == .cloud {
-                SettingsStorage.shared.translationProvider = .local
-                Log.app.warning("[Auth] Not logged in — switched translation to local provider")
-            }
-            if SettingsStorage.shared.meetingRealtimeTranscriptionEnabled {
-                SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = false
-                Log.app.warning("[Auth] Not logged in — disabled meeting cloud mode")
-            }
+            Log.app.info("[Auth] Not logged in — cloud preferences remain stored, runtime uses local fallback")
         }
     }
 
@@ -206,23 +194,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let service = activeTranscriptionService
                     text = try await service.transcribe(audioData: audioData)
                 case .meeting:
-                    if SettingsStorage.shared.transcriptionProvider == .cloud {
+                    if SettingsStorage.shared.effectiveTranscriptionProvider == .cloud {
                         text = try await transcriptionService.transcribeMeeting(audioData: audioData)
                     } else {
                         text = try await whisperTranscriptionService.transcribe(audioData: audioData)
                     }
                 case .translation, .meetingTranslation:
-                    let service: TranscriptionServiceProtocol = SettingsStorage.shared.translationProvider == .local
+                    let service: TranscriptionServiceProtocol = SettingsStorage.shared
+                        .effectiveTranslationProvider == .local
                         ? whisperTranscriptionService : transcriptionService
                     text = try await service.translateAndTranscribe(audioData: audioData)
                 }
 
-                let copyBehavior: ClipboardCopyBehavior
-                switch state.recordingType {
+                let copyBehavior: ClipboardCopyBehavior = switch state.recordingType {
                 case .voice, .translation:
-                    copyBehavior = .cleaned
+                    .cleaned
                 case .meeting, .meetingTranslation:
-                    copyBehavior = .raw
+                    .raw
                 }
 
                 clipboardService.copy(text: text, behavior: copyBehavior)
@@ -312,30 +300,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .seconds(delay))
             guard let self else { return }
 
-            if self.appState.meetingRecordingState == .recording {
+            if appState.meetingRecordingState == .recording {
                 NotchManager.shared.startRecording(mode: .meeting)
                 return
             }
-            if self.appState.meetingRecordingState == .processing {
+            if appState.meetingRecordingState == .processing {
                 NotchManager.shared.startProcessing(mode: .meeting)
                 return
             }
 
-            let translationMode: RecordingMode = .translation(languagePair: self.translationPairLabel)
-            if self.appState.translationRecordingState == .recording {
+            let translationMode: RecordingMode = .translation(languagePair: translationPairLabel)
+            if appState.translationRecordingState == .recording {
                 NotchManager.shared.startRecording(mode: translationMode)
                 return
             }
-            if self.appState.translationRecordingState == .processing {
+            if appState.translationRecordingState == .processing {
                 NotchManager.shared.startProcessing(mode: translationMode)
                 return
             }
 
-            if self.appState.recordingState == .recording {
+            if appState.recordingState == .recording {
                 NotchManager.shared.startRecording(mode: .voice)
                 return
             }
-            if self.appState.recordingState == .processing {
+            if appState.recordingState == .processing {
                 NotchManager.shared.startProcessing(mode: .voice)
             }
         }
@@ -379,6 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - State Change Handlers
+
     // Note: These are called directly from recording methods after state changes
     // Since @Observable doesn't use Combine publishers like ObservableObject
 

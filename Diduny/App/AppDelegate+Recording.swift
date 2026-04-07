@@ -158,7 +158,7 @@ extension AppDelegate {
         }
 
         // Provider-specific validation
-        switch SettingsStorage.shared.transcriptionProvider {
+        switch SettingsStorage.shared.effectiveTranscriptionProvider {
         case .cloud:
             Log.app.info("startRecording: Cloud provider selected")
         case .local:
@@ -365,7 +365,7 @@ extension AppDelegate {
             if !realtimeResult.text.isEmpty {
                 text = realtimeResult.text
                 Log.app.info("stopRecording: Using realtime transcription (\(text.count) chars)")
-            } else if SettingsStorage.shared.transcriptionProvider == .local {
+            } else if SettingsStorage.shared.effectiveTranscriptionProvider == .local {
                 // Local Whisper — needs original WAV data
                 text = try await whisperTranscriptionService.transcribe(audioData: audioData)
                 Log.app.info("stopRecording: Local Whisper transcription (\(text.count) chars)")
@@ -546,7 +546,7 @@ extension AppDelegate {
     // MARK: - Realtime Transcription (WebSocket)
 
     private func setupVoiceRealtimeTranscriptionIfNeeded() {
-        guard SettingsStorage.shared.transcriptionProvider == .cloud else {
+        guard SettingsStorage.shared.effectiveTranscriptionProvider == .cloud else {
             audioRecorder.onRealtimeAudioData = nil
             voiceRealtimeSessionEnabled = false
             voiceRealtimeAccumulator = nil

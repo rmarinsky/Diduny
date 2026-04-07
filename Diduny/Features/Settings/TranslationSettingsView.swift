@@ -83,11 +83,13 @@ struct TranslationSettingsView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
+        .onAppear {
+            translationProvider = SettingsStorage.shared.translationProvider
+        }
     }
 
     // MARK: - Local (Whisper) Translation
 
-    @ViewBuilder
     private var localTranslationSection: some View {
         Section("Local Whisper Translation") {
             Label("Whisper translates any language to English only.", systemImage: "info.circle")

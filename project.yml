@@ -2,7 +2,7 @@ name: Diduny
 options:
   bundleIdPrefix: ua.com.rmarinsky
   deploymentTarget:
-    macOS: "15.0"
+    macOS: "14.0"
   xcodeVersion: "17.0"
 
 packages:

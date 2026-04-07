@@ -56,17 +56,22 @@ struct OfflineModelsSettingsView: View {
 
         Section {
             VStack(alignment: .leading, spacing: 4) {
-                Label("Models with the \"Translate\" badge can translate speech from any language to English.", systemImage: "info.circle")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Label("On Intel Macs, Whisper runs on CPU only \u{2014} smaller models (Tiny, Base, Small) are recommended.", systemImage: "desktopcomputer")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Label(
+                    "Models with the \"Translate\" badge can translate speech from any language to English.",
+                    systemImage: "info.circle"
+                )
+                .font(.caption)
+                .foregroundColor(.secondary)
+                Label(
+                    "On Intel Macs, Whisper runs on CPU only \u{2014} smaller models (Tiny, Base, Small) are recommended.",
+                    systemImage: "desktopcomputer"
+                )
+                .font(.caption)
+                .foregroundColor(.secondary)
             }
         }
     }
 
-    @ViewBuilder
     private func whisperModelRow(_ model: WhisperModelManager.WhisperModel) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center) {
@@ -175,7 +180,6 @@ struct OfflineModelsSettingsView: View {
         }
     }
 
-    @ViewBuilder
     private func metricView(label: String, value: Double) -> some View {
         HStack(spacing: 4) {
             Text(label)
@@ -206,7 +210,6 @@ struct OfflineModelsSettingsView: View {
 
     // MARK: - Whisper Language & Prompt
 
-    @ViewBuilder
     private var whisperLanguageSection: some View {
         Section("Whisper Language & Prompt") {
             Picker("Language", selection: $whisperLanguage) {
@@ -230,14 +233,16 @@ struct OfflineModelsSettingsView: View {
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(.quaternary, lineWidth: 1)
                     )
-                    .onChange(of: whisperPrompt) { _, newValue in
-                        SettingsStorage.shared.whisperPrompt = newValue
-                    }
 
-                Text("Guides the Whisper decoder. Write a sentence in your target language to improve recognition. Example for Ukrainian: \"\u{041F}\u{0440}\u{0438}\u{0432}\u{0456}\u{0442}, \u{0446}\u{0435} \u{0442}\u{0440}\u{0430}\u{043D}\u{0441}\u{043A}\u{0440}\u{0438}\u{043F}\u{0446}\u{0456}\u{044F} \u{0443}\u{043A}\u{0440}\u{0430}\u{0457}\u{043D}\u{0441}\u{044C}\u{043A}\u{043E}\u{044E} \u{043C}\u{043E}\u{0432}\u{043E}\u{044E}.\"")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Text(
+                    "Guides the Whisper decoder. Write a sentence in your target language to improve recognition. Example for Ukrainian: \"\u{041F}\u{0440}\u{0438}\u{0432}\u{0456}\u{0442}, \u{0446}\u{0435} \u{0442}\u{0440}\u{0430}\u{043D}\u{0441}\u{043A}\u{0440}\u{0438}\u{043F}\u{0446}\u{0456}\u{044F} \u{0443}\u{043A}\u{0440}\u{0430}\u{0457}\u{043D}\u{0441}\u{044C}\u{043A}\u{043E}\u{044E} \u{043C}\u{043E}\u{0432}\u{043E}\u{044E}.\""
+                )
+                .font(.caption)
+                .foregroundColor(.secondary)
             }
+        }
+        .onDisappear {
+            SettingsStorage.shared.whisperPrompt = whisperPrompt
         }
     }
 }

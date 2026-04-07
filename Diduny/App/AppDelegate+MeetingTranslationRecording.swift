@@ -143,27 +143,31 @@ extension AppDelegate {
             meetingRecorderService.audioSource = SettingsStorage.shared.meetingAudioSource
             meetingRecorderService.onRealtimeAudioData = nil
 
-            // Set microphone device for mixed recording
-            let (device, didFallback) = audioDeviceManager.resolveDevice(
-                preferredUID: appState.preferredDeviceUID
-            )
-            if let device {
-                Log.app.info(
-                    "startMeetingTranslationRecording: Device resolution result = \(device.name), transport=\(device.transportType.displayName), sampleRate=\(Int(device.sampleRate)), uid=\(device.uid)"
+            if meetingRecorderService.audioSource == .systemPlusMicrophone {
+                let (device, didFallback) = audioDeviceManager.resolveDevice(
+                    preferredUID: appState.preferredDeviceUID
                 )
-            }
-            if didFallback, let name = device?.name {
-                Log.app.warning("startMeetingTranslationRecording: Preferred device unavailable, using \(name)")
-                appState.deviceFallbackWarning = "Selected microphone unavailable. Using \(name)"
-                if device?.isDefault == true {
-                    appState.preferredDeviceUID = nil
-                    Log.app
-                        .info(
-                            "startMeetingTranslationRecording: Cleared stale preferred microphone UID and switched to System Default"
-                        )
+                if let device {
+                    Log.app.info(
+                        "startMeetingTranslationRecording: Device resolution result = \(device.name), transport=\(device.transportType.displayName), sampleRate=\(Int(device.sampleRate)), uid=\(device.uid)"
+                    )
                 }
+                if didFallback, let name = device?.name {
+                    Log.app.warning("startMeetingTranslationRecording: Preferred device unavailable, using \(name)")
+                    appState.deviceFallbackWarning = "Selected microphone unavailable. Using \(name)"
+                    if device?.isDefault == true {
+                        appState.preferredDeviceUID = nil
+                        Log.app
+                            .info(
+                                "startMeetingTranslationRecording: Cleared stale preferred microphone UID and switched to System Default"
+                            )
+                    }
+                }
+                meetingRecorderService.microphoneDevice = device
+            } else {
+                meetingRecorderService.microphoneDevice = nil
+                appState.deviceFallbackWarning = nil
             }
-            meetingRecorderService.microphoneDevice = device
 
             try await meetingRecorderService.startRecording()
             Log.app.info("Meeting translation recording started")

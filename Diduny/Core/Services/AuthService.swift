@@ -5,6 +5,9 @@ import os
 @MainActor
 final class AuthService {
     static let shared = AuthService()
+    nonisolated static var hasStoredSession: Bool {
+        KeychainManager.shared.read(key: Keys.accessToken) != nil
+    }
 
     enum AuthState {
         case loggedOut
@@ -102,11 +105,7 @@ final class AuthService {
         try storeTokens(access: tokenResponse.accessToken, refresh: tokenResponse.refreshToken, email: email)
         authState = .loggedIn
 
-        // Switch to cloud processing now that the user is authenticated
-        SettingsStorage.shared.transcriptionProvider = .cloud
-        SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = true
-
-        Log.app.info("[Auth] Logged in as \(email), switched to cloud processing")
+        Log.app.info("[Auth] Logged in as \(email)")
     }
 
     func refreshTokens() async throws {
@@ -166,11 +165,7 @@ final class AuthService {
 
         clearTokens()
 
-        // Switch to local providers since cloud requires auth
-        SettingsStorage.shared.transcriptionProvider = .local
-        SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = false
-
-        Log.app.info("[Auth] Logged out, switched to local provider")
+        Log.app.info("[Auth] Logged out")
     }
 
     // MARK: - Token Access
@@ -181,7 +176,7 @@ final class AuthService {
 
         if Self.isTokenExpired(token) {
             do {
-                try await self.refreshTokens()
+                try await refreshTokens()
                 return KeychainManager.shared.read(key: Keys.accessToken)
             } catch {
                 Log.app.error("[Auth] Token refresh failed: \(error.localizedDescription)")
@@ -229,7 +224,12 @@ final class AuthService {
             guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
                 throw AuthError.invalidResponse
             }
-            HTTPLogger.logResponse(data: retryData, response: retryHttpResponse, requestId: retryRequestId, startTime: retryStart)
+            HTTPLogger.logResponse(
+                data: retryData,
+                response: retryHttpResponse,
+                requestId: retryRequestId,
+                startTime: retryStart
+            )
             return (retryData, retryHttpResponse)
         }
 

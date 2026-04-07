@@ -24,8 +24,9 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
     }
 
     func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String {
-        if targetLanguage != "en" {
+        if targetLanguage.lowercased() != "en" {
             Log.whisper.warning("Whisper can only translate to English, ignoring target language '\(targetLanguage)'")
+            return try await transcribe(audioData: audioData)
         }
         return try await translateAndTranscribe(audioData: audioData)
     }
@@ -52,10 +53,16 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         }
 
         let settings = SettingsStorage.shared
-        let language = settings.whisperLanguage.isEmpty || settings.whisperLanguage == "auto" ? nil : settings.whisperLanguage
+        let language = settings.whisperLanguage.isEmpty || settings.whisperLanguage == "auto" ? nil : settings
+            .whisperLanguage
         let prompt = settings.whisperPrompt.isEmpty ? nil : settings.whisperPrompt
 
-        let text = try await context.transcribe(samples: samples, language: language, initialPrompt: prompt, translate: translate)
+        let text = try await context.transcribe(
+            samples: samples,
+            language: language,
+            initialPrompt: prompt,
+            translate: translate
+        )
 
         guard !text.isEmpty else {
             throw TranscriptionError.emptyTranscription
