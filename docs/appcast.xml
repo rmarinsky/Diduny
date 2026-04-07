@@ -4,5 +4,17 @@
     <title>Diduny Updates</title>
     <description>Most recent changes with links to updates.</description>
     <language>en</language>
+      <item>
+    <title>Version 1.12.3</title>
+    <pubDate>Tue, 07 Apr 2026 10:31:33 +0000</pubDate>
+    <sparkle:version>69</sparkle:version>
+    <sparkle:shortVersionString>1.12.3</sparkle:shortVersionString>
+    <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+    <enclosure
+      url="https://github.com/rmarinsky/Diduny/releases/download/v1.12.3/Diduny-1.12.3.dmg"
+      sparkle:edSignature="suR+7U9s//SpRH22tDoSBUGdzVz9ZHmcFiO9tOcOdwq6knTIs3hhNQ+S/RAjt2rWRimbSwejT0KHH54PJTjdCQ=="
+      length="5588753"
+      type="application/octet-stream" />
+  </item>
   </channel>
 </rss>
