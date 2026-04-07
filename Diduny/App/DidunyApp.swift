@@ -15,7 +15,6 @@ struct DidunyApp: App {
                 onToggleMeetingRecording: { appDelegate.toggleMeetingRecording() },
                 onToggleMeetingTranslationRecording: { appDelegate.toggleMeetingTranslationRecording() },
                 onTranscribeFile: { appDelegate.transcribeFile() },
-                onSelectDevice: { device in appDelegate.selectDevice(device) },
                 onCheckForUpdates: { appDelegate.updaterManager.checkForUpdates() }
             )
             .environment(appDelegate.appState)
@@ -29,6 +28,15 @@ struct DidunyApp: App {
                     appDelegate.appState.shouldOpenSettings = false
                 }
             }
+            .onChange(of: appDelegate.appState.settingsTabToOpen) { _, tab in
+                if tab != nil {
+                    openSettings()
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(100))
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                }
+            }
         } label: {
             MenuBarIconView()
                 .environment(appDelegate.appState)
@@ -39,6 +47,7 @@ struct DidunyApp: App {
         Settings {
             SettingsView()
                 .environment(appDelegate.appState)
+                .environment(appDelegate.audioDeviceManager)
         }
     }
 }

@@ -15,9 +15,10 @@ CONFIG="Debug"
 APP_NAME="Diduny DEV"
 BUNDLE_ID="ua.com.rmarinsky.diduny.dev"
 BUILD_DIR="$PROJECT_DIR/build/dev-install"
-APP_PATH="$BUILD_DIR/${CONFIG}/${APP_NAME}.app"
+APP_PATH="$BUILD_DIR/Build/Products/${CONFIG}/${APP_NAME}.app"
 INSTALL_PATH="/Applications/${APP_NAME}.app"
 DESTINATION="platform=macOS,arch=$(uname -m)"
+PBXPROJ_PATH="$PROJECT_DIR/${PROJECT_NAME}.xcodeproj/project.pbxproj"
 
 echo "=== Clean Install: $APP_NAME ==="
 echo ""
@@ -46,8 +47,8 @@ echo "=== Building $APP_NAME ==="
 echo ""
 
 # Check if xcodegen is installed and project needs regenerating
-if [ ! -f "$PROJECT_DIR/${PROJECT_NAME}.xcodeproj/project.pbxproj" ]; then
-    echo "Xcode project not found. Generating..."
+if [ ! -f "$PBXPROJ_PATH" ] || [ "$PROJECT_DIR/project.yml" -nt "$PBXPROJ_PATH" ]; then
+    echo "Generating Xcode project..."
     if ! command -v xcodegen &> /dev/null; then
         if command -v brew &> /dev/null; then
             echo "XcodeGen not found. Installing via Homebrew..."
@@ -76,16 +77,18 @@ mkdir -p "$BUILD_DIR"
 
 # Build the app
 echo "Building $APP_NAME ($CONFIG)..."
-xcodebuild \
+if ! xcodebuild \
     -project "$PROJECT_DIR/${PROJECT_NAME}.xcodeproj" \
     -scheme "$SCHEME" \
     -configuration "$CONFIG" \
     -destination "$DESTINATION" \
     -derivedDataPath "$BUILD_DIR" \
-    CONFIGURATION_BUILD_DIR="$BUILD_DIR/${CONFIG}" \
     clean build \
-    | tee "$BUILD_DIR/xcodebuild.log" \
-    | grep -E "^(Build|Compiling|Linking|error:|warning:|\*\*)" || true
+    | tee "$BUILD_DIR/xcodebuild.log"; then
+    echo ""
+    echo "Build failed. See log: $BUILD_DIR/xcodebuild.log"
+    exit 1
+fi
 
 # Check if build succeeded
 if [ ! -d "$APP_PATH" ]; then
@@ -100,7 +103,7 @@ echo "Build successful: $APP_PATH"
 
 # Copy to /Applications
 echo "Installing to $INSTALL_PATH..."
-cp -R "$APP_PATH" "$INSTALL_PATH"
+ditto "$APP_PATH" "$INSTALL_PATH"
 
 # Clear quarantine attribute (keep Xcode's developer signature intact for TCC permissions)
 xattr -cr "$INSTALL_PATH"
@@ -109,4 +112,5 @@ echo ""
 echo "=== Installation Complete ==="
 echo "App installed to: $INSTALL_PATH"
 echo ""
-echo "To launch: open -a '$APP_NAME'"
+echo "Launching $APP_NAME..."
+open "$INSTALL_PATH"

@@ -74,6 +74,13 @@ struct RecordingDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+
+                if let sourceDevice = recording.sourceDevice {
+                    Text(deviceSummary(sourceDevice))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
             }
 
             Spacer()
@@ -120,7 +127,6 @@ struct RecordingDetailView: View {
         .frame(maxHeight: .infinity)
     }
 
-
     // MARK: - Actions
 
     private var actionsSection: some View {
@@ -148,7 +154,6 @@ struct RecordingDetailView: View {
 
     // MARK: - Cloud Actions
 
-    @ViewBuilder
     private var cloudActionsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label("Cloud", systemImage: "cloud.fill")
@@ -213,7 +218,6 @@ struct RecordingDetailView: View {
 
     // MARK: - Local Actions
 
-    @ViewBuilder
     private var localActionsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label("Local (Whisper)", systemImage: "desktopcomputer")
@@ -231,7 +235,8 @@ struct RecordingDetailView: View {
                     .frame(maxWidth: 200)
 
                     Button("Transcribe") {
-                        let modelName = selectedWhisperModel.isEmpty ? downloadedWhisperModels.first?.name : selectedWhisperModel
+                        let modelName = selectedWhisperModel.isEmpty ? downloadedWhisperModels.first?
+                            .name : selectedWhisperModel
                         queueService.enqueue(
                             [recording.id],
                             action: .transcribe,
@@ -282,4 +287,10 @@ struct RecordingDetailView: View {
         ByteCountFormatter.string(fromByteCount: recording.fileSizeBytes, countStyle: .file)
     }
 
+    private func deviceSummary(_ sourceDevice: RecordingDeviceInfo) -> String {
+        let sampleRate = sourceDevice.sampleRate >= 1000
+            ? String(format: "%.1f kHz", sourceDevice.sampleRate / 1000)
+            : String(format: "%.0f Hz", sourceDevice.sampleRate)
+        return "\(sourceDevice.name) · \(sourceDevice.transportType) · \(sourceDevice.channelCount) ch · \(sampleRate)"
+    }
 }

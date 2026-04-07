@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general, shortcuts, audio, dictation, translation, meetings, account, about
+    case general, shortcuts, audio, dictation, offlineModels, translation, meetings, account, about
 
     var id: String { rawValue }
 
@@ -12,6 +12,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .shortcuts: "Shortcuts"
         case .audio: "Audio"
         case .dictation: "Dictation"
+        case .offlineModels: "Offline Models"
         case .translation: "Translation"
         case .meetings: "Meetings"
         case .account: "Account"
@@ -25,6 +26,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .shortcuts: "keyboard"
         case .audio: "mic"
         case .dictation: "text.bubble"
+        case .offlineModels: "cpu"
         case .translation: "globe"
         case .meetings: "person.3"
         case .account: "person.crop.circle"
@@ -52,8 +54,18 @@ struct SettingsView: View {
         .toolbar(removing: .sidebarToggle)
         .frame(width: 700, height: 550)
         .onAppear {
+            if let tab = appState.settingsTabToOpen {
+                selectedTab = tab
+                appState.settingsTabToOpen = nil
+            }
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
+        }
+        .onChange(of: appState.settingsTabToOpen) { _, tab in
+            if let tab {
+                selectedTab = tab
+                appState.settingsTabToOpen = nil
+            }
         }
         .onDisappear {
             if let appDelegate = NSApp.delegate as? AppDelegate {
@@ -75,6 +87,8 @@ struct SettingsView: View {
             AudioSettingsView()
         case .dictation:
             DictationSettingsView()
+        case .offlineModels:
+            OfflineModelsSettingsView()
         case .translation:
             TranslationSettingsView()
         case .meetings:

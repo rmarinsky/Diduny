@@ -27,7 +27,7 @@ final class UpdaterManager: NSObject, ObservableObject {
 
 // MARK: - SPUStandardUserDriverDelegate
 
-extension UpdaterManager: SPUStandardUserDriverDelegate {
+extension UpdaterManager: @preconcurrency SPUStandardUserDriverDelegate {
     /// Show the app in the dock while the update window is visible so it can come to front.
     var supportsGentleScheduledUpdateReminders: Bool { true }
 

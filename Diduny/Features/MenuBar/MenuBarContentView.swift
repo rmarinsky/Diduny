@@ -11,47 +11,76 @@ struct MenuBarContentView: View {
     var onToggleMeetingRecording: @MainActor () -> Void
     var onToggleMeetingTranslationRecording: @MainActor () -> Void
     var onTranscribeFile: @MainActor () -> Void
-    var onSelectDevice: @MainActor (AudioDevice) -> Void
     var onCheckForUpdates: @MainActor () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Recording toggle
             Button(recordingButtonTitle, action: onToggleRecording)
-            .globalKeyboardShortcut(.toggleRecording)
-            .disabled(isDictationButtonDisabled)
+                .globalKeyboardShortcut(.toggleRecording)
+                .disabled(isDictationButtonDisabled)
 
             Button(translateButtonTitle, action: onToggleTranslationRecording)
-            .globalKeyboardShortcut(.toggleTranslation)
-            .disabled(isTranslationButtonDisabled)
+                .globalKeyboardShortcut(.toggleTranslation)
+                .disabled(isTranslationButtonDisabled)
 
-            // Meeting recording toggle
             Button(meetingButtonTitle, action: onToggleMeetingRecording)
-            .globalKeyboardShortcut(.toggleMeetingRecording)
-            .disabled(isMeetingButtonDisabled)
+                .globalKeyboardShortcut(.toggleMeetingRecording)
+                .disabled(isMeetingButtonDisabled)
 
-            // Meeting translation toggle
             Button(meetingTranslationButtonTitle, action: onToggleMeetingTranslationRecording)
-            .globalKeyboardShortcut(.toggleMeetingTranslation)
-            .disabled(isMeetingTranslationButtonDisabled)
+                .globalKeyboardShortcut(.toggleMeetingTranslation)
+                .disabled(isMeetingTranslationButtonDisabled)
 
             Divider()
 
-            // Transcribe file from disk
-            Button("Transcribe File...", action: onTranscribeFile)
-                .disabled(appState.recordingState == .processing)
+            Menu("Provider: \(currentProviderLabel)") {
+                Button {
+                    selectCloudMode()
+                } label: {
+                    HStack {
+                        Text("Cloud")
+                        if isCloudMode {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+
+                Button {
+                    selectLocalMode()
+                } label: {
+                    HStack {
+                        Text("Local")
+                        if !isCloudMode {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
 
             Divider()
 
-            // Audio device menu
-            Menu("Audio Device") {
+            Menu("Microphone: \(currentMicrophoneLabel)") {
+                let effectiveUID = audioDeviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID)
+                Button {
+                    appState.preferredDeviceUID = nil
+                } label: {
+                    HStack {
+                        Text("System Default")
+                        if effectiveUID == nil {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+
+                Divider()
+
                 ForEach(audioDeviceManager.availableDevices, id: \.uid) { device in
                     Button {
-                        onSelectDevice(device)
+                        appState.preferredDeviceUID = device.uid
                     } label: {
                         HStack {
                             Text(deviceMenuLabel(device))
-                            if appState.selectedDeviceUID == device.uid {
+                            if effectiveUID == device.uid {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -61,53 +90,13 @@ struct MenuBarContentView: View {
 
             Divider()
 
-            // Recent Transcriptions
-            Menu("Recent Transcriptions") {
-                let recent = RecordingsLibraryStorage.shared.recordings
-                    .filter { $0.transcriptionText != nil && !$0.transcriptionText!.isEmpty }
-                    .prefix(5)
+            Button("Transcribe File…", action: onTranscribeFile)
+                .disabled(appState.recordingState == .processing)
 
-                if recent.isEmpty {
-                    Text("No transcriptions yet")
-                        .foregroundColor(.secondary)
-                } else {
-                    ForEach(Array(recent)) { recording in
-                        Button {
-                            if let text = recording.transcriptionText {
-                                ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
-                            }
-                        } label: {
-                            let preview = transcriptionPreview(recording.transcriptionText ?? "")
-                            Text(preview)
-                        }
-                    }
-
-                    Divider()
-
-                    Button("View All...") {
-                        RecordingsLibraryWindowController.shared.showWindow()
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(100))
-                            NSApp.activate(ignoringOtherApps: true)
-                        }
-                    }
-                }
-            }
-
-            // Recordings library
-            Button("Recordings") {
-                RecordingsLibraryWindowController.shared.showWindow()
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(100))
-                    NSApp.activate(ignoringOtherApps: true)
-                }
-            }
-
-            Button("Check for Updates...", action: onCheckForUpdates)
+            Button("Library", action: openLibrary)
 
             Divider()
 
-            // Settings
             Button {
                 openSettings()
                 Task { @MainActor in
@@ -125,9 +114,10 @@ struct MenuBarContentView: View {
             }
             .keyboardShortcut(",", modifiers: .command)
 
+            Button("Check for Updates…", action: onCheckForUpdates)
+
             Divider()
 
-            // Quit
             Button("Quit") {
                 NSApplication.shared.terminate(nil)
             }
@@ -139,15 +129,15 @@ struct MenuBarContentView: View {
     private var recordingButtonTitle: String {
         switch appState.recordingState {
         case .idle:
-            "Start Dictation"
+            "Dictation"
         case .recording:
             "Stop Dictation"
         case .processing:
-            "Processing..."
+            "Processing Dictation…"
         case .success:
-            "Transcribed"
+            "Dictation"
         case .error:
-            "Transcription Error"
+            "Dictation"
         }
     }
 
@@ -165,15 +155,15 @@ struct MenuBarContentView: View {
     private var translateButtonTitle: String {
         switch appState.translationRecordingState {
         case .idle:
-            "Start Translation"
+            "Translation"
         case .recording:
             "Stop Translation"
         case .processing:
-            "Translating..."
+            "Processing Translation…"
         case .success:
-            "Translated"
+            "Translation"
         case .error:
-            "Translation Error"
+            "Translation"
         }
     }
 
@@ -184,26 +174,18 @@ struct MenuBarContentView: View {
                 || isInProgress(appState.meetingTranslationRecordingState))
     }
 
-    private func transcriptionPreview(_ text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.count > 40 {
-            return String(trimmed.prefix(40)) + "..."
-        }
-        return trimmed
-    }
-
     private var meetingButtonTitle: String {
         switch appState.meetingRecordingState {
         case .idle:
-            "Transcribe Meeting"
+            "Meeting"
         case .recording:
             "Stop Meeting"
         case .processing:
-            "Processing Meeting..."
+            "Processing Meeting…"
         case .success:
-            "Meeting Recorded"
+            "Meeting"
         case .error:
-            "Meeting Error"
+            "Meeting"
         }
     }
 
@@ -217,15 +199,15 @@ struct MenuBarContentView: View {
     private var meetingTranslationButtonTitle: String {
         switch appState.meetingTranslationRecordingState {
         case .idle:
-            "Translate Meeting"
+            "Meeting Translation"
         case .recording:
-            "Stop Translation"
+            "Stop Meeting Translation"
         case .processing:
-            "Translating Meeting..."
+            "Processing Meeting Translation…"
         case .success:
-            "Meeting Translated"
+            "Meeting Translation"
         case .error:
-            "Meeting Translation Error"
+            "Meeting Translation"
         }
     }
 
@@ -238,7 +220,7 @@ struct MenuBarContentView: View {
 
     private func deviceMenuLabel(_ device: AudioDevice) -> String {
         var label = device.name
-        if device.transportType != .unknown && device.transportType != .builtIn {
+        if device.transportType != .unknown, device.transportType != .builtIn {
             label += " (\(device.transportType.displayName))"
         }
         if device.isDefault {
@@ -247,4 +229,50 @@ struct MenuBarContentView: View {
         return label
     }
 
+    private var currentProviderLabel: String {
+        isCloudMode ? "Cloud" : "Local"
+    }
+
+    private var currentMicrophoneLabel: String {
+        if let effectiveUID = audioDeviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID),
+           let device = audioDeviceManager.device(forUID: effectiveUID)
+        {
+            return device.name
+        }
+        return "System Default"
+    }
+
+    private func openLibrary() {
+        RecordingsLibraryWindowController.shared.showWindow()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    private var isCloudMode: Bool {
+        let settings = SettingsStorage.shared
+        return settings.effectiveTranscriptionProvider == .cloud
+            && settings.effectiveTranslationProvider == .cloud
+            && settings.effectiveMeetingRealtimeTranscriptionEnabled
+    }
+
+    private func selectCloudMode() {
+        guard AuthService.shared.isLoggedIn else {
+            NotchManager.shared.showInfo(message: "Log in to use cloud processing", duration: 3.0)
+            appState.settingsTabToOpen = .account
+            return
+        }
+        let settings = SettingsStorage.shared
+        settings.transcriptionProvider = .cloud
+        settings.translationProvider = .cloud
+        settings.meetingRealtimeTranscriptionEnabled = true
+    }
+
+    private func selectLocalMode() {
+        let settings = SettingsStorage.shared
+        settings.transcriptionProvider = .local
+        settings.translationProvider = .local
+        settings.meetingRealtimeTranscriptionEnabled = false
+    }
 }

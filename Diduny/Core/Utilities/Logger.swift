@@ -27,5 +27,6 @@ enum Log {
     static let permissions = Logger(subsystem: subsystem, category: "permissions")
     static let whisper = Logger(subsystem: subsystem, category: "whisper")
     static let playback = Logger(subsystem: subsystem, category: "playback")
+    static let network = Logger(subsystem: subsystem, category: "network")
 }
 

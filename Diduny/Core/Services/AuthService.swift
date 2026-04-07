@@ -5,6 +5,9 @@ import os
 @MainActor
 final class AuthService {
     static let shared = AuthService()
+    nonisolated static var hasStoredSession: Bool {
+        KeychainManager.shared.read(key: Keys.accessToken) != nil
+    }
 
     enum AuthState {
         case loggedOut
@@ -55,11 +58,15 @@ final class AuthService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(["email": email])
+        let requestId = HTTPLogger.attachRequestId(&request)
+        HTTPLogger.logRequest(request, requestId: requestId)
 
+        let startTime = ContinuousClock.now
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AuthError.invalidResponse
         }
+        HTTPLogger.logResponse(data: data, response: httpResponse, requestId: requestId, startTime: startTime)
 
         guard (200 ... 299).contains(httpResponse.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "Unknown error"
@@ -79,11 +86,15 @@ final class AuthService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(["email": email, "code": code])
+        let verifyRequestId = HTTPLogger.attachRequestId(&request)
+        HTTPLogger.logRequest(request, requestId: verifyRequestId)
 
+        let verifyStart = ContinuousClock.now
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AuthError.invalidResponse
         }
+        HTTPLogger.logResponse(data: data, response: httpResponse, requestId: verifyRequestId, startTime: verifyStart)
 
         guard (200 ... 299).contains(httpResponse.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "Unknown error"
@@ -94,11 +105,7 @@ final class AuthService {
         try storeTokens(access: tokenResponse.accessToken, refresh: tokenResponse.refreshToken, email: email)
         authState = .loggedIn
 
-        // Switch to cloud processing now that the user is authenticated
-        SettingsStorage.shared.transcriptionProvider = .cloud
-        SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = true
-
-        Log.app.info("[Auth] Logged in as \(email), switched to cloud processing")
+        Log.app.info("[Auth] Logged in as \(email)")
     }
 
     func refreshTokens() async throws {
@@ -114,11 +121,15 @@ final class AuthService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(["refreshToken": refreshToken])
+        let refreshRequestId = HTTPLogger.attachRequestId(&request)
+        HTTPLogger.logRequest(request, requestId: refreshRequestId)
 
+        let refreshStart = ContinuousClock.now
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AuthError.invalidResponse
         }
+        HTTPLogger.logResponse(data: data, response: httpResponse, requestId: refreshRequestId, startTime: refreshStart)
 
         guard (200 ... 299).contains(httpResponse.statusCode) else {
             if httpResponse.statusCode == 401 {
@@ -154,11 +165,7 @@ final class AuthService {
 
         clearTokens()
 
-        // Switch to local providers since cloud requires auth
-        SettingsStorage.shared.transcriptionProvider = .local
-        SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = false
-
-        Log.app.info("[Auth] Logged out, switched to local provider")
+        Log.app.info("[Auth] Logged out")
     }
 
     // MARK: - Token Access
@@ -169,7 +176,7 @@ final class AuthService {
 
         if Self.isTokenExpired(token) {
             do {
-                try await self.refreshTokens()
+                try await refreshTokens()
                 return KeychainManager.shared.read(key: Keys.accessToken)
             } catch {
                 Log.app.error("[Auth] Token refresh failed: \(error.localizedDescription)")
@@ -193,11 +200,15 @@ final class AuthService {
     ) async throws -> (Data, HTTPURLResponse) {
         var authedRequest = request
         await authenticatedRequest(&authedRequest)
+        let requestId = HTTPLogger.attachRequestId(&authedRequest)
+        HTTPLogger.logRequest(authedRequest, requestId: requestId)
 
+        let startTime = ContinuousClock.now
         let (data, response) = try await session.data(for: authedRequest)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AuthError.invalidResponse
         }
+        HTTPLogger.logResponse(data: data, response: httpResponse, requestId: requestId, startTime: startTime)
 
         // Retry once on 401
         if httpResponse.statusCode == 401 {
@@ -205,11 +216,20 @@ final class AuthService {
 
             var retryRequest = request
             await authenticatedRequest(&retryRequest)
+            let retryRequestId = HTTPLogger.attachRequestId(&retryRequest)
+            HTTPLogger.logRequest(retryRequest, requestId: retryRequestId)
 
+            let retryStart = ContinuousClock.now
             let (retryData, retryResponse) = try await session.data(for: retryRequest)
             guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
                 throw AuthError.invalidResponse
             }
+            HTTPLogger.logResponse(
+                data: retryData,
+                response: retryHttpResponse,
+                requestId: retryRequestId,
+                startTime: retryStart
+            )
             return (retryData, retryHttpResponse)
         }
 

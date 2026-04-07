@@ -3,21 +3,21 @@ options:
   bundleIdPrefix: ua.com.rmarinsky
   deploymentTarget:
     macOS: "14.0"
-  xcodeVersion: "15.0"
+  xcodeVersion: "17.0"
 
 packages:
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts
-    from: 2.0.0
+    exactVersion: 2.4.0
   DynamicNotchKit:
     url: https://github.com/MrKai77/DynamicNotchKit
-    from: 1.0.0
+    revision: cd0b3e52d537db115ad3a9d89601f20e0bee8d27
   LaunchAtLogin:
     url: https://github.com/sindresorhus/LaunchAtLogin-Modern
-    from: 1.0.0
+    exactVersion: 1.1.0
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    from: 2.6.0
+    exactVersion: 2.9.0
 
 configs:
   Debug: debug

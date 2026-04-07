@@ -14,16 +14,22 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
     }
 
     private let maxAudioBytesForSpeechPrecheck = 25 * 1024 * 1024
+    private let longRunningSessionBodyThresholdBytes = 10 * 1024 * 1024
     private let strictSpeechPrecheck = false
 
-    // Protocol conformance method
+    private lazy var longRunningSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 1200 // 20 min for large file upload + processing
+        return URLSession(configuration: config)
+    }()
+
+    /// Protocol conformance method
     func transcribe(audioData: Data) async throws -> String {
         try await transcribe(audioData: audioData, language: nil)
     }
 
     func transcribe(audioData: Data, language: String?) async throws -> String {
         Log.transcription.info("transcribe: BEGIN, audioData size = \(audioData.count) bytes")
-
 
         try await ensureSpeechDetected(audioData, context: "transcribe")
 
@@ -42,7 +48,6 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
     /// Transcribe meeting audio with speaker diarization
     func transcribeMeeting(audioData: Data) async throws -> String {
         Log.transcription.info("transcribeMeeting: BEGIN, audioData size = \(audioData.count) bytes")
-
 
         try await ensureSpeechDetected(audioData, context: "transcribeMeeting")
 
@@ -75,7 +80,10 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
     }
 
     private func translateAndTranscribe(audioData: Data, languageA: String, languageB: String) async throws -> String {
-        Log.transcription.info("translateAndTranscribe: BEGIN, audioData size = \(audioData.count) bytes, pair = \(languageA) <-> \(languageB)")
+        Log.transcription
+            .info(
+                "translateAndTranscribe: BEGIN, audioData size = \(audioData.count) bytes, pair = \(languageA) <-> \(languageB)"
+            )
 
         try await ensureSpeechDetected(audioData, context: "translateAndTranscribe")
 
@@ -263,12 +271,23 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
 
     // MARK: - HTTP Debug Wrapper
 
-    private func performRequest(_ request: URLRequest, label: String) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await URLSession.shared.data(for: request)
+    private func performRequest(_ request: URLRequest, label _: String) async throws -> (Data, HTTPURLResponse) {
+        var request = request
+        let requestId = HTTPLogger.attachRequestId(&request)
+        HTTPLogger.logRequest(request, requestId: requestId)
+
+        let session = (request.httpBody?.count ?? 0) > longRunningSessionBodyThresholdBytes
+            ? longRunningSession
+            : URLSession.shared
+
+        let startTime = ContinuousClock.now
+        let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TranscriptionError.invalidResponse
         }
+
+        HTTPLogger.logResponse(data: data, response: httpResponse, requestId: requestId, startTime: startTime)
 
         return (data, httpResponse)
     }
@@ -379,7 +398,7 @@ private enum AudioSpeechDetector {
             var sumSquares: Float = 0
             var peak: Float = 0
 
-            for index in frameStart..<frameEnd {
+            for index in frameStart ..< frameEnd {
                 let sample = samples[index]
                 let amplitude = abs(sample)
                 sumSquares += sample * sample
@@ -406,7 +425,7 @@ private enum AudioSpeechDetector {
 
 // MARK: - Response Models
 
-// Proxy response: POST /api/v1/transcriptions returns { text, tokens }
+/// Proxy response: POST /api/v1/transcriptions returns { text, tokens }
 private struct ProxyTranscribeResponse: Decodable {
     let text: String
     let tokens: [ProxyTranscribeToken]
@@ -422,4 +441,3 @@ private struct ProxyTranscribeToken: Decodable {
     let translation_status: String?
     let source_language: String?
 }
-

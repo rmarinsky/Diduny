@@ -25,6 +25,8 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     private var recordingURL: URL?
     private var configurationObserver: NSObjectProtocol?
     private var realtimeAudioStreamer: RealtimeAudioStreamer?
+    private var activeRecordingFormat: AVAudioFormat?
+    private(set) var currentRecordingDeviceInfo: RecordingDeviceInfo?
 
     /// Timeout for audio hardware operations (in seconds)
     /// Increased to 5s to support older Intel Macs which can be slower
@@ -38,11 +40,16 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     /// Real-time PCM stream in `s16le`, 16kHz, mono for cloud websocket transcription/translation.
     var onRealtimeAudioData: ((Data) -> Void)?
 
+    /// Called when the recording device is lost mid-recording (engine failed to restart).
+    var onDeviceLost: (() -> Void)?
+
     // MARK: - Public Methods
 
     func startRecording(device: AudioDevice?) async throws {
-        Log.audio.info("startRecording: BEGIN, isRecording=\(self.isRecording)")
-        guard !isRecording else {
+        let recordingInProgress = self.isRecording
+        Log.audio.info("startRecording: BEGIN, isRecording=\(recordingInProgress)")
+        currentRecordingDeviceInfo = nil
+        guard !recordingInProgress else {
             Log.audio.warning("startRecording: Already recording, returning")
             return
         }
@@ -70,18 +77,21 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         // Set up input device on the engine
         // IMPORTANT: Accessing engine.inputNode can hang indefinitely if CoreAudio/coreaudiod is unresponsive
         // We wrap this in a timeout to prevent the app from freezing
-        let deviceID = device?.id
+        let shouldBindExplicitDevice = shouldBindExplicitDevice(device)
+        let deviceID = shouldBindExplicitDevice ? device?.id : nil
         let inputFormat: AVAudioFormat
+        let nodeOutputFormat: AVAudioFormat
         let inputNode: AVAudioInputNode
+        let audioOperationTimeout = self.audioOperationTimeout
 
         do {
-            Log.audio.info("startRecording: Initializing audio engine with \(self.audioOperationTimeout)s timeout")
+            Log.audio.info("startRecording: Initializing audio engine with \(audioOperationTimeout)s timeout")
 
             // Run audio hardware initialization with timeout to prevent hanging
             let result = try await withAudioTimeout(
                 operation: "audio engine initialization",
                 timeout: audioOperationTimeout
-            ) { [engine] () async throws -> (AVAudioInputNode, AVAudioFormat) in
+            ) { [engine] () async throws -> (AVAudioInputNode, AVAudioFormat, AVAudioFormat) in
                 // This runs in a detached context to avoid blocking MainActor
                 // Set device on the audio unit if specified
                 if let deviceID {
@@ -101,12 +111,14 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
                 // Access inputNode - this is where the hang typically occurs
                 let node = engine.inputNode
-                let format = node.outputFormat(forBus: 0)
-                return (node, format)
+                let hardwareInputFormat = node.inputFormat(forBus: 0)
+                let outputFormat = node.outputFormat(forBus: 0)
+                return (node, hardwareInputFormat, outputFormat)
             }
 
             inputNode = result.0
             inputFormat = result.1
+            nodeOutputFormat = result.2
             Log.audio.info("startRecording: Audio engine initialized successfully")
         } catch let error as AudioTimeoutError {
             Log.audio.error("startRecording: \(error.localizedDescription)")
@@ -114,20 +126,36 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
             throw AudioError.recordingFailed(error.localizedDescription)
         }
 
-        Log.audio.info("startRecording: Input format - sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
+        if let device {
+            Log.audio.info(
+                "startRecording: Resolved device = \(device.name), transport=\(device.transportType.rawValue), sampleRate=\(Int(device.sampleRate)), uid=\(device.uid), explicitBinding=\(shouldBindExplicitDevice)"
+            )
+        } else {
+            Log.audio.info("startRecording: Resolved device = System Default")
+        }
+        let hardwareInputFormatDescription = formatDescription(inputFormat)
+        let outputFormatDescription = formatDescription(nodeOutputFormat)
+        Log.audio.info("startRecording: Hardware input format = \(hardwareInputFormatDescription)")
+        Log.audio.info("startRecording: Input node output format = \(outputFormatDescription)")
+        currentRecordingDeviceInfo = makeRecordingDeviceInfo(device: device, inputFormat: inputFormat)
 
         // Validate audio format - on some Intel Macs, the format can be invalid
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            Log.audio.error("startRecording: Invalid audio format - sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
+            Log.audio
+                .error(
+                    "startRecording: Invalid audio format - sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)"
+                )
             audioEngine = nil
-            throw AudioError.recordingFailed("Invalid audio format. Please try selecting a different microphone in Settings.")
+            throw AudioError
+                .recordingFailed("Invalid audio format. Please try selecting a different microphone in Settings.")
         }
 
         // Create temporary file URL
         let tempDir = FileManager.default.temporaryDirectory
         let fileName = "diduny_\(UUID().uuidString).wav"
         recordingURL = tempDir.appendingPathComponent(fileName)
-        Log.audio.info("startRecording: Recording URL = \(self.recordingURL?.path ?? "nil")")
+        let recordingPath = recordingURL?.path ?? "nil"
+        Log.audio.info("startRecording: Recording URL = \(recordingPath)")
 
         guard let url = recordingURL else {
             Log.audio.error("startRecording: Failed to create URL")
@@ -153,6 +181,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         // Optional realtime streamer for websocket mode (translation/live features)
         let realtimeAudioStreamer = makeRealtimeAudioStreamerIfNeeded(inputFormat: inputFormat)
         self.realtimeAudioStreamer = realtimeAudioStreamer
+        activeRecordingFormat = inputFormat
 
         // Install tap on input node to capture audio
         // IMPORTANT: This callback runs on a realtime audio thread, NOT the main thread
@@ -160,18 +189,32 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         // NOTE: installTap is synchronous and must be called on the main thread.
         // Do NOT wrap this in withAudioTimeout as it causes threading issues on Intel Macs.
         Log.audio.info("startRecording: Installing tap on input node...")
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            // Update audio level from buffer (thread-safe method)
-            self?.updateAudioLevelFromBuffer(buffer)
+        do {
+            try ObjCExceptionCatcher.catchException {
+                inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+                    // Update audio level from buffer (thread-safe method)
+                    self?.updateAudioLevelFromBuffer(buffer)
 
-            // Write buffer directly to file - no format conversion
-            do {
-                try file.write(from: buffer)
-            } catch {
-                Log.audio.error("Failed to write audio buffer: \(error.localizedDescription)")
+                    // Write buffer directly to file - no format conversion
+                    do {
+                        try file.write(from: buffer)
+                    } catch {
+                        Log.audio.error("Failed to write audio buffer: \(error.localizedDescription)")
+                    }
+
+                    realtimeAudioStreamer?.process(buffer: buffer)
+                }
             }
-
-            realtimeAudioStreamer?.process(buffer: buffer)
+        } catch {
+            let tapFormatDescription = formatDescription(inputFormat)
+            let nodeOutputFormatDescription = formatDescription(nodeOutputFormat)
+            Log.audio.error(
+                "startRecording: Failed to install tap. tapFormat=\(tapFormatDescription), nodeOutputFormat=\(nodeOutputFormatDescription), error=\(error.localizedDescription)"
+            )
+            cleanupAfterFailedStart(removeTap: false, removeFile: true)
+            throw AudioError.recordingFailed(
+                "Could not start recording with the current microphone route. Try reconnecting AirPods or reselecting the microphone in Settings."
+            )
         }
         Log.audio.info("startRecording: Tap installed successfully")
 
@@ -203,23 +246,20 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
             Log.audio.info("startRecording: Engine verified running")
         } catch {
             Log.audio.error("startRecording: Failed to start engine: \(error.localizedDescription)")
-            inputNode.removeTap(onBus: 0)
-            if let observer = configurationObserver {
-                NotificationCenter.default.removeObserver(observer)
-                configurationObserver = nil
-            }
-            audioEngine = nil
+            cleanupAfterFailedStart(removeTap: true, removeFile: true)
             throw AudioError.recordingFailed("Failed to start audio engine: \(error.localizedDescription)")
         }
 
         isRecording = true
-        Log.audio.info("startRecording: END, isRecording=\(self.isRecording)")
+        let updatedRecordingState = self.isRecording
+        Log.audio.info("startRecording: END, isRecording=\(updatedRecordingState)")
     }
 
     func stopRecording() async throws -> Data {
-        Log.audio.info("stopRecording: BEGIN, isRecording=\(self.isRecording)")
+        let recordingInProgress = self.isRecording
+        Log.audio.info("stopRecording: BEGIN, isRecording=\(recordingInProgress)")
         guard isRecording, let engine = audioEngine, let url = recordingURL else {
-            let logMsg = "stopRecording: No active recording! isRecording=\(isRecording), " +
+            let logMsg = "stopRecording: No active recording! isRecording=\(recordingInProgress), " +
                 "engine=\(audioEngine != nil), url=\(recordingURL?.path ?? "nil")"
             Log.audio.warning("\(logMsg)")
             throw AudioError.recordingFailed("No active recording")
@@ -243,6 +283,8 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
         isRecording = false
         audioLevel = 0
+        onDeviceLost = nil
+        activeRecordingFormat = nil
 
         // Read audio data
         Log.audio.info("stopRecording: Reading audio data from \(url.path)")
@@ -275,6 +317,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
         audioFile = nil
         audioEngine = nil
+        activeRecordingFormat = nil
 
         if let url = recordingURL {
             try? FileManager.default.removeItem(at: url)
@@ -284,25 +327,89 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         realtimeAudioStreamer = nil
         isRecording = false
         audioLevel = 0
+        currentRecordingDeviceInfo = nil
+        onDeviceLost = nil
     }
 
     // MARK: - Private Methods
 
     private func handleConfigurationChange() {
-        Log.audio.info("Audio configuration changed - handling device switch")
+        let currentInputFormat = audioEngine?.inputNode.inputFormat(forBus: 0)
+        let currentOutputFormat = audioEngine?.inputNode.outputFormat(forBus: 0)
+        let currentInputFormatDescription = formatDescription(currentInputFormat)
+        let currentOutputFormatDescription = formatDescription(currentOutputFormat)
+        Log.audio.info(
+            "Audio configuration changed - input=\(currentInputFormatDescription), output=\(currentOutputFormatDescription)"
+        )
 
         guard isRecording, let engine = audioEngine else { return }
 
-        // The engine automatically handles configuration changes in most cases
-        // Just ensure it's still running
+        // The engine is automatically stopped on configuration changes.
+        // Try to restart it; if that fails the device is likely gone.
         if !engine.isRunning {
             do {
                 try engine.start()
                 Log.audio.info("Audio engine restarted after configuration change")
             } catch {
                 Log.audio.error("Failed to restart engine after config change: \(error.localizedDescription)")
-                // Recording will continue to fail, but we don't want to crash
+                onDeviceLost?()
             }
+        }
+    }
+
+    private func cleanupAfterFailedStart(removeTap: Bool, removeFile: Bool) {
+        if removeTap, let engine = audioEngine {
+            engine.inputNode.removeTap(onBus: 0)
+        }
+
+        audioEngine?.stop()
+        audioEngine?.reset()
+
+        if let observer = configurationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configurationObserver = nil
+        }
+
+        audioFile = nil
+        realtimeAudioStreamer = nil
+        activeRecordingFormat = nil
+        currentRecordingDeviceInfo = nil
+        isRecording = false
+        audioLevel = 0
+        onDeviceLost = nil
+
+        if removeFile, let url = recordingURL {
+            try? FileManager.default.removeItem(at: url)
+            recordingURL = nil
+        }
+
+        audioEngine = nil
+    }
+
+    private func shouldBindExplicitDevice(_ device: AudioDevice?) -> Bool {
+        guard let device else { return false }
+        return !device.isDefault
+    }
+
+    private func formatDescription(_ format: AVAudioFormat?) -> String {
+        guard let format else { return "nil" }
+        return "\(format.channelCount)ch @ \(Int(format.sampleRate))Hz \(commonFormatDescription(format.commonFormat))"
+    }
+
+    private func commonFormatDescription(_ format: AVAudioCommonFormat) -> String {
+        switch format {
+        case .otherFormat:
+            "other"
+        case .pcmFormatFloat32:
+            "Float32"
+        case .pcmFormatFloat64:
+            "Float64"
+        case .pcmFormatInt16:
+            "Int16"
+        case .pcmFormatInt32:
+            "Int32"
+        @unknown default:
+            "unknown"
         }
     }
 
@@ -314,7 +421,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
         // Calculate RMS (Root Mean Square) for audio level
         var sum: Float = 0
-        for i in 0..<frameLength {
+        for i in 0 ..< frameLength {
             let sample = channelData[i]
             sum += sample * sample
         }
@@ -366,6 +473,18 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         guard let callback = onRealtimeAudioData else { return nil }
         return RealtimeAudioStreamer(inputFormat: inputFormat, onAudioData: callback)
     }
+
+    private func makeRecordingDeviceInfo(device: AudioDevice?, inputFormat: AVAudioFormat) -> RecordingDeviceInfo? {
+        guard let device else { return nil }
+        return RecordingDeviceInfo(
+            uid: device.uid,
+            name: device.name,
+            transportType: device.transportType.displayName,
+            sampleRate: inputFormat.sampleRate,
+            channelCount: Int(inputFormat.channelCount),
+            wasDefaultRoute: device.isDefault
+        )
+    }
 }
 
 private final class RealtimeAudioStreamer {
@@ -398,8 +517,8 @@ private final class RealtimeAudioStreamer {
 
         queue.async { [weak self] in
             guard let self else { return }
-            guard let data = self.convertToRealtimePCM(buffer: copiedBuffer) else { return }
-            self.onAudioData(data)
+            guard let data = convertToRealtimePCM(buffer: copiedBuffer) else { return }
+            onAudioData(data)
         }
     }
 

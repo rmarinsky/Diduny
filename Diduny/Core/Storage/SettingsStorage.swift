@@ -10,7 +10,7 @@ final class SettingsStorage {
         "е-е",
         "ем",
         "мм",
-        "ммм",
+        "ммм"
     ]
     private static let englishFillerWordPreset = [
         "uh",
@@ -28,12 +28,14 @@ final class SettingsStorage {
         "you know",
         "i mean",
         "kind of",
-        "sort of",
+        "sort of"
     ]
     private static let defaultFillerWords = normalizedFillerWords(baseFillerWords + englishFillerWordPreset)
 
     private enum Key: String {
-        case selectedDeviceUID
+        case selectedDeviceUID // Legacy — kept for migration only
+        case preferredDeviceUID
+        case microphoneSelectionStrategy
         case autoPaste
         case playSoundOnCompletion
         case launchAtLogin
@@ -50,6 +52,7 @@ final class SettingsStorage {
         case favoriteLanguages
         case translationLanguageA
         case translationLanguageB
+        case translationProvider
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
         case meetingRealtimeTranscriptionEnabled
@@ -64,6 +67,7 @@ final class SettingsStorage {
 
     private init() {
         migrateSelectedDeviceIfNeeded()
+        migratePreferredDeviceKeyIfNeeded()
         migrateTranscriptionProviderIfNeeded()
     }
 
@@ -80,13 +84,22 @@ final class SettingsStorage {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        var uid: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
+        var size = UInt32(MemoryLayout<CFString?>.size)
         let deviceID = AudioDeviceID(legacyValue)
-        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, &uid)
-        guard status == noErr else { return } // keep legacy key for retry on next launch
-        defaults.set(uid as String, forKey: Key.selectedDeviceUID.rawValue)
+        var cfUID: CFString?
+        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, &cfUID)
+        guard status == noErr, let cfUID else { return } // keep legacy key for retry on next launch
+        let uid = cfUID as String
+        defaults.set(uid, forKey: Key.selectedDeviceUID.rawValue)
         defaults.removeObject(forKey: legacyKey)
+    }
+
+    /// One-time migration from `selectedDeviceUID` → `preferredDeviceUID`.
+    private func migratePreferredDeviceKeyIfNeeded() {
+        guard let oldValue = defaults.string(forKey: Key.selectedDeviceUID.rawValue),
+              defaults.string(forKey: Key.preferredDeviceUID.rawValue) == nil else { return }
+        defaults.set(oldValue, forKey: Key.preferredDeviceUID.rawValue)
+        defaults.removeObject(forKey: Key.selectedDeviceUID.rawValue)
     }
 
     /// Migrate old provider rawValues: "soniox" → "cloud", "whisper_local" → "local"
@@ -104,17 +117,31 @@ final class SettingsStorage {
 
     // MARK: - Audio Device
 
-    /// Stable device UID string persisted across reboots (replaces old AudioDeviceID storage).
-    var selectedDeviceUID: String? {
+    /// Preferred device UID. `nil` means "follow System Default".
+    var preferredDeviceUID: String? {
         get {
-            defaults.string(forKey: Key.selectedDeviceUID.rawValue)
+            defaults.string(forKey: Key.preferredDeviceUID.rawValue)
         }
         set {
             if let uid = newValue {
-                defaults.set(uid, forKey: Key.selectedDeviceUID.rawValue)
+                defaults.set(uid, forKey: Key.preferredDeviceUID.rawValue)
             } else {
-                defaults.removeObject(forKey: Key.selectedDeviceUID.rawValue)
+                defaults.removeObject(forKey: Key.preferredDeviceUID.rawValue)
             }
+        }
+    }
+
+    var microphoneSelectionStrategy: MicrophoneSelectionStrategy {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.microphoneSelectionStrategy.rawValue),
+                  let strategy = MicrophoneSelectionStrategy(rawValue: rawValue)
+            else {
+                return .auto
+            }
+            return strategy
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.microphoneSelectionStrategy.rawValue)
         }
     }
 
@@ -306,6 +333,10 @@ final class SettingsStorage {
         }
     }
 
+    var effectiveTranscriptionProvider: TranscriptionProvider {
+        transcriptionProvider == .cloud && !AuthService.hasStoredSession ? .local : transcriptionProvider
+    }
+
     var selectedWhisperModel: String {
         get { defaults.string(forKey: Key.selectedWhisperModel.rawValue) ?? "" }
         set { defaults.set(newValue, forKey: Key.selectedWhisperModel.rawValue) }
@@ -321,6 +352,26 @@ final class SettingsStorage {
     var whisperPrompt: String {
         get { defaults.string(forKey: Key.whisperPrompt.rawValue) ?? "" }
         set { defaults.set(newValue, forKey: Key.whisperPrompt.rawValue) }
+    }
+
+    // MARK: - Translation Provider
+
+    var translationProvider: TranscriptionProvider {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.translationProvider.rawValue),
+                  let provider = TranscriptionProvider(rawValue: rawValue)
+            else {
+                return .cloud
+            }
+            return provider
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.translationProvider.rawValue)
+        }
+    }
+
+    var effectiveTranslationProvider: TranscriptionProvider {
+        translationProvider == .cloud && !AuthService.hasStoredSession ? .local : translationProvider
     }
 
     // MARK: - Translation Realtime Socket
@@ -352,6 +403,10 @@ final class SettingsStorage {
     var meetingRealtimeTranscriptionEnabled: Bool {
         get { defaults.bool(forKey: Key.meetingRealtimeTranscriptionEnabled.rawValue) }
         set { defaults.set(newValue, forKey: Key.meetingRealtimeTranscriptionEnabled.rawValue) }
+    }
+
+    var effectiveMeetingRealtimeTranscriptionEnabled: Bool {
+        meetingRealtimeTranscriptionEnabled && AuthService.hasStoredSession
     }
 
     // MARK: - Escape Cancel
@@ -442,9 +497,9 @@ final class SettingsStorage {
     // MARK: - Proxy Settings
 
     #if DEV_BUILD
-    private static let defaultProxyBaseURL = "http://localhost:3000"
+        private static let defaultProxyBaseURL = "http://localhost:3000"
     #else
-    private static let defaultProxyBaseURL = "https://diduny-ears-proxy.fly.dev"
+        private static let defaultProxyBaseURL = "https://diduny-ears-proxy.fly.dev"
     #endif
 
     var proxyBaseURL: String {
@@ -462,7 +517,6 @@ final class SettingsStorage {
             }
         }
     }
-
 }
 
 extension Notification.Name {

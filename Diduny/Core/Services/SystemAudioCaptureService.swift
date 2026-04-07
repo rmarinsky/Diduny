@@ -1,45 +1,83 @@
 import AVFoundation
+import CoreAudio
 import CoreMedia
 import Foundation
 import os
 import ScreenCaptureKit
 
-@available(macOS 13.0, *)
 final class SystemAudioCaptureService: NSObject {
     private var stream: SCStream?
     private var audioFile: AVAudioFile?
     private var outputURL: URL?
     private var isCapturing = false
     private var outputFormat: AVAudioFormat?
-    private var audioConverter: AVAudioConverter?
     private var sampleCount: Int = 0
-    private var lastFlushTime: Date = Date()
-    private let flushInterval: TimeInterval = 30.0 // Flush to disk every 30 seconds
+    private var lastFlushTime: Date = .init()
+    private let flushInterval: TimeInterval = 30.0
 
-    /// Separate queue for real-time transcription callbacks to avoid blocking audio delivery
+    // Microphone capture via AVAudioEngine (SCStream's captureMicrophone is unreliable)
+    private var micEngine: AVAudioEngine?
+    private var micConverter: AVAudioConverter?
+
     private let realtimeQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.realtime", qos: .userInitiated)
-    /// Separate queue for file writing to avoid blocking the audio callback queue
     private let fileWriteQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.systemaudio.write")
+    /// Serial queue for mixer buffer access — both SCStream callbacks and AVAudioEngine tap dispatch here.
+    private let mixerQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.mixer")
 
-    var includeMicrophone: Bool = false
+    // MARK: - Public Configuration
+
+    /// Enable microphone capture alongside system audio.
+    var captureMicrophone: Bool = false
+
+    /// The microphone device to use. `nil` = system default.
+    var microphoneDevice: AudioDevice?
+
+    /// Gain applied to microphone samples before mixing (0–2, default 1.0).
+    var micGain: Float = 1.0
+
+    /// Gain applied to system audio samples before mixing with microphone (0–2, default 0.3).
+    var systemGain: Float = 0.3
+
     var onError: ((Error) -> Void)?
     var onCaptureStarted: (() -> Void)?
 
-    /// Callback mode: when set, raw sample buffers are forwarded instead of writing to file
-    var onAudioBuffer: ((CMSampleBuffer) -> Void)?
-
-    /// Whether to use callback mode (forwarding buffers) instead of file writing
-    var useCallbackMode: Bool = false
-
-    /// Secondary callback for raw PCM data (fires in both file-write and callback modes)
+    /// Raw mono s16le PCM data callback for cloud real-time transcription.
     var onRawAudioData: ((Data) -> Void)?
+
+    /// Fired when microphone has been silent for > `silenceTimeout`.
+    var onMicrophoneSilent: (() -> Void)?
+
+    /// Fired when system audio has been silent for > `silenceTimeout`.
+    var onSystemAudioSilent: (() -> Void)?
+
+    // MARK: - Inline Mixer State (accessed only on mixerQueue)
+
+    private var systemBuffer: [Float] = []
+    private var micBuffer: [Float] = []
+    /// Maximum single-source frames before flushing without counterpart (50ms at 16kHz).
+    /// Kept low to minimize latency for real-time cloud transcription.
+    private let flushThresholdFrames = 800
+
+    // MARK: - Silence Detection (accessed only on mixerQueue)
+
+    private let silenceTimeout: TimeInterval = 5.0
+    private let silenceRMSThreshold: Float = 0.001
+    private var lastNonSilentSystemTime: Date = .init()
+    private var lastNonSilentMicTime: Date = .init()
+    private var didFireSystemSilent = false
+    private var didFireMicSilent = false
+
     private var rawAudioCallbackCount = 0
+    private var systemBufferCount = 0
+    private var micBufferCount = 0
+    private var delegateCallCount = 0
+
+    private var microphoneCaptureStarted = false
 
     // MARK: - Permission Check
 
     static func checkPermission() async -> Bool {
         do {
-            // This will prompt for permission if not granted
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
             return !content.displays.isEmpty
         } catch {
@@ -49,7 +87,6 @@ final class SystemAudioCaptureService: NSObject {
     }
 
     static func requestPermission() async -> Bool {
-        // Requesting shareable content triggers the permission dialog
         await checkPermission()
     }
 
@@ -63,56 +100,232 @@ final class SystemAudioCaptureService: NSObject {
 
         self.outputURL = outputURL
 
-        Log.audio.info("Starting system audio capture...")
+        Log.audio.info("Starting system audio capture (captureMicrophone=\(self.captureMicrophone))...")
 
-        // Get shareable content
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
 
         guard let display = content.displays.first else {
             throw SystemAudioError.noDisplayFound
         }
 
-        // Create filter for audio only (capture display but we only want audio)
         let filter = SCContentFilter(display: display, excludingWindows: [])
 
-        // Configure stream for audio capture
-        // Use lower quality for long recordings to reduce memory pressure
         let config = SCStreamConfiguration()
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = false
         config.width = 2
         config.height = 2
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 1) // Minimal video
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
         config.showsCursor = false
-        config.sampleRate = 16000 // Reduced from 48000 for long recordings
-        config.channelCount = 1 // Mono instead of stereo to save memory
+        config.sampleRate = 16000
+        config.channelCount = 1
 
-        // Create stream
+        // NOTE: We do NOT use config.captureMicrophone — it's unreliable on macOS 15.
+        // Microphone is captured separately via AVAudioEngine below.
+
+        NSLog("[AudioCapture] Creating SCStream (system audio only)")
+
         stream = SCStream(filter: filter, configuration: config, delegate: self)
 
         guard let stream else {
             throw SystemAudioError.streamCreationFailed
         }
 
-        // Add audio output
-        try stream.addStreamOutput(
-            self,
-            type: .audio,
-            sampleHandlerQueue: DispatchQueue(label: "ua.com.rmarinsky.diduny.systemaudio")
-        )
+        // The .screen handler is needed on some macOS versions to unblock audio delivery.
+        let outputQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.scstream.output")
+        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
+        try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
 
-        // Setup audio file for recording (only if not in callback mode)
-        if !useCallbackMode {
-            try setupAudioFile(at: outputURL)
-        }
+        try setupAudioFile(at: outputURL)
 
-        // Start capture
+        // Reset mixer state
+        systemBuffer.removeAll()
+        micBuffer.removeAll()
+        let now = Date()
+        lastNonSilentSystemTime = now
+        lastNonSilentMicTime = now
+        didFireSystemSilent = false
+        didFireMicSilent = false
+        rawAudioCallbackCount = 0
+        systemBufferCount = 0
+        micBufferCount = 0
+        delegateCallCount = 0
+        microphoneCaptureStarted = false
+
         try await stream.startCapture()
         isCapturing = true
-        lastFlushTime = Date() // Reset flush timer
+        lastFlushTime = Date()
 
-        Log.audio.info("Capture started successfully (16kHz mono for long recordings)")
+        // Start microphone capture via AVAudioEngine if requested
+        if captureMicrophone {
+            do {
+                try startMicrophoneCapture()
+                microphoneCaptureStarted = true
+                NSLog(
+                    "[AudioCapture] Microphone engine started (device: %@)",
+                    microphoneDevice?.name ?? "system default"
+                )
+            } catch {
+                Log.audio.error("Microphone capture failed during meeting start: \(error.localizedDescription)")
+                NSLog("[AudioCapture] ERROR: Microphone capture failed: %@", error.localizedDescription)
+                try await cleanupFailedStart(removeOutputFile: true)
+                throw SystemAudioError.microphoneStartFailed(error.localizedDescription)
+            }
+        }
+
+        Log.audio.info("Capture started (16kHz mono, captureMicrophone=\(self.captureMicrophone))")
+        NSLog("[AudioCapture] Capture started — waiting for delegate callbacks...")
         onCaptureStarted?()
+    }
+
+    // MARK: - Microphone Capture (AVAudioEngine)
+
+    private func startMicrophoneCapture() throws {
+        let engine = AVAudioEngine()
+        let shouldBindExplicitDevice = shouldBindExplicitDevice(microphoneDevice)
+        var didBindExplicitDevice = false
+
+        // Set specific device if provided
+        if shouldBindExplicitDevice, let device = microphoneDevice {
+            let inputNode = engine.inputNode
+            if let audioUnit = inputNode.audioUnit {
+                var deviceID = device.id
+                let status = AudioUnitSetProperty(
+                    audioUnit,
+                    kAudioOutputUnitProperty_CurrentDevice,
+                    kAudioUnitScope_Global,
+                    0,
+                    &deviceID,
+                    UInt32(MemoryLayout<AudioDeviceID>.size)
+                )
+                if status == noErr {
+                    didBindExplicitDevice = true
+                    Log.audio
+                        .info(
+                            "Meeting mic explicit binding to \(device.name), uid=\(device.uid), transport=\(device.transportType.displayName)"
+                        )
+                    NSLog("[AudioCapture] Set mic engine device to %@ (id=%d)", device.name, device.id)
+                } else {
+                    Log.audio
+                        .warning(
+                            "Meeting mic explicit binding failed: status=\(status), device=\(device.name), uid=\(device.uid)"
+                        )
+                    NSLog(
+                        "[AudioCapture] WARNING: failed to bind mic device %@ (id=%d, status=%d), using system default route",
+                        device.name,
+                        device.id,
+                        status
+                    )
+                }
+            }
+        }
+
+        let inputNode = engine.inputNode
+        let inputFormat = inputNode.inputFormat(forBus: 0)
+        let nodeOutputFormat = inputNode.outputFormat(forBus: 0)
+
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            throw SystemAudioError.microphoneFormatInvalid
+        }
+
+        Log.audio.info(
+            "Meeting mic format resolved: input=\(self.formatDescription(inputFormat)), output=\(self.formatDescription(nodeOutputFormat)), explicitBinding=\(didBindExplicitDevice)"
+        )
+        NSLog(
+            "[AudioCapture] Mic input format: sampleRate=%.0f, channels=%d",
+            inputFormat.sampleRate,
+            inputFormat.channelCount
+        )
+
+        // Create converter: native mic format → 16kHz mono Float32
+        guard let targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16000,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw SystemAudioError.microphoneFormatInvalid
+        }
+
+        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            throw SystemAudioError.microphoneFormatInvalid
+        }
+
+        micConverter = converter
+
+        // Install tap — runs on audio render thread
+        do {
+            try ObjCExceptionCatcher.catchException {
+                inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+                    self?.processMicBuffer(buffer)
+                }
+            }
+        } catch {
+            Log.audio.error(
+                "Meeting mic tap install failed. tapFormat=\(self.formatDescription(inputFormat)), nodeOutputFormat=\(self.formatDescription(nodeOutputFormat)), error=\(error.localizedDescription)"
+            )
+            throw SystemAudioError.microphoneStartFailed(
+                "Could not start meeting microphone with the current route. Try reconnecting AirPods or choosing System Default."
+            )
+        }
+
+        try engine.start()
+        micEngine = engine
+
+        NSLog("[AudioCapture] AVAudioEngine started for microphone capture")
+    }
+
+    private func stopMicrophoneCapture() {
+        if let engine = micEngine {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            engine.reset()
+            NSLog("[AudioCapture] AVAudioEngine stopped for microphone")
+        }
+        micEngine = nil
+        micConverter = nil
+        microphoneCaptureStarted = false
+    }
+
+    /// Convert mic buffer to 16kHz mono Float32 and dispatch to mixer queue.
+    private func processMicBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard let converter = micConverter else { return }
+
+        let inputFormat = buffer.format
+        let ratio = 16000.0 / inputFormat.sampleRate
+        let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
+        guard outputFrameCapacity > 0 else { return }
+
+        guard let targetFormat = converter.outputFormat as AVAudioFormat?,
+              let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCapacity)
+        else { return }
+
+        var error: NSError?
+        var hasInputData = true
+
+        let status = converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+            if hasInputData {
+                hasInputData = false
+                outStatus.pointee = .haveData
+                return buffer
+            }
+            outStatus.pointee = .noDataNow
+            return nil
+        }
+
+        guard error == nil, status != .error, outputBuffer.frameLength > 0 else { return }
+
+        guard let channelData = outputBuffer.floatChannelData?[0] else { return }
+        let frameCount = Int(outputBuffer.frameLength)
+        var samples = [Float](repeating: 0, count: frameCount)
+        for i in 0 ..< frameCount {
+            samples[i] = channelData[i]
+        }
+
+        // Dispatch to mixer queue (same queue as system audio handler)
+        mixerQueue.async { [weak self] in
+            self?.handleMicrophoneAudio(samples)
+        }
     }
 
     // MARK: - Stop Capture
@@ -123,189 +336,323 @@ final class SystemAudioCaptureService: NSObject {
             return nil
         }
 
-        Log.audio.info("Stopping capture... Total samples processed: \(self.sampleCount)")
+        NSLog(
+            "[AudioCapture] Stopping capture... sampleCount=%d, systemBuffers=%d, micBuffers=%d, systemBuf=%d, micBuf=%d",
+            sampleCount,
+            systemBufferCount,
+            micBufferCount,
+            systemBuffer.count,
+            micBuffer.count
+        )
+
+        // Stop microphone first to prevent further mic data arriving
+        stopMicrophoneCapture()
 
         try await stream.stopCapture()
         self.stream = nil
         isCapturing = false
 
-        // Wait for pending file writes to complete before closing
-        fileWriteQueue.sync {}
-
-        // Close audio file and cleanup
-        audioFile = nil
-        audioConverter = nil
-        outputFormat = nil
-        sampleCount = 0
+        synchronizedTeardown(flushPendingAudio: true)
 
         Log.audio.info("Capture stopped, file saved to: \(self.outputURL?.path ?? "nil")")
-
         return outputURL
+    }
+
+    private func cleanupFailedStart(removeOutputFile: Bool) async throws {
+        stopMicrophoneCapture()
+
+        if let stream {
+            try? await stream.stopCapture()
+        }
+
+        stream = nil
+        isCapturing = false
+        synchronizedTeardown(flushPendingAudio: false)
+
+        if removeOutputFile, let outputURL {
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+    }
+
+    private func synchronizedTeardown(flushPendingAudio: Bool) {
+        mixerQueue.sync { [self] in
+            fileWriteQueue.sync { [self] in
+                if flushPendingAudio {
+                    flushRemainingBuffers()
+                }
+                audioFile = nil
+                outputFormat = nil
+                systemBuffer.removeAll()
+                micBuffer.removeAll()
+            }
+        }
+        sampleCount = 0
+        microphoneCaptureStarted = false
     }
 
     // MARK: - Audio File Setup
 
     private func setupAudioFile(at url: URL) throws {
-        // Use lower quality 16-bit PCM for long recordings to reduce memory usage
-        // This is ~12x smaller than 48kHz stereo 32-bit float
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 16000.0, // Lower sample rate for meetings
-            AVNumberOfChannelsKey: 1, // Mono for speech
-            AVLinearPCMBitDepthKey: 16, // 16-bit instead of 32-bit float
+            AVSampleRateKey: 16000.0,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
             AVLinearPCMIsFloatKey: false,
             AVLinearPCMIsBigEndianKey: false,
             AVLinearPCMIsNonInterleaved: false
         ]
 
-        // Create output format for conversion
         outputFormat = AVAudioFormat(settings: settings)
-
         audioFile = try AVAudioFile(forWriting: url, settings: settings)
+        Log.audio.info("Audio file created at: \(url.path) (16kHz mono 16-bit)")
+    }
 
-        Log.audio.info("Audio file created at: \(url.path) (16kHz mono 16-bit for long recordings)")
+    // MARK: - Flush on Stop
+
+    /// Flush any remaining buffered audio directly to file.
+    /// IMPORTANT: Called from `fileWriteQueue.sync` inside `mixerQueue.sync` —
+    /// must NOT dispatch to either queue (would deadlock or drop data).
+    private func flushRemainingBuffers() {
+        guard audioFile != nil else { return }
+
+        if captureMicrophone {
+            // Mix overlapping frames synchronously
+            let mixCount = min(systemBuffer.count, micBuffer.count)
+            if mixCount > 0 {
+                var mixed = [Float](repeating: 0, count: mixCount)
+                for i in 0 ..< mixCount {
+                    mixed[i] = max(-1.0, min(1.0, systemBuffer[i] + micBuffer[i]))
+                }
+                systemBuffer.removeFirst(mixCount)
+                micBuffer.removeFirst(mixCount)
+                emitRealtimeData(mixed)
+                writeSamples(mixed)
+            }
+            // Flush remaining single-source samples
+            if !systemBuffer.isEmpty {
+                emitRealtimeData(systemBuffer)
+                writeSamples(systemBuffer)
+                systemBuffer.removeAll()
+            }
+            if !micBuffer.isEmpty {
+                emitRealtimeData(micBuffer)
+                writeSamples(micBuffer)
+                micBuffer.removeAll()
+            }
+        } else if !systemBuffer.isEmpty {
+            emitRealtimeData(systemBuffer)
+            writeSamples(systemBuffer)
+            systemBuffer.removeAll()
+        }
     }
 }
 
 // MARK: - SCStreamDelegate
 
-@available(macOS 13.0, *)
 extension SystemAudioCaptureService: SCStreamDelegate {
-    func stream(_: SCStream, didStopWithError error: Error) {
+    func stream(_ stream: SCStream, didStopWithError error: Error) {
+        guard let activeStream = self.stream, activeStream === stream else { return }
         Log.audio.error("Stream stopped with error: \(error)")
+        stopMicrophoneCapture()
+        self.stream = nil
         isCapturing = false
+        synchronizedTeardown(flushPendingAudio: false)
         onError?(error)
     }
 }
 
 // MARK: - SCStreamOutput
 
-@available(macOS 13.0, *)
 extension SystemAudioCaptureService: SCStreamOutput {
-    func stream(_: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+        guard let activeStream = self.stream, activeStream === stream, isCapturing else { return }
+        delegateCallCount += 1
+        if delegateCallCount <= 5 {
+            NSLog("[AudioCapture] delegate called #%d, type=%d (.screen=0, .audio=1)", delegateCallCount, type.rawValue)
+        }
         guard type == .audio else { return }
 
-        // Stream raw PCM data to real-time transcription on a separate queue
-        // to avoid blocking audio delivery and file writing
-        if let onRawAudioData {
-            if let data = extractRawPCMData(from: sampleBuffer) {
-                rawAudioCallbackCount += 1
-                if rawAudioCallbackCount <= 5 || rawAudioCallbackCount % 200 == 0 {
-                    NSLog("[AudioCapture] onRawAudioData callback #%d, data size=%d bytes", rawAudioCallbackCount, data.count)
-                }
-                realtimeQueue.async {
-                    onRawAudioData(data)
-                }
+        let samples = extractFloatSamples(from: sampleBuffer)
+        guard let samples, !samples.isEmpty else { return }
+
+        sampleCount += 1
+
+        // Dispatch system audio to mixer queue
+        mixerQueue.async { [weak self] in
+            self?.handleSystemAudio(samples)
+        }
+    }
+
+    // MARK: - Source Handlers (called on mixerQueue)
+
+    private func handleSystemAudio(_ samples: [Float]) {
+        systemBufferCount += 1
+        if systemBufferCount <= 3 || systemBufferCount % 500 == 0 {
+            NSLog(
+                "[AudioCapture] .audio buffer #%d, %d samples (mic buffers so far: %d)",
+                systemBufferCount,
+                samples.count,
+                micBufferCount
+            )
+        }
+
+        if rms(samples) > silenceRMSThreshold {
+            lastNonSilentSystemTime = Date()
+            didFireSystemSilent = false
+        } else {
+            checkSilence(source: .system)
+        }
+
+        let appliedSystemGain: Float = captureMicrophone ? systemGain : 1.0
+        let gained = samples.map { max(-1, min(1, $0 * appliedSystemGain)) }
+
+        if captureMicrophone {
+            systemBuffer.append(contentsOf: gained)
+            drainMixedSamples()
+            flushStaleBuffer()
+        } else {
+            emitRealtimeData(gained)
+            fileWriteQueue.async { [weak self] in
+                self?.writeSamples(gained)
             }
-        } else if sampleCount <= 3 {
-            NSLog("[AudioCapture] onRawAudioData is nil — real-time streaming not wired")
+        }
+    }
+
+    private func handleMicrophoneAudio(_ samples: [Float]) {
+        micBufferCount += 1
+        if micBufferCount <= 3 || micBufferCount % 500 == 0 {
+            NSLog(
+                "[AudioCapture] .microphone buffer #%d, %d samples (sys buffers so far: %d)",
+                micBufferCount,
+                samples.count,
+                systemBufferCount
+            )
         }
 
-        // Callback mode: forward buffer to mixer
-        if useCallbackMode {
-            onAudioBuffer?(sampleBuffer)
-            return
+        if rms(samples) > silenceRMSThreshold {
+            lastNonSilentMicTime = Date()
+            didFireMicSilent = false
+        } else {
+            checkSilence(source: .microphone)
         }
 
-        // File writing mode: copy buffer on audio queue, write on fileWriteQueue
+        let gained = samples.map { max(-1, min(1, $0 * micGain)) }
+        micBuffer.append(contentsOf: gained)
+        drainMixedSamples()
+        flushStaleBuffer()
+    }
+
+    // MARK: - Inline Mixer (called on mixerQueue)
+
+    private func drainMixedSamples() {
+        let mixCount = min(systemBuffer.count, micBuffer.count)
+        guard mixCount > 0 else { return }
+
+        var mixed = [Float](repeating: 0, count: mixCount)
+        for i in 0 ..< mixCount {
+            mixed[i] = max(-1.0, min(1.0, systemBuffer[i] + micBuffer[i]))
+        }
+        systemBuffer.removeFirst(mixCount)
+        micBuffer.removeFirst(mixCount)
+
+        emitRealtimeData(mixed)
+        fileWriteQueue.async { [weak self] in
+            self?.writeSamples(mixed)
+        }
+    }
+
+    /// Flush any single-source buffer that has accumulated beyond the threshold.
+    /// This prevents audio from being held indefinitely when one source delivers
+    /// faster or the other is temporarily silent.
+    private func flushStaleBuffer() {
+        flushIfStale(&systemBuffer)
+        flushIfStale(&micBuffer)
+    }
+
+    private func flushIfStale(_ buffer: inout [Float]) {
+        guard buffer.count > flushThresholdFrames else { return }
+        let stale = Array(buffer)
+        buffer.removeAll()
+        emitRealtimeData(stale)
+        fileWriteQueue.async { [weak self] in
+            self?.writeSamples(stale)
+        }
+    }
+
+    // MARK: - Real-Time Streaming
+
+    private func emitRealtimeData(_ samples: [Float]) {
+        guard let onRawAudioData else { return }
+
+        var data = Data(count: samples.count * MemoryLayout<Int16>.size)
+        data.withUnsafeMutableBytes { rawBuffer in
+            let int16Buffer = rawBuffer.bindMemory(to: Int16.self)
+            for i in 0 ..< samples.count {
+                int16Buffer[i] = Int16(max(-1.0, min(1.0, samples[i])) * Float(Int16.max))
+            }
+        }
+
+        rawAudioCallbackCount += 1
+        if rawAudioCallbackCount <= 5 || rawAudioCallbackCount % 200 == 0 {
+            NSLog("[AudioCapture] onRawAudioData #%d, %d bytes", rawAudioCallbackCount, data.count)
+        }
+
+        realtimeQueue.async {
+            onRawAudioData(data)
+        }
+    }
+
+    // MARK: - File Writing
+
+    /// Write Float samples to the audio file. AVAudioFile accepts Float32 buffers matching
+    /// its `processingFormat` and internally converts to the file's Int16 format.
+    private func writeSamples(_ samples: [Float]) {
         guard let audioFile else { return }
 
+        let processingFormat = audioFile.processingFormat
+
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: processingFormat,
+            frameCapacity: AVAudioFrameCount(samples.count)
+        ) else { return }
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+
+        guard let channelData = buffer.floatChannelData?[0] else { return }
+        for i in 0 ..< samples.count {
+            channelData[i] = samples[i]
+        }
+
+        do {
+            try audioFile.write(from: buffer)
+
+            let now = Date()
+            if now.timeIntervalSince(lastFlushTime) >= self.flushInterval {
+                Log.audio.info("Audio buffer auto-flush (every \(self.flushInterval)s)")
+                lastFlushTime = now
+            }
+        } catch {
+            Log.audio.error("Error writing audio: \(error)")
+        }
+    }
+
+    // MARK: - Sample Extraction
+
+    private func extractFloatSamples(from sampleBuffer: CMSampleBuffer) -> [Float]? {
         guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
               let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)
-        else {
-            return
-        }
-
-        let numSamples = CMSampleBufferGetNumSamples(sampleBuffer)
-        guard numSamples > 0 else { return }
-
-        logSampleInfoIfNeeded(asbd: asbd, numSamples: numSamples)
-
-        // Copy buffer data on the audio queue (sampleBuffer may be reused by ScreenCaptureKit)
-        guard let pcmBuffer = createPCMBuffer(from: sampleBuffer, asbd: asbd, numSamples: numSamples) else {
-            return
-        }
-
-        // Dispatch file writing to a separate queue to keep the audio callback fast
-        fileWriteQueue.async { [weak self] in
-            self?.writeBufferToFile(pcmBuffer, audioFile: audioFile, numSamples: numSamples)
-        }
-    }
-
-    // MARK: - Helper Methods
-
-    private func logSampleInfoIfNeeded(
-        asbd: UnsafePointer<AudioStreamBasicDescription>,
-        numSamples: Int
-    ) {
-        sampleCount += 1
-        guard sampleCount <= 3 else { return }
-
-        let isFloat = (asbd.pointee.mFormatFlags & kAudioFormatFlagIsFloat) != 0
-        let isNonInterleaved = (asbd.pointee.mFormatFlags & kAudioFormatFlagIsNonInterleaved) != 0
-        let logMessage = "Audio sample \(sampleCount): frames=\(numSamples), " +
-            "sampleRate=\(asbd.pointee.mSampleRate), channels=\(asbd.pointee.mChannelsPerFrame), " +
-            "bitsPerChannel=\(asbd.pointee.mBitsPerChannel), isFloat=\(isFloat), " +
-            "isNonInterleaved=\(isNonInterleaved)"
-        Log.audio.info("\(logMessage)")
-    }
-
-    private func createPCMBuffer(
-        from sampleBuffer: CMSampleBuffer,
-        asbd: UnsafePointer<AudioStreamBasicDescription>,
-        numSamples: Int
-    ) -> AVAudioPCMBuffer? {
-        guard let inputFormat = AVAudioFormat(streamDescription: asbd) else {
-            Log.audio.error("Failed to create input format")
-            return nil
-        }
-
-        guard let pcmBuffer = AVAudioPCMBuffer(
-            pcmFormat: inputFormat,
-            frameCapacity: AVAudioFrameCount(numSamples)
-        ) else {
-            Log.audio.error("Failed to create PCM buffer")
-            return nil
-        }
-        pcmBuffer.frameLength = AVAudioFrameCount(numSamples)
-
-        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
-            Log.audio.error("Failed to get data buffer")
-            return nil
-        }
-
-        guard let dataPointer = getDataPointer(from: blockBuffer) else {
-            return nil
-        }
-
-        copyAudioData(to: pcmBuffer, from: dataPointer, asbd: asbd, numSamples: numSamples)
-        return pcmBuffer
-    }
-
-    private func extractRawPCMData(from sampleBuffer: CMSampleBuffer) -> Data? {
-        guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
-              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)
-        else {
-            return nil
-        }
+        else { return nil }
 
         guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return nil }
 
         var totalLength = 0
         var dataPointer: UnsafeMutablePointer<Int8>?
         let status = CMBlockBufferGetDataPointer(
-            blockBuffer,
-            atOffset: 0,
-            lengthAtOffsetOut: nil,
-            totalLengthOut: &totalLength,
-            dataPointerOut: &dataPointer
+            blockBuffer, atOffset: 0, lengthAtOffsetOut: nil,
+            totalLengthOut: &totalLength, dataPointerOut: &dataPointer
         )
+        guard status == kCMBlockBufferNoErr, let ptr = dataPointer, totalLength > 0 else { return nil }
 
-        guard status == kCMBlockBufferNoErr, let ptr = dataPointer, totalLength > 0 else {
-            return nil
-        }
-
-        // Convert any incoming PCM layout to mono s16le (what cloud realtime expects).
         let channelCount = max(1, Int(asbd.pointee.mChannelsPerFrame))
         let bitsPerChannel = Int(asbd.pointee.mBitsPerChannel)
         let bytesPerSample = max(1, bitsPerChannel / 8)
@@ -323,6 +670,13 @@ extension SystemAudioCaptureService: SCStreamOutput {
         }
         guard frameCount > 0 else { return nil }
 
+        if self.sampleCount <= 3 {
+            Log.audio
+                .info(
+                    "Audio sample \(self.sampleCount): frames=\(frameCount), sampleRate=\(asbd.pointee.mSampleRate), ch=\(channelCount), bits=\(bitsPerChannel), float=\(isFloat)"
+                )
+        }
+
         let rawPointer = UnsafeRawPointer(ptr)
 
         func sample(at offset: Int) -> Float {
@@ -331,191 +685,91 @@ extension SystemAudioCaptureService: SCStreamOutput {
                 memcpy(&value, rawPointer.advanced(by: offset), MemoryLayout<Float>.size)
                 return value
             }
-
             if !isFloat, bitsPerChannel == 16 {
                 var value: Int16 = 0
                 memcpy(&value, rawPointer.advanced(by: offset), MemoryLayout<Int16>.size)
                 return Float(value) / Float(Int16.max)
             }
-
             if !isFloat, bitsPerChannel == 32 {
                 var value: Int32 = 0
                 memcpy(&value, rawPointer.advanced(by: offset), MemoryLayout<Int32>.size)
                 return Float(value) / Float(Int32.max)
             }
-
             return 0
         }
 
-        var int16Data = Data(count: frameCount * MemoryLayout<Int16>.size)
-        int16Data.withUnsafeMutableBytes { rawBuffer in
-            let int16Buffer = rawBuffer.bindMemory(to: Int16.self)
-            for frame in 0 ..< frameCount {
-                var mixed: Float = 0
-
-                for channel in 0 ..< channelCount {
-                    let offset: Int
-                    if isNonInterleaved {
-                        offset = (channel * frameCount + frame) * bytesPerSample
-                    } else {
-                        offset = (frame * channelCount + channel) * bytesPerSample
-                    }
-                    mixed += sample(at: offset)
-                }
-
-                mixed /= Float(channelCount)
-                let clamped = max(-1.0, min(1.0, mixed))
-                int16Buffer[frame] = Int16(clamped * Float(Int16.max))
-            }
-        }
-
-        return int16Data
-    }
-
-    private func getDataPointer(from blockBuffer: CMBlockBuffer) -> UnsafeMutablePointer<Int8>? {
-        var totalLength = 0
-        var dataPointer: UnsafeMutablePointer<Int8>?
-        let status = CMBlockBufferGetDataPointer(
-            blockBuffer,
-            atOffset: 0,
-            lengthAtOffsetOut: nil,
-            totalLengthOut: &totalLength,
-            dataPointerOut: &dataPointer
-        )
-
-        guard status == kCMBlockBufferNoErr, let data = dataPointer else {
-            Log.audio.error("Failed to get data pointer, status: \(status)")
-            return nil
-        }
-        return data
-    }
-
-    private func copyAudioData(
-        to pcmBuffer: AVAudioPCMBuffer,
-        from data: UnsafeMutablePointer<Int8>,
-        asbd: UnsafePointer<AudioStreamBasicDescription>,
-        numSamples: Int
-    ) {
-        let isNonInterleaved = (asbd.pointee.mFormatFlags & kAudioFormatFlagIsNonInterleaved) != 0
-
-        if isNonInterleaved {
-            copyNonInterleavedData(to: pcmBuffer, from: data, asbd: asbd, numSamples: numSamples)
-        } else {
-            copyInterleavedData(to: pcmBuffer, from: data, asbd: asbd, numSamples: numSamples)
-        }
-    }
-
-    private func copyNonInterleavedData(
-        to pcmBuffer: AVAudioPCMBuffer,
-        from data: UnsafeMutablePointer<Int8>,
-        asbd: UnsafePointer<AudioStreamBasicDescription>,
-        numSamples: Int
-    ) {
-        let channelCount = Int(asbd.pointee.mChannelsPerFrame)
-        let bytesPerFrame = Int(asbd.pointee.mBytesPerFrame)
-
-        guard let floatChannelData = pcmBuffer.floatChannelData else { return }
-
-        for channel in 0 ..< channelCount {
-            let channelOffset = channel * numSamples * bytesPerFrame
-            let srcPtr = data.advanced(by: channelOffset)
-            let dstPtr = floatChannelData[channel]
-            memcpy(dstPtr, srcPtr, numSamples * bytesPerFrame)
-        }
-    }
-
-    private func copyInterleavedData(
-        to pcmBuffer: AVAudioPCMBuffer,
-        from data: UnsafeMutablePointer<Int8>,
-        asbd: UnsafePointer<AudioStreamBasicDescription>,
-        numSamples: Int
-    ) {
-        guard let floatChannelData = pcmBuffer.floatChannelData else { return }
-
-        let srcPtr = UnsafeRawPointer(data)
-        let channelCount = Int(asbd.pointee.mChannelsPerFrame)
-        let bytesPerSample = Int(asbd.pointee.mBitsPerChannel / 8)
-
-        for frame in 0 ..< numSamples {
+        var result = [Float](repeating: 0, count: frameCount)
+        for frame in 0 ..< frameCount {
+            var mixed: Float = 0
             for channel in 0 ..< channelCount {
-                let srcOffset = (frame * channelCount + channel) * bytesPerSample
-                let value = srcPtr.load(fromByteOffset: srcOffset, as: Float.self)
-                floatChannelData[channel][frame] = value
+                let offset: Int = if isNonInterleaved {
+                    (channel * frameCount + frame) * bytesPerSample
+                } else {
+                    (frame * channelCount + channel) * bytesPerSample
+                }
+                mixed += sample(at: offset)
+            }
+            result[frame] = mixed / Float(channelCount)
+        }
+
+        return result
+    }
+
+    // MARK: - Silence Detection
+
+    private enum SilenceSource { case system, microphone }
+
+    private func rms(_ samples: [Float]) -> Float {
+        guard !samples.isEmpty else { return 0 }
+        var sum: Float = 0
+        for s in samples {
+            sum += s * s
+        }
+        return sqrt(sum / Float(samples.count))
+    }
+
+    private func checkSilence(source: SilenceSource) {
+        let now = Date()
+        switch source {
+        case .system:
+            if !didFireSystemSilent, now.timeIntervalSince(lastNonSilentSystemTime) > silenceTimeout {
+                didFireSystemSilent = true
+                let callback = onSystemAudioSilent
+                DispatchQueue.main.async { callback?() }
+            }
+        case .microphone:
+            if !didFireMicSilent, now.timeIntervalSince(lastNonSilentMicTime) > silenceTimeout {
+                didFireMicSilent = true
+                let callback = onMicrophoneSilent
+                DispatchQueue.main.async { callback?() }
             }
         }
     }
 
-    private func writeBufferToFile(
-        _ pcmBuffer: AVAudioPCMBuffer,
-        audioFile: AVAudioFile,
-        numSamples: Int
-    ) {
-        do {
-            let inputFormat = pcmBuffer.format
-            let fileFormat = audioFile.processingFormat
-
-            if inputFormat == fileFormat {
-                try audioFile.write(from: pcmBuffer)
-            } else {
-                try writeWithConversion(pcmBuffer, to: audioFile, numSamples: numSamples)
-            }
-
-            // Periodically flush to disk to reduce memory pressure
-            let now = Date()
-            if now.timeIntervalSince(self.lastFlushTime) >= self.flushInterval {
-                // AVAudioFile automatically flushes, but we can log it
-                Log.audio.info("Audio buffer auto-flush (every \(self.flushInterval)s to prevent memory issues)")
-                self.lastFlushTime = now
-            }
-        } catch {
-            Log.audio.error("Error writing audio: \(error)")
-        }
+    private func shouldBindExplicitDevice(_ device: AudioDevice?) -> Bool {
+        guard let device else { return false }
+        return !device.isDefault
     }
 
-    private func writeWithConversion(
-        _ pcmBuffer: AVAudioPCMBuffer,
-        to audioFile: AVAudioFile,
-        numSamples: Int
-    ) throws {
-        let fileFormat = audioFile.processingFormat
+    private func formatDescription(_ format: AVAudioFormat?) -> String {
+        guard let format else { return "nil" }
+        return "\(format.channelCount)ch @ \(Int(format.sampleRate))Hz \(commonFormatDescription(format.commonFormat))"
+    }
 
-        if audioConverter == nil {
-            audioConverter = AVAudioConverter(from: pcmBuffer.format, to: fileFormat)
-        }
-
-        guard let converter = audioConverter else {
-            Log.audio.error("Failed to create converter")
-            return
-        }
-
-        guard let outputBuffer = AVAudioPCMBuffer(
-            pcmFormat: fileFormat,
-            frameCapacity: AVAudioFrameCount(numSamples)
-        ) else {
-            Log.audio.error("Failed to create output buffer")
-            return
-        }
-
-        var error: NSError?
-        var hasData = true
-        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-            if hasData {
-                hasData = false
-                outStatus.pointee = .haveData
-                return pcmBuffer
-            } else {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
-        }
-
-        if let error {
-            Log.audio.error("Conversion error: \(error)")
-            return
-        }
-
-        if outputBuffer.frameLength > 0 {
-            try audioFile.write(from: outputBuffer)
+    private func commonFormatDescription(_ format: AVAudioCommonFormat) -> String {
+        switch format {
+        case .otherFormat:
+            "other"
+        case .pcmFormatFloat32:
+            "Float32"
+        case .pcmFormatFloat64:
+            "Float64"
+        case .pcmFormatInt16:
+            "Int16"
+        case .pcmFormatInt32:
+            "Int32"
+        @unknown default:
+            "unknown"
         }
     }
 }
@@ -526,6 +780,8 @@ enum SystemAudioError: LocalizedError {
     case noDisplayFound
     case streamCreationFailed
     case permissionDenied
+    case microphoneFormatInvalid
+    case microphoneStartFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -535,6 +791,10 @@ enum SystemAudioError: LocalizedError {
             "Failed to create audio capture stream"
         case .permissionDenied:
             "Screen recording permission required"
+        case .microphoneFormatInvalid:
+            "Invalid microphone audio format"
+        case let .microphoneStartFailed(reason):
+            reason
         }
     }
 }

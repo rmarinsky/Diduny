@@ -50,10 +50,10 @@ final class AppState {
         }
     }
 
-    /// Stable device UID string — persisted across reboots (unlike AudioDeviceID).
-    var selectedDeviceUID: String? {
+    /// Preferred device UID — `nil` means "follow System Default".
+    var preferredDeviceUID: String? {
         didSet {
-            SettingsStorage.shared.selectedDeviceUID = selectedDeviceUID
+            SettingsStorage.shared.preferredDeviceUID = preferredDeviceUID
         }
     }
 
@@ -62,6 +62,9 @@ final class AppState {
 
     // Settings trigger (for opening settings from non-SwiftUI code)
     var shouldOpenSettings: Bool = false
+
+    /// When set, the Settings window opens directly on this tab, then resets to nil.
+    var settingsTabToOpen: SettingsTab?
 
     // Meeting recording
     var meetingRecordingState: RecordingState = .idle {
@@ -120,10 +123,10 @@ final class AppState {
 
     init() {
         let settings = SettingsStorage.shared
-        selectedDeviceUID = settings.selectedDeviceUID
+        preferredDeviceUID = settings.preferredDeviceUID
         Log.app
             .debug(
-                "Initialized: selectedDeviceUID=\(String(describing: self.selectedDeviceUID))"
+                "Initialized: preferredDeviceUID=\(String(describing: self.preferredDeviceUID))"
             )
     }
 }

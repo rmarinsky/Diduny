@@ -2,7 +2,6 @@ import AppKit
 import Combine
 import Foundation
 
-@available(macOS 13.0, *)
 actor RealtimeVoiceAccumulator {
     private var finalText: String = ""
 
@@ -28,7 +27,8 @@ actor RealtimeVoiceAccumulator {
 
 extension AppDelegate {
     @objc func toggleRecording() {
-        Log.app.info("toggleRecording called, current state: \(self.appState.recordingState)")
+        let recordingState = appState.recordingState
+        Log.app.info("toggleRecording called, current state: \(recordingState)")
         voicePipelineTask?.cancel()
         voicePipelineTask = Task {
             await self.performToggleRecording()
@@ -36,8 +36,9 @@ extension AppDelegate {
     }
 
     func performToggleRecording() async {
-        Log.app.info("performToggleRecording: state = \(self.appState.recordingState)")
-        switch appState.recordingState {
+        let recordingState = appState.recordingState
+        Log.app.info("performToggleRecording: state = \(recordingState)")
+        switch recordingState {
         case .idle:
             Log.app.info("State is idle, starting recording...")
             await startRecording()
@@ -48,7 +49,7 @@ extension AppDelegate {
             Log.app.info("State is processing, canceling...")
             await cancelRecording(cancelTask: false)
         default:
-            Log.app.info("State is \(self.appState.recordingState), ignoring toggle")
+            Log.app.info("State is \(recordingState), ignoring toggle")
         }
     }
 
@@ -76,12 +77,14 @@ extension AppDelegate {
 
         if SettingsStorage.shared.escapeCancelSaveAudio, audioRecorder.isRecording {
             do {
+                let sourceDevice = audioRecorder.currentRecordingDeviceInfo
                 let audioData = try await audioRecorder.stopRecording()
                 let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                 RecordingsLibraryStorage.shared.saveRecording(
                     audioData: audioData,
                     type: .voice,
-                    duration: duration
+                    duration: duration,
+                    sourceDevice: sourceDevice
                 )
                 Log.app.info("cancelRecording: audio saved after cancel")
             } catch {
@@ -155,7 +158,7 @@ extension AppDelegate {
         }
 
         // Provider-specific validation
-        switch SettingsStorage.shared.transcriptionProvider {
+        switch SettingsStorage.shared.effectiveTranscriptionProvider {
         case .cloud:
             Log.app.info("startRecording: Cloud provider selected")
         case .local:
@@ -171,40 +174,35 @@ extension AppDelegate {
             Log.app.info("startRecording: Whisper model ready")
         }
 
-        // Determine device with fallback to best available
-        var device: AudioDevice?
-
-        if let selectedUID = appState.selectedDeviceUID {
-            let (validDevice, didFallback) = audioDeviceManager.getValidDevice(selectedUID: selectedUID)
-            device = validDevice
-
-            if didFallback {
-                Log.app.warning("startRecording: Selected device (UID: \(selectedUID)) unavailable, using \(device?.name ?? "default")")
-                if let fallbackName = device?.name {
-                    await MainActor.run {
-                        appState.deviceFallbackWarning = "Using \(fallbackName)"
-                    }
-                }
-            } else {
-                Log.app.info("startRecording: Using selected device: \(device?.name ?? "none")")
-            }
-        } else {
-            Log.app.info("startRecording: No device selected, using best available")
-            device = audioDeviceManager.bestDevice() ?? audioDeviceManager.getCurrentDefaultDevice()
+        // Resolve device (nil preference = System Default)
+        if let preferredUID = appState.preferredDeviceUID,
+           !audioDeviceManager.isDeviceAvailable(uid: preferredUID)
+        {
+            Log.app.warning("startRecording: Preferred device UID is unavailable: \(preferredUID)")
         }
 
-        if device == nil {
-            if audioDeviceManager.availableDevices.isEmpty {
-                Log.app.error("startRecording: No audio input devices available")
-                await MainActor.run {
-                    appState.errorMessage = "No microphone found. Please connect a microphone."
-                    appState.recordingState = .error
-                    handleRecordingStateChange(.error)
-                }
-                return
+        let (device, didFallback) = audioDeviceManager.resolveDevice(
+            preferredUID: appState.preferredDeviceUID
+        )
+        if let device {
+            Log.app.info(
+                "startRecording: Device resolution result = \(device.name), transport=\(device.transportType.displayName), sampleRate=\(Int(device.sampleRate)), uid=\(device.uid)"
+            )
+        }
+        if didFallback, let name = device?.name {
+            Log.app.warning("startRecording: Preferred device unavailable, using \(name)")
+            appState.deviceFallbackWarning = "Selected microphone unavailable. Using \(name)"
+            if device?.isDefault == true {
+                appState.preferredDeviceUID = nil
+                Log.app.info("startRecording: Cleared stale preferred microphone UID and switched to System Default")
             }
-            device = audioDeviceManager.availableDevices.first
-            Log.app.info("startRecording: Using first available device: \(device?.name ?? "none")")
+        }
+        guard device != nil else {
+            Log.app.error("startRecording: No audio input devices available")
+            appState.errorMessage = "No microphone found. Please connect a microphone."
+            appState.recordingState = .error
+            handleRecordingStateChange(.error)
+            return
         }
 
         Log.app.info("startRecording: Setting state to recording")
@@ -231,8 +229,9 @@ extension AppDelegate {
             Log.app.info("startRecording: Recording started successfully")
 
             // Only set recording state AFTER audio engine is confirmed working
-            guard appState.recordingState == .processing else {
-                Log.app.warning("startRecording: state changed during init (now \(self.appState.recordingState)), aborting")
+            let recordingStateAfterStart = appState.recordingState
+            guard recordingStateAfterStart == .processing else {
+                Log.app.warning("startRecording: state changed during init (now \(recordingStateAfterStart)), aborting")
                 audioRecorder.cancelRecording()
                 _ = await stopVoiceRealtimeSession(finalize: false)
                 if let token = recordingActivityToken {
@@ -253,6 +252,8 @@ extension AppDelegate {
                         NotchManager.shared.audioLevel = level
                     }
             }
+
+            wireDeviceLostNotification()
 
             // Activate escape cancel handler
             await MainActor.run {
@@ -342,13 +343,21 @@ extension AppDelegate {
 
         // Capture audio data first so it's available in both success and error paths
         var capturedAudioData: Data?
+        var originalWAVData: Data?
         let recordingId = UUID()
+        let sourceDevice = audioRecorder.currentRecordingDeviceInfo
 
         do {
             Log.app.info("stopRecording: Stopping audio recorder")
             let audioData = try await audioRecorder.stopRecording()
-            capturedAudioData = audioData
             Log.app.info("stopRecording: Got audio data, size = \(audioData.count) bytes")
+
+            // Preserve original WAV for potential Whisper fallback (Whisper can't parse FLAC)
+            originalWAVData = audioData
+
+            // Compress WAV → FLAC for smaller storage (skipped for < 1MB)
+            let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
+            capturedAudioData = compressedData
 
             let realtimeResult = await stopVoiceRealtimeSession(finalize: true)
 
@@ -356,8 +365,8 @@ extension AppDelegate {
             if !realtimeResult.text.isEmpty {
                 text = realtimeResult.text
                 Log.app.info("stopRecording: Using realtime transcription (\(text.count) chars)")
-            } else if SettingsStorage.shared.transcriptionProvider == .local {
-                // Local Whisper — no WebSocket, transcribe from audio
+            } else if SettingsStorage.shared.effectiveTranscriptionProvider == .local {
+                // Local Whisper — needs original WAV data
                 text = try await whisperTranscriptionService.transcribe(audioData: audioData)
                 Log.app.info("stopRecording: Local Whisper transcription (\(text.count) chars)")
             } else if let connectionError = voiceRealtimeConnectionError {
@@ -382,8 +391,12 @@ extension AppDelegate {
                 }
             }
 
-            guard appState.recordingState == .processing else {
-                Log.app.warning("stopRecording: state changed during processing (now \(self.appState.recordingState)), dropping result")
+            let processingState = appState.recordingState
+            guard processingState == .processing else {
+                Log.app
+                    .warning(
+                        "stopRecording: state changed during processing (now \(processingState)), dropping result"
+                    )
                 return
             }
             await MainActor.run {
@@ -396,14 +409,15 @@ extension AppDelegate {
             }
             Log.app.info("stopRecording: SUCCESS")
 
-            // Save to recordings library
+            // Save to recordings library (uses compressed data if available)
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
-                audioData: audioData,
+                audioData: compressedData,
                 type: .voice,
                 duration: duration,
-                transcriptionText: text
+                transcriptionText: text,
+                sourceDevice: sourceDevice
             )
 
             if SettingsStorage.shared.playSoundOnCompletion {
@@ -427,11 +441,11 @@ extension AppDelegate {
             _ = await stopVoiceRealtimeSession(finalize: false)
             Log.app.warning("stopRecording: Usage limit exceeded, attempting Whisper fallback")
 
-            // Try falling back to local Whisper model
-            if let audioData = capturedAudioData, WhisperModelManager.shared.selectedModel() != nil {
+            // Try falling back to local Whisper model (use original WAV since Whisper can't parse FLAC)
+            if let wavData = originalWAVData, WhisperModelManager.shared.selectedModel() != nil {
                 NotchManager.shared.showInfo(message: "Cloud limit reached. Switching to local model.", duration: 2.0)
                 do {
-                    let text = try await whisperTranscriptionService.transcribe(audioData: audioData)
+                    let text = try await whisperTranscriptionService.transcribe(audioData: wavData)
                     Log.app.info("stopRecording: Whisper fallback succeeded (\(text.count) chars)")
                     clipboardService.copy(text: text)
                     if SettingsStorage.shared.autoPaste {
@@ -447,10 +461,13 @@ extension AppDelegate {
                         handleRecordingStateChange(.success)
                     }
                     let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
-                    RecordingsLibraryStorage.shared.saveRecording(
-                        id: recordingId, audioData: audioData, type: .voice,
-                        duration: duration, transcriptionText: text
-                    )
+                    if let audioData = capturedAudioData {
+                        RecordingsLibraryStorage.shared.saveRecording(
+                            id: recordingId, audioData: audioData, type: .voice,
+                            duration: duration, transcriptionText: text,
+                            sourceDevice: sourceDevice
+                        )
+                    }
                     RecoveryStateManager.shared.clearState()
                     Task { await UsageService.shared.refresh() }
                 } catch {
@@ -470,7 +487,8 @@ extension AppDelegate {
                 if let audioData = capturedAudioData {
                     let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                     RecordingsLibraryStorage.shared.saveRecording(
-                        id: recordingId, audioData: audioData, type: .voice, duration: duration
+                        id: recordingId, audioData: audioData, type: .voice, duration: duration,
+                        sourceDevice: sourceDevice
                     )
                     RecoveryStateManager.shared.clearState()
                 }
@@ -498,13 +516,18 @@ extension AppDelegate {
                     id: recordingId,
                     audioData: audioData,
                     type: .voice,
-                    duration: duration
+                    duration: duration,
+                    sourceDevice: sourceDevice
                 )
                 RecoveryStateManager.shared.clearState()
             }
 
-            guard appState.recordingState == .processing else {
-                Log.app.warning("stopRecording: state changed during processing (now \(self.appState.recordingState)), dropping error")
+            let processingState = appState.recordingState
+            guard processingState == .processing else {
+                Log.app
+                    .warning(
+                        "stopRecording: state changed during processing (now \(processingState)), dropping error"
+                    )
                 return
             }
             await MainActor.run {
@@ -523,7 +546,7 @@ extension AppDelegate {
     // MARK: - Realtime Transcription (WebSocket)
 
     private func setupVoiceRealtimeTranscriptionIfNeeded() {
-        guard SettingsStorage.shared.transcriptionProvider == .cloud else {
+        guard SettingsStorage.shared.effectiveTranscriptionProvider == .cloud else {
             audioRecorder.onRealtimeAudioData = nil
             voiceRealtimeSessionEnabled = false
             voiceRealtimeAccumulator = nil
@@ -570,7 +593,7 @@ extension AppDelegate {
                 try await rtService.connect(
                     languageHints: languageHints,
                     strictLanguageHints: !languageHints.isEmpty,
-                    audioConfig: .defaultPCM16kMono,
+                    audioConfig: .defaultPCM16kMono
                 )
 
                 await MainActor.run {
@@ -640,7 +663,7 @@ extension AppDelegate {
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(1.6))
                 guard let self,
-                      self.appState.recordingState == .recording else { return }
+                      appState.recordingState == .recording else { return }
                 NotchManager.shared.startRecording(mode: .voice)
             }
         }
@@ -657,5 +680,4 @@ extension AppDelegate {
 
         escapeService.activate()
     }
-
 }

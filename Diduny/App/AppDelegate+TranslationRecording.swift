@@ -2,7 +2,6 @@ import AppKit
 import Combine
 import Foundation
 
-@available(macOS 13.0, *)
 actor RealtimeTranslationAccumulator {
     private var finalOriginalText: String = ""
     private var finalTranslatedText: String = ""
@@ -42,7 +41,8 @@ actor RealtimeTranslationAccumulator {
 
 extension AppDelegate {
     @objc func toggleTranslationRecording() {
-        Log.app.info("toggleTranslationRecording called, current state: \(self.appState.translationRecordingState)")
+        let translationRecordingState = appState.translationRecordingState
+        Log.app.info("toggleTranslationRecording called, current state: \(translationRecordingState)")
         translationPipelineTask?.cancel()
         translationPipelineTask = Task {
             await self.performToggleTranslationRecording()
@@ -50,7 +50,8 @@ extension AppDelegate {
     }
 
     func performToggleTranslationRecording() async {
-        switch appState.translationRecordingState {
+        let translationRecordingState = appState.translationRecordingState
+        switch translationRecordingState {
         case .idle:
             await startTranslationRecording()
         case .recording:
@@ -59,7 +60,7 @@ extension AppDelegate {
             Log.app.info("Translation state is processing, canceling...")
             await cancelTranslationRecording(cancelTask: false)
         default:
-            Log.app.info("Translation state is \(self.appState.translationRecordingState), ignoring toggle")
+            Log.app.info("Translation state is \(translationRecordingState), ignoring toggle")
         }
     }
 
@@ -87,16 +88,21 @@ extension AppDelegate {
 
         if SettingsStorage.shared.escapeCancelSaveAudio, audioRecorder.isRecording {
             do {
+                let sourceDevice = audioRecorder.currentRecordingDeviceInfo
                 let audioData = try await audioRecorder.stopRecording()
                 let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                 RecordingsLibraryStorage.shared.saveRecording(
                     audioData: audioData,
                     type: .translation,
-                    duration: duration
+                    duration: duration,
+                    sourceDevice: sourceDevice
                 )
                 Log.app.info("cancelTranslationRecording: audio saved after cancel")
             } catch {
-                Log.app.warning("cancelTranslationRecording: failed to save audio on cancel - \(error.localizedDescription)")
+                Log.app
+                    .warning(
+                        "cancelTranslationRecording: failed to save audio on cancel - \(error.localizedDescription)"
+                    )
                 audioRecorder.cancelRecording()
             }
         } else {
@@ -165,11 +171,20 @@ extension AppDelegate {
         }
 
         // Provider-specific validation for Local mode
-        if SettingsStorage.shared.transcriptionProvider == .local {
-            guard WhisperModelManager.shared.selectedModel() != nil else {
+        if SettingsStorage.shared.effectiveTranslationProvider == .local {
+            guard let model = WhisperModelManager.shared.selectedModel() else {
                 Log.app.warning("startTranslationRecording: No Whisper model selected")
                 await MainActor.run {
                     appState.errorMessage = "No Whisper model downloaded. Please download one in Settings."
+                    appState.translationRecordingState = .error
+                    handleTranslationStateChange(.error)
+                }
+                return
+            }
+            if model.isEnglishOnly {
+                Log.app.warning("startTranslationRecording: English-only model cannot translate")
+                await MainActor.run {
+                    appState.errorMessage = WhisperError.modelDoesNotSupportTranslation.localizedDescription
                     appState.translationRecordingState = .error
                     handleTranslationStateChange(.error)
                 }
@@ -179,35 +194,21 @@ extension AppDelegate {
         Log.app.info("startTranslationRecording: Provider ready")
         translationRealtimeSessionEnabled = false
 
-        // Determine device with fallback to best available
-        var device: AudioDevice?
-
-        if let selectedUID = appState.selectedDeviceUID {
-            let (validDevice, didFallback) = audioDeviceManager.getValidDevice(selectedUID: selectedUID)
-            device = validDevice
-
-            if didFallback {
-                NSLog("[Diduny] startTranslationRecording: Selected device (UID: %@) not available, using %@", selectedUID, device?.name ?? "default")
-            } else {
-                NSLog("[Diduny] startTranslationRecording: Using selected device: %@", device?.name ?? "none")
-            }
-        } else {
-            NSLog("[Diduny] startTranslationRecording: No device selected, using best available")
-            device = audioDeviceManager.bestDevice() ?? audioDeviceManager.getCurrentDefaultDevice()
+        // Resolve device (nil preference = System Default)
+        let (device, didFallback) = audioDeviceManager.resolveDevice(
+            preferredUID: appState.preferredDeviceUID
+        )
+        if didFallback, let name = device?.name {
+            Log.app.warning("startTranslationRecording: Preferred device unavailable, using \(name)")
         }
-
-        if device == nil {
-            if audioDeviceManager.availableDevices.isEmpty {
-                Log.app.error("startTranslationRecording: No audio input devices available")
-                await MainActor.run {
-                    appState.errorMessage = "No microphone found. Please connect a microphone."
-                    appState.translationRecordingState = .error
-                    handleTranslationStateChange(.error)
-                }
-                return
+        guard device != nil else {
+            Log.app.error("startTranslationRecording: No audio input devices available")
+            await MainActor.run {
+                appState.errorMessage = "No microphone found. Please connect a microphone."
+                appState.translationRecordingState = .error
+                handleTranslationStateChange(.error)
             }
-            device = audioDeviceManager.availableDevices.first
-            Log.app.info("startTranslationRecording: Using first available device: \(device?.name ?? "none")")
+            return
         }
 
         Log.app.info("startTranslationRecording: Setting state to processing")
@@ -234,8 +235,12 @@ extension AppDelegate {
             Log.app.info("startTranslationRecording: Recording started successfully")
 
             // Only set recording state AFTER audio engine is confirmed working
-            guard appState.translationRecordingState == .processing else {
-                Log.app.warning("startTranslationRecording: state changed during init (now \(self.appState.translationRecordingState)), aborting")
+            let recordingStateAfterStart = appState.translationRecordingState
+            guard recordingStateAfterStart == .processing else {
+                Log.app
+                    .warning(
+                        "startTranslationRecording: state changed during init (now \(recordingStateAfterStart)), aborting"
+                    )
                 audioRecorder.cancelRecording()
                 _ = await stopTranslationRealtimeSession(finalize: false)
                 if let token = translationActivityToken {
@@ -256,6 +261,8 @@ extension AppDelegate {
                         NotchManager.shared.audioLevel = level
                     }
             }
+
+            wireDeviceLostNotification()
 
             // Activate escape cancel handler
             await MainActor.run {
@@ -338,6 +345,7 @@ extension AppDelegate {
         // Capture audio data first so it's available in both success and error paths
         var capturedAudioData: Data?
         let recordingId = UUID()
+        let sourceDevice = audioRecorder.currentRecordingDeviceInfo
 
         do {
             Log.app.info("stopTranslationRecording: Stopping audio recorder")
@@ -351,7 +359,7 @@ extension AppDelegate {
             if !realtimeResult.text.isEmpty {
                 text = realtimeResult.text
                 Log.app.info("stopTranslationRecording: Using realtime translation (\(text.count) chars)")
-            } else if SettingsStorage.shared.transcriptionProvider == .local {
+            } else if SettingsStorage.shared.effectiveTranslationProvider == .local {
                 // Local Whisper — no WebSocket, transcribe from audio
                 text = try await whisperTranscriptionService.translateAndTranscribe(audioData: audioData)
                 Log.app.info("stopTranslationRecording: Local Whisper translation (\(text.count) chars)")
@@ -362,8 +370,12 @@ extension AppDelegate {
             }
             Log.app.info("stopTranslationRecording: Translation received (\(text.count) chars)")
 
-            guard appState.translationRecordingState == .processing else {
-                Log.app.warning("stopTranslationRecording: state changed during processing (now \(self.appState.translationRecordingState)), dropping result")
+            let processingState = appState.translationRecordingState
+            guard processingState == .processing else {
+                Log.app
+                    .warning(
+                        "stopTranslationRecording: state changed during processing (now \(processingState)), dropping result"
+                    )
                 return
             }
 
@@ -397,7 +409,8 @@ extension AppDelegate {
                 audioData: audioData,
                 type: .translation,
                 duration: duration,
-                transcriptionText: text
+                transcriptionText: text,
+                sourceDevice: sourceDevice
             )
 
             if SettingsStorage.shared.playSoundOnCompletion {
@@ -430,13 +443,18 @@ extension AppDelegate {
                     id: recordingId,
                     audioData: audioData,
                     type: .translation,
-                    duration: duration
+                    duration: duration,
+                    sourceDevice: sourceDevice
                 )
                 RecoveryStateManager.shared.clearState()
             }
 
-            guard appState.translationRecordingState == .processing else {
-                Log.app.warning("stopTranslationRecording: state changed during processing (now \(self.appState.translationRecordingState)), dropping error")
+            let processingState = appState.translationRecordingState
+            guard processingState == .processing else {
+                Log.app
+                    .warning(
+                        "stopTranslationRecording: state changed during processing (now \(processingState)), dropping error"
+                    )
                 return
             }
             await MainActor.run {
@@ -460,7 +478,7 @@ extension AppDelegate {
     // MARK: - Realtime Translation (WebSocket)
 
     private func setupRealtimeTranslationIfNeeded() {
-        guard SettingsStorage.shared.transcriptionProvider == .cloud else {
+        guard SettingsStorage.shared.effectiveTranslationProvider == .cloud else {
             audioRecorder.onRealtimeAudioData = nil
             translationRealtimeSessionEnabled = false
             translationRealtimeAccumulator = nil
@@ -509,7 +527,7 @@ extension AppDelegate {
                     audioConfig: .defaultPCM16kMono,
                     translationConfig: RealtimeTranslationConfig(
                         mode: .twoWay(languageA: pair.languageA, languageB: pair.languageB)
-                    ),
+                    )
                 )
 
                 await MainActor.run {
@@ -560,7 +578,7 @@ extension AppDelegate {
     }
 
     private func translationLanguagePair() -> (languageA: String, languageB: String) {
-        return (
+        (
             SettingsStorage.shared.translationLanguageA,
             SettingsStorage.shared.translationLanguageB
         )
@@ -586,8 +604,8 @@ extension AppDelegate {
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(1.6))
                 guard let self,
-                      self.appState.translationRecordingState == .recording else { return }
-                NotchManager.shared.startRecording(mode: .translation(languagePair: self.translationPairLabel))
+                      appState.translationRecordingState == .recording else { return }
+                NotchManager.shared.startRecording(mode: .translation(languagePair: translationPairLabel))
             }
         }
 
@@ -603,5 +621,4 @@ extension AppDelegate {
 
         escapeService.activate()
     }
-
 }

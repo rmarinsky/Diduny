@@ -25,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let appState = AppState()
 
-    // Audio level piping to notch
+    /// Audio level piping to notch
     var audioLevelCancellable: AnyCancellable?
 
     // App Nap prevention tokens
@@ -57,22 +57,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var hotkeyService = HotkeyService()
     lazy var pushToTalkService = PushToTalkService()
     lazy var translationPushToTalkService = PushToTalkService()
-    @available(macOS 13.0, *)
     lazy var meetingRecorderService = MeetingRecorderService()
-    @available(macOS 13.0, *)
     lazy var realtimeTranscriptionService = CloudRealtimeService()
-    @available(macOS 13.0, *)
     var voiceRealtimeAccumulator: RealtimeVoiceAccumulator?
     var voiceRealtimeSessionEnabled: Bool = false
     var voiceRealtimeConnectionError: String?
-    @available(macOS 13.0, *)
     var translationRealtimeAccumulator: RealtimeTranslationAccumulator?
     var translationRealtimeSessionEnabled: Bool = false
     var translationRealtimeConnectionError: String?
     var translationRealtimeConnectionTask: Task<Void, Never>?
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
-        switch SettingsStorage.shared.transcriptionProvider {
+        switch SettingsStorage.shared.effectiveTranscriptionProvider {
         case .cloud: transcriptionService
         case .local: whisperTranscriptionService
         }
@@ -85,28 +81,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = updaterManager
 
         setupNotchStopHandler()
-
-        // Auto-select best device if none selected
-        if appState.selectedDeviceUID == nil,
-           let best = audioDeviceManager.bestDevice() ?? audioDeviceManager.defaultDevice {
-            appState.selectedDeviceUID = best.uid
-        }
-
-        // Watch for device changes and auto-select best if selected device is disconnected
-        audioDeviceManager.onDevicesChanged = { [weak self] devices in
-            guard let self else { return }
-            // If selected device is no longer available, switch to best available
-            if let selectedUID = self.appState.selectedDeviceUID,
-               !devices.contains(where: { $0.uid == selectedUID }) {
-                let best = self.audioDeviceManager.bestDevice() ?? self.audioDeviceManager.defaultDevice
-                self.appState.selectedDeviceUID = best?.uid
-            }
-            // If no device selected and devices are available, select best
-            if self.appState.selectedDeviceUID == nil,
-               let best = self.audioDeviceManager.bestDevice() ?? self.audioDeviceManager.defaultDevice {
-                self.appState.selectedDeviceUID = best.uid
-            }
-        }
 
         // Listen for push-to-talk key changes
         NotificationCenter.default.addObserver(
@@ -167,16 +141,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Enforce local provider if not logged in (cloud requires auth)
         if !AuthService.shared.isLoggedIn {
-            if SettingsStorage.shared.transcriptionProvider == .cloud {
-                SettingsStorage.shared.transcriptionProvider = .local
-                Log.app.warning("[Auth] Not logged in — switched to local provider")
-            }
-            if SettingsStorage.shared.meetingRealtimeTranscriptionEnabled {
-                SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = false
-                Log.app.warning("[Auth] Not logged in — disabled meeting cloud mode")
-            }
+            Log.app.info("[Auth] Not logged in — cloud preferences remain stored, runtime uses local fallback")
         }
     }
 
@@ -228,22 +194,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let service = activeTranscriptionService
                     text = try await service.transcribe(audioData: audioData)
                 case .meeting:
-                    if SettingsStorage.shared.transcriptionProvider == .cloud {
+                    if SettingsStorage.shared.effectiveTranscriptionProvider == .cloud {
                         text = try await transcriptionService.transcribeMeeting(audioData: audioData)
                     } else {
                         text = try await whisperTranscriptionService.transcribe(audioData: audioData)
                     }
                 case .translation, .meetingTranslation:
-                    let service = activeTranscriptionService
+                    let service: TranscriptionServiceProtocol = SettingsStorage.shared
+                        .effectiveTranslationProvider == .local
+                        ? whisperTranscriptionService : transcriptionService
                     text = try await service.translateAndTranscribe(audioData: audioData)
                 }
 
-                let copyBehavior: ClipboardCopyBehavior
-                switch state.recordingType {
+                let copyBehavior: ClipboardCopyBehavior = switch state.recordingType {
                 case .voice, .translation:
-                    copyBehavior = .cleaned
+                    .cleaned
                 case .meeting, .meetingTranslation:
-                    copyBehavior = .raw
+                    .raw
                 }
 
                 clipboardService.copy(text: text, behavior: copyBehavior)
@@ -280,6 +247,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try await Task.detached(priority: .userInitiated) {
             try Data(contentsOf: url)
         }.value
+    }
+
+    // MARK: - Shared Recording Helpers
+
+    func wireDeviceLostNotification() {
+        audioRecorder.onDeviceLost = {
+            Task { @MainActor in
+                NotchManager.shared.showInfo(message: "Microphone disconnected", duration: 2.0)
+            }
+        }
     }
 
     // MARK: - Cross-Mode Recording Guard
@@ -323,30 +300,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .seconds(delay))
             guard let self else { return }
 
-            if self.appState.meetingRecordingState == .recording {
+            if appState.meetingTranslationRecordingState == .recording {
+                NotchManager.shared.startRecording(mode: .meetingTranslation)
+                return
+            }
+            if appState.meetingTranslationRecordingState == .processing {
+                NotchManager.shared.startProcessing(mode: .meetingTranslation)
+                return
+            }
+
+            if appState.meetingRecordingState == .recording {
                 NotchManager.shared.startRecording(mode: .meeting)
                 return
             }
-            if self.appState.meetingRecordingState == .processing {
+            if appState.meetingRecordingState == .processing {
                 NotchManager.shared.startProcessing(mode: .meeting)
                 return
             }
 
-            let translationMode: RecordingMode = .translation(languagePair: self.translationPairLabel)
-            if self.appState.translationRecordingState == .recording {
+            let translationMode: RecordingMode = .translation(languagePair: translationPairLabel)
+            if appState.translationRecordingState == .recording {
                 NotchManager.shared.startRecording(mode: translationMode)
                 return
             }
-            if self.appState.translationRecordingState == .processing {
+            if appState.translationRecordingState == .processing {
                 NotchManager.shared.startProcessing(mode: translationMode)
                 return
             }
 
-            if self.appState.recordingState == .recording {
+            if appState.recordingState == .recording {
                 NotchManager.shared.startRecording(mode: .voice)
                 return
             }
-            if self.appState.recordingState == .processing {
+            if appState.recordingState == .processing {
                 NotchManager.shared.startProcessing(mode: .voice)
             }
         }
@@ -390,6 +376,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - State Change Handlers
+
     // Note: These are called directly from recording methods after state changes
     // Since @Observable doesn't use Combine publishers like ObservableObject
 
@@ -496,12 +483,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             successDelay: 1.5,
             errorDelay: 2.0
         )
-    }
-
-    // MARK: - Device Selection (exposed for SwiftUI)
-
-    func selectDevice(_ device: AudioDevice) {
-        appState.selectedDeviceUID = device.uid
     }
 
     // MARK: - Settings

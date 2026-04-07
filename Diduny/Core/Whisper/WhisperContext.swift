@@ -22,7 +22,7 @@ actor WhisperContext {
         }
     }
 
-    func transcribe(samples: [Float], language: String? = nil, initialPrompt: String? = nil) throws -> String {
+    func transcribe(samples: [Float], language: String? = nil, initialPrompt: String? = nil, translate: Bool = false) throws -> String {
         guard let context else {
             throw WhisperError.contextNotInitialized
         }
@@ -37,6 +37,7 @@ actor WhisperContext {
         params.print_special = false
         params.no_timestamps = true
         params.single_segment = false
+        params.translate = translate
 
         let languageCString = Array((language ?? "auto").utf8CString)
         let promptCString = initialPrompt.map { Array($0.utf8CString) }

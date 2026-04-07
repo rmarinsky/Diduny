@@ -100,11 +100,15 @@ final class RecordingQueueService {
         do {
             let audioData = try Data(contentsOf: audioURL)
 
-            let provider: TranscriptionProvider
-            if let override = providerOverride {
-                provider = override
+            let provider: TranscriptionProvider = if let override = providerOverride {
+                override
             } else {
-                provider = SettingsStorage.shared.transcriptionProvider
+                switch action {
+                case .transcribe:
+                    SettingsStorage.shared.effectiveTranscriptionProvider
+                case .translate:
+                    SettingsStorage.shared.effectiveTranslationProvider
+                }
             }
 
             let service = createTranscriptionService(

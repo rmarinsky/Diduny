@@ -36,7 +36,7 @@
 
 ### Build from Source
 
-- Xcode 15.0+
+- Xcode 17.0+
 - [Homebrew](https://brew.sh) (for XcodeGen)
 
 ## Build & Install

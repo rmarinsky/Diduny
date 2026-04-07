@@ -37,7 +37,8 @@ final class RecordingsLibraryStorage {
         audioData: Data,
         type: Recording.RecordingType,
         duration: TimeInterval,
-        transcriptionText: String? = nil
+        transcriptionText: String? = nil,
+        sourceDevice: RecordingDeviceInfo? = nil
     ) {
         let recordingID = id ?? UUID()
         let fileName = "\(recordingID.uuidString).wav"
@@ -50,11 +51,10 @@ final class RecordingsLibraryStorage {
             return
         }
 
-        let status: Recording.ProcessingStatus
-        if transcriptionText != nil {
-            status = type == .translation ? .translated : .transcribed
+        let status: Recording.ProcessingStatus = if transcriptionText != nil {
+            type == .translation ? .translated : .transcribed
         } else {
-            status = .unprocessed
+            .unprocessed
         }
         let recording = Recording(
             id: recordingID,
@@ -65,7 +65,8 @@ final class RecordingsLibraryStorage {
             fileSizeBytes: Int64(audioData.count),
             status: status,
             transcriptionText: transcriptionText,
-            processedAt: transcriptionText != nil ? Date() : nil
+            processedAt: transcriptionText != nil ? Date() : nil,
+            sourceDevice: sourceDevice
         )
 
         recordings.insert(recording, at: 0)
@@ -80,7 +81,8 @@ final class RecordingsLibraryStorage {
         audioURL: URL,
         type: Recording.RecordingType,
         duration: TimeInterval,
-        transcriptionText: String? = nil
+        transcriptionText: String? = nil,
+        sourceDevice: RecordingDeviceInfo? = nil
     ) {
         let recordingID = id ?? UUID()
         let ext = audioURL.pathExtension.isEmpty ? "wav" : audioURL.pathExtension
@@ -94,20 +96,18 @@ final class RecordingsLibraryStorage {
             return
         }
 
-        let fileSize: Int64
-        if let attrs = try? fileManager.attributesOfItem(atPath: destURL.path),
-           let size = attrs[.size] as? Int64
+        let fileSize: Int64 = if let attrs = try? fileManager.attributesOfItem(atPath: destURL.path),
+                                 let size = attrs[.size] as? Int64
         {
-            fileSize = size
+            size
         } else {
-            fileSize = 0
+            0
         }
 
-        let status: Recording.ProcessingStatus
-        if transcriptionText != nil {
-            status = type == .translation ? .translated : .transcribed
+        let status: Recording.ProcessingStatus = if transcriptionText != nil {
+            type == .translation ? .translated : .transcribed
         } else {
-            status = .unprocessed
+            .unprocessed
         }
 
         let recording = Recording(
@@ -119,7 +119,8 @@ final class RecordingsLibraryStorage {
             fileSizeBytes: fileSize,
             status: status,
             transcriptionText: transcriptionText,
-            processedAt: transcriptionText != nil ? Date() : nil
+            processedAt: transcriptionText != nil ? Date() : nil,
+            sourceDevice: sourceDevice
         )
 
         recordings.insert(recording, at: 0)
@@ -203,14 +204,17 @@ final class RecordingsLibraryStorage {
     }
 
     private func pruneOrphaned() {
-        let before = self.recordings.count
-        self.recordings.removeAll { recording in
-            let fileURL = self.recordingsDir.appendingPathComponent(recording.audioFileName)
-            return !self.fileManager.fileExists(atPath: fileURL.path)
+        let before = recordings.count
+        let recordingsDir = self.recordingsDir
+        let fileManager = self.fileManager
+        recordings.removeAll { recording in
+            let fileURL = recordingsDir.appendingPathComponent(recording.audioFileName)
+            return !fileManager.fileExists(atPath: fileURL.path)
         }
-        if self.recordings.count != before {
-            Log.app.info("Pruned \(before - self.recordings.count) orphaned recording entries")
-            self.saveMetadata()
+        if recordings.count != before {
+            let prunedCount = before - recordings.count
+            Log.app.info("Pruned \(prunedCount) orphaned recording entries")
+            saveMetadata()
         }
     }
 }

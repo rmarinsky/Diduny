@@ -9,6 +9,7 @@ protocol AudioRecorderProtocol: AnyObject {
     var isRecording: Bool { get }
     var audioLevel: Float { get }
     var currentRecordingPath: String? { get }
+    var currentRecordingDeviceInfo: RecordingDeviceInfo? { get }
     func startRecording(device: AudioDevice?) async throws
     func stopRecording() async throws -> Data
     func cancelRecording()
@@ -55,10 +56,12 @@ protocol AudioDeviceManagerProtocol: AnyObject {
     func refreshDevices()
     func isDeviceAvailable(uid: String) -> Bool
     func device(forUID uid: String) -> AudioDevice?
-    func getCurrentDefaultDevice() -> AudioDevice?
     func bestDevice() -> AudioDevice?
-    func isDeviceAlive(_ deviceID: AudioDeviceID) -> Bool
-    func getValidDevice(selectedUID: String?) -> (device: AudioDevice?, didFallback: Bool)
+    func score(for device: AudioDevice, strategy: MicrophoneSelectionStrategy) -> AudioDeviceScore
+    func recommendedDevice(strategy: MicrophoneSelectionStrategy) -> AudioDevice?
+    func resolveDevice(preferredUID: String?) -> (device: AudioDevice?, didFallback: Bool)
+    func resolveDevice(preferredUID: String?, strategy: MicrophoneSelectionStrategy)
+        -> (device: AudioDevice?, didFallback: Bool)
 }
 
 // MARK: - Push To Talk Service Protocol
@@ -77,7 +80,6 @@ protocol PushToTalkServiceProtocol: AnyObject {
 
 // MARK: - Meeting Recorder Service Protocol
 
-@available(macOS 13.0, *)
 protocol MeetingRecorderServiceProtocol: AnyObject {
     var isRecording: Bool { get }
     var currentRecordingPath: String? { get }

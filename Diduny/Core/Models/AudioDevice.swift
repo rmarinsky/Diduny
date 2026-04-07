@@ -46,6 +46,44 @@ enum AudioTransportType: String, Comparable {
     }
 }
 
+enum MicrophoneSelectionStrategy: String, CaseIterable, Identifiable {
+    case manual
+    case auto
+    case preferNoiseReduction
+    case preferFidelity
+
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .manual: "Manual"
+        case .auto: "Auto"
+        case .preferNoiseReduction: "Noise"
+        case .preferFidelity: "Fidelity"
+        }
+    }
+
+    var helpText: String {
+        switch self {
+        case .manual:
+            "Use the exact microphone you selected below."
+        case .auto:
+            "Balance proximity, noise handling, and fidelity."
+        case .preferNoiseReduction:
+            "Prefer headset-style microphones like AirPods in noisy places."
+        case .preferFidelity:
+            "Prefer built-in or wired microphones with wider bandwidth."
+        }
+    }
+}
+
+struct AudioDeviceScore {
+    let total: Int
+    let summary: String
+}
+
 struct AudioDevice: Identifiable, Equatable, Hashable {
     /// Stable UID string from the driver — persists across reboots.
     let uid: String
@@ -63,5 +101,51 @@ struct AudioDevice: Identifiable, Equatable, Hashable {
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(uid)
+    }
+
+    private var normalizedName: String {
+        name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .lowercased()
+    }
+
+    var isBluetooth: Bool {
+        transportType == .bluetooth
+    }
+
+    var isBuiltInMic: Bool {
+        transportType == .builtIn || normalizedName.contains("macbook") || normalizedName.contains("built-in")
+    }
+
+    var isAirPodsLike: Bool {
+        normalizedName.contains("airpods") || normalizedName.contains("beats fit pro")
+    }
+
+    var isHeadsetLike: Bool {
+        isAirPodsLike ||
+            normalizedName.contains("headset") ||
+            normalizedName.contains("headphones") ||
+            normalizedName.contains("earpods") ||
+            normalizedName.contains("buds") ||
+            normalizedName.contains("jabra") ||
+            normalizedName.contains("plantronics")
+    }
+
+    var qualityHint: String {
+        if isAirPodsLike {
+            return "Close mic, better in noise, lower bandwidth"
+        }
+        if isHeadsetLike {
+            return "Headset mic, usually better in noise"
+        }
+        if isBuiltInMic {
+            return "Wider capture, may pick up more room noise"
+        }
+        if transportType == .usb || transportType == .thunderbolt || transportType == .firewire {
+            return "External mic, usually best fidelity"
+        }
+        if transportType == .bluetooth {
+            return "Bluetooth mic, voice-optimized but bandwidth-limited"
+        }
+        return "General-purpose input device"
     }
 }
