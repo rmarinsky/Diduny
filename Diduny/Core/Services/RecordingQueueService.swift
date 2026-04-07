@@ -103,7 +103,12 @@ final class RecordingQueueService {
             let provider: TranscriptionProvider = if let override = providerOverride {
                 override
             } else {
-                SettingsStorage.shared.effectiveTranscriptionProvider
+                switch action {
+                case .transcribe:
+                    SettingsStorage.shared.effectiveTranscriptionProvider
+                case .translate:
+                    SettingsStorage.shared.effectiveTranslationProvider
+                }
             }
 
             let service = createTranscriptionService(

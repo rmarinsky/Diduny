@@ -35,7 +35,7 @@ final class SystemAudioCaptureService: NSObject {
     /// Gain applied to microphone samples before mixing (0–2, default 1.0).
     var micGain: Float = 1.0
 
-    /// Gain applied to system audio samples before mixing (0–2, default 0.3).
+    /// Gain applied to system audio samples before mixing with microphone (0–2, default 0.3).
     var systemGain: Float = 0.3
 
     var onError: ((Error) -> Void)?
@@ -183,13 +183,14 @@ final class SystemAudioCaptureService: NSObject {
     private func startMicrophoneCapture() throws {
         let engine = AVAudioEngine()
         let shouldBindExplicitDevice = shouldBindExplicitDevice(microphoneDevice)
+        var didBindExplicitDevice = false
 
         // Set specific device if provided
         if shouldBindExplicitDevice, let device = microphoneDevice {
             let inputNode = engine.inputNode
             if let audioUnit = inputNode.audioUnit {
                 var deviceID = device.id
-                AudioUnitSetProperty(
+                let status = AudioUnitSetProperty(
                     audioUnit,
                     kAudioOutputUnitProperty_CurrentDevice,
                     kAudioUnitScope_Global,
@@ -197,11 +198,25 @@ final class SystemAudioCaptureService: NSObject {
                     &deviceID,
                     UInt32(MemoryLayout<AudioDeviceID>.size)
                 )
-                Log.audio
-                    .info(
-                        "Meeting mic explicit binding to \(device.name), uid=\(device.uid), transport=\(device.transportType.displayName)"
+                if status == noErr {
+                    didBindExplicitDevice = true
+                    Log.audio
+                        .info(
+                            "Meeting mic explicit binding to \(device.name), uid=\(device.uid), transport=\(device.transportType.displayName)"
+                        )
+                    NSLog("[AudioCapture] Set mic engine device to %@ (id=%d)", device.name, device.id)
+                } else {
+                    Log.audio
+                        .warning(
+                            "Meeting mic explicit binding failed: status=\(status), device=\(device.name), uid=\(device.uid)"
+                        )
+                    NSLog(
+                        "[AudioCapture] WARNING: failed to bind mic device %@ (id=%d, status=%d), using system default route",
+                        device.name,
+                        device.id,
+                        status
                     )
-                NSLog("[AudioCapture] Set mic engine device to %@ (id=%d)", device.name, device.id)
+                }
             }
         }
 
@@ -214,7 +229,7 @@ final class SystemAudioCaptureService: NSObject {
         }
 
         Log.audio.info(
-            "Meeting mic format resolved: input=\(self.formatDescription(inputFormat)), output=\(self.formatDescription(nodeOutputFormat)), explicitBinding=\(shouldBindExplicitDevice)"
+            "Meeting mic format resolved: input=\(self.formatDescription(inputFormat)), output=\(self.formatDescription(nodeOutputFormat)), explicitBinding=\(didBindExplicitDevice)"
         )
         NSLog(
             "[AudioCapture] Mic input format: sampleRate=%.0f, channels=%d",
@@ -337,19 +352,7 @@ final class SystemAudioCaptureService: NSObject {
         self.stream = nil
         isCapturing = false
 
-        // Wait for pending mixer queue work, then flush remaining buffers
-        mixerQueue.sync { [self] in
-            fileWriteQueue.sync { [self] in
-                flushRemainingBuffers()
-            }
-        }
-
-        audioFile = nil
-        outputFormat = nil
-        sampleCount = 0
-        systemBuffer.removeAll()
-        micBuffer.removeAll()
-        microphoneCaptureStarted = false
+        synchronizedTeardown(flushPendingAudio: true)
 
         Log.audio.info("Capture stopped, file saved to: \(self.outputURL?.path ?? "nil")")
         return outputURL
@@ -364,16 +367,27 @@ final class SystemAudioCaptureService: NSObject {
 
         stream = nil
         isCapturing = false
-        audioFile = nil
-        outputFormat = nil
-        sampleCount = 0
-        systemBuffer.removeAll()
-        micBuffer.removeAll()
-        microphoneCaptureStarted = false
+        synchronizedTeardown(flushPendingAudio: false)
 
         if removeOutputFile, let outputURL {
             try? FileManager.default.removeItem(at: outputURL)
         }
+    }
+
+    private func synchronizedTeardown(flushPendingAudio: Bool) {
+        mixerQueue.sync { [self] in
+            fileWriteQueue.sync { [self] in
+                if flushPendingAudio {
+                    flushRemainingBuffers()
+                }
+                audioFile = nil
+                outputFormat = nil
+                systemBuffer.removeAll()
+                micBuffer.removeAll()
+            }
+        }
+        sampleCount = 0
+        microphoneCaptureStarted = false
     }
 
     // MARK: - Audio File Setup
@@ -437,16 +451,13 @@ final class SystemAudioCaptureService: NSObject {
 // MARK: - SCStreamDelegate
 
 extension SystemAudioCaptureService: SCStreamDelegate {
-    func stream(_: SCStream, didStopWithError error: Error) {
+    func stream(_ stream: SCStream, didStopWithError error: Error) {
+        guard let activeStream = self.stream, activeStream === stream else { return }
         Log.audio.error("Stream stopped with error: \(error)")
         stopMicrophoneCapture()
-        stream = nil
+        self.stream = nil
         isCapturing = false
-        audioFile = nil
-        outputFormat = nil
-        systemBuffer.removeAll()
-        micBuffer.removeAll()
-        microphoneCaptureStarted = false
+        synchronizedTeardown(flushPendingAudio: false)
         onError?(error)
     }
 }
@@ -454,7 +465,8 @@ extension SystemAudioCaptureService: SCStreamDelegate {
 // MARK: - SCStreamOutput
 
 extension SystemAudioCaptureService: SCStreamOutput {
-    func stream(_: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+        guard let activeStream = self.stream, activeStream === stream, isCapturing else { return }
         delegateCallCount += 1
         if delegateCallCount <= 5 {
             NSLog("[AudioCapture] delegate called #%d, type=%d (.screen=0, .audio=1)", delegateCallCount, type.rawValue)
@@ -492,13 +504,14 @@ extension SystemAudioCaptureService: SCStreamOutput {
             checkSilence(source: .system)
         }
 
+        let appliedSystemGain: Float = captureMicrophone ? systemGain : 1.0
+        let gained = samples.map { max(-1, min(1, $0 * appliedSystemGain)) }
+
         if captureMicrophone {
-            let gained = samples.map { max(-1, min(1, $0 * systemGain)) }
             systemBuffer.append(contentsOf: gained)
             drainMixedSamples()
             flushStaleBuffer()
         } else {
-            let gained = samples.map { max(-1, min(1, $0 * systemGain)) }
             emitRealtimeData(gained)
             fileWriteQueue.async { [weak self] in
                 self?.writeSamples(gained)
@@ -614,7 +627,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
             try audioFile.write(from: buffer)
 
             let now = Date()
-            if now.timeIntervalSince(lastFlushTime) >= flushInterval {
+            if now.timeIntervalSince(lastFlushTime) >= self.flushInterval {
                 Log.audio.info("Audio buffer auto-flush (every \(self.flushInterval)s)")
                 lastFlushTime = now
             }
@@ -657,7 +670,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
         }
         guard frameCount > 0 else { return nil }
 
-        if sampleCount <= 3 {
+        if self.sampleCount <= 3 {
             Log.audio
                 .info(
                     "Audio sample \(self.sampleCount): frames=\(frameCount), sampleRate=\(asbd.pointee.mSampleRate), ch=\(channelCount), bits=\(bitsPerChannel), float=\(isFloat)"

@@ -86,17 +86,10 @@ final class SettingsStorage {
         )
         var size = UInt32(MemoryLayout<CFString?>.size)
         let deviceID = AudioDeviceID(legacyValue)
-        let uid: String? = withUnsafeTemporaryAllocation(
-            of: UInt8.self,
-            capacity: Int(size)
-        ) { buffer -> String? in
-            guard let baseAddress = buffer.baseAddress else { return nil }
-            let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, baseAddress)
-            guard status == noErr else { return nil }
-            let cfValue = baseAddress.withMemoryRebound(to: CFString?.self, capacity: 1) { $0.pointee }
-            return cfValue as String?
-        }
-        guard let uid else { return } // keep legacy key for retry on next launch
+        var cfUID: CFString?
+        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, &cfUID)
+        guard status == noErr, let cfUID else { return } // keep legacy key for retry on next launch
+        let uid = cfUID as String
         defaults.set(uid, forKey: Key.selectedDeviceUID.rawValue)
         defaults.removeObject(forKey: legacyKey)
     }

@@ -300,6 +300,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .seconds(delay))
             guard let self else { return }
 
+            if appState.meetingTranslationRecordingState == .recording {
+                NotchManager.shared.startRecording(mode: .meetingTranslation)
+                return
+            }
+            if appState.meetingTranslationRecordingState == .processing {
+                NotchManager.shared.startProcessing(mode: .meetingTranslation)
+                return
+            }
+
             if appState.meetingRecordingState == .recording {
                 NotchManager.shared.startRecording(mode: .meeting)
                 return

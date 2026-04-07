@@ -143,6 +143,7 @@ extension AppDelegate {
                 let (device, didFallback) = audioDeviceManager.resolveDevice(
                     preferredUID: appState.preferredDeviceUID
                 )
+                appState.deviceFallbackWarning = nil
                 if let device {
                     Log.app.info(
                         "startMeetingRecording: Device resolution result = \(device.name), transport=\(device.transportType.displayName), sampleRate=\(Int(device.sampleRate)), uid=\(device.uid)"

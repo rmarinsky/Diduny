@@ -233,6 +233,9 @@ struct OfflineModelsSettingsView: View {
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(.quaternary, lineWidth: 1)
                     )
+                    .onChange(of: whisperPrompt) { _, newValue in
+                        SettingsStorage.shared.whisperPrompt = newValue
+                    }
 
                 Text(
                     "Guides the Whisper decoder. Write a sentence in your target language to improve recognition. Example for Ukrainian: \"\u{041F}\u{0440}\u{0438}\u{0432}\u{0456}\u{0442}, \u{0446}\u{0435} \u{0442}\u{0440}\u{0430}\u{043D}\u{0441}\u{043A}\u{0440}\u{0438}\u{043F}\u{0446}\u{0456}\u{044F} \u{0443}\u{043A}\u{0440}\u{0430}\u{0457}\u{043D}\u{0441}\u{044C}\u{043A}\u{043E}\u{044E} \u{043C}\u{043E}\u{0432}\u{043E}\u{044E}.\""
