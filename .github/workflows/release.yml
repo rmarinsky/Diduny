@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 env:
   APP_NAME: Diduny
@@ -182,6 +183,25 @@ jobs:
             echo 'SPARKLE_EOF'
           } >> "$GITHUB_ENV"
 
+      - name: Create or update GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" \
+              "build/${DISPLAY_NAME}-${VERSION}.dmg" \
+              "build/${DISPLAY_NAME}-${VERSION}.sha256" \
+              --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              "build/${DISPLAY_NAME}-${VERSION}.dmg" \
+              "build/${DISPLAY_NAME}-${VERSION}.sha256" \
+              --title "${APP_NAME} ${VERSION}" \
+              --generate-notes
+          fi
+
       - name: Update appcast.xml
         run: |
           VERSION=${GITHUB_REF_NAME#v}
@@ -223,33 +243,38 @@ jobs:
           echo "Updated appcast.xml with version ${VERSION}"
           cat docs/appcast.xml
 
-      - name: Commit and push appcast.xml
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # We're on detached HEAD (tag checkout), so stash the updated appcast,
-          # switch to main, apply it, commit and push
-          cp docs/appcast.xml /tmp/appcast.xml
-          git checkout main
-          cp /tmp/appcast.xml docs/appcast.xml
-          git add docs/appcast.xml
-          if ! git diff --quiet --cached -- docs/appcast.xml; then
-            git commit -m "Update appcast.xml for ${GITHUB_REF_NAME}"
-            git push origin main
-          fi
-
-      - name: Create GitHub release
+      - name: Commit appcast.xml via PR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          gh release create "${GITHUB_REF_NAME}" \
-            "build/${DISPLAY_NAME}-${VERSION}.dmg" \
-            "build/${DISPLAY_NAME}-${VERSION}.sha256" \
-            --title "${APP_NAME} ${VERSION}" \
-            --generate-notes
+          VERSION=${GITHUB_REF_NAME#v}
+          BRANCH_NAME="appcast-${GITHUB_REF_NAME}"
+
+          cp docs/appcast.xml /tmp/appcast.xml
+          git fetch origin main
+          git checkout -B "$BRANCH_NAME" origin/main
+          cp /tmp/appcast.xml docs/appcast.xml
+          git add docs/appcast.xml
+
+          if ! git diff --quiet --cached -- docs/appcast.xml; then
+            git commit -m "Update appcast.xml for ${GITHUB_REF_NAME}"
+            git push --force-with-lease origin "$BRANCH_NAME"
+
+            PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --base main --json number --jq '.[0].number')
+            if [ -z "$PR_NUMBER" ]; then
+              gh pr create \
+                --base main \
+                --head "$BRANCH_NAME" \
+                --title "Update appcast.xml for ${GITHUB_REF_NAME}" \
+                --body "Automated Sparkle appcast update for ${GITHUB_REF_NAME}."
+              PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --base main --json number --jq '.[0].number')
+            fi
+
+            gh pr merge "$PR_NUMBER" --squash --delete-branch
+          fi
 
       - name: Cleanup signing artifacts
         if: always()
