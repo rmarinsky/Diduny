@@ -115,6 +115,9 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
             throw TranscriptionError.invalidURL
         }
 
+        // Optimize audio before upload: downsample to 16kHz mono + FLAC compress
+        let optimizedData = await optimizeAudioForUpload(audioData)
+
         let boundary = UUID().uuidString
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -125,8 +128,8 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
         let configData = try JSONSerialization.data(withJSONObject: config)
         let configString = String(data: configData, encoding: .utf8) ?? "{}"
 
-        let (filename, contentType) = detectAudioFormat(audioData)
-        Log.transcription.info("proxyTranscribe: audio format=\(contentType), config=\(configString)")
+        let (filename, contentType) = detectAudioFormat(optimizedData)
+        Log.transcription.info("proxyTranscribe: audio format=\(contentType), original=\(audioData.count) bytes, optimized=\(optimizedData.count) bytes, config=\(configString)")
 
         // Build multipart body: audio + config
         var body = Data()
@@ -134,7 +137,7 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
         body.append(Data("--\(boundary)\r\n".utf8))
         body.append(Data("Content-Disposition: form-data; name=\"audio\"; filename=\"\(filename)\"\r\n".utf8))
         body.append(Data("Content-Type: \(contentType)\r\n\r\n".utf8))
-        body.append(audioData)
+        body.append(optimizedData)
         body.append(Data("\r\n".utf8))
         // Config part
         body.append(Data("--\(boundary)\r\n".utf8))
@@ -176,6 +179,83 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
         }
 
         return try JSONDecoder().decode(ProxyTranscribeResponse.self, from: data)
+    }
+
+    // MARK: - Audio Optimization for Upload
+
+    /// Downsample WAV to 16kHz mono 16-bit, then FLAC compress.
+    /// Soniox processes 16kHz mono — sending higher quality wastes upload time and processing time.
+    /// 48kHz stereo 32-bit (38MB/min) → 16kHz mono 16-bit WAV (1.9MB/min) → FLAC (~1MB/min)
+    private func optimizeAudioForUpload(_ audioData: Data) async -> Data {
+        let startTime = ContinuousClock.now
+
+        // Step 1: Downsample to 16kHz mono 16-bit WAV using afconvert
+        let downsampledData = await downsampleToSoniox(audioData)
+
+        // Step 2: FLAC compress the downsampled WAV
+        let compressedData = await AudioCompressionService.compressToFLAC(audioData: downsampledData)
+
+        let elapsed = ContinuousClock.now - startTime
+        let ratio = audioData.count > 0 ? Double(compressedData.count) / Double(audioData.count) * 100 : 100
+        Log.transcription.info(
+            "Audio optimized: \(audioData.count) → \(compressedData.count) bytes (\(String(format: "%.1f%%", ratio))) in \(elapsed)"
+        )
+
+        return compressedData
+    }
+
+    /// Downsample audio to 16kHz mono 16-bit PCM WAV using macOS afconvert.
+    private func downsampleToSoniox(_ audioData: Data) async -> Data {
+        let tempDir = FileManager.default.temporaryDirectory
+        let inputURL = tempDir.appendingPathComponent(UUID().uuidString + ".wav")
+        let outputURL = tempDir.appendingPathComponent(UUID().uuidString + "_16k.wav")
+
+        defer {
+            try? FileManager.default.removeItem(at: inputURL)
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+
+        do {
+            try audioData.write(to: inputURL)
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
+            process.arguments = [
+                "-f", "WAVE",           // output format: WAV
+                "-d", "LEI16",          // data format: little-endian 16-bit integer
+                "-c", "1",              // mono
+                "-r", "16000",          // 16kHz sample rate
+                inputURL.path,
+                outputURL.path
+            ]
+
+            let errorPipe = Pipe()
+            process.standardError = errorPipe
+
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                process.terminationHandler = { proc in
+                    if proc.terminationStatus == 0 {
+                        continuation.resume()
+                    } else {
+                        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                        let msg = String(data: errorData, encoding: .utf8) ?? "exit \(proc.terminationStatus)"
+                        continuation.resume(throwing: NSError(domain: "afconvert", code: Int(proc.terminationStatus), userInfo: [NSLocalizedDescriptionKey: msg]))
+                    }
+                }
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+
+            let downsampledData = try Data(contentsOf: outputURL)
+            Log.transcription.info("Downsampled: \(audioData.count) → \(downsampledData.count) bytes (16kHz mono s16le)")
+            return downsampledData
+        } catch {
+            Log.transcription.warning("Downsample failed, using original: \(error.localizedDescription)")
+            return audioData
+        }
     }
 
     // MARK: - Speech Pre-check

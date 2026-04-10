@@ -395,12 +395,44 @@ extension AppDelegate {
                 text = realtimeText
                 Log.app.info("Using real-time transcript (\(realtimeText.count) chars)")
             } else if cloudModeEnabled {
-                Log.app.info("No real-time transcript, falling back to async API...")
+                Log.app.info("No real-time transcript, falling back to async jobs API...")
                 let audioData = try await loadAudioData(from: compressedURL)
                 Log.app.info("Meeting recording size = \(audioData.count) bytes")
 
-                text = try await transcriptionService.transcribeMeeting(audioData: audioData)
-                Log.app.info("Async meeting transcription received (\(text?.count ?? 0) chars)")
+                let asyncJobService = AsyncTranscriptionJobService()
+                let hints = SettingsStorage.shared.favoriteLanguages
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                var config: [String: Any] = [
+                    "mode": "transcribe",
+                    "enable_speaker_diarization": true
+                ]
+                if !hints.isEmpty {
+                    config["language_hints"] = hints
+                }
+
+                text = try await asyncJobService.transcribeMeetingWithRetry(
+                    audioData: audioData,
+                    config: config
+                ) { status in
+                    Task { @MainActor in
+                        switch status {
+                        case .queued:
+                            NotchManager.shared.showInfo(message: "Queued...", duration: 30)
+                        case .uploading:
+                            NotchManager.shared.showInfo(message: "Uploading...", duration: 30)
+                        case .processing:
+                            // Processing can take tens of minutes for large files —
+                            // use persistent processing state instead of auto-dismissing info
+                            NotchManager.shared.startProcessing(mode: .meeting)
+                        case .finalizing:
+                            NotchManager.shared.showInfo(message: "Finishing up...", duration: 30)
+                        default:
+                            break
+                        }
+                    }
+                }
+                Log.app.info("Async jobs transcription received (\(text?.count ?? 0) chars)")
             } else {
                 text = nil
                 Log.app.info("Saving meeting recording without automatic transcription")

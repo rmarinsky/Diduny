@@ -7,6 +7,7 @@ final class RecordingQueueService {
 
     enum QueueAction {
         case transcribe
+        case transcribeDiarize
         case translate
     }
 
@@ -104,7 +105,7 @@ final class RecordingQueueService {
                 override
             } else {
                 switch action {
-                case .transcribe:
+                case .transcribe, .transcribeDiarize:
                     SettingsStorage.shared.effectiveTranscriptionProvider
                 case .translate:
                     SettingsStorage.shared.effectiveTranslationProvider
@@ -120,10 +121,10 @@ final class RecordingQueueService {
             let status: Recording.ProcessingStatus
             switch action {
             case .transcribe:
-                if provider == .cloud,
-                   recording.type == .meeting,
-                   let cloudService = service as? CloudTranscriptionService
-                {
+                text = try await service.transcribe(audioData: audioData)
+                status = .transcribed
+            case .transcribeDiarize:
+                if let cloudService = service as? CloudTranscriptionService {
                     text = try await cloudService.transcribeMeeting(audioData: audioData)
                 } else {
                     text = try await service.transcribe(audioData: audioData)
