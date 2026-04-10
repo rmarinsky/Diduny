@@ -164,7 +164,7 @@ struct RecordingDetailView: View {
                 Button("Transcribe + Diarize") {
                     queueService.enqueue(
                         [recording.id],
-                        action: .transcribe,
+                        action: .transcribeDiarize,
                         providerOverride: .cloud
                     )
                 }

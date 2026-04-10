@@ -417,7 +417,8 @@ final class SystemAudioCaptureService: NSObject {
         guard audioFile != nil else { return }
 
         if captureMicrophone {
-            // Mix overlapping frames synchronously
+            // Mix overlapping frames synchronously and write to file only.
+            // Real-time emit already happened in handleSystemAudio().
             let mixCount = min(systemBuffer.count, micBuffer.count)
             if mixCount > 0 {
                 var mixed = [Float](repeating: 0, count: mixCount)
@@ -426,22 +427,17 @@ final class SystemAudioCaptureService: NSObject {
                 }
                 systemBuffer.removeFirst(mixCount)
                 micBuffer.removeFirst(mixCount)
-                emitRealtimeData(mixed)
                 writeSamples(mixed)
             }
-            // Flush remaining single-source samples
             if !systemBuffer.isEmpty {
-                emitRealtimeData(systemBuffer)
                 writeSamples(systemBuffer)
                 systemBuffer.removeAll()
             }
             if !micBuffer.isEmpty {
-                emitRealtimeData(micBuffer)
                 writeSamples(micBuffer)
                 micBuffer.removeAll()
             }
         } else if !systemBuffer.isEmpty {
-            emitRealtimeData(systemBuffer)
             writeSamples(systemBuffer)
             systemBuffer.removeAll()
         }
@@ -504,17 +500,20 @@ extension SystemAudioCaptureService: SCStreamOutput {
             checkSilence(source: .system)
         }
 
-        let appliedSystemGain: Float = captureMicrophone ? systemGain : 1.0
-        let gained = samples.map { max(-1, min(1, $0 * appliedSystemGain)) }
+        // Emit system audio for real-time transcription IMMEDIATELY, before mixing.
+        // This restores v1.12.0 behavior where real-time streaming was never blocked
+        // by mixer synchronization. The mixed audio is only needed for the WAV file.
+        emitRealtimeData(samples)
 
         if captureMicrophone {
+            let appliedSystemGain = systemGain
+            let gained = samples.map { max(-1, min(1, $0 * appliedSystemGain)) }
             systemBuffer.append(contentsOf: gained)
             drainMixedSamples()
             flushStaleBuffer()
         } else {
-            emitRealtimeData(gained)
             fileWriteQueue.async { [weak self] in
-                self?.writeSamples(gained)
+                self?.writeSamples(samples)
             }
         }
     }
@@ -556,7 +555,8 @@ extension SystemAudioCaptureService: SCStreamOutput {
         systemBuffer.removeFirst(mixCount)
         micBuffer.removeFirst(mixCount)
 
-        emitRealtimeData(mixed)
+        // Real-time emit happens in handleSystemAudio() before mixing.
+        // Mixer output is only written to the WAV file.
         fileWriteQueue.async { [weak self] in
             self?.writeSamples(mixed)
         }
@@ -574,7 +574,8 @@ extension SystemAudioCaptureService: SCStreamOutput {
         guard buffer.count > flushThresholdFrames else { return }
         let stale = Array(buffer)
         buffer.removeAll()
-        emitRealtimeData(stale)
+        // Real-time emit happens in handleSystemAudio() before mixing.
+        // Stale buffer flush only writes to the WAV file.
         fileWriteQueue.async { [weak self] in
             self?.writeSamples(stale)
         }
