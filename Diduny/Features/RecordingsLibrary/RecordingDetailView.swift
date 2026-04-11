@@ -24,6 +24,29 @@ struct RecordingDetailView: View {
         return SupportedLanguage.allLanguages.filter { !favCodes.contains($0.code) }
     }
 
+    private var queueStatusText: String? {
+        guard queueService.currentRecordingId == recording.id,
+              let status = queueService.currentJobStatus
+        else { return nil }
+
+        switch status {
+        case .queued:
+            return "Queued..."
+        case .uploading:
+            return "Uploading..."
+        case .processing:
+            return "Transcribing..."
+        case .finalizing:
+            return "Finalizing..."
+        case .completed, .error:
+            return nil
+        }
+    }
+
+    private var supportsSpeakerLabels: Bool {
+        recording.type == .meeting
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
@@ -106,7 +129,7 @@ struct RecordingDetailView: View {
                     HStack {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Processing...")
+                        Text(queueStatusText ?? "Processing...")
                             .foregroundColor(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -161,14 +184,25 @@ struct RecordingDetailView: View {
                 .foregroundColor(.blue)
 
             VStack(alignment: .leading, spacing: 6) {
-                Button("Transcribe + Diarize") {
+                Button("Transcribe") {
                     queueService.enqueue(
                         [recording.id],
-                        action: .transcribeDiarize,
+                        action: .transcribe,
                         providerOverride: .cloud
                     )
                 }
                 .disabled(recording.status == .processing)
+
+                if supportsSpeakerLabels {
+                    Button("Transcribe with Speakers") {
+                        queueService.enqueue(
+                            [recording.id],
+                            action: .transcribeDiarize,
+                            providerOverride: .cloud
+                        )
+                    }
+                    .disabled(recording.status == .processing)
+                }
 
                 HStack(spacing: 6) {
                     Text("Translate:")
@@ -220,7 +254,7 @@ struct RecordingDetailView: View {
 
     private var localActionsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Local (Whisper)", systemImage: "desktopcomputer")
+            Label("Local (Whisper.cpp)", systemImage: "desktopcomputer")
                 .font(.caption)
                 .foregroundColor(.green)
 
@@ -234,7 +268,7 @@ struct RecordingDetailView: View {
                     .pickerStyle(.menu)
                     .frame(maxWidth: 200)
 
-                    Button("Transcribe") {
+                    Button("Transcribe Locally") {
                         let modelName = selectedWhisperModel.isEmpty ? downloadedWhisperModels.first?
                             .name : selectedWhisperModel
                         queueService.enqueue(
@@ -246,8 +280,12 @@ struct RecordingDetailView: View {
                     }
                     .disabled(recording.status == .processing)
                 }
+
+                Text("Use this when you want offline processing with the selected Whisper model.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             } else {
-                Text("Download a Whisper model in Settings")
+                Text("Only Whisper-compatible local models are supported right now. Download one in Settings.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .italic()

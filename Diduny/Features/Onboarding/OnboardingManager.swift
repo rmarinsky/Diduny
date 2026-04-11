@@ -153,6 +153,10 @@ final class OnboardingManager {
 
         SettingsStorage.shared.pushToTalkKey = .rightShift
         SettingsStorage.shared.handsFreeModeEnabled = false
+        SettingsStorage.shared.pushToTalkToggleTapCount = 3
+        SettingsStorage.shared.translationPushToTalkToggleTapCount = 3
+        SettingsStorage.shared.meetingHotkeyPressCount = 1
+        SettingsStorage.shared.meetingTranslationHotkeyPressCount = 1
         SettingsStorage.shared.autoPaste = true
         SettingsStorage.shared.playSoundOnCompletion = true
     }

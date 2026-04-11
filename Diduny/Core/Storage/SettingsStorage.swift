@@ -40,11 +40,17 @@ final class SettingsStorage {
         case playSoundOnCompletion
         case launchAtLogin
         case pushToTalkKey
+        case pushToTalkToggleTapCount
         case meetingAudioSource
         case meetingMicGain
         case meetingSystemGain
         case translationPushToTalkKey
+        case translationPushToTalkToggleTapCount
         case handsFreeModeEnabled
+        case recordingHotkeyPressCount
+        case translationHotkeyPressCount
+        case meetingHotkeyPressCount
+        case meetingTranslationHotkeyPressCount
         case transcriptionProvider
         case selectedWhisperModel
         case whisperLanguage
@@ -58,6 +64,7 @@ final class SettingsStorage {
         case meetingRealtimeTranscriptionEnabled
         case escapeCancelEnabled
         case escapeCancelShortcut
+        case escapeCancelPressCount
         case escapeCancelSaveAudio
         case textCleanupEnabled
         case fillerWords
@@ -241,13 +248,27 @@ final class SettingsStorage {
             guard let rawValue = defaults.string(forKey: Key.pushToTalkKey.rawValue),
                   let key = PushToTalkKey(rawValue: rawValue)
             else {
-                // Default to Right Shift for double-tap mode
+                // Default to Right Shift for modifier-key shortcut mode
                 return .rightShift
             }
             return key
         }
         set {
             defaults.set(newValue.rawValue, forKey: Key.pushToTalkKey.rawValue)
+        }
+    }
+
+    /// Number of presses required to toggle dictation via the selected modifier key in hands-free mode.
+    var pushToTalkToggleTapCount: Int {
+        get {
+            let stored = defaults.object(forKey: Key.pushToTalkToggleTapCount.rawValue) as? Int ?? 3
+            return Self.sanitizedTapCount(stored, fallback: 3)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedTapCount(newValue, fallback: 3),
+                forKey: Key.pushToTalkToggleTapCount.rawValue
+            )
         }
     }
 
@@ -301,9 +322,23 @@ final class SettingsStorage {
         }
     }
 
-    // MARK: - Hands-Free Mode (Double-Tap Toggle)
+    /// Number of presses required to toggle translation via the selected modifier key in hands-free mode.
+    var translationPushToTalkToggleTapCount: Int {
+        get {
+            let stored = defaults.object(forKey: Key.translationPushToTalkToggleTapCount.rawValue) as? Int ?? 3
+            return Self.sanitizedTapCount(stored, fallback: 3)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedTapCount(newValue, fallback: 3),
+                forKey: Key.translationPushToTalkToggleTapCount.rawValue
+            )
+        }
+    }
 
-    /// When enabled, double-tap starts/stops recording (toggle mode)
+    // MARK: - Hands-Free Mode (Multi-Tap Toggle)
+
+    /// When enabled, multi-tap starts/stops recording (toggle mode)
     /// When disabled, hold-to-record mode is used
     var handsFreeModeEnabled: Bool {
         get {
@@ -315,6 +350,60 @@ final class SettingsStorage {
             return defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue)
         }
         set { defaults.set(newValue, forKey: Key.handsFreeModeEnabled.rawValue) }
+    }
+
+    // MARK: - Global Hotkey Press Counts
+
+    var recordingHotkeyPressCount: Int {
+        get {
+            let stored = defaults.object(forKey: Key.recordingHotkeyPressCount.rawValue) as? Int ?? 1
+            return Self.sanitizedPressCount(stored, fallback: 1)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedPressCount(newValue, fallback: 1),
+                forKey: Key.recordingHotkeyPressCount.rawValue
+            )
+        }
+    }
+
+    var translationHotkeyPressCount: Int {
+        get {
+            let stored = defaults.object(forKey: Key.translationHotkeyPressCount.rawValue) as? Int ?? 1
+            return Self.sanitizedPressCount(stored, fallback: 1)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedPressCount(newValue, fallback: 1),
+                forKey: Key.translationHotkeyPressCount.rawValue
+            )
+        }
+    }
+
+    var meetingHotkeyPressCount: Int {
+        get {
+            let stored = defaults.object(forKey: Key.meetingHotkeyPressCount.rawValue) as? Int ?? 1
+            return Self.sanitizedPressCount(stored, fallback: 1)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedPressCount(newValue, fallback: 1),
+                forKey: Key.meetingHotkeyPressCount.rawValue
+            )
+        }
+    }
+
+    var meetingTranslationHotkeyPressCount: Int {
+        get {
+            let stored = defaults.object(forKey: Key.meetingTranslationHotkeyPressCount.rawValue) as? Int ?? 1
+            return Self.sanitizedPressCount(stored, fallback: 1)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedPressCount(newValue, fallback: 1),
+                forKey: Key.meetingTranslationHotkeyPressCount.rawValue
+            )
+        }
     }
 
     // MARK: - Transcription Provider
@@ -380,7 +469,7 @@ final class SettingsStorage {
     var translationRealtimeSocketEnabled: Bool {
         get {
             if defaults.object(forKey: Key.translationRealtimeSocketEnabled.rawValue) == nil {
-                return true
+                return false
             }
             return defaults.bool(forKey: Key.translationRealtimeSocketEnabled.rawValue)
         }
@@ -411,7 +500,7 @@ final class SettingsStorage {
 
     // MARK: - Escape Cancel
 
-    /// Enables double-press Escape cancellation during active recording.
+    /// Enables Escape-based cancellation during active recording.
     var escapeCancelEnabled: Bool {
         get {
             if defaults.object(forKey: Key.escapeCancelEnabled.rawValue) == nil {
@@ -422,8 +511,8 @@ final class SettingsStorage {
         set { defaults.set(newValue, forKey: Key.escapeCancelEnabled.rawValue) }
     }
 
-    /// Shortcut used for double-press cancellation during active recording.
-    /// Default is Escape (double-press).
+    /// Legacy custom cancel shortcut storage.
+    /// Current UI uses None/Esc only, but we keep the persisted model for compatibility.
     var escapeCancelShortcut: RecordingCancelShortcut {
         get {
             guard let data = defaults.data(forKey: Key.escapeCancelShortcut.rawValue),
@@ -437,6 +526,28 @@ final class SettingsStorage {
             guard let data = try? JSONEncoder().encode(newValue) else { return }
             defaults.set(data, forKey: Key.escapeCancelShortcut.rawValue)
         }
+    }
+
+    /// Number of Escape presses required to cancel an active recording.
+    var escapeCancelPressCount: Int {
+        get {
+            let stored = defaults.object(forKey: Key.escapeCancelPressCount.rawValue) as? Int ?? 2
+            return Self.sanitizedTapCount(stored, fallback: 2)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedTapCount(newValue, fallback: 2),
+                forKey: Key.escapeCancelPressCount.rawValue
+            )
+        }
+    }
+
+    func escapeCancelRepeatHint(afterPressCount pressCount: Int) -> String {
+        let remaining = max(escapeCancelPressCount - pressCount, 0)
+        if remaining <= 1 {
+            return "Press Esc 1 more time to cancel"
+        }
+        return "Press Esc \(remaining) more times to cancel"
     }
 
     /// When enabled, cancelled recordings are still saved to the recordings library.
@@ -492,6 +603,16 @@ final class SettingsStorage {
     private static func sanitizedGain(_ value: Float, fallback: Float) -> Float {
         guard value.isFinite else { return fallback }
         return min(max(value, 0), 2.0)
+    }
+
+    private static func sanitizedPressCount(_ value: Int, fallback: Int) -> Int {
+        guard value != 0 else { return fallback }
+        return min(max(value, 1), 3)
+    }
+
+    private static func sanitizedTapCount(_ value: Int, fallback: Int) -> Int {
+        guard value != 0 else { return fallback }
+        return min(max(value, 2), 3)
     }
 
     // MARK: - Proxy Settings

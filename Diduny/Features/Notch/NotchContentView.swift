@@ -36,20 +36,25 @@ struct NotchCompactTrailingView: View {
             switch manager.state {
             case .recording:
                 HStack(spacing: 6) {
+                    NotchStopButton(style: .compact) {
+                        manager.requestStopActiveRecording()
+                    }
                     PulsingDotView()
+                        .allowsHitTesting(false)
                     RecordingTimerView(startTime: manager.recordingStartTime)
+                        .allowsHitTesting(false)
                 }
 
             case .processing:
                 ProgressView()
                     .scaleEffect(0.5)
                     .frame(width: 16, height: 16)
+                    .allowsHitTesting(false)
 
             default:
                 EmptyView()
             }
         }
-        .allowsHitTesting(false)
         .animation(.easeInOut(duration: 0.2), value: manager.state)
     }
 }
@@ -78,8 +83,9 @@ struct NotchExpandedView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
 
             case let .recording(mode):
-                RecordingExpandedView(mode: mode)
-                    .allowsHitTesting(false)
+                RecordingExpandedView(mode: mode) {
+                    manager.requestStopActiveRecording()
+                }
                     .transition(.opacity)
 
             case let .processing(mode):
@@ -186,6 +192,7 @@ private struct RecordingTimerView: View {
 
 private struct RecordingExpandedView: View {
     let mode: RecordingMode
+    let onStop: () -> Void
     @State private var isPulsing = false
 
     var body: some View {
@@ -195,20 +202,65 @@ private struct RecordingExpandedView: View {
                 .frame(width: 8, height: 8)
                 .scaleEffect(isPulsing ? 1.3 : 1.0)
                 .opacity(isPulsing ? 0.7 : 1.0)
+                .allowsHitTesting(false)
 
             Image(systemName: mode.icon)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.red)
+                .allowsHitTesting(false)
 
             Text(mode.label)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.primary)
+                .allowsHitTesting(false)
+
+            Spacer(minLength: 8)
+
+            NotchStopButton(style: .expanded, action: onStop)
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
         }
+    }
+}
+
+private struct NotchStopButton: View {
+    enum Style {
+        case compact
+        case expanded
+    }
+
+    let style: Style
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                switch style {
+                case .compact:
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 16, height: 16)
+                        .background(Circle().fill(.red.opacity(0.95)))
+                case .expanded:
+                    HStack(spacing: 6) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("Stop")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(.red.opacity(0.95)))
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Stop recording")
     }
 }
 
@@ -350,4 +402,3 @@ private struct InfoExpandedView: View {
         }
     }
 }
-

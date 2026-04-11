@@ -5,10 +5,12 @@ enum AudioConverter {
     static let whisperSampleRate: Double = 16000.0
 
     static func convertToWhisperFormat(audioData: Data) throws -> [Float] {
+        let tempFileExtension = detectedAudioFileExtension(for: audioData)
+
         // Write audio data to a temp file so AVAudioFile can read it
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("wav")
+            .appendingPathExtension(tempFileExtension)
 
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
@@ -106,5 +108,39 @@ enum AudioConverter {
         guard let channelData = buffer.floatChannelData else { return [] }
         let frameLength = Int(buffer.frameLength)
         return Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
+    }
+
+    private static func detectedAudioFileExtension(for audioData: Data) -> String {
+        guard audioData.count >= 12 else {
+            return "wav"
+        }
+
+        let bytes = [UInt8](audioData.prefix(12))
+
+        if bytes[0] == 0x52, bytes[1] == 0x49, bytes[2] == 0x46, bytes[3] == 0x46,
+           bytes[8] == 0x57, bytes[9] == 0x41, bytes[10] == 0x56, bytes[11] == 0x45
+        {
+            return "wav"
+        }
+
+        if bytes[0] == 0x66, bytes[1] == 0x4C, bytes[2] == 0x61, bytes[3] == 0x43 {
+            return "flac"
+        }
+
+        if bytes[4] == 0x66, bytes[5] == 0x74, bytes[6] == 0x79, bytes[7] == 0x70 {
+            return "m4a"
+        }
+
+        if (bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) ||
+            (bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0)
+        {
+            return "mp3"
+        }
+
+        if bytes[0] == 0x4F, bytes[1] == 0x67, bytes[2] == 0x67, bytes[3] == 0x53 {
+            return "ogg"
+        }
+
+        return "wav"
     }
 }

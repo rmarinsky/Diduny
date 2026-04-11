@@ -142,6 +142,7 @@ extension AppDelegate {
         do {
             meetingRecorderService.audioSource = SettingsStorage.shared.meetingAudioSource
             meetingRecorderService.onRealtimeAudioData = nil
+            wireMeetingRecorderStatusMessages()
 
             if meetingRecorderService.audioSource == .systemPlusMicrophone {
                 let (device, didFallback) = audioDeviceManager.resolveDevice(
@@ -388,10 +389,20 @@ extension AppDelegate {
             store?.isActive = false
         }
 
-        // Track audioURL for library save in error path
+        // Track audio artifacts for library save and cleanup
         var capturedAudioURL: URL?
+        var originalWavURL: URL?
         let stopTime = Date()
         let recordingId = UUID()
+
+        func cleanupTemporaryAudio() {
+            if let wavURL = originalWavURL {
+                try? FileManager.default.removeItem(at: wavURL)
+            }
+            if let audioURL = capturedAudioURL {
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+        }
 
         do {
             guard let audioURL = try await meetingRecorderService.stopRecording() else {
@@ -451,10 +462,16 @@ extension AppDelegate {
             }
             Log.app.info("stopMeetingTranslationRecording: SUCCESS")
 
+            let compressedURL = await AudioCompressionService.compressToFLAC(wavURL: audioURL)
+            if compressedURL != audioURL {
+                originalWavURL = audioURL
+                capturedAudioURL = compressedURL
+            }
+
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
-                audioURL: audioURL,
+                audioURL: compressedURL,
                 type: .meeting,
                 duration: duration,
                 transcriptionText: text
@@ -465,13 +482,11 @@ extension AppDelegate {
             }
 
             RecoveryStateManager.shared.clearState()
-            try? FileManager.default.removeItem(at: audioURL)
+            cleanupTemporaryAudio()
 
         } catch is CancellationError {
             Log.app.info("stopMeetingTranslationRecording: Cancelled")
-            if let audioURL = capturedAudioURL {
-                try? FileManager.default.removeItem(at: audioURL)
-            }
+            cleanupTemporaryAudio()
             RecoveryStateManager.shared.clearState()
             await MainActor.run {
                 appState.meetingTranslationRecordingState = .idle
@@ -483,14 +498,19 @@ extension AppDelegate {
             Log.app.error("Meeting translation failed: \(error)")
 
             if let audioURL = capturedAudioURL {
+                let audioURLForLibrarySave = await AudioCompressionService.compressToFLAC(wavURL: audioURL)
+                if audioURLForLibrarySave != audioURL {
+                    originalWavURL = audioURL
+                    capturedAudioURL = audioURLForLibrarySave
+                }
                 let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                 RecordingsLibraryStorage.shared.saveRecording(
                     id: recordingId,
-                    audioURL: audioURL,
+                    audioURL: audioURLForLibrarySave,
                     type: .meeting,
                     duration: duration
                 )
-                try? FileManager.default.removeItem(at: audioURL)
+                cleanupTemporaryAudio()
                 RecoveryStateManager.shared.clearState()
             }
 
@@ -537,10 +557,9 @@ extension AppDelegate {
             return
         }
 
-        // On first shortcut press: show confirmation notification
-        escapeService.onFirstEscape = { [weak self] in
+        escapeService.onProgressEscape = { [weak self] pressCount, _ in
             NotchManager.shared.showInfo(
-                message: SettingsStorage.shared.escapeCancelShortcut.repeatHint,
+                message: SettingsStorage.shared.escapeCancelRepeatHint(afterPressCount: pressCount),
                 duration: 1.5
             )
 

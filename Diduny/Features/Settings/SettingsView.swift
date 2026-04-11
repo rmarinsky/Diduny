@@ -46,13 +46,13 @@ struct SettingsView: View {
                     .tag(tab)
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 200)
+            .navigationSplitViewColumnWidth(min: 190, ideal: 190, max: 190)
         } detail: {
             detailView
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .navigationSplitViewStyle(.balanced)
         .toolbar(removing: .sidebarToggle)
-        .frame(width: 700, height: 550)
+        .frame(minWidth: 700, idealWidth: 700, minHeight: 550, idealHeight: 550)
         .onAppear {
             if let tab = appState.settingsTabToOpen {
                 selectedTab = tab

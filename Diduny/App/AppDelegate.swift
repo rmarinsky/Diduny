@@ -98,6 +98,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(pushToTalkTapCountChanged(_:)),
+            name: .pushToTalkTapCountChanged,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(translationPushToTalkTapCountChanged(_:)),
+            name: .translationPushToTalkTapCountChanged,
+            object: nil
+        )
+
         // Check if onboarding needs to be shown
         // Uses shouldShowOnboarding which skips for existing users with mic access
         if OnboardingManager.shared.shouldShowOnboarding {
@@ -338,6 +352,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func wireMeetingRecorderStatusMessages() {
+        meetingRecorderService.onStatusMessage = { [weak self] message in
+            Task { @MainActor in
+                NotchManager.shared.showInfo(message: message, duration: 2.0)
+                self?.restoreNotchForActiveRecordingAfterInfo(delay: 2.1)
+            }
+        }
+
+        meetingRecorderService.onError = { [weak self] error in
+            Task { @MainActor in
+                guard let self else { return }
+                self.appState.errorMessage = error.localizedDescription
+                self.appState.liveTranscriptStore?.isActive = false
+                self.appState.liveTranscriptStore = nil
+
+                if self.isStateInProgress(self.appState.meetingTranslationRecordingState) {
+                    self.appState.meetingTranslationRecordingState = .error
+                    self.appState.meetingTranslationRecordingStartTime = nil
+                    self.handleMeetingTranslationStateChange(.error)
+                } else if self.isStateInProgress(self.appState.meetingRecordingState) {
+                    self.appState.meetingRecordingState = .error
+                    self.appState.meetingRecordingStartTime = nil
+                    self.handleMeetingStateChange(.error)
+                }
+
+                NotchManager.shared.showError(message: error.localizedDescription)
+            }
+        }
+    }
+
     private func isSettingsWindowVisible() -> Bool {
         NSApp.windows.contains { window in
             window.identifier?.rawValue == "com_apple_SwiftUI_Settings_window" && window.isVisible
@@ -373,6 +417,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         restoreNotchForActiveRecordingAfterInfo()
 
         return false
+    }
+
+    func startAudioRecorderWithFallback(
+        initialDevice: AudioDevice,
+        logPrefix: String
+    ) async throws -> AudioDevice {
+        do {
+            try await audioRecorder.startRecording(device: initialDevice)
+            return initialDevice
+        } catch let error as AudioTimeoutError {
+            throw error
+        } catch {
+            let fallbackDevices = recordingFallbackDevices(afterFailing: initialDevice)
+            guard !fallbackDevices.isEmpty else {
+                throw error
+            }
+
+            Log.app.warning("\(logPrefix): primary microphone failed, trying fallback routes")
+
+            var lastError: Error = error
+            for fallbackDevice in fallbackDevices {
+                do {
+                    try await audioRecorder.startRecording(device: fallbackDevice)
+                    let warningMessage = initialDevice.isDefault
+                        ? "System Default microphone failed to start. Using \(fallbackDevice.name)."
+                        : "\(initialDevice.name) failed to start. Using \(fallbackDevice.name)."
+                    appState.deviceFallbackWarning = warningMessage
+                    Log.app.warning("\(logPrefix): recovered by switching microphone route")
+                    return fallbackDevice
+                } catch let timeout as AudioTimeoutError {
+                    throw timeout
+                } catch {
+                    lastError = error
+                }
+            }
+
+            throw lastError
+        }
+    }
+
+    private func recordingFallbackDevices(afterFailing failedDevice: AudioDevice) -> [AudioDevice] {
+        audioDeviceManager.refreshDevices()
+        let alternatives = audioDeviceManager.availableDevices.filter { $0.uid != failedDevice.uid }
+        guard !alternatives.isEmpty else { return [] }
+
+        var ordered: [AudioDevice] = []
+
+        if !failedDevice.isDefault,
+           let defaultDevice = alternatives.first(where: \.isDefault)
+        {
+            ordered.append(defaultDevice)
+        }
+
+        ordered.append(contentsOf: alternatives.filter(\.isBuiltInMic))
+        ordered.append(contentsOf: alternatives.filter {
+            !$0.isBuiltInMic && !$0.isBluetooth && !$0.isDefault
+        })
+        ordered.append(contentsOf: alternatives.filter(\.isBluetooth))
+        ordered.append(contentsOf: alternatives)
+
+        var seen = Set<String>()
+        return ordered.filter { seen.insert($0.uid).inserted }
     }
 
     // MARK: - State Change Handlers

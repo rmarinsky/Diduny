@@ -197,7 +197,7 @@ extension AppDelegate {
                 Log.app.info("startRecording: Cleared stale preferred microphone UID and switched to System Default")
             }
         }
-        guard device != nil else {
+        guard let device else {
             Log.app.error("startRecording: No audio input devices available")
             appState.errorMessage = "No microphone found. Please connect a microphone."
             appState.recordingState = .error
@@ -225,7 +225,10 @@ extension AppDelegate {
             setupVoiceRealtimeTranscriptionIfNeeded()
 
             Log.app.info("startRecording: Starting audio recording")
-            try await audioRecorder.startRecording(device: device)
+            _ = try await startAudioRecorderWithFallback(
+                initialDevice: device,
+                logPrefix: "startRecording"
+            )
             Log.app.info("startRecording: Recording started successfully")
 
             // Only set recording state AFTER audio engine is confirmed working
@@ -352,7 +355,7 @@ extension AppDelegate {
             let audioData = try await audioRecorder.stopRecording()
             Log.app.info("stopRecording: Got audio data, size = \(audioData.count) bytes")
 
-            // Preserve original WAV for potential Whisper fallback (Whisper can't parse FLAC)
+            // Preserve original capture bytes for fallback paths that should avoid any storage-time conversion
             originalWAVData = audioData
 
             // Compress WAV → FLAC for smaller storage (skipped for < 1MB)
@@ -361,22 +364,22 @@ extension AppDelegate {
 
             let realtimeResult = await stopVoiceRealtimeSession(finalize: true)
 
-            let text: String
+            let rawText: String
             if !realtimeResult.text.isEmpty {
-                text = realtimeResult.text
-                Log.app.info("stopRecording: Using realtime transcription (\(text.count) chars)")
+                rawText = realtimeResult.text
+                Log.app.info("stopRecording: Using realtime transcription (\(rawText.count) chars)")
             } else if SettingsStorage.shared.effectiveTranscriptionProvider == .local {
-                // Local Whisper — needs original WAV data
-                text = try await whisperTranscriptionService.transcribe(audioData: audioData)
-                Log.app.info("stopRecording: Local Whisper transcription (\(text.count) chars)")
-            } else if let connectionError = voiceRealtimeConnectionError {
-                throw TranscriptionError.cloudConnectionFailed(connectionError)
+                // Local Whisper — use original capture data, not the storage-compressed variant
+                rawText = try await whisperTranscriptionService.transcribe(audioData: audioData)
+                Log.app.info("stopRecording: Local Whisper transcription (\(rawText.count) chars)")
             } else {
-                throw TranscriptionError.emptyTranscription
+                rawText = try await transcriptionService.transcribe(audioData: audioData)
+                Log.app.info("stopRecording: HTTP cloud transcription (\(rawText.count) chars)")
             }
+            let text = ClipboardService.preparedText(rawText, behavior: .cleaned)
             Log.app.info("stopRecording: Transcription received (\(text.count) chars)")
 
-            clipboardService.copy(text: text)
+            clipboardService.copy(text: text, behavior: .raw)
             Log.app.info("stopRecording: Text copied to clipboard")
 
             if SettingsStorage.shared.autoPaste {
@@ -441,7 +444,7 @@ extension AppDelegate {
             _ = await stopVoiceRealtimeSession(finalize: false)
             Log.app.warning("stopRecording: Usage limit exceeded, attempting Whisper fallback")
 
-            // Try falling back to local Whisper model (use original WAV since Whisper can't parse FLAC)
+            // Try falling back to local Whisper model using the original capture bytes
             if let wavData = originalWAVData, WhisperModelManager.shared.selectedModel() != nil {
                 NotchManager.shared.showInfo(message: "Cloud limit reached. Switching to local model.", duration: 2.0)
                 do {
@@ -546,7 +549,8 @@ extension AppDelegate {
     // MARK: - Realtime Transcription (WebSocket)
 
     private func setupVoiceRealtimeTranscriptionIfNeeded() {
-        guard SettingsStorage.shared.effectiveTranscriptionProvider == .cloud else {
+        guard SettingsStorage.shared.effectiveTranscriptionProvider == .cloud,
+              SettingsStorage.shared.transcriptionRealtimeSocketEnabled else {
             audioRecorder.onRealtimeAudioData = nil
             voiceRealtimeSessionEnabled = false
             voiceRealtimeAccumulator = nil
@@ -652,10 +656,9 @@ extension AppDelegate {
             return
         }
 
-        // On first shortcut press: show confirmation notification
-        escapeService.onFirstEscape = { [weak self] in
+        escapeService.onProgressEscape = { [weak self] pressCount, _ in
             NotchManager.shared.showInfo(
-                message: SettingsStorage.shared.escapeCancelShortcut.repeatHint,
+                message: SettingsStorage.shared.escapeCancelRepeatHint(afterPressCount: pressCount),
                 duration: 1.5
             )
 

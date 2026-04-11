@@ -41,7 +41,8 @@ final class RecordingsLibraryStorage {
         sourceDevice: RecordingDeviceInfo? = nil
     ) {
         let recordingID = id ?? UUID()
-        let fileName = "\(recordingID.uuidString).wav"
+        let fileExtension = detectedAudioFileExtension(for: audioData)
+        let fileName = "\(recordingID.uuidString).\(fileExtension)"
         let fileURL = recordingsDir.appendingPathComponent(fileName)
 
         do {
@@ -166,6 +167,42 @@ final class RecordingsLibraryStorage {
         saveMetadata()
     }
 
+    func optimizeStoredRecordingIfNeeded(id: UUID) async -> URL? {
+        guard let index = recordings.firstIndex(where: { $0.id == id }) else { return nil }
+
+        let recording = recordings[index]
+        let sourceURL = audioFileURL(for: recording)
+        guard fileManager.fileExists(atPath: sourceURL.path) else { return nil }
+
+        let detectedExtension = detectedAudioFileExtension(for: sourceURL)
+
+        if detectedExtension == "flac", sourceURL.pathExtension.lowercased() != "flac" {
+            let normalizedURL = sourceURL.deletingPathExtension().appendingPathExtension("flac")
+            return replaceStoredAudioFile(
+                at: index,
+                from: sourceURL,
+                to: normalizedURL,
+                moveOnly: true
+            )
+        }
+
+        guard detectedExtension == "wav" else {
+            return sourceURL
+        }
+
+        let compressedURL = await AudioCompressionService.compressToFLAC(wavURL: sourceURL)
+        guard compressedURL != sourceURL else {
+            return sourceURL
+        }
+
+        return replaceStoredAudioFile(
+            at: index,
+            from: sourceURL,
+            to: compressedURL,
+            moveOnly: false
+        )
+    }
+
     // MARK: - Audio File Access
 
     func audioFileURL(for recording: Recording) -> URL {
@@ -216,5 +253,82 @@ final class RecordingsLibraryStorage {
             Log.app.info("Pruned \(prunedCount) orphaned recording entries")
             saveMetadata()
         }
+    }
+
+    private func replaceStoredAudioFile(
+        at index: Int,
+        from sourceURL: URL,
+        to replacementURL: URL,
+        moveOnly: Bool
+    ) -> URL {
+        let recording = recordings[index]
+        let replacementFileName = replacementURL.lastPathComponent
+        let replacementFileSize: Int64 = if let attrs = try? fileManager.attributesOfItem(atPath: replacementURL.path),
+                                            let size = attrs[.size] as? Int64
+        {
+            size
+        } else {
+            recording.fileSizeBytes
+        }
+
+        do {
+            if moveOnly {
+                try fileManager.moveItem(at: sourceURL, to: replacementURL)
+            } else {
+                try fileManager.removeItem(at: sourceURL)
+            }
+
+            recordings[index] = Recording(
+                id: recording.id,
+                createdAt: recording.createdAt,
+                type: recording.type,
+                audioFileName: replacementFileName,
+                durationSeconds: recording.durationSeconds,
+                fileSizeBytes: replacementFileSize,
+                status: recording.status,
+                transcriptionText: recording.transcriptionText,
+                errorMessage: recording.errorMessage,
+                processedAt: recording.processedAt,
+                chapters: recording.chapters,
+                sourceDevice: recording.sourceDevice
+            )
+            saveMetadata()
+
+            Log.app.info(
+                "Recording storage optimized: \(recording.audioFileName) → \(replacementFileName), \(recording.fileSizeBytes) → \(replacementFileSize) bytes"
+            )
+            return replacementURL
+        } catch {
+            Log.app.warning("Failed to replace stored recording audio: \(error.localizedDescription)")
+            if !moveOnly {
+                try? fileManager.removeItem(at: replacementURL)
+            }
+            return sourceURL
+        }
+    }
+
+    private func detectedAudioFileExtension(for audioData: Data) -> String {
+        if audioData.count >= 4, String(data: audioData.prefix(4), encoding: .ascii) == "fLaC" {
+            return "flac"
+        }
+
+        if audioData.count >= 12,
+           String(data: audioData.prefix(4), encoding: .ascii) == "RIFF",
+           String(data: audioData.dropFirst(8).prefix(4), encoding: .ascii) == "WAVE"
+        {
+            return "wav"
+        }
+
+        return "wav"
+    }
+
+    private func detectedAudioFileExtension(for fileURL: URL) -> String {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else {
+            return fileURL.pathExtension.lowercased()
+        }
+        defer { try? handle.close() }
+
+        let header = (try? handle.read(upToCount: 12)) ?? Data()
+        return detectedAudioFileExtension(for: header)
     }
 }

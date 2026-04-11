@@ -93,7 +93,7 @@ struct MenuBarContentView: View {
             Button("Transcribe File…", action: onTranscribeFile)
                 .disabled(appState.recordingState == .processing)
 
-            Button("Library", action: openLibrary)
+            Button("Recordings", action: openLibrary)
 
             Divider()
 

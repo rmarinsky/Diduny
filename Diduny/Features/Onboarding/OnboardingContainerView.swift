@@ -610,7 +610,13 @@ struct ShortcutStepView: View {
     @State private var selectedKey: PushToTalkKey = .rightShift
     @State private var selectedMode: ShortcutMode = .pushToTalk
 
-    private let availableKeys: [PushToTalkKey] = [.rightShift, .rightCommand, .rightOption, .rightControl]
+    private let availableKeys: [PushToTalkKey] = [
+        .leftShift, .rightShift,
+        .leftCommand, .rightCommand,
+        .leftOption, .rightOption,
+        .leftControl, .rightControl,
+    ]
+    private let keyGridColumns = Array(repeating: GridItem(.flexible(minimum: 90), spacing: 10), count: 4)
 
     enum ShortcutMode: String {
         case pushToTalk
@@ -621,7 +627,7 @@ struct ShortcutStepView: View {
             case .pushToTalk:
                 return "Push-to-talk (Recommended)"
             case .handsFree:
-                return "Hands-free (Double tap)"
+                return "Hands-free (Toggle)"
             }
         }
 
@@ -630,7 +636,7 @@ struct ShortcutStepView: View {
             case .pushToTalk:
                 return "Hold the key while speaking. Release to insert text."
             case .handsFree:
-                return "Double-tap to start recording, double-tap again to stop."
+                return "Tap the key several times to start and stop recording. You can adjust the tap count later in Settings."
             }
         }
     }
@@ -655,7 +661,7 @@ struct ShortcutStepView: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
 
-                    HStack(spacing: 10) {
+                    LazyVGrid(columns: keyGridColumns, alignment: .leading, spacing: 10) {
                         ForEach(availableKeys, id: \.self) { key in
                             ShortcutKeyChip(key: key, isSelected: selectedKey == key) {
                                 selectedKey = key
@@ -713,6 +719,9 @@ struct ShortcutStepView: View {
     private func saveSettings() {
         SettingsStorage.shared.pushToTalkKey = selectedKey
         SettingsStorage.shared.handsFreeModeEnabled = selectedMode == .handsFree
+        if selectedMode == .handsFree {
+            SettingsStorage.shared.pushToTalkToggleTapCount = 3
+        }
         NotificationCenter.default.post(name: .pushToTalkKeyChanged, object: selectedKey)
     }
 }
@@ -811,7 +820,7 @@ struct CompleteStepView: View {
                 Text("You're all set!")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
 
-                Text("Start transcribing by double-tapping\nyour shortcut key, or use the menu bar.")
+                Text("Start transcribing with your shortcut key\nor use the menu bar.")
                     .font(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -819,7 +828,7 @@ struct CompleteStepView: View {
 
             // Quick tips
             VStack(alignment: .leading, spacing: 12) {
-                TipRow(icon: "keyboard", text: "Double-tap your key to start/stop recording")
+                TipRow(icon: "keyboard", text: "Use hold-to-record or configure multi-tap toggle mode")
                 TipRow(icon: "menubar.rectangle", text: "Click the menu bar icon for more options")
                 TipRow(icon: "gearshape", text: "Access settings anytime from the menu")
             }

@@ -79,6 +79,22 @@ struct RecordingsLibraryView: View {
         return SupportedLanguage.allLanguages.filter { !favCodes.contains($0.code) }
     }
 
+    private var currentQueueStatusText: String? {
+        guard let status = queueService.currentJobStatus else { return nil }
+        switch status {
+        case .queued:
+            return "Queued"
+        case .uploading:
+            return "Uploading"
+        case .processing:
+            return "Transcribing"
+        case .finalizing:
+            return "Finalizing"
+        case .completed, .error:
+            return nil
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Toolbar
@@ -169,6 +185,13 @@ struct RecordingsLibraryView: View {
         }
         .disabled(recording.status == .processing)
 
+        if recording.type == .meeting {
+            Button("Transcribe with Speakers") {
+                queueService.enqueue([recording.id], action: .transcribeDiarize, providerOverride: .cloud)
+            }
+            .disabled(recording.status == .processing)
+        }
+
         // Translate submenu with favorite languages
         Menu("Translate to") {
             ForEach(favoriteLanguages) { lang in
@@ -258,7 +281,11 @@ struct RecordingsLibraryView: View {
                 HStack(spacing: 4) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("Processing (\(queueService.queueCount) remaining)")
+                    Text(
+                        currentQueueStatusText.map {
+                            "\($0) (\(queueService.queueCount) remaining)"
+                        } ?? "Processing (\(queueService.queueCount) remaining)"
+                    )
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

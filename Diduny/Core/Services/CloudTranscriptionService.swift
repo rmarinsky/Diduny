@@ -401,7 +401,7 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
     }
 }
 
-private enum AudioSpeechDetector {
+enum AudioSpeechDetector {
     private static let frameSize = 320 // 20 ms at 16 kHz
     private static let minSpeechDurationSeconds: Double = 0.18
     private static let minRmsThreshold: Float = 0.0015

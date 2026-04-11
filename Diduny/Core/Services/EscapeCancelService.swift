@@ -2,23 +2,24 @@ import AppKit
 import Foundation
 
 /// Service to handle double-press cancellation shortcut during recording.
-/// First press shows a confirmation notification, second press within threshold cancels recording.
+/// Press Escape 2x or 3x within threshold to cancel active recording.
 @MainActor
 final class EscapeCancelService: ObservableObject {
     static let shared = EscapeCancelService()
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    private var firstPressTime: Date?
-    private let secondPressThreshold: TimeInterval = 1.5
+    private var lastPressTime: Date?
+    private var consecutivePressCount = 0
+    private let pressThreshold: TimeInterval = 1.5
     private var timeoutTask: Task<Void, Never>?
     private var isActive = false
 
-    /// Called when recording should be cancelled (after double-press confirmed)
+    /// Called when recording should be cancelled (after required press count confirmed)
     var onCancel: (() -> Void)?
 
-    /// Called on first shortcut press to show confirmation notification
-    var onFirstEscape: (() -> Void)?
+    /// Called on intermediate Escape presses so UI can explain how many are left.
+    var onProgressEscape: ((Int, Int) -> Void)?
 
     private init() {}
 
@@ -26,7 +27,7 @@ final class EscapeCancelService: ObservableObject {
     func activate() {
         guard !isActive else { return }
         isActive = true
-        firstPressTime = nil
+        resetPressState()
 
         // Monitor keyDown events globally.
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -60,11 +61,9 @@ final class EscapeCancelService: ObservableObject {
             localMonitor = nil
         }
 
-        firstPressTime = nil
-        timeoutTask?.cancel()
-        timeoutTask = nil
+        resetPressState()
         onCancel = nil
-        onFirstEscape = nil
+        onProgressEscape = nil
 
         Log.app.debug("Cancel shortcut handler deactivated")
     }
@@ -72,45 +71,42 @@ final class EscapeCancelService: ObservableObject {
     private func handleKeyDown(_ event: NSEvent) {
         guard isActive else { return }
         guard SettingsStorage.shared.escapeCancelEnabled else {
-            firstPressTime = nil
-            timeoutTask?.cancel()
-            timeoutTask = nil
+            resetPressState()
             return
         }
-
-        let shortcut = SettingsStorage.shared.escapeCancelShortcut
-        guard shortcut.matches(event) else { return }
+        guard event.type == .keyDown, !event.isARepeat, event.keyCode == 53 else { return }
 
         let now = Date()
+        let requiredPressCount = SettingsStorage.shared.escapeCancelPressCount
 
-        if let firstTime = firstPressTime,
-           now.timeIntervalSince(firstTime) <= secondPressThreshold
-        {
-            // Second press within threshold - cancel recording
-            Log.app.info("Double cancel shortcut detected - cancelling recording")
-            firstPressTime = nil
-            timeoutTask?.cancel()
-            timeoutTask = nil
-            onCancel?()
-
+        if let lastPressTime, now.timeIntervalSince(lastPressTime) <= pressThreshold {
+            consecutivePressCount += 1
         } else {
-            // First press - show notification and wait
-            firstPressTime = now
-            Log.app.debug("First cancel shortcut press - waiting for confirmation")
+            consecutivePressCount = 1
+        }
+        self.lastPressTime = now
 
-            // Play subtle sound for feedback
+        if consecutivePressCount >= requiredPressCount {
+            Log.app.info("\(requiredPressCount)x Escape detected - cancelling recording")
+            resetPressState()
+            onCancel?()
+        } else {
+            Log.app.debug("Escape press \(self.consecutivePressCount)/\(requiredPressCount) - waiting for confirmation")
             NSSound(named: NSSound.Name("Tink"))?.play()
-
-            // Notify to show confirmation message
-            onFirstEscape?()
-
-            // Set timeout to reset
+            onProgressEscape?(self.consecutivePressCount, requiredPressCount)
             timeoutTask?.cancel()
             timeoutTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(self?.secondPressThreshold ?? 1.5))
+                try? await Task.sleep(for: .seconds(self?.pressThreshold ?? 1.5))
                 guard !Task.isCancelled else { return }
-                self?.firstPressTime = nil
+                self?.resetPressState()
             }
         }
+    }
+
+    private func resetPressState() {
+        lastPressTime = nil
+        consecutivePressCount = 0
+        timeoutTask?.cancel()
+        timeoutTask = nil
     }
 }

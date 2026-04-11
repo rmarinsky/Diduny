@@ -30,6 +30,7 @@ extension AppDelegate {
     func setupPushToTalk() {
         let key = SettingsStorage.shared.pushToTalkKey
         pushToTalkService.selectedKey = key
+        pushToTalkService.toggleTapCount = SettingsStorage.shared.pushToTalkToggleTapCount
 
         pushToTalkService.onKeyDown = { [weak self] in
             guard let self else { return }
@@ -70,11 +71,19 @@ extension AppDelegate {
         }
     }
 
+    @objc func pushToTalkTapCountChanged(_ notification: Notification) {
+        guard let tapCount = notification.object as? Int else { return }
+        pushToTalkService.toggleTapCount = tapCount
+        pushToTalkService.resetHandsFreeMode()
+        Log.app.info("Dictation modifier tap count changed to: \(tapCount)x")
+    }
+
     // MARK: - Translation Push to Talk
 
     func setupTranslationPushToTalk() {
         let key = SettingsStorage.shared.translationPushToTalkKey
         translationPushToTalkService.selectedKey = key
+        translationPushToTalkService.toggleTapCount = SettingsStorage.shared.translationPushToTalkToggleTapCount
 
         translationPushToTalkService.onKeyDown = { [weak self] in
             guard let self else { return }
@@ -113,6 +122,13 @@ extension AppDelegate {
         if key != .none {
             translationPushToTalkService.start()
         }
+    }
+
+    @objc func translationPushToTalkTapCountChanged(_ notification: Notification) {
+        guard let tapCount = notification.object as? Int else { return }
+        translationPushToTalkService.toggleTapCount = tapCount
+        translationPushToTalkService.resetHandsFreeMode()
+        Log.app.info("Translation modifier tap count changed to: \(tapCount)x")
     }
 
 }

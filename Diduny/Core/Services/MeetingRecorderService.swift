@@ -33,6 +33,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
 
     var onMicrophoneSilent: (() -> Void)?
     var onSystemAudioSilent: (() -> Void)?
+    var onStatusMessage: ((String) -> Void)?
 
     var recordingDuration: TimeInterval {
         guard let start = startTime else { return 0 }
@@ -86,6 +87,9 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         service.micGain = SettingsStorage.shared.meetingMicGain
         service.systemGain = SettingsStorage.shared.meetingSystemGain
         service.onRawAudioData = onRealtimeAudioData
+        service.onStatusMessage = { [weak self] message in
+            self?.onStatusMessage?(message)
+        }
 
         service.onError = { [weak self] error in
             Log.recording.error("Audio capture error: \(error.localizedDescription)")
@@ -113,7 +117,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         isRecording = true
         startTime = Date()
 
-        Log.recording.info("Recording started (captureMicrophone=\(enableMic))")
+        Log.recording.info("Recording started (captureMicrophone=\(service.captureMicrophone))")
         onRecordingStarted?()
     }
 

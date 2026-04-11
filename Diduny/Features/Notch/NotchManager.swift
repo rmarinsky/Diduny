@@ -133,11 +133,18 @@ final class NotchManager {
         }
     }
 
-    /// The DynamicNotchKit panel is always non-interactive (ignoresMouseEvents = true)
-    /// to avoid blocking the upper screen.
+    var isStopControlVisible: Bool {
+        if case .recording = state {
+            return true
+        }
+        return false
+    }
+
+    /// Keep the panel non-interactive by default so it never blocks the upper screen.
+    /// Recording mode opts into hit testing for the explicit Stop control only.
     private func updatePanelMouseEvents() {
         guard let panel = notch?.windowController?.window else { return }
-        panel.ignoresMouseEvents = true
+        panel.ignoresMouseEvents = !isStopControlVisible
     }
 
     private func ensureNotch() {

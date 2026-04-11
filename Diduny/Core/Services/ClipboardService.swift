@@ -31,18 +31,21 @@ final class ClipboardService: ClipboardServiceProtocol {
 
     private let pasteboard = NSPasteboard.general
 
+    static func preparedText(_ text: String, behavior: ClipboardCopyBehavior = .cleaned) -> String {
+        switch behavior {
+        case .cleaned:
+            ClipboardTextNormalizer.normalize(text)
+        case .raw:
+            text
+        }
+    }
+
     func copy(text: String) {
         copy(text: text, behavior: .cleaned)
     }
 
     func copy(text: String, behavior: ClipboardCopyBehavior) {
-        let normalizedText: String
-        switch behavior {
-        case .cleaned:
-            normalizedText = ClipboardTextNormalizer.normalize(text)
-        case .raw:
-            normalizedText = text
-        }
+        let normalizedText = Self.preparedText(text, behavior: behavior)
 
         pasteboard.clearContents()
         pasteboard.setString(normalizedText, forType: .string)
@@ -136,9 +139,15 @@ final class ClipboardService: ClipboardServiceProtocol {
 
 private enum ClipboardTextNormalizer {
     private static let regexCache = RegexCache()
+    private static let boundaryPunctuation = CharacterSet(charactersIn: ".,;:!?\"'«»()[]{}")
 
     static func normalize(_ text: String) -> String {
+        guard SettingsStorage.shared.textCleanupEnabled else {
+            return normalizeSpacing(in: text).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
         var normalized = normalizeSpacing(in: text)
+        normalized = removeRepeatedPhrases(in: normalized)
 
         normalized = removeSingleLetterStutters(in: normalized)
 
@@ -150,6 +159,46 @@ private enum ClipboardTextNormalizer {
         normalized = normalizePunctuation(in: normalized)
         normalized = normalizeEnumerations(in: normalized)
         return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func removeRepeatedPhrases(in text: String, minSize: Int = 1, maxSize: Int = 6) -> String {
+        var words = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard words.count >= minSize * 2 else { return text }
+
+        var changed = true
+        var pass = 0
+        let maxPasses = 6
+
+        while changed, pass < maxPasses {
+            changed = false
+            pass += 1
+
+            let normalizedWords = words.map(normalizedToken)
+            let upperBound = min(maxSize, words.count / 2)
+            guard upperBound >= minSize else { break }
+
+            outer: for size in stride(from: upperBound, through: minSize, by: -1) {
+                guard words.count >= size * 2 else { continue }
+
+                for start in 0 ... (words.count - size * 2) {
+                    let lhs = Array(normalizedWords[start ..< start + size])
+                    let rhs = Array(normalizedWords[start + size ..< start + size * 2])
+
+                    guard !lhs.contains(where: \.isEmpty), lhs == rhs else { continue }
+
+                    let followingToken = start + size * 2 < words.count ? words[start + size * 2] : nil
+                    words[start + size - 1] = cleanedBoundaryToken(
+                        words[start + size - 1],
+                        followingToken: followingToken
+                    )
+                    words.removeSubrange(start + size ..< start + size * 2)
+                    changed = true
+                    break outer
+                }
+            }
+        }
+
+        return words.joined(separator: " ")
     }
 
     private static func removeSingleLetterStutters(in text: String) -> String {
@@ -205,9 +254,43 @@ private enum ClipboardTextNormalizer {
             with: ":\n$1"
         )
 
+        // Render explicit ordinal enumerations as a bullet list in dictation output.
+        result = replacing(
+            in: result,
+            pattern: "(?imu)^(по-(?:перше|друге|третє|четверте|п[‘’]?яте|шосте|сьоме|восьме|дев[‘’]?яте|десяте)\\b.*)$",
+            with: "- $1"
+        )
+
         // Keep list blocks compact.
         result = replacing(in: result, pattern: "\\n{3,}", with: "\n\n")
         return result
+    }
+
+    private static func normalizedToken(_ token: String) -> String {
+        token
+            .trimmingCharacters(in: boundaryPunctuation)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+    }
+
+    private static func cleanedBoundaryToken(_ token: String, followingToken: String?) -> String {
+        var cleaned = replacing(in: token, pattern: "[,;:]+$", with: "")
+
+        if shouldStripSentenceEndingPunctuation(before: followingToken) {
+            cleaned = replacing(in: cleaned, pattern: "[.!?]+$", with: "")
+        }
+
+        return cleaned
+    }
+
+    private static func shouldStripSentenceEndingPunctuation(before token: String?) -> Bool {
+        guard let token else { return false }
+
+        let trimmed = token.trimmingCharacters(in: boundaryPunctuation.union(.whitespacesAndNewlines))
+        guard let first = trimmed.first else { return false }
+
+        let scalarString = String(first)
+        return scalarString != scalarString.uppercased() && scalarString == scalarString.lowercased()
     }
 
     private static func replacing(in text: String, pattern: String, with template: String) -> String {

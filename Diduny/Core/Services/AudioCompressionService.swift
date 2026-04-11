@@ -62,7 +62,7 @@ enum AudioCompressionService {
     private static func runAfconvert(input: URL, output: URL) async throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
-        process.arguments = ["-f", "FLAC", "-d", "flac", input.path, output.path]
+        process.arguments = ["-f", "flac", "-d", "flac", input.path, output.path]
 
         let errorPipe = Pipe()
         process.standardError = errorPipe

@@ -10,12 +10,14 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     private var isReady = false
     private var startTime: Date?
 
-    // Double-tap detection for toggle mode
-    private var lastKeyUpTime: TimeInterval?
-    private let doubleTapThreshold: TimeInterval = 0.2
+    // Multi-tap detection for toggle mode
+    private var lastToggleTapTime: TimeInterval?
+    private var consecutiveToggleTapCount = 0
+    private let toggleTapThreshold: TimeInterval = 0.3
     private var isHandsFreeMode = false
 
     var selectedKey: PushToTalkKey = .none
+    var toggleTapCount: Int = 3
     var onKeyDown: (() -> Void)?
     var onKeyUp: (() -> Void)?
 
@@ -36,7 +38,8 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         isReady = false
         startTime = Date()
         isHandsFreeMode = false
-        lastKeyUpTime = nil
+        lastToggleTapTime = nil
+        consecutiveToggleTapCount = 0
 
         // Monitor flags changed events globally
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
@@ -72,14 +75,16 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         isReady = false
         startTime = nil
         isHandsFreeMode = false
-        lastKeyUpTime = nil
+        lastToggleTapTime = nil
+        consecutiveToggleTapCount = 0
         Log.app.info("Stopped monitoring")
     }
 
     /// Reset hands-free mode (call when recording is cancelled externally)
     func resetHandsFreeMode() {
         isHandsFreeMode = false
-        lastKeyUpTime = nil
+        lastToggleTapTime = nil
+        consecutiveToggleTapCount = 0
     }
 
     private func handleFlagsChanged(_ event: NSEvent) {
@@ -96,23 +101,22 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
         // Special handling for Caps Lock (toggle key by nature)
         if selectedKey == .capsLock {
-            handleCapsLockEvent(keyCode: keyCode)
+            handleCapsLockEvent(keyCode: keyCode, eventTime: eventTime)
             return
         }
 
-        // Handle modifier keys with double-tap detection
+        // Handle modifier keys with configurable multi-tap detection
         handleModifierKeyEvent(isPressed: isPressed, eventTime: eventTime)
     }
 
-    private func handleCapsLockEvent(keyCode: UInt16) {
+    private func handleCapsLockEvent(keyCode: UInt16, eventTime: TimeInterval) {
         guard keyCode == 57 else { return }
 
         if isToggleModeEnabled {
-            // Caps Lock in toggle mode: each press toggles
+            // Caps Lock in toggle mode: toggle after the configured number of taps
             if !isKeyPressed {
                 isKeyPressed = true
-                Log.app.info("Caps Lock pressed - toggling recording")
-                onToggle?()
+                handleToggleTap(eventTime: eventTime, keyLabel: "Caps Lock")
             } else {
                 isKeyPressed = false
             }
@@ -137,28 +141,9 @@ final class PushToTalkService: PushToTalkServiceProtocol {
             // Key down
             isKeyPressed = true
 
-            // Check for double-tap (toggle mode enabled)
+            // Check for configured tap count (toggle mode enabled)
             if isToggleModeEnabled {
-                if let lastUp = lastKeyUpTime {
-                    let timeSinceLastUp = eventTime - lastUp
-
-                    if timeSinceLastUp < doubleTapThreshold {
-                        // Double-tap detected
-                        if isHandsFreeMode {
-                            // Already in toggle mode: stop recording
-                            isHandsFreeMode = false
-                            Log.app.info("Double-tap detected - stopping recording (toggle off)")
-                            onToggle?()
-                        } else {
-                            // Enter toggle mode: start recording
-                            isHandsFreeMode = true
-                            Log.app.info("Double-tap detected - starting recording (toggle on)")
-                            onToggle?()
-                        }
-                    }
-                    // Single tap in toggle mode: do nothing
-                }
-                // First tap or single tap: do nothing, wait for potential double-tap
+                handleToggleTap(eventTime: eventTime, keyLabel: selectedKey.displayName)
                 return
             }
 
@@ -169,7 +154,6 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         } else {
             // Key up
             isKeyPressed = false
-            lastKeyUpTime = eventTime
 
             if isToggleModeEnabled {
                 // In toggle mode: don't stop on release
@@ -182,12 +166,50 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         }
     }
 
+    private func handleToggleTap(eventTime: TimeInterval, keyLabel: String) {
+        let requiredTapCount = sanitizedToggleTapCount
+
+        if let lastTap = lastToggleTapTime, eventTime - lastTap < toggleTapThreshold {
+            consecutiveToggleTapCount += 1
+        } else {
+            consecutiveToggleTapCount = 1
+        }
+        lastToggleTapTime = eventTime
+
+        guard consecutiveToggleTapCount >= requiredTapCount else { return }
+
+        consecutiveToggleTapCount = 0
+        lastToggleTapTime = nil
+
+        if isHandsFreeMode {
+            isHandsFreeMode = false
+            Log.app.info("\(requiredTapCount)x tap detected on \(keyLabel) - stopping recording (toggle off)")
+        } else {
+            isHandsFreeMode = true
+            Log.app.info("\(requiredTapCount)x tap detected on \(keyLabel) - starting recording (toggle on)")
+        }
+
+        onToggle?()
+    }
+
+    private var sanitizedToggleTapCount: Int {
+        min(max(toggleTapCount, 2), 3)
+    }
+
     private func isKeyCurrentlyPressed(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Bool {
         switch selectedKey {
         case .none:
             return false
         case .capsLock:
             return keyCode == 57 && flags.contains(.capsLock)
+        case .leftShift:
+            return keyCode == 56 && flags.contains(.shift)
+        case .leftOption:
+            return keyCode == 58 && flags.contains(.option)
+        case .leftCommand:
+            return keyCode == 55 && flags.contains(.command)
+        case .leftControl:
+            return keyCode == 59 && flags.contains(.control)
         case .rightShift:
             return keyCode == 60 && flags.contains(.shift)
         case .rightOption:
@@ -205,6 +227,14 @@ final class PushToTalkService: PushToTalkServiceProtocol {
             false
         case .capsLock:
             keyCode == 57
+        case .leftShift:
+            keyCode == 56
+        case .leftOption:
+            keyCode == 58
+        case .leftCommand:
+            keyCode == 55
+        case .leftControl:
+            keyCode == 59
         case .rightShift:
             keyCode == 60
         case .rightOption:

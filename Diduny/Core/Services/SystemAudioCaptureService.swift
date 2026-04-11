@@ -10,6 +10,7 @@ final class SystemAudioCaptureService: NSObject {
     private var audioFile: AVAudioFile?
     private var outputURL: URL?
     private var isCapturing = false
+    private var isStoppingCapture = false
     private var outputFormat: AVAudioFormat?
     private var sampleCount: Int = 0
     private var lastFlushTime: Date = .init()
@@ -18,11 +19,20 @@ final class SystemAudioCaptureService: NSObject {
     // Microphone capture via AVAudioEngine (SCStream's captureMicrophone is unreliable)
     private var micEngine: AVAudioEngine?
     private var micConverter: AVAudioConverter?
+    private var micConfigurationObserver: NSObjectProtocol?
+    private var systemRecoveryTask: Task<Void, Never>?
+    private var microphoneRecoveryTask: Task<Void, Never>?
+    private var isRecoveringSystem = false
+    private var isRecoveringMicrophone = false
 
     private let realtimeQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.realtime", qos: .userInitiated)
     private let fileWriteQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.systemaudio.write")
     /// Serial queue for mixer buffer access — both SCStream callbacks and AVAudioEngine tap dispatch here.
     private let mixerQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.mixer")
+    private let streamOutputQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.scstream.output")
+    private let maxSystemRecoveryAttempts = 3
+    private let maxMicrophoneRecoveryAttempts = 3
+    private let initialRecoveryDelay: TimeInterval = 0.75
 
     // MARK: - Public Configuration
 
@@ -50,13 +60,17 @@ final class SystemAudioCaptureService: NSObject {
     /// Fired when system audio has been silent for > `silenceTimeout`.
     var onSystemAudioSilent: (() -> Void)?
 
+    /// Informational runtime status updates (recovery attempts, fallbacks, etc.)
+    var onStatusMessage: ((String) -> Void)?
+
     // MARK: - Inline Mixer State (accessed only on mixerQueue)
 
     private var systemBuffer: [Float] = []
     private var micBuffer: [Float] = []
-    /// Maximum single-source frames before flushing without counterpart (50ms at 16kHz).
-    /// Kept low to minimize latency for real-time cloud transcription.
-    private let flushThresholdFrames = 800
+    /// Maximum single-source frames before flushing without counterpart.
+    /// This bounds live-transcription latency when one source temporarily leads
+    /// the other, while still giving the mixer a chance to align overlapping audio.
+    private let flushThresholdFrames = 8000
 
     // MARK: - Silence Detection (accessed only on mixerQueue)
 
@@ -99,42 +113,12 @@ final class SystemAudioCaptureService: NSObject {
         }
 
         self.outputURL = outputURL
+        isStoppingCapture = false
+        cancelRecoveryTasks()
+        isRecoveringSystem = false
+        isRecoveringMicrophone = false
 
         Log.audio.info("Starting system audio capture (captureMicrophone=\(self.captureMicrophone))...")
-
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-
-        guard let display = content.displays.first else {
-            throw SystemAudioError.noDisplayFound
-        }
-
-        let filter = SCContentFilter(display: display, excludingWindows: [])
-
-        let config = SCStreamConfiguration()
-        config.capturesAudio = true
-        config.excludesCurrentProcessAudio = false
-        config.width = 2
-        config.height = 2
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
-        config.showsCursor = false
-        config.sampleRate = 16000
-        config.channelCount = 1
-
-        // NOTE: We do NOT use config.captureMicrophone — it's unreliable on macOS 15.
-        // Microphone is captured separately via AVAudioEngine below.
-
-        NSLog("[AudioCapture] Creating SCStream (system audio only)")
-
-        stream = SCStream(filter: filter, configuration: config, delegate: self)
-
-        guard let stream else {
-            throw SystemAudioError.streamCreationFailed
-        }
-
-        // The .screen handler is needed on some macOS versions to unblock audio delivery.
-        let outputQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.scstream.output")
-        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: outputQueue)
-        try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: outputQueue)
 
         try setupAudioFile(at: outputURL)
 
@@ -152,7 +136,7 @@ final class SystemAudioCaptureService: NSObject {
         delegateCallCount = 0
         microphoneCaptureStarted = false
 
-        try await stream.startCapture()
+        try await createAndStartSystemStream()
         isCapturing = true
         lastFlushTime = Date()
 
@@ -168,14 +152,55 @@ final class SystemAudioCaptureService: NSObject {
             } catch {
                 Log.audio.error("Microphone capture failed during meeting start: \(error.localizedDescription)")
                 NSLog("[AudioCapture] ERROR: Microphone capture failed: %@", error.localizedDescription)
-                try await cleanupFailedStart(removeOutputFile: true)
-                throw SystemAudioError.microphoneStartFailed(error.localizedDescription)
+                captureMicrophone = false
+                microphoneDevice = nil
+                microphoneCaptureStarted = false
+                emitStatusMessage("Microphone unavailable. Recording system audio only")
             }
         }
 
         Log.audio.info("Capture started (16kHz mono, captureMicrophone=\(self.captureMicrophone))")
         NSLog("[AudioCapture] Capture started — waiting for delegate callbacks...")
         onCaptureStarted?()
+    }
+
+    private func createAndStartSystemStream() async throws {
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+
+        guard let display = content.displays.first else {
+            throw SystemAudioError.noDisplayFound
+        }
+
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let config = makeStreamConfiguration()
+
+        NSLog("[AudioCapture] Creating SCStream (system audio only)")
+
+        let stream = SCStream(filter: filter, configuration: config, delegate: self)
+        do {
+            try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: streamOutputQueue)
+            try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: streamOutputQueue)
+            self.stream = stream
+            try await stream.startCapture()
+        } catch {
+            self.stream = nil
+            throw error
+        }
+    }
+
+    private func makeStreamConfiguration() -> SCStreamConfiguration {
+        let config = SCStreamConfiguration()
+        config.capturesAudio = true
+        config.excludesCurrentProcessAudio = false
+        config.width = 2
+        config.height = 2
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+        config.showsCursor = false
+        config.sampleRate = 16000
+        config.channelCount = 1
+        // NOTE: We do NOT use config.captureMicrophone — it's unreliable on macOS 15.
+        // Microphone is captured separately via AVAudioEngine below.
+        return config
     }
 
     // MARK: - Microphone Capture (AVAudioEngine)
@@ -221,23 +246,24 @@ final class SystemAudioCaptureService: NSObject {
         }
 
         let inputNode = engine.inputNode
-        let inputFormat = inputNode.inputFormat(forBus: 0)
-        let nodeOutputFormat = inputNode.outputFormat(forBus: 0)
+        let hardwareInputFormat = inputNode.inputFormat(forBus: 0)
+        let tapFormat = inputNode.outputFormat(forBus: 0)
 
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+        guard tapFormat.sampleRate > 0, tapFormat.channelCount > 0 else {
             throw SystemAudioError.microphoneFormatInvalid
         }
 
         Log.audio.info(
-            "Meeting mic format resolved: input=\(self.formatDescription(inputFormat)), output=\(self.formatDescription(nodeOutputFormat)), explicitBinding=\(didBindExplicitDevice)"
+            "Meeting mic format resolved: input=\(self.formatDescription(hardwareInputFormat)), output=\(self.formatDescription(tapFormat)), explicitBinding=\(didBindExplicitDevice)"
         )
         NSLog(
             "[AudioCapture] Mic input format: sampleRate=%.0f, channels=%d",
-            inputFormat.sampleRate,
-            inputFormat.channelCount
+            tapFormat.sampleRate,
+            tapFormat.channelCount
         )
 
-        // Create converter: native mic format → 16kHz mono Float32
+        // The tap callback delivers buffers in the node's output format.
+        // Converting from that format keeps the tap and converter in sync.
         guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: 16000,
@@ -247,7 +273,7 @@ final class SystemAudioCaptureService: NSObject {
             throw SystemAudioError.microphoneFormatInvalid
         }
 
-        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+        guard let converter = AVAudioConverter(from: tapFormat, to: targetFormat) else {
             throw SystemAudioError.microphoneFormatInvalid
         }
 
@@ -256,13 +282,13 @@ final class SystemAudioCaptureService: NSObject {
         // Install tap — runs on audio render thread
         do {
             try ObjCExceptionCatcher.catchException {
-                inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+                inputNode.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
                     self?.processMicBuffer(buffer)
                 }
             }
         } catch {
             Log.audio.error(
-                "Meeting mic tap install failed. tapFormat=\(self.formatDescription(inputFormat)), nodeOutputFormat=\(self.formatDescription(nodeOutputFormat)), error=\(error.localizedDescription)"
+                "Meeting mic tap install failed. tapFormat=\(self.formatDescription(tapFormat)), nodeOutputFormat=\(self.formatDescription(hardwareInputFormat)), error=\(error.localizedDescription)"
             )
             throw SystemAudioError.microphoneStartFailed(
                 "Could not start meeting microphone with the current route. Try reconnecting AirPods or choosing System Default."
@@ -271,11 +297,13 @@ final class SystemAudioCaptureService: NSObject {
 
         try engine.start()
         micEngine = engine
+        installMicrophoneObserver(for: engine)
 
         NSLog("[AudioCapture] AVAudioEngine started for microphone capture")
     }
 
     private func stopMicrophoneCapture() {
+        removeMicrophoneObserver()
         if let engine = micEngine {
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
@@ -285,6 +313,45 @@ final class SystemAudioCaptureService: NSObject {
         micEngine = nil
         micConverter = nil
         microphoneCaptureStarted = false
+    }
+
+    private func installMicrophoneObserver(for engine: AVAudioEngine) {
+        removeMicrophoneObserver()
+        micConfigurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleMicrophoneConfigurationChange()
+        }
+    }
+
+    private func removeMicrophoneObserver() {
+        if let observer = micConfigurationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            micConfigurationObserver = nil
+        }
+    }
+
+    private func handleMicrophoneConfigurationChange() {
+        let currentInputFormat = micEngine?.inputNode.inputFormat(forBus: 0)
+        let currentOutputFormat = micEngine?.inputNode.outputFormat(forBus: 0)
+        Log.audio.info(
+            "Meeting mic configuration changed - input=\(self.formatDescription(currentInputFormat)), output=\(self.formatDescription(currentOutputFormat))"
+        )
+
+        guard captureMicrophone,
+              isCapturing,
+              !isStoppingCapture,
+              !isRecoveringSystem,
+              !isRecoveringMicrophone
+        else { return }
+
+        if micEngine?.isRunning == true {
+            return
+        }
+
+        scheduleMicrophoneRecovery(reason: "configuration change")
     }
 
     /// Convert mic buffer to 16kHz mono Float32 and dispatch to mixer queue.
@@ -331,10 +398,13 @@ final class SystemAudioCaptureService: NSObject {
     // MARK: - Stop Capture
 
     func stopCapture() async throws -> URL? {
-        guard isCapturing, let stream else {
+        guard isCapturing else {
             Log.audio.warning("Not capturing")
             return nil
         }
+
+        isStoppingCapture = true
+        cancelRecoveryTasks()
 
         NSLog(
             "[AudioCapture] Stopping capture... sampleCount=%d, systemBuffers=%d, micBuffers=%d, systemBuf=%d, micBuf=%d",
@@ -348,7 +418,9 @@ final class SystemAudioCaptureService: NSObject {
         // Stop microphone first to prevent further mic data arriving
         stopMicrophoneCapture()
 
-        try await stream.stopCapture()
+        if let stream {
+            try await stream.stopCapture()
+        }
         self.stream = nil
         isCapturing = false
 
@@ -359,6 +431,8 @@ final class SystemAudioCaptureService: NSObject {
     }
 
     private func cleanupFailedStart(removeOutputFile: Bool) async throws {
+        isStoppingCapture = true
+        cancelRecoveryTasks()
         stopMicrophoneCapture()
 
         if let stream {
@@ -388,6 +462,163 @@ final class SystemAudioCaptureService: NSObject {
         }
         sampleCount = 0
         microphoneCaptureStarted = false
+        isRecoveringSystem = false
+        isRecoveringMicrophone = false
+        isStoppingCapture = false
+    }
+
+    private func cancelRecoveryTasks() {
+        systemRecoveryTask?.cancel()
+        systemRecoveryTask = nil
+        microphoneRecoveryTask?.cancel()
+        microphoneRecoveryTask = nil
+    }
+
+    private func scheduleSystemRecovery(after error: Error) {
+        guard isCapturing else { return }
+        guard !isStoppingCapture else { return }
+        guard !isRecoveringSystem else { return }
+
+        isRecoveringSystem = true
+        cancelMicrophoneRecoveryOnly()
+        stopMicrophoneCapture()
+        dropPendingMixerBuffers()
+        stream = nil
+        emitStatusMessage("System audio interrupted. Reconnecting…")
+
+        systemRecoveryTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.isRecoveringSystem = false
+                self.systemRecoveryTask = nil
+            }
+
+            for attempt in 1 ... self.maxSystemRecoveryAttempts {
+                if attempt == 1 {
+                    try? await Task.sleep(for: .seconds(self.initialRecoveryDelay))
+                } else {
+                    try? await Task.sleep(for: .seconds(self.recoveryDelay(for: attempt)))
+                }
+
+                guard !Task.isCancelled, self.isCapturing, !self.isStoppingCapture else { return }
+
+                do {
+                    try await self.createAndStartSystemStream()
+                    Log.audio.info("System audio recovered on attempt \(attempt)")
+
+                    if self.captureMicrophone {
+                        do {
+                            try self.startMicrophoneCapture()
+                            self.microphoneCaptureStarted = true
+                        } catch {
+                            Log.audio.warning(
+                                "Microphone restart after system recovery failed: \(error.localizedDescription)"
+                            )
+                            self.scheduleMicrophoneRecovery(
+                                reason: "system audio recovered",
+                                allowDuringSystemRecovery: true
+                            )
+                        }
+                    }
+
+                    self.emitStatusMessage("System audio reconnected")
+                    return
+                } catch {
+                    Log.audio.warning(
+                        "System audio recovery attempt \(attempt) failed: \(error.localizedDescription)"
+                    )
+                }
+            }
+
+            let recoveryError = SystemAudioError.streamRecoveryFailed(
+                "System audio capture was interrupted and could not reconnect."
+            )
+            self.failCapture(recoveryError)
+        }
+    }
+
+    private func scheduleMicrophoneRecovery(
+        reason: String,
+        allowDuringSystemRecovery: Bool = false
+    ) {
+        guard captureMicrophone,
+              isCapturing,
+              !isStoppingCapture,
+              (!isRecoveringSystem || allowDuringSystemRecovery),
+              !isRecoveringMicrophone
+        else { return }
+
+        isRecoveringMicrophone = true
+        stopMicrophoneCapture()
+        dropPendingMixerBuffers()
+        emitStatusMessage("Microphone changed. Reconnecting…")
+
+        microphoneRecoveryTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.isRecoveringMicrophone = false
+                self.microphoneRecoveryTask = nil
+            }
+
+            var triedDefaultFallback = false
+
+            for attempt in 1 ... self.maxMicrophoneRecoveryAttempts {
+                try? await Task.sleep(for: .seconds(self.recoveryDelay(for: attempt)))
+                guard !Task.isCancelled, self.isCapturing, !self.isStoppingCapture else { return }
+
+                do {
+                    try self.startMicrophoneCapture()
+                    self.microphoneCaptureStarted = true
+                    Log.audio.info("Microphone recovered after \(reason) on attempt \(attempt)")
+                    self.emitStatusMessage("Microphone reconnected")
+                    return
+                } catch {
+                    Log.audio.warning(
+                        "Microphone recovery attempt \(attempt) after \(reason) failed: \(error.localizedDescription)"
+                    )
+
+                    if !triedDefaultFallback, self.microphoneDevice != nil {
+                        let failedDeviceName = self.microphoneDevice?.name ?? "selected microphone"
+                        self.microphoneDevice = nil
+                        triedDefaultFallback = true
+                        self.emitStatusMessage("\(failedDeviceName) unavailable. Using System Default…")
+                    }
+                }
+            }
+
+            self.captureMicrophone = false
+            self.emitStatusMessage("Microphone unavailable. Continuing with system audio")
+        }
+    }
+
+    private func recoveryDelay(for attempt: Int) -> TimeInterval {
+        initialRecoveryDelay * pow(2.0, Double(max(0, attempt - 1)))
+    }
+
+    private func emitStatusMessage(_ message: String) {
+        Log.audio.info("\(message)")
+        onStatusMessage?(message)
+    }
+
+    private func dropPendingMixerBuffers() {
+        mixerQueue.sync {
+            systemBuffer.removeAll()
+            micBuffer.removeAll()
+        }
+    }
+
+    private func cancelMicrophoneRecoveryOnly() {
+        microphoneRecoveryTask?.cancel()
+        microphoneRecoveryTask = nil
+        isRecoveringMicrophone = false
+    }
+
+    private func failCapture(_ error: Error) {
+        stopMicrophoneCapture()
+        stream = nil
+        isCapturing = false
+        synchronizedTeardown(flushPendingAudio: false)
+        onError?(error)
     }
 
     // MARK: - Audio File Setup
@@ -418,7 +649,6 @@ final class SystemAudioCaptureService: NSObject {
 
         if captureMicrophone {
             // Mix overlapping frames synchronously and write to file only.
-            // Real-time emit already happened in handleSystemAudio().
             let mixCount = min(systemBuffer.count, micBuffer.count)
             if mixCount > 0 {
                 var mixed = [Float](repeating: 0, count: mixCount)
@@ -450,11 +680,7 @@ extension SystemAudioCaptureService: SCStreamDelegate {
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         guard let activeStream = self.stream, activeStream === stream else { return }
         Log.audio.error("Stream stopped with error: \(error)")
-        stopMicrophoneCapture()
-        self.stream = nil
-        isCapturing = false
-        synchronizedTeardown(flushPendingAudio: false)
-        onError?(error)
+        scheduleSystemRecovery(after: error)
     }
 }
 
@@ -500,11 +726,6 @@ extension SystemAudioCaptureService: SCStreamOutput {
             checkSilence(source: .system)
         }
 
-        // Emit system audio for real-time transcription IMMEDIATELY, before mixing.
-        // This restores v1.12.0 behavior where real-time streaming was never blocked
-        // by mixer synchronization. The mixed audio is only needed for the WAV file.
-        emitRealtimeData(samples)
-
         if captureMicrophone {
             let appliedSystemGain = systemGain
             let gained = samples.map { max(-1, min(1, $0 * appliedSystemGain)) }
@@ -512,6 +733,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
             drainMixedSamples()
             flushStaleBuffer()
         } else {
+            emitRealtimeData(samples)
             fileWriteQueue.async { [weak self] in
                 self?.writeSamples(samples)
             }
@@ -555,8 +777,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
         systemBuffer.removeFirst(mixCount)
         micBuffer.removeFirst(mixCount)
 
-        // Real-time emit happens in handleSystemAudio() before mixing.
-        // Mixer output is only written to the WAV file.
+        emitRealtimeData(mixed)
         fileWriteQueue.async { [weak self] in
             self?.writeSamples(mixed)
         }
@@ -566,16 +787,17 @@ extension SystemAudioCaptureService: SCStreamOutput {
     /// This prevents audio from being held indefinitely when one source delivers
     /// faster or the other is temporarily silent.
     private func flushStaleBuffer() {
-        flushIfStale(&systemBuffer)
-        flushIfStale(&micBuffer)
+        flushIfStale(&systemBuffer, emitRealtime: captureMicrophone)
+        flushIfStale(&micBuffer, emitRealtime: captureMicrophone)
     }
 
-    private func flushIfStale(_ buffer: inout [Float]) {
+    private func flushIfStale(_ buffer: inout [Float], emitRealtime: Bool) {
         guard buffer.count > flushThresholdFrames else { return }
         let stale = Array(buffer)
         buffer.removeAll()
-        // Real-time emit happens in handleSystemAudio() before mixing.
-        // Stale buffer flush only writes to the WAV file.
+        if emitRealtime {
+            emitRealtimeData(stale)
+        }
         fileWriteQueue.async { [weak self] in
             self?.writeSamples(stale)
         }
@@ -780,6 +1002,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
 enum SystemAudioError: LocalizedError {
     case noDisplayFound
     case streamCreationFailed
+    case streamRecoveryFailed(String)
     case permissionDenied
     case microphoneFormatInvalid
     case microphoneStartFailed(String)
@@ -790,6 +1013,8 @@ enum SystemAudioError: LocalizedError {
             "No display found for screen capture"
         case .streamCreationFailed:
             "Failed to create audio capture stream"
+        case let .streamRecoveryFailed(reason):
+            reason
         case .permissionDenied:
             "Screen recording permission required"
         case .microphoneFormatInvalid:

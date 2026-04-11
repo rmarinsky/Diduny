@@ -68,6 +68,7 @@ protocol AudioDeviceManagerProtocol: AnyObject {
 
 protocol PushToTalkServiceProtocol: AnyObject {
     var selectedKey: PushToTalkKey { get set }
+    var toggleTapCount: Int { get set }
     var onKeyDown: (() -> Void)? { get set }
     var onKeyUp: (() -> Void)? { get set }
     /// Called when recording should toggle (for hands-free mode)

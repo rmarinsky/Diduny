@@ -138,6 +138,7 @@ extension AppDelegate {
         do {
             meetingRecorderService.audioSource = SettingsStorage.shared.meetingAudioSource
             meetingRecorderService.onRealtimeAudioData = nil
+            wireMeetingRecorderStatusMessages()
 
             if meetingRecorderService.audioSource == .systemPlusMicrophone {
                 let (device, didFallback) = audioDeviceManager.resolveDevice(
@@ -567,10 +568,9 @@ extension AppDelegate {
             return
         }
 
-        // On first shortcut press: show confirmation notification
-        escapeService.onFirstEscape = { [weak self] in
+        escapeService.onProgressEscape = { [weak self] pressCount, _ in
             NotchManager.shared.showInfo(
-                message: SettingsStorage.shared.escapeCancelShortcut.repeatHint,
+                message: SettingsStorage.shared.escapeCancelRepeatHint(afterPressCount: pressCount),
                 duration: 1.5
             )
 

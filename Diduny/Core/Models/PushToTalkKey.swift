@@ -4,6 +4,10 @@ import Foundation
 enum PushToTalkKey: String, Codable, CaseIterable, Identifiable {
     case none
     case capsLock
+    case leftShift
+    case leftOption
+    case leftCommand
+    case leftControl
     case rightShift
     case rightOption
     case rightCommand
@@ -17,6 +21,14 @@ enum PushToTalkKey: String, Codable, CaseIterable, Identifiable {
             "Disabled"
         case .capsLock:
             "Caps Lock"
+        case .leftShift:
+            "Left Shift"
+        case .leftOption:
+            "Left Option"
+        case .leftCommand:
+            "Left Command"
+        case .leftControl:
+            "Left Control"
         case .rightShift:
             "Right Shift"
         case .rightOption:
@@ -34,6 +46,14 @@ enum PushToTalkKey: String, Codable, CaseIterable, Identifiable {
             ""
         case .capsLock:
             "⇪"
+        case .leftShift:
+            "⇧"
+        case .leftOption:
+            "⌥"
+        case .leftCommand:
+            "⌘"
+        case .leftControl:
+            "⌃"
         case .rightShift:
             "⇧"
         case .rightOption:

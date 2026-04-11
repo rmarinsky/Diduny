@@ -79,8 +79,8 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         // We wrap this in a timeout to prevent the app from freezing
         let shouldBindExplicitDevice = shouldBindExplicitDevice(device)
         let deviceID = shouldBindExplicitDevice ? device?.id : nil
-        let inputFormat: AVAudioFormat
-        let nodeOutputFormat: AVAudioFormat
+        let hardwareInputFormat: AVAudioFormat
+        let tapFormat: AVAudioFormat
         let inputNode: AVAudioInputNode
         let audioOperationTimeout = self.audioOperationTimeout
 
@@ -112,13 +112,13 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
                 // Access inputNode - this is where the hang typically occurs
                 let node = engine.inputNode
                 let hardwareInputFormat = node.inputFormat(forBus: 0)
-                let outputFormat = node.outputFormat(forBus: 0)
-                return (node, hardwareInputFormat, outputFormat)
+                let tapFormat = node.outputFormat(forBus: 0)
+                return (node, hardwareInputFormat, tapFormat)
             }
 
             inputNode = result.0
-            inputFormat = result.1
-            nodeOutputFormat = result.2
+            hardwareInputFormat = result.1
+            tapFormat = result.2
             Log.audio.info("startRecording: Audio engine initialized successfully")
         } catch let error as AudioTimeoutError {
             Log.audio.error("startRecording: \(error.localizedDescription)")
@@ -133,17 +133,18 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         } else {
             Log.audio.info("startRecording: Resolved device = System Default")
         }
-        let hardwareInputFormatDescription = formatDescription(inputFormat)
-        let outputFormatDescription = formatDescription(nodeOutputFormat)
+        let hardwareInputFormatDescription = formatDescription(hardwareInputFormat)
+        let outputFormatDescription = formatDescription(tapFormat)
         Log.audio.info("startRecording: Hardware input format = \(hardwareInputFormatDescription)")
         Log.audio.info("startRecording: Input node output format = \(outputFormatDescription)")
-        currentRecordingDeviceInfo = makeRecordingDeviceInfo(device: device, inputFormat: inputFormat)
+        currentRecordingDeviceInfo = makeRecordingDeviceInfo(device: device, inputFormat: tapFormat)
 
-        // Validate audio format - on some Intel Macs, the format can be invalid
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+        // The input node tap records from the node's output bus, not its hardware input bus.
+        // Using the tap/output format avoids mismatches that can prevent recording from starting.
+        guard tapFormat.sampleRate > 0, tapFormat.channelCount > 0 else {
             Log.audio
                 .error(
-                    "startRecording: Invalid audio format - sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)"
+                    "startRecording: Invalid tap format - sampleRate=\(tapFormat.sampleRate), channels=\(tapFormat.channelCount)"
                 )
             audioEngine = nil
             throw AudioError
@@ -165,7 +166,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         // Create audio file for writing - use the INPUT format to avoid realtime conversion
         // The transcription service can handle various formats
         do {
-            audioFile = try AVAudioFile(forWriting: url, settings: inputFormat.settings)
+            audioFile = try AVAudioFile(forWriting: url, settings: tapFormat.settings)
         } catch {
             Log.audio.error("startRecording: Failed to create audio file: \(error.localizedDescription)")
             throw AudioError.recordingFailed("Could not create audio file: \(error.localizedDescription)")
@@ -179,9 +180,9 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         }
 
         // Optional realtime streamer for websocket mode (translation/live features)
-        let realtimeAudioStreamer = makeRealtimeAudioStreamerIfNeeded(inputFormat: inputFormat)
+        let realtimeAudioStreamer = makeRealtimeAudioStreamerIfNeeded(inputFormat: tapFormat)
         self.realtimeAudioStreamer = realtimeAudioStreamer
-        activeRecordingFormat = inputFormat
+        activeRecordingFormat = tapFormat
 
         // Install tap on input node to capture audio
         // IMPORTANT: This callback runs on a realtime audio thread, NOT the main thread
@@ -191,7 +192,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         Log.audio.info("startRecording: Installing tap on input node...")
         do {
             try ObjCExceptionCatcher.catchException {
-                inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+                inputNode.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
                     // Update audio level from buffer (thread-safe method)
                     self?.updateAudioLevelFromBuffer(buffer)
 
@@ -206,8 +207,8 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
                 }
             }
         } catch {
-            let tapFormatDescription = formatDescription(inputFormat)
-            let nodeOutputFormatDescription = formatDescription(nodeOutputFormat)
+            let tapFormatDescription = formatDescription(tapFormat)
+            let nodeOutputFormatDescription = formatDescription(hardwareInputFormat)
             Log.audio.error(
                 "startRecording: Failed to install tap. tapFormat=\(tapFormatDescription), nodeOutputFormat=\(nodeOutputFormatDescription), error=\(error.localizedDescription)"
             )

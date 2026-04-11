@@ -201,7 +201,7 @@ extension AppDelegate {
         if didFallback, let name = device?.name {
             Log.app.warning("startTranslationRecording: Preferred device unavailable, using \(name)")
         }
-        guard device != nil else {
+        guard let device else {
             Log.app.error("startTranslationRecording: No audio input devices available")
             await MainActor.run {
                 appState.errorMessage = "No microphone found. Please connect a microphone."
@@ -231,7 +231,10 @@ extension AppDelegate {
             setupRealtimeTranslationIfNeeded()
 
             Log.app.info("startTranslationRecording: Starting audio recording")
-            try await audioRecorder.startRecording(device: device)
+            _ = try await startAudioRecorderWithFallback(
+                initialDevice: device,
+                logPrefix: "startTranslationRecording"
+            )
             Log.app.info("startTranslationRecording: Recording started successfully")
 
             // Only set recording state AFTER audio engine is confirmed working
@@ -350,24 +353,26 @@ extension AppDelegate {
         do {
             Log.app.info("stopTranslationRecording: Stopping audio recorder")
             let audioData = try await audioRecorder.stopRecording()
-            capturedAudioData = audioData
             Log.app.info("stopTranslationRecording: Got audio data, size = \(audioData.count) bytes")
+
+            let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
+            capturedAudioData = compressedData
 
             let realtimeResult = await stopTranslationRealtimeSession(finalize: true)
 
-            let text: String
+            let rawText: String
             if !realtimeResult.text.isEmpty {
-                text = realtimeResult.text
-                Log.app.info("stopTranslationRecording: Using realtime translation (\(text.count) chars)")
+                rawText = realtimeResult.text
+                Log.app.info("stopTranslationRecording: Using realtime translation (\(rawText.count) chars)")
             } else if SettingsStorage.shared.effectiveTranslationProvider == .local {
                 // Local Whisper — no WebSocket, transcribe from audio
-                text = try await whisperTranscriptionService.translateAndTranscribe(audioData: audioData)
-                Log.app.info("stopTranslationRecording: Local Whisper translation (\(text.count) chars)")
-            } else if let connectionError = translationRealtimeConnectionError {
-                throw TranscriptionError.cloudConnectionFailed(connectionError)
+                rawText = try await whisperTranscriptionService.translateAndTranscribe(audioData: audioData)
+                Log.app.info("stopTranslationRecording: Local Whisper translation (\(rawText.count) chars)")
             } else {
-                throw TranscriptionError.emptyTranscription
+                rawText = try await transcriptionService.translateAndTranscribe(audioData: audioData)
+                Log.app.info("stopTranslationRecording: HTTP cloud translation (\(rawText.count) chars)")
             }
+            let text = ClipboardService.preparedText(rawText, behavior: .cleaned)
             Log.app.info("stopTranslationRecording: Translation received (\(text.count) chars)")
 
             let processingState = appState.translationRecordingState
@@ -379,7 +384,7 @@ extension AppDelegate {
                 return
             }
 
-            clipboardService.copy(text: text)
+            clipboardService.copy(text: text, behavior: .raw)
             Log.app.info("stopTranslationRecording: Text copied to clipboard")
 
             if SettingsStorage.shared.autoPaste {
@@ -406,7 +411,7 @@ extension AppDelegate {
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
-                audioData: audioData,
+                audioData: compressedData,
                 type: .translation,
                 duration: duration,
                 transcriptionText: text,
@@ -478,7 +483,8 @@ extension AppDelegate {
     // MARK: - Realtime Translation (WebSocket)
 
     private func setupRealtimeTranslationIfNeeded() {
-        guard SettingsStorage.shared.effectiveTranslationProvider == .cloud else {
+        guard SettingsStorage.shared.effectiveTranslationProvider == .cloud,
+              SettingsStorage.shared.translationRealtimeSocketEnabled else {
             audioRecorder.onRealtimeAudioData = nil
             translationRealtimeSessionEnabled = false
             translationRealtimeAccumulator = nil
@@ -593,10 +599,9 @@ extension AppDelegate {
             return
         }
 
-        // On first shortcut press: show confirmation notification
-        escapeService.onFirstEscape = { [weak self] in
+        escapeService.onProgressEscape = { [weak self] pressCount, _ in
             NotchManager.shared.showInfo(
-                message: SettingsStorage.shared.escapeCancelShortcut.repeatHint,
+                message: SettingsStorage.shared.escapeCancelRepeatHint(afterPressCount: pressCount),
                 duration: 1.5
             )
 

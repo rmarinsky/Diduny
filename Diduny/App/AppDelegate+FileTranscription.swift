@@ -47,9 +47,37 @@ extension AppDelegate {
             let audioData = try await loadAudioData(from: fileURL)
             Log.app.info("transcribeFile: Loaded \(audioData.count) bytes")
 
-            let service = activeTranscriptionService
+            let text: String
+            if SettingsStorage.shared.effectiveTranscriptionProvider == .cloud {
+                let asyncJobService = AsyncTranscriptionJobService()
+                let hints = SettingsStorage.shared.favoriteLanguages
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                var config: [String: Any] = ["mode": "transcribe"]
+                if !hints.isEmpty {
+                    config["language_hints"] = hints
+                }
 
-            let text = try await service.transcribe(audioData: audioData)
+                text = try await asyncJobService.transcribeWithRetry(audioData: audioData, config: config) { status in
+                    Task { @MainActor in
+                        switch status {
+                        case .queued:
+                            NotchManager.shared.showInfo(message: "Queued...", duration: 30)
+                        case .uploading:
+                            NotchManager.shared.showInfo(message: "Uploading...", duration: 30)
+                        case .processing:
+                            NotchManager.shared.startProcessing(mode: .fileTranscription)
+                        case .finalizing:
+                            NotchManager.shared.showInfo(message: "Finishing up...", duration: 30)
+                        default:
+                            break
+                        }
+                    }
+                }
+            } else {
+                let service = activeTranscriptionService
+                text = try await service.transcribe(audioData: audioData)
+            }
             Log.app.info("transcribeFile: Transcription received (\(text.count) chars)")
 
             clipboardService.copy(text: text)
