@@ -67,8 +67,12 @@ final class NotchManager {
     private init() {}
 
     func startRecording(mode: RecordingMode = .voice) {
-        autoDismissTask?.cancel()
         recordingStartTime = Date()
+        resumeRecording(mode: mode)
+    }
+
+    func resumeRecording(mode: RecordingMode = .voice) {
+        autoDismissTask?.cancel()
         state = .recording(mode: mode)
         showCompact()
     }
@@ -99,7 +103,6 @@ final class NotchManager {
         scheduleAutoDismiss(delay: 3.0)
     }
 
-    /// Show informational message (e.g., "Press ESC again to cancel")
     func showInfo(message: String, duration: TimeInterval = 1.5) {
         autoDismissTask?.cancel()
         state = .info(message: message)
@@ -107,12 +110,26 @@ final class NotchManager {
         scheduleAutoDismiss(delay: duration)
     }
 
+    /// Show info message during active recording, then auto-restore recording UI with preserved timer.
+    func showInfoDuringRecording(message: String, mode: RecordingMode, duration: TimeInterval = 1.5) {
+        autoDismissTask?.cancel()
+        let savedStartTime = recordingStartTime
+        state = .info(message: message)
+        showExpanded()
+        autoDismissTask = Task {
+            try? await Task.sleep(for: .seconds(duration))
+            guard !Task.isCancelled else { return }
+            recordingStartTime = savedStartTime
+            state = .recording(mode: mode)
+            showCompact()
+        }
+    }
+
     func hide() {
         autoDismissTask?.cancel()
         recordingStartTime = nil
         audioLevel = 0
         state = .idle
-        updatePanelMouseEvents()
         operationSequence &+= 1
         let seq = operationSequence
         Task {
@@ -131,20 +148,6 @@ final class NotchManager {
         Task { @MainActor in
             await onStopRequested()
         }
-    }
-
-    var isStopControlVisible: Bool {
-        if case .recording = state {
-            return true
-        }
-        return false
-    }
-
-    /// Keep the panel non-interactive by default so it never blocks the upper screen.
-    /// Recording mode opts into hit testing for the explicit Stop control only.
-    private func updatePanelMouseEvents() {
-        guard let panel = notch?.windowController?.window else { return }
-        panel.ignoresMouseEvents = !isStopControlVisible
     }
 
     private func ensureNotch() {
@@ -185,7 +188,6 @@ final class NotchManager {
             } else {
                 await notch?.expand(on: screen)
             }
-            updatePanelMouseEvents()
         }
     }
 
@@ -197,7 +199,6 @@ final class NotchManager {
         Task {
             guard self.operationSequence == seq else { return }
             await notch?.expand(on: screen)
-            updatePanelMouseEvents()
         }
     }
 

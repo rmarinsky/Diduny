@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		007C689901A82C26D1AFD661 /* NotchManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12B40184B3E0CE6E0736EE82 /* NotchManagerTests.swift */; };
+		03386BD1EB00ACDF8DD60759 /* EscapeCancelServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46453045F6E830B4B5B48D4 /* EscapeCancelServiceTests.swift */; };
 		03EBBAC2178925692C5B0F28 /* OnboardingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A7E2F21047194B8A5423BF5 /* OnboardingManager.swift */; };
 		0B16463025082AB0F9EF90A5 /* LiveTranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54C08AEA7B3D9495385E0990 /* LiveTranscriptView.swift */; };
 		0CD34EAB840AD6CB69BF6ECB /* JobModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78ADA0228DC80DA0ACD8CE17 /* JobModels.swift */; };
@@ -26,6 +28,7 @@
 		3857104F9A2310C3DA6E8290 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 924F66A90537891F57F1CF0D /* PermissionManager.swift */; };
 		3FDACDAE1B8CF7A54595BE9D /* AudioPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39F37FBC8AD6C2935F89C66D /* AudioPlaybackService.swift */; };
 		438C177832C516A8BD571C36 /* WhisperModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71FCAF64D600F8EFA8B20A2 /* WhisperModelManager.swift */; };
+		474BEF9A6D5E57064A709DFD /* NotchStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D34BB7F6DB9091D30035DAA0 /* NotchStateTests.swift */; };
 		4845580D664C6BE034CF6835 /* MeetingChapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A53A5FD4196FA12DF76141 /* MeetingChapter.swift */; };
 		48D234DA0A725C503B5DEA75 /* HistoryPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EED41A85ABE10582EF485F5D /* HistoryPaletteView.swift */; };
 		497E932204DB8D119B40EAA5 /* PushToTalkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CDE81820CACD577C91281C9 /* PushToTalkService.swift */; };
@@ -101,6 +104,16 @@
 		F9204E8BCBCCA977B096A3D2 /* AudioPlaybackControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C88AE153FCAA14A227A7E16 /* AudioPlaybackControlView.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		AEF7BB28223633B49FADB1A2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C2A45244C917AF2A13FB1A1E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 80E4B00A9B397CFA48C6CD61;
+			remoteInfo = Diduny;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		001D5E66F362C783C621055C /* CloudRealtimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudRealtimeService.swift; sourceTree = "<group>"; };
 		01E272A8E12D4EEF5D724E91 /* AppDelegate+TranslationRecording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+TranslationRecording.swift"; sourceTree = "<group>"; };
@@ -111,6 +124,7 @@
 		0C49EEDF9A5AEED5B941A6AF /* Test.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Test.xcconfig; sourceTree = "<group>"; };
 		0E8F66106EF94ABC7EDE8870 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		118CE8BCA0160E31FD916B10 /* AudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDevice.swift; sourceTree = "<group>"; };
+		12B40184B3E0CE6E0736EE82 /* NotchManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchManagerTests.swift; sourceTree = "<group>"; };
 		158C39D9362442B65F2948C6 /* RealtimeTranscription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeTranscription.swift; sourceTree = "<group>"; };
 		18174CC5740A330799589646 /* AppDelegate+MeetingRecording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+MeetingRecording.swift"; sourceTree = "<group>"; };
 		1967633DAD0607B3B2756CC8 /* OnboardingContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingContainerView.swift; sourceTree = "<group>"; };
@@ -121,6 +135,7 @@
 		2430641841403AB68C61B536 /* KeychainManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManager.swift; sourceTree = "<group>"; };
 		26809CA162E096F4EA668768 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
 		2A69C86E608DDD0D38D8AB54 /* WhisperBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WhisperBridge.h; sourceTree = "<group>"; };
+		2ABF3F1FBD81398469047BB4 /* DidunyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DidunyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2C88AE153FCAA14A227A7E16 /* AudioPlaybackControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackControlView.swift; sourceTree = "<group>"; };
 		30A4F862A41E4EC48E5CAEFB /* RecordingRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingRowView.swift; sourceTree = "<group>"; };
 		312D39F00F29463EB9AD6DE4 /* TextTranslationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextTranslationView.swift; sourceTree = "<group>"; };
@@ -181,8 +196,10 @@
 		BECAEC93BAEBC7FB0CE79126 /* Errors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Errors.swift; sourceTree = "<group>"; };
 		BED4AC73DF15E8FB1B784BE2 /* LiveTranscriptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptStore.swift; sourceTree = "<group>"; };
 		C1AFB9C5F772A874A404885C /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		C46453045F6E830B4B5B48D4 /* EscapeCancelServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscapeCancelServiceTests.swift; sourceTree = "<group>"; };
 		D052DF5E0E01BC0AD2742150 /* AudioSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSettingsView.swift; sourceTree = "<group>"; };
 		D1B0622318D71BD3A1EEA701 /* ShortcutsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutsSettingsView.swift; sourceTree = "<group>"; };
+		D34BB7F6DB9091D30035DAA0 /* NotchStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchStateTests.swift; sourceTree = "<group>"; };
 		E2133D27EF1A261954A78BEB /* RecoveryStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryStateManager.swift; sourceTree = "<group>"; };
 		E4ECCACC4D64216B39204947 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		E819431AE3C66AA9B422954A /* RecordingQueueService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingQueueService.swift; sourceTree = "<group>"; };
@@ -233,6 +250,7 @@
 			isa = PBXGroup;
 			children = (
 				4C5A21F6255692712508A475 /* Diduny.app */,
+				2ABF3F1FBD81398469047BB4 /* DidunyTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -446,6 +464,7 @@
 			children = (
 				FB9E2593E522D0D3A76C8FB7 /* Config */,
 				15D2F8B0F5D1CD8440457521 /* Diduny */,
+				D2B2605F1A03065F4BA5333C /* DidunyTests */,
 				FD4742A70F27CE5022031899 /* Frameworks */,
 				166821B9EBE984E0D67F7515 /* Products */,
 			);
@@ -458,6 +477,16 @@
 				9357A98372102BF3B285A2AD /* HistoryPaletteWindowController.swift */,
 			);
 			path = HistoryPalette;
+			sourceTree = "<group>";
+		};
+		D2B2605F1A03065F4BA5333C /* DidunyTests */ = {
+			isa = PBXGroup;
+			children = (
+				C46453045F6E830B4B5B48D4 /* EscapeCancelServiceTests.swift */,
+				12B40184B3E0CE6E0736EE82 /* NotchManagerTests.swift */,
+				D34BB7F6DB9091D30035DAA0 /* NotchStateTests.swift */,
+			);
+			path = DidunyTests;
 			sourceTree = "<group>";
 		};
 		FB9E2593E522D0D3A76C8FB7 /* Config */ = {
@@ -522,6 +551,24 @@
 			productReference = 4C5A21F6255692712508A475 /* Diduny.app */;
 			productType = "com.apple.product-type.application";
 		};
+		B58B754E03E21FECE84ABC56 /* DidunyTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 63CE54C009AA385C62F1FCEA /* Build configuration list for PBXNativeTarget "DidunyTests" */;
+			buildPhases = (
+				CD4F1845EC07A511CF55CFFB /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DC570C261C7BDCAD4DF715D0 /* PBXTargetDependency */,
+			);
+			name = DidunyTests;
+			packageProductDependencies = (
+			);
+			productName = DidunyTests;
+			productReference = 2ABF3F1FBD81398469047BB4 /* DidunyTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -532,6 +579,10 @@
 				LastUpgradeCheck = 1700;
 				TargetAttributes = {
 					80E4B00A9B397CFA48C6CD61 = {
+						DevelopmentTeam = 8JL9TM5WLG;
+						ProvisioningStyle = Automatic;
+					};
+					B58B754E03E21FECE84ABC56 = {
 						DevelopmentTeam = 8JL9TM5WLG;
 						ProvisioningStyle = Automatic;
 					};
@@ -558,6 +609,7 @@
 			projectRoot = "";
 			targets = (
 				80E4B00A9B397CFA48C6CD61 /* Diduny */,
+				B58B754E03E21FECE84ABC56 /* DidunyTests */,
 			);
 		};
 /* End PBXProject section */
@@ -665,7 +717,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CD4F1845EC07A511CF55CFFB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				03386BD1EB00ACDF8DD60759 /* EscapeCancelServiceTests.swift in Sources */,
+				007C689901A82C26D1AFD661 /* NotchManagerTests.swift in Sources */,
+				474BEF9A6D5E57064A709DFD /* NotchStateTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		DC570C261C7BDCAD4DF715D0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 80E4B00A9B397CFA48C6CD61 /* Diduny */;
+			targetProxy = AEF7BB28223633B49FADB1A2 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		1597D7475480E90CED87DC89 /* Test */ = {
@@ -686,6 +756,7 @@
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.diduny.test;
+				PRODUCT_MODULE_NAME = Diduny;
 				PRODUCT_NAME = "Diduny TEST";
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = TEST_BUILD;
@@ -744,7 +815,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.12.5;
+				MARKETING_VERSION = 1.12.6;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -773,11 +844,46 @@
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.diduny;
+				PRODUCT_MODULE_NAME = Diduny;
 				PRODUCT_NAME = Diduny;
 				SDKROOT = macosx;
 				SWIFT_OBJC_BRIDGING_HEADER = Diduny/Core/Whisper/WhisperBridge.h;
 			};
 			name = Release;
+		};
+		61B966C80FD4F573EC6C3C67 /* Test */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.DidunyTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Diduny DEV.app/Contents/MacOS/Diduny DEV";
+			};
+			name = Test;
+		};
+		6ECA19D15F2B97B10D61F81A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.diduny.dev.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Diduny DEV.app/Contents/MacOS/Diduny DEV";
+			};
+			name = Debug;
 		};
 		CB09A9AB4CA14E28C1618458 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -830,7 +936,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.12.5;
+				MARKETING_VERSION = 1.12.6;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -896,7 +1002,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.12.5;
+				MARKETING_VERSION = 1.12.6;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -925,12 +1031,30 @@
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.diduny.dev;
+				PRODUCT_MODULE_NAME = Diduny;
 				PRODUCT_NAME = "Diduny DEV";
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEV_BUILD DEBUG";
 				SWIFT_OBJC_BRIDGING_HEADER = Diduny/Core/Whisper/WhisperBridge.h;
 			};
 			name = Debug;
+		};
+		DCA16F25BF1DD0ED5E46287D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.DidunyTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Diduny DEV.app/Contents/MacOS/Diduny DEV";
+			};
+			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
@@ -941,6 +1065,16 @@
 				D798173A6EE5637EB45A132B /* Debug */,
 				CB09A9AB4CA14E28C1618458 /* Release */,
 				2F2A33D2A7ECF1597458760E /* Test */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		63CE54C009AA385C62F1FCEA /* Build configuration list for PBXNativeTarget "DidunyTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6ECA19D15F2B97B10D61F81A /* Debug */,
+				DCA16F25BF1DD0ED5E46287D /* Release */,
+				61B966C80FD4F573EC6C3C67 /* Test */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

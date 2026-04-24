@@ -26,7 +26,7 @@ configs:
 
 settings:
   base:
-    MARKETING_VERSION: "1.12.5"
+    MARKETING_VERSION: "1.12.6"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: "8JL9TM5WLG"
     CODE_SIGN_STYLE: Automatic
@@ -46,6 +46,22 @@ configFiles:
   Release: Config/Release.xcconfig
 
 targets:
+  DidunyTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: DidunyTests
+    dependencies:
+      - target: Diduny
+    settings:
+      base:
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Diduny DEV.app/Contents/MacOS/Diduny DEV"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        GENERATE_INFOPLIST_FILE: YES
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: ua.com.rmarinsky.diduny.dev.tests
+
   Diduny:
     type: application
     platform: macOS
@@ -64,6 +80,7 @@ targets:
       - sdk: Metal.framework
     settings:
       base:
+        PRODUCT_MODULE_NAME: Diduny
         INFOPLIST_FILE: Diduny/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Diduny/Resources/Diduny.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -96,8 +113,13 @@ schemes:
     build:
       targets:
         Diduny: all
+        DidunyTests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - DidunyTests
     archive:
       config: Debug
 

@@ -557,19 +557,12 @@ extension AppDelegate {
             return
         }
 
-        escapeService.onProgressEscape = { [weak self] pressCount, _ in
-            NotchManager.shared.showInfo(
+        escapeService.onProgressEscape = { pressCount, _ in
+            NotchManager.shared.showInfoDuringRecording(
                 message: SettingsStorage.shared.escapeCancelRepeatHint(afterPressCount: pressCount),
+                mode: .meetingTranslation,
                 duration: 1.5
             )
-
-            // Resume showing recording state after info disappears
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(1.6))
-                guard let self,
-                      appState.meetingTranslationRecordingState == .recording else { return }
-                NotchManager.shared.startRecording(mode: .meetingTranslation)
-            }
         }
 
         // On second shortcut press (confirmed cancel): cancel recording

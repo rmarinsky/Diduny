@@ -75,8 +75,10 @@ final class EscapeCancelService: ObservableObject {
             return
         }
         guard event.type == .keyDown, !event.isARepeat, event.keyCode == 53 else { return }
+        processEscapePress(at: Date())
+    }
 
-        let now = Date()
+    func processEscapePress(at now: Date) {
         let requiredPressCount = SettingsStorage.shared.escapeCancelPressCount
 
         if let lastPressTime, now.timeIntervalSince(lastPressTime) <= pressThreshold {
