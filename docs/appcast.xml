@@ -36,8 +36,8 @@
     <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
     <enclosure
       url="https://github.com/rmarinsky/Diduny/releases/download/v1.12.6/Diduny-1.12.6.dmg"
-      sparkle:edSignature="7d2SnQdl/BLG9/gTu9HVwjcMPsppptQXZYU7uDCZuTJiXWuGxUJN2djelabyH8c3uIdL4mQGkvIneQxNVlQyDQ=="
-      length="5761375"
+      sparkle:edSignature="QBQcj+l4LRKPb/ZGPcViMPks5Sfv8etMqTtC4hsA99ASA+4cXc9ORWBgh67D0fCHtCEBLYnI1n0UnUfWlcH6AQ=="
+      length="5761393"
       type="application/octet-stream" />
   </item>
   </channel>
