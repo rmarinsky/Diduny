@@ -12,6 +12,7 @@ struct ShortcutsSettingsView: View {
     @State private var translationHotkeyPressCount = SettingsStorage.shared.translationHotkeyPressCount
     @State private var meetingHotkeyPressCount = SettingsStorage.shared.meetingHotkeyPressCount
     @State private var meetingTranslationHotkeyPressCount = SettingsStorage.shared.meetingTranslationHotkeyPressCount
+    @State private var translateSelectedTextHotkeyPressCount = SettingsStorage.shared.translateSelectedTextHotkeyPressCount
     @State private var escapeCancelEnabled = SettingsStorage.shared.escapeCancelEnabled
     @State private var escapeCancelPressCount = SettingsStorage.shared.escapeCancelPressCount
     @State private var escapeCancelSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
@@ -37,12 +38,12 @@ struct ShortcutsSettingsView: View {
                     store: { SettingsStorage.shared.translationHotkeyPressCount = $0 }
                 )
 
-                HStack {
-                    Text("Translate Selected Text:")
-                        .frame(width: 160, alignment: .leading)
-                    Text("Double-press \u{2318}C")
-                        .foregroundColor(.secondary)
-                }
+                hotkeyRow(
+                    title: "Translate Selected Text:",
+                    shortcut: .translateSelectedText,
+                    pressCount: $translateSelectedTextHotkeyPressCount,
+                    store: { SettingsStorage.shared.translateSelectedTextHotkeyPressCount = $0 }
+                )
 
                 hotkeyRow(
                     title: "Meeting:",

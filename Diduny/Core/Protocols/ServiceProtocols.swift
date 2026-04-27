@@ -45,6 +45,8 @@ protocol HotkeyServiceProtocol {
     func unregisterHistoryPaletteHotkey()
     func registerChapterHotkey(handler: @escaping () -> Void)
     func unregisterChapterHotkey()
+    func registerTranslateSelectedTextHotkey(handler: @escaping () -> Void)
+    func unregisterTranslateSelectedTextHotkey()
     func unregisterAll()
 }
 

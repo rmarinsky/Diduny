@@ -51,6 +51,7 @@ final class SettingsStorage {
         case translationHotkeyPressCount
         case meetingHotkeyPressCount
         case meetingTranslationHotkeyPressCount
+        case translateSelectedTextHotkeyPressCount
         case transcriptionProvider
         case selectedWhisperModel
         case whisperLanguage
@@ -68,6 +69,7 @@ final class SettingsStorage {
         case escapeCancelSaveAudio
         case textCleanupEnabled
         case fillerWords
+        case whisperModelUnloadPolicy
         case proxyBaseURL
         case remoteConfigURL
     }
@@ -406,6 +408,19 @@ final class SettingsStorage {
         }
     }
 
+    var translateSelectedTextHotkeyPressCount: Int {
+        get {
+            let stored = defaults.object(forKey: Key.translateSelectedTextHotkeyPressCount.rawValue) as? Int ?? 1
+            return Self.sanitizedPressCount(stored, fallback: 1)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedPressCount(newValue, fallback: 1),
+                forKey: Key.translateSelectedTextHotkeyPressCount.rawValue
+            )
+        }
+    }
+
     // MARK: - Transcription Provider
 
     var transcriptionProvider: TranscriptionProvider {
@@ -441,6 +456,21 @@ final class SettingsStorage {
     var whisperPrompt: String {
         get { defaults.string(forKey: Key.whisperPrompt.rawValue) ?? "" }
         set { defaults.set(newValue, forKey: Key.whisperPrompt.rawValue) }
+    }
+
+    var whisperModelUnloadPolicy: WhisperModelUnloadPolicy {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.whisperModelUnloadPolicy.rawValue),
+                  let policy = WhisperModelUnloadPolicy(rawValue: rawValue)
+            else {
+                return .minutes5
+            }
+            return policy
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.whisperModelUnloadPolicy.rawValue)
+            NotificationCenter.default.post(name: .whisperModelUnloadPolicyChanged, object: nil)
+        }
     }
 
     // MARK: - Translation Provider
@@ -642,4 +672,5 @@ final class SettingsStorage {
 
 extension Notification.Name {
     static let textCleanupSettingsChanged = Notification.Name("textCleanupSettingsChanged")
+    static let whisperModelUnloadPolicyChanged = Notification.Name("whisperModelUnloadPolicyChanged")
 }

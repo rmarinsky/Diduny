@@ -25,6 +25,19 @@ extension AppDelegate {
         hotkeyService.registerHistoryPaletteHotkey {
             HistoryPaletteWindowController.shared.toggle()
         }
+
+        hotkeyService.registerTranslateSelectedTextHotkey {
+            Task {
+                do {
+                    let text = try await ClipboardService.shared.captureSelectedText()
+                    await MainActor.run {
+                        TextTranslationWindowController.shared.showWindow(sourceText: text)
+                    }
+                } catch {
+                    Log.app.error("[TranslateSelected] Failed to capture text: \(error)")
+                }
+            }
+        }
     }
 
     func setupPushToTalk() {

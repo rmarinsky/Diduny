@@ -6,11 +6,34 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
     private var whisperContext: WhisperContext?
     private var loadedModelPath: String?
 
+    private var unloadTask: Task<Void, Never>?
+    private var policyObserver: NSObjectProtocol?
+
+    init() {
+        policyObserver = NotificationCenter.default.addObserver(
+            forName: .whisperModelUnloadPolicyChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handlePolicyChange()
+        }
+    }
+
+    deinit {
+        unloadTask?.cancel()
+        if let observer = policyObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
     func transcribe(audioData: Data) async throws -> String {
         try await performTranscription(audioData: audioData, translate: false)
     }
 
     func transcribeRawSamples(_ samples: [Float]) async throws -> String {
+        cancelUnloadTimer()
+        defer { scheduleModelUnload() }
+
         let context = try await ensureContext()
         guard !samples.isEmpty else {
             throw TranscriptionError.emptyTranscription
@@ -45,6 +68,9 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
     // MARK: - Private
 
     private func performTranscription(audioData: Data, translate: Bool) async throws -> String {
+        cancelUnloadTimer()
+        defer { scheduleModelUnload() }
+
         let context = try await ensureContext()
         let samples = try AudioConverter.convertToWhisperFormat(audioData: audioData)
 
@@ -98,5 +124,39 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         whisperContext = context
         loadedModelPath = path
         return context
+    }
+
+    // MARK: - Model Unload Timer
+
+    private func cancelUnloadTimer() {
+        unloadTask?.cancel()
+        unloadTask = nil
+    }
+
+    private func scheduleModelUnload() {
+        guard whisperContext != nil else { return }
+
+        guard let interval = SettingsStorage.shared.whisperModelUnloadPolicy.timeInterval else {
+            return // keepLoaded — no timer
+        }
+
+        unloadTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(interval))
+            guard !Task.isCancelled else { return }
+            self?.unloadModel()
+        }
+    }
+
+    private func unloadModel() {
+        guard whisperContext != nil else { return }
+        whisperContext = nil
+        loadedModelPath = nil
+        Log.whisper.info("Whisper model unloaded after inactivity timeout")
+    }
+
+    private func handlePolicyChange() {
+        guard whisperContext != nil else { return }
+        cancelUnloadTimer()
+        scheduleModelUnload()
     }
 }
