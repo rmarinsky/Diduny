@@ -13,6 +13,7 @@ extension KeyboardShortcuts.Name {
     static let toggleTranslation = Self("toggleTranslation", default: .init(.slash, modifiers: [.command, .option]))
     static let addMeetingChapter = Self("addMeetingChapter", default: .init(.b, modifiers: [.command, .option]))
     static let toggleHistoryPalette = Self("toggleHistoryPalette", default: .init(.h, modifiers: [.command, .option]))
+    static let translateSelectedText = Self("translateSelectedText", default: .init(.t, modifiers: [.command, .option]))
 }
 
 // MARK: - Hotkey Service
@@ -51,6 +52,7 @@ final class HotkeyService: HotkeyServiceProtocol {
         case translation
         case meeting
         case meetingTranslation
+        case translateSelectedText
     }
 
     private let multiPressThreshold: TimeInterval = 0.35
@@ -61,11 +63,13 @@ final class HotkeyService: HotkeyServiceProtocol {
     private var translationHandler: (() -> Void)?
     private var chapterHandler: (() -> Void)?
     private var historyPaletteHandler: (() -> Void)?
+    private var translateSelectedTextHandler: (() -> Void)?
 
     private var recordingPressTracker = PressTracker()
     private var translationPressTracker = PressTracker()
     private var meetingPressTracker = PressTracker()
     private var meetingTranslationPressTracker = PressTracker()
+    private var translateSelectedTextPressTracker = PressTracker()
 
     // MARK: - Recording Hotkey
 
@@ -155,6 +159,21 @@ final class HotkeyService: HotkeyServiceProtocol {
         historyPaletteHandler = nil
     }
 
+    // MARK: - Translate Selected Text Hotkey
+
+    func registerTranslateSelectedTextHotkey(handler: @escaping () -> Void) {
+        translateSelectedTextHandler = handler
+        KeyboardShortcuts.onKeyDown(for: .translateSelectedText) { [weak self] in
+            self?.handleMultiPress(.translateSelectedText)
+        }
+    }
+
+    func unregisterTranslateSelectedTextHotkey() {
+        KeyboardShortcuts.disable(.translateSelectedText)
+        translateSelectedTextPressTracker.reset()
+        translateSelectedTextHandler = nil
+    }
+
     // MARK: - Convenience Methods
 
     func unregisterAll() {
@@ -164,6 +183,7 @@ final class HotkeyService: HotkeyServiceProtocol {
         unregisterTranslationHotkey()
         unregisterChapterHotkey()
         unregisterHistoryPaletteHotkey()
+        unregisterTranslateSelectedTextHotkey()
     }
 
     // MARK: - Multi-Press
@@ -210,6 +230,15 @@ final class HotkeyService: HotkeyServiceProtocol {
             if didTrigger {
                 meetingTranslationHandler?()
             }
+        case .translateSelectedText:
+            didTrigger = translateSelectedTextPressTracker.registerPress(
+                at: eventTime,
+                requiredPressCount: requiredPressCount,
+                threshold: multiPressThreshold
+            )
+            if didTrigger {
+                translateSelectedTextHandler?()
+            }
         }
     }
 
@@ -223,6 +252,8 @@ final class HotkeyService: HotkeyServiceProtocol {
             SettingsStorage.shared.meetingHotkeyPressCount
         case .meetingTranslation:
             SettingsStorage.shared.meetingTranslationHotkeyPressCount
+        case .translateSelectedText:
+            SettingsStorage.shared.translateSelectedTextHotkeyPressCount
         }
     }
 }

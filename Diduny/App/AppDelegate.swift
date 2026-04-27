@@ -139,11 +139,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupPushToTalk()
         setupTranslationPushToTalk()
 
-        // Start double Cmd+C detector for text translation
-        DoubleCopyDetector.shared.start { text in
-            TextTranslationWindowController.shared.showWindow(sourceText: text)
-        }
-
         // Check for orphaned recordings from previous crash
         checkForOrphanedRecordings()
 
@@ -253,7 +248,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyService.unregisterAll()
         pushToTalkService.stop()
         translationPushToTalkService.stop()
-        DoubleCopyDetector.shared.stop()
         NotificationCenter.default.removeObserver(self)
     }
 

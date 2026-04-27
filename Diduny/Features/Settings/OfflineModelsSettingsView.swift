@@ -5,6 +5,7 @@ struct OfflineModelsSettingsView: View {
     @State private var modelSort: ModelSort = .speed
     @State private var whisperLanguage: String = SettingsStorage.shared.whisperLanguage
     @State private var whisperPrompt: String = SettingsStorage.shared.whisperPrompt
+    @State private var unloadPolicy: WhisperModelUnloadPolicy = SettingsStorage.shared.whisperModelUnloadPolicy
 
     enum ModelSort: String, CaseIterable {
         case speed, accuracy
@@ -23,6 +24,7 @@ struct OfflineModelsSettingsView: View {
         Form {
             whisperModelsSection
             whisperLanguageSection
+            memoryManagementSection
         }
         .formStyle(.grouped)
     }
@@ -246,6 +248,28 @@ struct OfflineModelsSettingsView: View {
         }
         .onDisappear {
             SettingsStorage.shared.whisperPrompt = whisperPrompt
+        }
+    }
+
+    // MARK: - Memory Management
+
+    private var memoryManagementSection: some View {
+        Section("Memory Management") {
+            Picker("Unload model after inactivity", selection: $unloadPolicy) {
+                ForEach(WhisperModelUnloadPolicy.allCases) { policy in
+                    Text(policy.displayName).tag(policy)
+                }
+            }
+            .onChange(of: unloadPolicy) { _, newValue in
+                SettingsStorage.shared.whisperModelUnloadPolicy = newValue
+            }
+
+            Text(
+                "The Whisper model uses significant RAM while loaded. "
+                    + "A shorter timeout frees memory sooner but adds a 3\u{2013}5 second reload delay on the next transcription."
+            )
+            .font(.caption)
+            .foregroundColor(.secondary)
         }
     }
 }
