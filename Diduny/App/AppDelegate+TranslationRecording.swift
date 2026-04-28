@@ -372,7 +372,11 @@ extension AppDelegate {
                 rawText = try await transcriptionService.translateAndTranscribe(audioData: audioData)
                 Log.app.info("stopTranslationRecording: HTTP cloud translation (\(rawText.count) chars)")
             }
-            let text = ClipboardService.preparedText(rawText, behavior: .cleaned)
+            let cleanedRawText = await TranscriptCleanupService.shared.clean(
+                rawText,
+                fillerWords: SettingsStorage.shared.fillerWords
+            )
+            let text = ClipboardService.preparedText(cleanedRawText, behavior: .cleaned)
             Log.app.info("stopTranslationRecording: Translation received (\(text.count) chars)")
 
             let processingState = appState.translationRecordingState

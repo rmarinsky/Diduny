@@ -391,9 +391,9 @@ extension AppDelegate {
             let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
             let cloudModeEnabled = SettingsStorage.shared.effectiveMeetingRealtimeTranscriptionEnabled
 
-            let text: String?
+            let rawText: String?
             if !realtimeText.isEmpty {
-                text = realtimeText
+                rawText = realtimeText
                 Log.app.info("Using real-time transcript (\(realtimeText.count) chars)")
             } else if cloudModeEnabled {
                 Log.app.info("No real-time transcript, falling back to async jobs API...")
@@ -412,7 +412,7 @@ extension AppDelegate {
                     config["language_hints"] = hints
                 }
 
-                text = try await asyncJobService.transcribeMeetingWithRetry(
+                rawText = try await asyncJobService.transcribeMeetingWithRetry(
                     audioData: audioData,
                     config: config
                 ) { status in
@@ -433,10 +433,21 @@ extension AppDelegate {
                         }
                     }
                 }
-                Log.app.info("Async jobs transcription received (\(text?.count ?? 0) chars)")
+                Log.app.info("Async jobs transcription received (\(rawText?.count ?? 0) chars)")
             } else {
-                text = nil
+                rawText = nil
                 Log.app.info("Saving meeting recording without automatic transcription")
+            }
+
+            // Apply server-side cleanup (filler words, dedup, formatting).
+            // Falls back to raw text silently if no auth / no network.
+            let text: String? = if let r = rawText {
+                await TranscriptCleanupService.shared.clean(
+                    r,
+                    fillerWords: SettingsStorage.shared.fillerWords
+                )
+            } else {
+                nil
             }
 
             let processingState = appState.meetingRecordingState
