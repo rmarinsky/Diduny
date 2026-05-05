@@ -132,6 +132,13 @@ final class AuthService {
 
     /// Returns the current Supabase access token, letting the SDK refresh it if needed.
     nonisolated func getAccessToken() async -> String? {
+        #if TEST_BUILD
+            if let token = ProcessInfo.processInfo.environment["DIDUNY_E2E_ACCESS_TOKEN"],
+               !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                return token
+            }
+        #endif
         await supabase.currentAccessToken
     }
 

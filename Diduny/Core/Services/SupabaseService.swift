@@ -14,8 +14,30 @@ final class SupabaseService: @unchecked Sendable {
 
     /// Publishable / anon key — safe to embed in the binary (Row Level Security enforces data
     /// isolation at the DB level). Do NOT embed the secret key here.
-    private static let supabaseURL = URL(string: "https://oplmqfsttetsosglilkb.supabase.co")!
-    private static let supabaseAnonKey = "sb_publishable_kLAVgHi1AGvXF_ZTdAdaEA_Yyfgvv_o"
+    private static let defaultSupabaseURL = URL(string: "https://oplmqfsttetsosglilkb.supabase.co")!
+    private static let defaultSupabaseAnonKey = "sb_publishable_kLAVgHi1AGvXF_ZTdAdaEA_Yyfgvv_o"
+
+    private static var supabaseURL: URL {
+        #if DEBUG || TEST_BUILD
+            if let rawURL = ProcessInfo.processInfo.environment["DIDUNY_SUPABASE_URL"],
+               let url = URL(string: rawURL)
+            {
+                return url
+            }
+        #endif
+        return defaultSupabaseURL
+    }
+
+    private static var supabaseAnonKey: String {
+        #if DEBUG || TEST_BUILD
+            if let key = ProcessInfo.processInfo.environment["DIDUNY_SUPABASE_ANON_KEY"],
+               !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                return key
+            }
+        #endif
+        return defaultSupabaseAnonKey
+    }
 
     // MARK: - Client
 
