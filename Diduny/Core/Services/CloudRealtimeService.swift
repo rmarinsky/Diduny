@@ -291,7 +291,13 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                 } catch {
                     if Task.isCancelled { break }
                     NSLog("[Cloud RT] Receive error: %@", error.localizedDescription)
-                    self.handleDisconnect()
+                    // Note: server-initiated closes (including 1001) also fire
+                    // urlSession(_:webSocketTask:didCloseWith:reason:) on the delegate,
+                    // which calls handleDisconnect(closeCode:) with the actual code.
+                    // The receive loop fires a generic error without the close code,
+                    // so we call handleDisconnect with no code here to avoid a
+                    // double-reconnect race — the delegate path wins for close-code routing.
+                    self.handleDisconnect(closeCode: nil)
                     break
                 }
             }
@@ -411,9 +417,27 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
 
     // MARK: - Reconnect
 
-    private func handleDisconnect() {
+    /// Called when the receive loop exits due to an error or a server-initiated close.
+    ///
+    /// ADR-0004 edge cases handled here:
+    /// - `1001 Going Away` (proxy 8-hour cap or rolling restart): treat as graceful session end,
+    ///   save partial transcript, show non-error UI, do NOT auto-reconnect.
+    /// - `401` from proxy on reconnect: refresh Supabase session silently, retry once.
+    ///   Never loop — if the refresh fails the user is prompted to re-login.
+    private func handleDisconnect(closeCode: URLSessionWebSocketTask.CloseCode? = nil) {
         guard isConnected else { return }
         isConnected = false
+
+        // 1001 Going Away — proxy-initiated graceful close (8h cap or rolling restart).
+        // Per ADR-0004: save partial transcript, show non-error UI, do NOT reconnect.
+        if closeCode?.rawValue == 1001 {
+            Log.transcription.info("Cloud RT: WS 1001 Going Away — session cap reached, not reconnecting")
+            onConnectionStatusChanged?(.disconnected)
+            // Signal upstream (AppDelegate / MeetingRecorderService) to flush partial transcript.
+            // We reuse the existing segmentBoundary path: emit .endpoint so callers finalise.
+            onSegmentBoundary?(.endpoint)
+            return
+        }
 
         guard reconnectAttempt < maxReconnectAttempts else {
             Log.transcription.error("Cloud RT: Max reconnect attempts reached")
@@ -435,6 +459,25 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                 try await self.connectWebSocket()
                 self.reconnectAttempt = 0
                 Log.transcription.info("Cloud RT: Reconnected successfully")
+            } catch let error as RealtimeTranscriptionError {
+                // ADR-0004: if WS upgrade returned 401, refresh Supabase token and retry once.
+                if case .connectionFailed(let msg) = error, msg.contains("401") {
+                    Log.transcription.info("Cloud RT: 401 on WS upgrade — refreshing Supabase session")
+                    do {
+                        try await AuthService.shared.refreshTokens()
+                        try await self.connectWebSocket()
+                        self.reconnectAttempt = 0
+                        Log.transcription.info("Cloud RT: Reconnected after token refresh")
+                    } catch {
+                        Log.transcription.error("Cloud RT: Reconnect after token refresh failed - \(error.localizedDescription)")
+                        self.onError?(error)
+                        self.onConnectionStatusChanged?(.failed("Session expired — please log in again"))
+                    }
+                } else {
+                    Log.transcription.error("Cloud RT: Reconnect failed - \(error.localizedDescription)")
+                    self.onError?(error)
+                    self.handleDisconnect()
+                }
             } catch {
                 Log.transcription.error("Cloud RT: Reconnect failed - \(error.localizedDescription)")
                 self.onError?(error)
@@ -526,5 +569,7 @@ extension CloudRealtimeService: URLSessionWebSocketDelegate {
     ) {
         let reasonStr = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "none"
         Log.transcription.info("Cloud RT: WebSocket closed, code: \(closeCode.rawValue), reason: \(reasonStr)")
+        // Delegate fires for server-initiated closes; drive reconnect logic from here.
+        handleDisconnect(closeCode: closeCode)
     }
 }

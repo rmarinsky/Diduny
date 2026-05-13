@@ -46,9 +46,9 @@ struct AboutSettingsView: View {
 
                 LinkRow(
                     title: "GitHub",
-                    subtitle: "github.com/nickolay-rmrsky",
+                    subtitle: "github.com/rmarinsky",
                     systemImage: "chevron.left.forwardslash.chevron.right",
-                    url: "https://github.com/nickolay-rmrsky"
+                    url: "https://github.com/rmarinsky"
                 )
 
                 LinkRow(

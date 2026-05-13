@@ -14,6 +14,7 @@
 		0CD34EAB840AD6CB69BF6ECB /* JobModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78ADA0228DC80DA0ACD8CE17 /* JobModels.swift */; };
 		0FFD1A4567A90C61047FD763 /* SettingsStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91E893AF3E6C20B492D3CB7 /* SettingsStorage.swift */; };
 		107FDBF081DEEF30BD2A922D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F0D8B455676B571AEC778E72 /* Assets.xcassets */; };
+		154F9E85CEDA37FE7E88EE36 /* CloudTranscriptionServiceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2D4C4C36B3BB89D1A2E8BD /* CloudTranscriptionServiceE2ETests.swift */; };
 		1CBA3DB7D76838DB69D9DDDE /* RecordingsLibraryWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDED8DC543F3EEDBCAC5A5D7 /* RecordingsLibraryWindowController.swift */; };
 		1FC13B68C69A30C9FD13E2F0 /* ShortcutsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B0622318D71BD3A1EEA701 /* ShortcutsSettingsView.swift */; };
 		214683A40F227DDAE1D64C8B /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5A6F95E2FA37D325086B2BC /* OnboardingComponents.swift */; };
@@ -27,6 +28,7 @@
 		37B4946599B2FDB08DEB48E7 /* DidunyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE5770AB5E9601E0DB6B878 /* DidunyApp.swift */; };
 		3857104F9A2310C3DA6E8290 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 924F66A90537891F57F1CF0D /* PermissionManager.swift */; };
 		3FDACDAE1B8CF7A54595BE9D /* AudioPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39F37FBC8AD6C2935F89C66D /* AudioPlaybackService.swift */; };
+		416BAE722E64C33169DE1E7F /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 1682C3BCEB8B3B3CE61588C9 /* Supabase */; };
 		438C177832C516A8BD571C36 /* WhisperModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71FCAF64D600F8EFA8B20A2 /* WhisperModelManager.swift */; };
 		474BEF9A6D5E57064A709DFD /* NotchStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D34BB7F6DB9091D30035DAA0 /* NotchStateTests.swift */; };
 		4845580D664C6BE034CF6835 /* MeetingChapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A53A5FD4196FA12DF76141 /* MeetingChapter.swift */; };
@@ -70,7 +72,9 @@
 		A546AE88A1817EF822FFEAE1 /* AudioCompressionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 741C4E6B6495E48C5D14392E /* AudioCompressionService.swift */; };
 		ACAD1265239FA9A32565242B /* AccountSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7074B6A737CE72D77BD9AE8F /* AccountSettingsView.swift */; };
 		B11EF2458AEAF401E1A03FD2 /* HistoryPaletteWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9357A98372102BF3B285A2AD /* HistoryPaletteWindowController.swift */; };
+		BB39149383C71119B82FE3AD /* TranscriptCleanupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEA00E234538355F573DD94 /* TranscriptCleanupService.swift */; };
 		BF3538E2F19CF3EB9D232E7A /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = 22385D60DC75174064B0DF0F /* ObjCExceptionCatcher.m */; };
+		BF50A7600E9D175A63D987E7 /* AuthServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90DC34399C728FB2BD9C292 /* AuthServiceTests.swift */; };
 		C24B6F611448AF8CAD8E3DB9 /* MeetingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA64DC6EAB5D1FB38CF7F517 /* MeetingSettingsView.swift */; };
 		C5FA530A98A4A76DD9DEA952 /* AppDelegate+MeetingRecording.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18174CC5740A330799589646 /* AppDelegate+MeetingRecording.swift */; };
 		C6297FB1BED3D932E43C6C7E /* ClipboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 459B59FAABA91EB9AD4EB4EF /* ClipboardService.swift */; };
@@ -84,12 +88,14 @@
 		D52AFEB3B25B529860D14116 /* AudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118CE8BCA0160E31FD916B10 /* AudioDevice.swift */; };
 		D6203B3BADF3AA7E40186F11 /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491E26240E167BDB5DCACEE /* HotkeyService.swift */; };
 		D88F0858310A14339ADE4178 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E4ECCACC4D64216B39204947 /* Metal.framework */; };
+		D9A94E2B88149920B8BA2B9E /* TranscriptCleanupServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCC34E52E29A97B99C122898 /* TranscriptCleanupServiceTests.swift */; };
 		DB3964EFB7C60E392C41A920 /* MenuBarIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B43D2844894F848F20BFDEB /* MenuBarIconView.swift */; };
 		DC1445338179F12A14662B34 /* AboutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F4203EEA094B3353F01444 /* AboutSettingsView.swift */; };
 		DDA86150D6B671266D004BEE /* LiveTranscriptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED4AC73DF15E8FB1B784BE2 /* LiveTranscriptStore.swift */; };
 		DEE6BFC7FC33767EDB94BFDE /* RecoveryStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2133D27EF1A261954A78BEB /* RecoveryStateManager.swift */; };
 		DFE3D7FFABE00254D2B2F164 /* RecordingQueueService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E819431AE3C66AA9B422954A /* RecordingQueueService.swift */; };
 		E2A1278EF4D20EC10319BBF4 /* Recording.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5D4FC33778F42CC48FF44C5 /* Recording.swift */; };
+		E3591F430A848CDAB8D090B4 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22F3DF3DBD7AB2A6B8F1B8D1 /* SupabaseService.swift */; };
 		E4DA7F7432AC5A880F8D5CE8 /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B850C5D55AE7652A88CE36F5 /* GeneralSettingsView.swift */; };
 		E52ED7C098FF6FA9C0554C28 /* RecordingsLibraryStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 865E86F8079EAE7A9BFB178E /* RecordingsLibraryStorage.swift */; };
 		E5A43EA1048E2701A2B0498B /* RecordingRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30A4F862A41E4EC48E5CAEFB /* RecordingRowView.swift */; };
@@ -131,6 +137,7 @@
 		1999FC4728C79F46A514A1E4 /* AppDelegate+MeetingTranslationRecording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+MeetingTranslationRecording.swift"; sourceTree = "<group>"; };
 		1A7E2F21047194B8A5423BF5 /* OnboardingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingManager.swift; sourceTree = "<group>"; };
 		22385D60DC75174064B0DF0F /* ObjCExceptionCatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ObjCExceptionCatcher.m; sourceTree = "<group>"; };
+		22F3DF3DBD7AB2A6B8F1B8D1 /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
 		2430641841403AB68C61B536 /* KeychainManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManager.swift; sourceTree = "<group>"; };
 		26809CA162E096F4EA668768 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
 		2A69C86E608DDD0D38D8AB54 /* WhisperBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WhisperBridge.h; sourceTree = "<group>"; };
@@ -183,6 +190,7 @@
 		9357A98372102BF3B285A2AD /* HistoryPaletteWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPaletteWindowController.swift; sourceTree = "<group>"; };
 		A5A6F95E2FA37D325086B2BC /* OnboardingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingComponents.swift; sourceTree = "<group>"; };
 		A71FCAF64D600F8EFA8B20A2 /* WhisperModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModelManager.swift; sourceTree = "<group>"; };
+		A90DC34399C728FB2BD9C292 /* AuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthServiceTests.swift; sourceTree = "<group>"; };
 		AB584F0BDA9252D1D71CE50D /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		AF8E52BB2FE2DF4133F56731 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		B14415E4A90B0A80E5B44F3B /* WhisperModelUnloadPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModelUnloadPolicy.swift; sourceTree = "<group>"; };
@@ -200,6 +208,7 @@
 		D052DF5E0E01BC0AD2742150 /* AudioSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSettingsView.swift; sourceTree = "<group>"; };
 		D1B0622318D71BD3A1EEA701 /* ShortcutsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutsSettingsView.swift; sourceTree = "<group>"; };
 		D34BB7F6DB9091D30035DAA0 /* NotchStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchStateTests.swift; sourceTree = "<group>"; };
+		DCC34E52E29A97B99C122898 /* TranscriptCleanupServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptCleanupServiceTests.swift; sourceTree = "<group>"; };
 		E2133D27EF1A261954A78BEB /* RecoveryStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryStateManager.swift; sourceTree = "<group>"; };
 		E4ECCACC4D64216B39204947 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		E819431AE3C66AA9B422954A /* RecordingQueueService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingQueueService.swift; sourceTree = "<group>"; };
@@ -210,9 +219,11 @@
 		F54AB0D8602B537FB2845507 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F6206FCF30AD9AFE3530CB50 /* WhisperTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperTranscriptionService.swift; sourceTree = "<group>"; };
 		F91E893AF3E6C20B492D3CB7 /* SettingsStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStorage.swift; sourceTree = "<group>"; };
+		FB2D4C4C36B3BB89D1A2E8BD /* CloudTranscriptionServiceE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudTranscriptionServiceE2ETests.swift; sourceTree = "<group>"; };
 		FDED8DC543F3EEDBCAC5A5D7 /* RecordingsLibraryWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingsLibraryWindowController.swift; sourceTree = "<group>"; };
 		FE4A0D0C3F98F775DE8EE4AA /* TranslationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationSettingsView.swift; sourceTree = "<group>"; };
 		FE81A3506184A31D459CC1DA /* MeetingRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRecorderService.swift; sourceTree = "<group>"; };
+		FEEA00E234538355F573DD94 /* TranscriptCleanupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptCleanupService.swift; sourceTree = "<group>"; };
 		FF35CE111AABBE5F2797242F /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = whisper.xcframework; path = Frameworks/whisper.xcframework; sourceTree = "<group>"; };
 		FF5B2157378ABF82C5B80572 /* TranscriptionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionProvider.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -226,6 +237,7 @@
 				247C7BD6AD352D40A40CCFD0 /* DynamicNotchKit in Frameworks */,
 				8089B2EF55ADCDC2F120C765 /* LaunchAtLogin in Frameworks */,
 				5A18DAA2CFAE9E95CCA51D24 /* Sparkle in Frameworks */,
+				416BAE722E64C33169DE1E7F /* Supabase in Frameworks */,
 				5C38E65B15A426A3B51A9EEB /* whisper.xcframework in Frameworks */,
 				2EF13108B3414D04405FD360 /* Accelerate.framework in Frameworks */,
 				D88F0858310A14339ADE4178 /* Metal.framework in Frameworks */,
@@ -344,7 +356,9 @@
 				4CDE81820CACD577C91281C9 /* PushToTalkService.swift */,
 				E819431AE3C66AA9B422954A /* RecordingQueueService.swift */,
 				4852162851F73B8352C95E25 /* RemoteConfigService.swift */,
+				22F3DF3DBD7AB2A6B8F1B8D1 /* SupabaseService.swift */,
 				70DDD786E73A1532AE91FC20 /* SystemAudioCaptureService.swift */,
+				FEEA00E234538355F573DD94 /* TranscriptCleanupService.swift */,
 				684A014D6E9B1A40935A7608 /* UpdaterManager.swift */,
 				B3A09F4B066D5CA8FBA776EB /* UsageService.swift */,
 				F6206FCF30AD9AFE3530CB50 /* WhisperTranscriptionService.swift */,
@@ -482,9 +496,12 @@
 		D2B2605F1A03065F4BA5333C /* DidunyTests */ = {
 			isa = PBXGroup;
 			children = (
+				A90DC34399C728FB2BD9C292 /* AuthServiceTests.swift */,
+				FB2D4C4C36B3BB89D1A2E8BD /* CloudTranscriptionServiceE2ETests.swift */,
 				C46453045F6E830B4B5B48D4 /* EscapeCancelServiceTests.swift */,
 				12B40184B3E0CE6E0736EE82 /* NotchManagerTests.swift */,
 				D34BB7F6DB9091D30035DAA0 /* NotchStateTests.swift */,
+				DCC34E52E29A97B99C122898 /* TranscriptCleanupServiceTests.swift */,
 			);
 			path = DidunyTests;
 			sourceTree = "<group>";
@@ -546,6 +563,7 @@
 				B431F17EA826367ED3C4D989 /* DynamicNotchKit */,
 				57D44526E8ECA54C87677F5B /* LaunchAtLogin */,
 				B9A32E3B977C8D9C16E2DC20 /* Sparkle */,
+				1682C3BCEB8B3B3CE61588C9 /* Supabase */,
 			);
 			productName = Diduny;
 			productReference = 4C5A21F6255692712508A475 /* Diduny.app */;
@@ -602,6 +620,7 @@
 				44A6802ED268E042B3E340B9 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
 				40D87DB8B850A83EB00FF9EE /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */,
 				9F0000456CA7E8DED8E2171B /* XCRemoteSwiftPackageReference "Sparkle" */,
+				4C5DFD55E5BB9D9D8AF44A0F /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 166821B9EBE984E0D67F7515 /* Products */;
@@ -700,10 +719,12 @@
 				0FFD1A4567A90C61047FD763 /* SettingsStorage.swift in Sources */,
 				C7A8368E38269D419E0C0832 /* SettingsView.swift in Sources */,
 				1FC13B68C69A30C9FD13E2F0 /* ShortcutsSettingsView.swift in Sources */,
+				E3591F430A848CDAB8D090B4 /* SupabaseService.swift in Sources */,
 				8864F470B8EFDFF965ABAA76 /* SupportedLanguage.swift in Sources */,
 				8E61D4628397B11E5BCEE03D /* SystemAudioCaptureService.swift in Sources */,
 				247921044E1EB03B31AFDB28 /* TextTranslationView.swift in Sources */,
 				2C3DFECDC8802F2F4EFACC66 /* TextTranslationWindowController.swift in Sources */,
+				BB39149383C71119B82FE3AD /* TranscriptCleanupService.swift in Sources */,
 				F293480FBFF36536227A5878 /* TranscriptionProvider.swift in Sources */,
 				50CD068CB639D75D27C09787 /* TranscriptionWindowController.swift in Sources */,
 				C7510BB39D1940260EB806F1 /* TranslationSettingsView.swift in Sources */,
@@ -721,9 +742,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BF50A7600E9D175A63D987E7 /* AuthServiceTests.swift in Sources */,
+				154F9E85CEDA37FE7E88EE36 /* CloudTranscriptionServiceE2ETests.swift in Sources */,
 				03386BD1EB00ACDF8DD60759 /* EscapeCancelServiceTests.swift in Sources */,
 				007C689901A82C26D1AFD661 /* NotchManagerTests.swift in Sources */,
 				474BEF9A6D5E57064A709DFD /* NotchStateTests.swift in Sources */,
+				D9A94E2B88149920B8BA2B9E /* TranscriptCleanupServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -801,7 +825,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 8JL9TM5WLG;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -815,7 +839,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.13.0;
+				MARKETING_VERSION = 1.14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -922,7 +946,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 8JL9TM5WLG;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -936,7 +960,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.13.0;
+				MARKETING_VERSION = 1.14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
@@ -984,7 +1008,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 8JL9TM5WLG;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1002,7 +1026,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.13.0;
+				MARKETING_VERSION = 1.14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1108,6 +1132,14 @@
 				version = 2.4.0;
 			};
 		};
+		4C5DFD55E5BB9D9D8AF44A0F /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = exactVersion;
+				version = 2.45.0;
+			};
+		};
 		9F0000456CA7E8DED8E2171B /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
@@ -1127,6 +1159,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		1682C3BCEB8B3B3CE61588C9 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4C5DFD55E5BB9D9D8AF44A0F /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
 		2E72BE3A05C906A8B16DBE4E /* KeyboardShortcuts */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 44A6802ED268E042B3E340B9 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;

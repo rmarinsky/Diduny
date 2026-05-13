@@ -47,8 +47,10 @@ struct AccountSettingsView: View {
 
                 case .otpSent:
                     HStack {
-                        TextField("Enter OTP code", text: $otpCode)
+                        TextField("Enter 6-digit code", text: $otpCode)
                             .textFieldStyle(.roundedBorder)
+                            .textContentType(.oneTimeCode)
+                            .autocorrectionDisabled()
 
                         Button("Verify") {
                             verifyOtp()
@@ -57,7 +59,9 @@ struct AccountSettingsView: View {
                         .disabled(otpCode.isEmpty || isAuthLoading)
 
                         Button("Cancel") {
-                            Task { await authService.logout() }
+                            otpCode = ""
+                            authError = nil
+                            authService.cancelOtpFlow()
                         }
                         .buttonStyle(.bordered)
                     }
@@ -91,9 +95,20 @@ struct AccountSettingsView: View {
                 }
 
                 if let error = authError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.red)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+
+                        if authService.authState == .otpSent && isTokenExpiredError(error) {
+                            Button("Send new code") {
+                                resendOtp()
+                            }
+                            .font(.caption)
+                            .buttonStyle(.borderless)
+                            .foregroundColor(.accentColor)
+                        }
+                    }
                 }
 
 #if DEV_BUILD
@@ -372,6 +387,22 @@ struct AccountSettingsView: View {
                 authError = error.localizedDescription
             }
             isAuthLoading = false
+        }
+    }
+
+    private func isTokenExpiredError(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("expired") || lower.contains("invalid")
+    }
+
+    private func resendOtp() {
+        otpCode = ""
+        authError = nil
+        authService.cancelOtpFlow()
+        // Small delay so the state transition renders before we trigger sendOtp.
+        Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            sendOtp()
         }
     }
 

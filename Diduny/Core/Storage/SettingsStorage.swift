@@ -78,6 +78,7 @@ final class SettingsStorage {
         migrateSelectedDeviceIfNeeded()
         migratePreferredDeviceKeyIfNeeded()
         migrateTranscriptionProviderIfNeeded()
+        migrateProxyURLIfNeeded()
     }
 
     /// One-time migration from legacy `selectedDeviceID` (AudioDeviceID int) to `selectedDeviceUID` (String).
@@ -109,6 +110,16 @@ final class SettingsStorage {
               defaults.string(forKey: Key.preferredDeviceUID.rawValue) == nil else { return }
         defaults.set(oldValue, forKey: Key.preferredDeviceUID.rawValue)
         defaults.removeObject(forKey: Key.selectedDeviceUID.rawValue)
+    }
+
+    /// One-time migration: users who had the v1 proxy URL explicitly saved → upgrade to v2.
+    /// Users who never touched the setting will get v2 via the updated defaultProxyBaseURL.
+    private func migrateProxyURLIfNeeded() {
+        let v1URL = "https://diduny-ears-proxy.fly.dev"
+        let v2URL = "https://diduny-ears-proxy-v2.fly.dev"
+        guard let stored = defaults.string(forKey: Key.proxyBaseURL.rawValue),
+              stored == v1URL else { return }
+        defaults.set(v2URL, forKey: Key.proxyBaseURL.rawValue)
     }
 
     /// Migrate old provider rawValues: "soniox" → "cloud", "whisper_local" → "local"
@@ -650,7 +661,7 @@ final class SettingsStorage {
     #if DEV_BUILD
         private static let defaultProxyBaseURL = "http://localhost:3000"
     #else
-        private static let defaultProxyBaseURL = "https://diduny-ears-proxy.fly.dev"
+        private static let defaultProxyBaseURL = "https://diduny-ears-proxy-v2.fly.dev"
     #endif
 
     var proxyBaseURL: String {

@@ -1,13 +1,31 @@
 import Foundation
+import Supabase
 import os
 
+/// Diduny auth façade backed by the Supabase Auth SDK.
+///
+/// Public interface is intentionally kept identical to the previous custom-auth
+/// version so that AppDelegate and UI components require only local call-site
+/// changes (OTP code length: 6, not 8).
+///
+/// Session Keychain storage and token rotation are managed entirely by the
+/// supabase-swift SDK — do not duplicate them here.
 @Observable
 @MainActor
 final class AuthService {
     static let shared = AuthService()
+
+    /// True when the SDK has a cached session (does not validate expiry —
+    /// the SDK auto-refreshes before the token expires).
     nonisolated static var hasStoredSession: Bool {
-        KeychainManager.shared.read(key: Keys.accessToken) != nil
+        // The SDK stores the session under a deterministic Keychain key. We
+        // cannot call async APIs here (nonisolated static), so we rely on
+        // UserDefaults as a cheap session-presence flag that AuthService keeps
+        // in sync via onAuthStateChange.
+        UserDefaults.standard.bool(forKey: "_diduny_supabase_session_present")
     }
+
+    // MARK: - State
 
     enum AuthState {
         case loggedOut
@@ -16,184 +34,122 @@ final class AuthService {
     }
 
     private(set) var authState: AuthState = .loggedOut
-    private var authStateResolved = false
 
     var isLoggedIn: Bool {
-        resolveAuthStateIfNeeded()
-        return KeychainManager.shared.read(key: Keys.accessToken) != nil
+        authState == .loggedIn
     }
 
     var userEmail: String? {
-        resolveAuthStateIfNeeded()
-        return KeychainManager.shared.read(key: Keys.userEmail)
+        _cachedEmail
     }
 
-    private enum Keys {
-        static let accessToken = "auth_access_token"
-        static let refreshToken = "auth_refresh_token"
-        static let userEmail = "auth_user_email"
-    }
+    // Cached from the session so callers that need a sync answer get one.
+    private var _cachedEmail: String?
 
-    private var proxyBaseURL: String {
-        SettingsStorage.shared.proxyBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-    }
+    // Retained for the lifetime of AuthService.
+    private var authStateObserverTask: Task<Void, Never>?
 
-    private init() {}
+    private var supabase: SupabaseService { SupabaseService.shared }
 
-    /// Lazily resolve auth state on first access instead of at app launch.
-    private func resolveAuthStateIfNeeded() {
-        guard !authStateResolved else { return }
-        authStateResolved = true
-        if KeychainManager.shared.read(key: Keys.accessToken) != nil {
-            authState = .loggedIn
-        }
-    }
-
-    func sendOtp(email: String) async throws {
-        guard let url = URL(string: "\(proxyBaseURL)/api/v1/auth/send-otp") else {
-            throw AuthError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(["email": email])
-        let requestId = HTTPLogger.attachRequestId(&request)
-        HTTPLogger.logRequest(request, requestId: requestId)
-
-        let startTime = ContinuousClock.now
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AuthError.invalidResponse
-        }
-        HTTPLogger.logResponse(data: data, response: httpResponse, requestId: requestId, startTime: startTime)
-
-        guard (200 ... 299).contains(httpResponse.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw AuthError.serverError("Failed to send OTP (\(httpResponse.statusCode)): \(body)")
-        }
-
-        authState = .otpSent
-        Log.app.info("[Auth] OTP sent to \(email)")
-    }
-
-    func verifyOtp(email: String, code: String) async throws {
-        guard let url = URL(string: "\(proxyBaseURL)/api/v1/auth/verify-otp") else {
-            throw AuthError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(["email": email, "code": code])
-        let verifyRequestId = HTTPLogger.attachRequestId(&request)
-        HTTPLogger.logRequest(request, requestId: verifyRequestId)
-
-        let verifyStart = ContinuousClock.now
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AuthError.invalidResponse
-        }
-        HTTPLogger.logResponse(data: data, response: httpResponse, requestId: verifyRequestId, startTime: verifyStart)
-
-        guard (200 ... 299).contains(httpResponse.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw AuthError.serverError("Verification failed (\(httpResponse.statusCode)): \(body)")
-        }
-
-        let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
-        try storeTokens(access: tokenResponse.accessToken, refresh: tokenResponse.refreshToken, email: email)
-        authState = .loggedIn
-
-        Log.app.info("[Auth] Logged in as \(email)")
-    }
-
-    func refreshTokens() async throws {
-        guard let refreshToken = KeychainManager.shared.read(key: Keys.refreshToken) else {
-            throw AuthError.notAuthenticated
-        }
-
-        guard let url = URL(string: "\(proxyBaseURL)/api/v1/auth/refresh") else {
-            throw AuthError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(["refreshToken": refreshToken])
-        let refreshRequestId = HTTPLogger.attachRequestId(&request)
-        HTTPLogger.logRequest(request, requestId: refreshRequestId)
-
-        let refreshStart = ContinuousClock.now
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AuthError.invalidResponse
-        }
-        HTTPLogger.logResponse(data: data, response: httpResponse, requestId: refreshRequestId, startTime: refreshStart)
-
-        guard (200 ... 299).contains(httpResponse.statusCode) else {
-            if httpResponse.statusCode == 401 {
-                clearTokens()
-                throw AuthError.notAuthenticated
+    private init() {
+        // Eagerly restore session state from SDK cache.
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if let session = await supabase.currentSession {
+                self._cachedEmail = session.user.email
+                self.authState = .loggedIn
+                Self.setSessionPresent(true)
             }
-            let body = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw AuthError.serverError("Token refresh failed (\(httpResponse.statusCode)): \(body)")
+            self.startAuthStateObserver()
         }
-
-        let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
-        let email = userEmail ?? ""
-        try storeTokens(access: tokenResponse.accessToken, refresh: tokenResponse.refreshToken, email: email)
-        Log.app.info("[Auth] Tokens refreshed")
     }
+
+    // MARK: - Auth State Observer
+
+    private func startAuthStateObserver() {
+        authStateObserverTask?.cancel()
+        authStateObserverTask = supabase.onAuthStateChange { [weak self] event, session in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                switch event {
+                case .signedIn, .tokenRefreshed, .userUpdated:
+                    self._cachedEmail = session?.user.email
+                    self.authState = .loggedIn
+                    Self.setSessionPresent(true)
+                    Log.app.info("[Auth] State → loggedIn (event: \(String(describing: event)))")
+                case .signedOut, .userDeleted:
+                    self._cachedEmail = nil
+                    self.authState = .loggedOut
+                    Self.setSessionPresent(false)
+                    Log.app.info("[Auth] State → loggedOut (event: \(String(describing: event)))")
+                default:
+                    break
+                }
+            }
+        }
+    }
+
+    // MARK: - OTP Flow
+
+    /// Sends a 6-digit OTP email via Supabase Auth (Supabase handles delivery).
+    func sendOtp(email: String) async throws {
+        try await supabase.signInWithOTP(email: email)
+        authState = .otpSent
+    }
+
+    /// Verifies the 6-digit OTP code from the email.
+    /// On success the SDK stores a Session and authState transitions to .loggedIn
+    /// via the auth-state observer.
+    func verifyOtp(email: String, code: String) async throws {
+        try await supabase.verifyOTP(email: email, token: code)
+        // authState is updated by startAuthStateObserver → .signedIn event.
+    }
+
+    // MARK: - OTP Cancellation
+
+    /// Cancels an in-progress OTP flow without touching the server.
+    /// No Supabase session exists at this point, so no revocation is needed.
+    func cancelOtpFlow() {
+        authState = .loggedOut
+    }
+
+    // MARK: - Sign Out
 
     func logout() async {
-        // Best-effort server logout
-        if let refreshToken = KeychainManager.shared.read(key: Keys.refreshToken),
-           let url = URL(string: "\(proxyBaseURL)/api/v1/auth/logout")
-        {
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try? JSONEncoder().encode(["refreshToken": refreshToken])
-
-            if let accessToken = KeychainManager.shared.read(key: Keys.accessToken) {
-                request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-            }
-
-            _ = try? await URLSession.shared.data(for: request)
+        do {
+            try await supabase.signOut()
+            // authState updated via observer.
+        } catch {
+            // Best-effort: if sign-out RPC fails (offline), clear local state anyway.
+            Log.app.warning("[Auth] Sign-out RPC failed: \(error.localizedDescription) — clearing local state")
+            authState = .loggedOut
+            _cachedEmail = nil
+            Self.setSessionPresent(false)
         }
-
-        clearTokens()
-
-        Log.app.info("[Auth] Logged out")
     }
 
     // MARK: - Token Access
 
-    /// Returns the current access token, auto-refreshing if expired.
+    /// Returns the current Supabase access token, letting the SDK refresh it if needed.
     nonisolated func getAccessToken() async -> String? {
-        guard let token = KeychainManager.shared.read(key: Keys.accessToken) else { return nil }
-
-        if Self.isTokenExpired(token) {
-            do {
-                try await refreshTokens()
-                return KeychainManager.shared.read(key: Keys.accessToken)
-            } catch {
-                Log.app.error("[Auth] Token refresh failed: \(error.localizedDescription)")
-                return nil
+        #if TEST_BUILD
+            if let token = ProcessInfo.processInfo.environment["DIDUNY_E2E_ACCESS_TOKEN"],
+               !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                return token
             }
-        }
-
-        return token
+        #endif
+        await supabase.currentAccessToken
     }
 
-    /// Sets the Bearer auth header on a request.
+    /// Attaches `Authorization: Bearer <token>` to a URLRequest.
     nonisolated func authenticatedRequest(_ request: inout URLRequest) async {
         guard let token = await getAccessToken() else { return }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     }
 
-    /// Performs a URLSession request with automatic 401 retry (refreshes token once).
+    /// Performs a URLSession request with automatic 401 retry.
+    /// On 401 the SDK's `refreshSession()` is called once, then the request is retried.
     nonisolated func performWithAuth(
         _ request: URLRequest,
         session: URLSession = .shared
@@ -210,75 +166,57 @@ final class AuthService {
         }
         HTTPLogger.logResponse(data: data, response: httpResponse, requestId: requestId, startTime: startTime)
 
-        // Retry once on 401
-        if httpResponse.statusCode == 401 {
-            try await refreshTokens()
-
-            var retryRequest = request
-            await authenticatedRequest(&retryRequest)
-            let retryRequestId = HTTPLogger.attachRequestId(&retryRequest)
-            HTTPLogger.logRequest(retryRequest, requestId: retryRequestId)
-
-            let retryStart = ContinuousClock.now
-            let (retryData, retryResponse) = try await session.data(for: retryRequest)
-            guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
-                throw AuthError.invalidResponse
-            }
-            HTTPLogger.logResponse(
-                data: retryData,
-                response: retryHttpResponse,
-                requestId: retryRequestId,
-                startTime: retryStart
-            )
-            return (retryData, retryHttpResponse)
+        guard httpResponse.statusCode == 401 else {
+            return (data, httpResponse)
         }
 
-        return (data, httpResponse)
-    }
-
-    // MARK: - Token Expiry Check
-
-    /// Token format: `userId:timestamp:random:signature` (base64url-encoded segments separated by colons).
-    /// Checks if 15 minutes have passed since the timestamp.
-    private nonisolated static func isTokenExpired(_ token: String) -> Bool {
-        let parts = token.split(separator: ":")
-        guard parts.count >= 2,
-              let timestamp = TimeInterval(parts[1])
-        else {
-            // Can't parse — treat as expired to force refresh
-            return true
+        // 401 → refresh session once, then retry.
+        Log.app.info("[Auth] 401 received — refreshing Supabase session")
+        do {
+            try await SupabaseService.shared.refreshSession()
+        } catch {
+            Log.app.error("[Auth] Session refresh failed: \(error.localizedDescription)")
+            throw AuthError.notAuthenticated
         }
 
-        let tokenDate = Date(timeIntervalSince1970: timestamp / 1000)
-        let elapsed = Date().timeIntervalSince(tokenDate)
-        // Refresh 1 minute before actual 15-min expiry
-        return elapsed >= (14 * 60)
+        var retryRequest = request
+        await authenticatedRequest(&retryRequest)
+        let retryId = HTTPLogger.attachRequestId(&retryRequest)
+        HTTPLogger.logRequest(retryRequest, requestId: retryId)
+
+        let retryStart = ContinuousClock.now
+        let (retryData, retryResponse) = try await session.data(for: retryRequest)
+        guard let retryHTTP = retryResponse as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+        HTTPLogger.logResponse(data: retryData, response: retryHTTP, requestId: retryId, startTime: retryStart)
+        return (retryData, retryHTTP)
     }
 
-    // MARK: - Keychain Helpers
+    // MARK: - Refresh (kept for CloudRealtimeService ADR-0004 reconnect path)
 
-    private func storeTokens(access: String, refresh: String, email: String) throws {
-        try KeychainManager.shared.save(key: Keys.accessToken, value: access)
-        try KeychainManager.shared.save(key: Keys.refreshToken, value: refresh)
-        if !email.isEmpty {
-            try KeychainManager.shared.save(key: Keys.userEmail, value: email)
+    /// Explicit session refresh — used by CloudRealtimeService when WS upgrade
+    /// returns 401 after a network blip (ADR-0004 edge case: silent refresh, 1 retry).
+    func refreshTokens() async throws {
+        do {
+            try await supabase.refreshSession()
+        } catch {
+            // If refresh itself fails, the user is effectively signed out.
+            authState = .loggedOut
+            _cachedEmail = nil
+            Self.setSessionPresent(false)
+            throw AuthError.notAuthenticated
         }
     }
 
-    private func clearTokens() {
-        KeychainManager.shared.delete(key: Keys.accessToken)
-        KeychainManager.shared.delete(key: Keys.refreshToken)
-        KeychainManager.shared.delete(key: Keys.userEmail)
-        authState = .loggedOut
+    // MARK: - Private Helpers
+
+    private static func setSessionPresent(_ present: Bool) {
+        UserDefaults.standard.set(present, forKey: "_diduny_supabase_session_present")
     }
 }
 
-// MARK: - Models
-
-private struct TokenResponse: Decodable {
-    let accessToken: String
-    let refreshToken: String
-}
+// MARK: - Error Type
 
 enum AuthError: LocalizedError {
     case invalidURL
@@ -288,14 +226,10 @@ enum AuthError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL:
-            "Invalid auth URL"
-        case .invalidResponse:
-            "Invalid server response"
-        case .notAuthenticated:
-            "Not authenticated — please log in"
-        case let .serverError(message):
-            message
+        case .invalidURL: "Invalid auth URL"
+        case .invalidResponse: "Invalid server response"
+        case .notAuthenticated: "Not authenticated — please log in"
+        case let .serverError(message): message
         }
     }
 }

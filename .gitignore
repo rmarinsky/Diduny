@@ -156,3 +156,9 @@ coverage/
 *.dmg
 *.sha256
 *-notary.zip
+
+# =============================================================================
+# Personal scratch and planning notes (kept local)
+# =============================================================================
+/PLAN-*.md
+/PROJECT-INVENTORY.md

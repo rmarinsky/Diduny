@@ -80,6 +80,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Start Sparkle updater (access lazy var to trigger init)
         _ = updaterManager
 
+        // Eagerly init SupabaseService + AuthService so the auth-state observer
+        // is registered before any UI renders.
+        _ = SupabaseService.shared
+        _ = AuthService.shared
+
         setupNotchStopHandler()
 
         // Listen for push-to-talk key changes
@@ -197,23 +202,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let audioData = try await loadAudioData(from: audioURL)
                 Log.app.info("Recovered audio data: \(audioData.count) bytes")
 
-                let text: String
+                let rawText: String
                 switch state.recordingType {
                 case .voice:
                     let service = activeTranscriptionService
-                    text = try await service.transcribe(audioData: audioData)
+                    rawText = try await service.transcribe(audioData: audioData)
                 case .meeting:
                     if SettingsStorage.shared.effectiveTranscriptionProvider == .cloud {
-                        text = try await transcriptionService.transcribeMeeting(audioData: audioData)
+                        rawText = try await transcriptionService.transcribeMeeting(audioData: audioData)
                     } else {
-                        text = try await whisperTranscriptionService.transcribe(audioData: audioData)
+                        rawText = try await whisperTranscriptionService.transcribe(audioData: audioData)
                     }
                 case .translation, .meetingTranslation:
                     let service: TranscriptionServiceProtocol = SettingsStorage.shared
                         .effectiveTranslationProvider == .local
                         ? whisperTranscriptionService : transcriptionService
-                    text = try await service.translateAndTranscribe(audioData: audioData)
+                    rawText = try await service.translateAndTranscribe(audioData: audioData)
                 }
+
+                // Apply server-side cleanup for all recovery types;
+                // TranscriptCleanupService falls back silently when auth/network unavailable.
+                let text = await TranscriptCleanupService.shared.clean(
+                    rawText,
+                    fillerWords: SettingsStorage.shared.fillerWords
+                )
 
                 let copyBehavior: ClipboardCopyBehavior = switch state.recordingType {
                 case .voice, .translation:
