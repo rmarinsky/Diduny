@@ -1,3 +1,5 @@
+import AVFoundation
+import ApplicationServices
 import Foundation
 import SwiftUI
 
@@ -9,6 +11,8 @@ enum OnboardingStep: Int, Codable, CaseIterable {
     case accessibilityPermission = 2
     case screenRecordingPermission = 3
     case shortcutSetup = 4
+    // Deprecated — see docs/decisions/0008-onboarding-step-enum-stability.md
+    // DO NOT remove: rawValue 5 may be persisted in UserDefaults on existing installs.
     case apiSetup = 5
     case complete = 6
 
@@ -33,6 +37,14 @@ enum OnboardingStep: Int, Codable, CaseIterable {
     }
 }
 
+// MARK: - Startup Action
+
+enum StartupAction {
+    case skipOnboarding
+    case showFullTour(jumpToFirstMissing: OnboardingStep?)
+    case showMiniFlow(steps: [OnboardingStep])
+}
+
 // MARK: - Onboarding Manager
 
 @Observable
@@ -42,6 +54,7 @@ final class OnboardingManager {
     private let hasCompletedOnboardingKey = "onboarding.completed"
     private let onboardingVersionKey = "onboarding.version"
     private let currentStepKey = "onboarding.currentStep"
+    private let firstLaunchTimestampKey = "onboarding.firstLaunchTimestamp"
     private let currentOnboardingVersion = 1
 
     // Step completion tracking
@@ -49,6 +62,9 @@ final class OnboardingManager {
 
     /// Force show onboarding even if completed (for settings)
     var forceShowOnboarding = false
+
+    /// Set by computeStartupAction — signals the mini-flow step sequence to show
+    var miniFlowSteps: [OnboardingStep]? = nil
 
     /// Current step to resume from
     var currentStep: OnboardingStep {
@@ -81,23 +97,80 @@ final class OnboardingManager {
         !UserDefaults.standard.bool(forKey: hasCompletedOnboardingKey)
     }
 
-    /// Check if onboarding should be shown
+    /// Check if onboarding should be shown (legacy sync path — settings / force-show only)
     var shouldShowOnboarding: Bool {
-        // Always show if forced from settings
-        if forceShowOnboarding {
-            return true
-        }
-
-        // Skip if already completed
-        if hasCompletedOnboarding {
-            return false
-        }
-
-        // Show onboarding for new users
+        if forceShowOnboarding { return true }
+        if hasCompletedOnboarding { return false }
         return true
     }
 
-    private init() {}
+    private init() {
+        writeFirstLaunchTimestampIfNeeded()
+    }
+
+    // MARK: - First-launch timestamp (legacy-user detection signal)
+
+    private func writeFirstLaunchTimestampIfNeeded() {
+        guard UserDefaults.standard.object(forKey: firstLaunchTimestampKey) == nil else { return }
+        UserDefaults.standard.set(Date().timeIntervalSinceReferenceDate,
+                                  forKey: firstLaunchTimestampKey)
+    }
+
+    // MARK: - Permission-gate startup decision tree
+
+    /// Async: evaluates live permission state and returns the correct startup action.
+    func computeStartupAction() async -> StartupAction {
+        if forceShowOnboarding {
+            return .showFullTour(jumpToFirstMissing: nil)
+        }
+
+        // Live permission check
+        let micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        let accessGranted = AXIsProcessTrusted()
+        let screenGranted = await PermissionManager.shared.checkScreenRecordingPermission()
+        let userDeclinedScreen = SettingsStorage.shared.userDeclinedScreenRecording
+
+        // Build ordered missing-steps list
+        var missingSteps: [OnboardingStep] = []
+        if !micGranted { missingSteps.append(.microphonePermission) }
+        if !accessGranted { missingSteps.append(.accessibilityPermission) }
+        if !screenGranted && !userDeclinedScreen { missingSteps.append(.screenRecordingPermission) }
+
+        // All permissions satisfied — skip regardless of hasCompletedOnboarding
+        if missingSteps.isEmpty { return .skipOnboarding }
+
+        // Legacy-user detection
+        let isLegacyUser = detectLegacyUser()
+
+        if !hasCompletedOnboarding && !isLegacyUser {
+            return .showFullTour(jumpToFirstMissing: missingSteps.first)
+        } else {
+            return .showMiniFlow(steps: missingSteps)
+        }
+    }
+
+    private func detectLegacyUser() -> Bool {
+        let hasFirstLaunchTimestamp = UserDefaults.standard.object(forKey: firstLaunchTimestampKey) != nil
+        // Timestamp is written on first launch; if it's already present before computeStartupAction
+        // runs (because init() ran first this session), the user is NOT a legacy user — they simply
+        // haven't finished onboarding. The legacy case is: an update install where the old app never
+        // wrote the timestamp, but a Supabase session is present.
+        // NOTE: init() always writes the timestamp on first launch of this build. So for a legacy
+        // user updating from a pre-onboarding build, the timestamp is written THIS launch. We
+        // therefore check the session BEFORE the timestamp write would disambiguate — which means
+        // we must rely solely on the session signal here.
+        // ADR-0008 Decision 2 is the authoritative contract.
+        if hasFirstLaunchTimestamp && !forceShowOnboarding {
+            // Already launched with onboarding present — not a legacy user
+            // UNLESS this is literally the first call this run AND the timestamp was
+            // just written by init(). We can't distinguish those two; we fall back to
+            // the session signal as the tie-breaker.
+            let hasSession = AuthService.hasStoredSession
+            if hasSession { return true }
+        }
+        // Timestamp absent (pre-onboarding build update): check session
+        return AuthService.hasStoredSession
+    }
 
     // MARK: - Step Management
 
@@ -128,6 +201,7 @@ final class OnboardingManager {
         UserDefaults.standard.removeObject(forKey: hasCompletedOnboardingKey)
         UserDefaults.standard.removeObject(forKey: onboardingVersionKey)
         UserDefaults.standard.removeObject(forKey: currentStepKey)
+        UserDefaults.standard.removeObject(forKey: firstLaunchTimestampKey)
 
         // Clear all step completion flags
         for step in OnboardingStep.allCases {
@@ -135,6 +209,7 @@ final class OnboardingManager {
         }
 
         forceShowOnboarding = false
+        miniFlowSteps = nil
         currentStep = .welcome
     }
 
@@ -173,19 +248,26 @@ final class OnboardingWindowController {
 
     private init() {}
 
-    func showOnboarding(completion: @escaping () -> Void) {
+    func showOnboarding(miniFlow: [OnboardingStep]? = nil,
+                        completion: @escaping () -> Void)
+    {
         if let window {
-            // Window already exists, bring to front
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
+        OnboardingManager.shared.miniFlowSteps = miniFlow
+
+        let isMiniFlow = miniFlow != nil
+        let windowTitle = isMiniFlow ? "Permissions Check" : "Welcome to Diduny"
+
         let onboardingView = OnboardingContainerView(
             onComplete: {
                 OnboardingManager.shared.hasCompletedOnboarding = true
                 OnboardingManager.shared.forceShowOnboarding = false
+                OnboardingManager.shared.miniFlowSteps = nil
                 self.closeOnboarding()
                 completion()
             }
@@ -195,31 +277,35 @@ final class OnboardingWindowController {
         self.hostingView = hostingView
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1320, height: 820),
-            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: 600),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
 
-        window.title = "Welcome to Diduny"
+        window.title = windowTitle
         window.contentView = hostingView
         window.identifier = NSUserInterfaceItemIdentifier("diduny.onboarding")
         window.center()
-        window.minSize = NSSize(width: 1080, height: 700)
+        window.minSize = NSSize(width: 680, height: 520)
         window.isReleasedWhenClosed = false
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.isMovableByWindowBackground = true
-        window.backgroundColor = .clear
-        window.isOpaque = false
+        // Native macOS titlebar — no custom overrides
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = false
+        window.isMovableByWindowBackground = false
+        window.backgroundColor = .windowBackgroundColor
+        window.isOpaque = true
 
         self.windowDelegate = WindowDelegate(onClose: {
-            // If user closes window without completing
+            // Close-via-X: save currentStep but do NOT mark hasCompletedOnboarding.
+            // Next launch resumes from saved step.
             OnboardingManager.shared.forceShowOnboarding = false
+            OnboardingManager.shared.miniFlowSteps = nil
             self.window = nil
             self.hostingView = nil
             self.windowDelegate = nil
-            completion()
+            // Do NOT call completion() here — that would trigger setupAfterOnboarding
+            // prematurely while onboarding is unfinished.
         })
         window.delegate = self.windowDelegate
 
