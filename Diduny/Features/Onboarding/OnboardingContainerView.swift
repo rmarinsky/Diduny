@@ -2,70 +2,160 @@ import AVFoundation
 import ApplicationServices
 import SwiftUI
 
+// MARK: - Style & Typography Tokens
+
 private enum OnboardingStyle {
+    // Colors
     static let brandBlue = Color(red: 0.15, green: 0.51, blue: 0.95)
     static let brandBlueDark = Color(red: 0.09, green: 0.41, blue: 0.84)
     static let panelBlue = Color(red: 0.80, green: 0.88, blue: 0.98)
     static let titleColor = Color(red: 0.16, green: 0.24, blue: 0.50)
+
+    // Typography tokens (design doc §2)
+    static let display   = Font.system(size: 30, weight: .bold)
+    static let title     = Font.system(size: 22, weight: .bold)
+    static let subtitle  = Font.system(size: 16, weight: .regular)
+    static let body      = Font.system(size: 13, weight: .regular)
+    static let cardTitle = Font.system(size: 15, weight: .bold)
+    static let cardBody  = Font.system(size: 13, weight: .regular)
+    static let button    = Font.system(size: 13, weight: .semibold)
+    static let textAction = Font.system(size: 13, weight: .semibold)
+    // `header` token defined for completeness; unused by Phase 1 after custom header removal.
+    static let header    = Font.system(size: 13, weight: .semibold)
+    static let label     = Font.system(size: 12, weight: .medium)
+    static let tip       = Font.system(size: 13, weight: .regular)
+    static let caption   = Font.system(size: 12, weight: .regular)
 }
 
-/// Main container that manages onboarding flow and step navigation
+// MARK: - ProgressDots dot index helper
+
+private func dotIndex(for step: OnboardingStep) -> Int? {
+    switch step {
+    case .microphonePermission, .accessibilityPermission: return 0
+    case .screenRecordingPermission: return 1
+    case .shortcutSetup: return 2
+    case .complete: return 3
+    default: return nil
+    }
+}
+
+// MARK: - Main Container
+
+/// Main container that manages onboarding flow and step navigation.
+/// Supports both the full welcome tour and the mini-flow (Permissions Check).
 struct OnboardingContainerView: View {
     let onComplete: () -> Void
 
     @State private var currentStep: OnboardingStep = OnboardingManager.shared.currentStep
 
+    /// Mini-flow step list. Non-nil when showing Permissions Check.
+    private var miniFlowSteps: [OnboardingStep]? {
+        OnboardingManager.shared.miniFlowSteps
+    }
+
+    // MARK: - ProgressDots wiring
+
+    private var showProgressDots: Bool {
+        guard currentStep != .welcome else { return false }
+        if let steps = miniFlowSteps {
+            return steps.count > 1
+        }
+        return true
+    }
+
+    private var progressTotal: Int {
+        if let steps = miniFlowSteps { return steps.count }
+        // Full flow: mic/access(0), screenRecording(1), shortcut(2), complete(3) — 4 dots
+        return 4
+    }
+
+    private var progressCurrent: Int {
+        if let steps = miniFlowSteps {
+            return steps.firstIndex(of: currentStep) ?? 0
+        }
+        return dotIndex(for: currentStep) ?? 0
+    }
+
+    // MARK: - Body
+
     var body: some View {
         ZStack {
             OnboardingBackgroundView()
 
-            Group {
-                switch currentStep {
-                case .welcome:
-                    WelcomeStepView(onContinue: { navigate(to: .microphonePermission) })
-
-                case .microphonePermission, .accessibilityPermission:
-                    SetupComputerStepView(
-                        onBack: { navigate(to: .welcome, markCurrentAsComplete: false) },
-                        onContinue: { navigate(to: .screenRecordingPermission) },
-                        onSkip: { navigate(to: .screenRecordingPermission) }
-                    )
-
-                case .screenRecordingPermission:
-                    ScreenRecordingStepView(
-                        onBack: { navigate(to: .microphonePermission, markCurrentAsComplete: false) },
-                        onContinue: { navigate(to: .shortcutSetup) },
-                        onSkip: { navigate(to: .shortcutSetup) }
-                    )
-
-                case .shortcutSetup:
-                    ShortcutStepView(
-                        onBack: { navigate(to: .screenRecordingPermission, markCurrentAsComplete: false) },
-                        onContinue: { navigate(to: .complete) },
-                        onSkip: { navigate(to: .complete) }
-                    )
-
-                case .apiSetup:
-                    // Legacy step — skip directly to complete
-                    CompleteStepView(onFinish: onComplete)
-
-                case .complete:
-                    CompleteStepView(onFinish: onComplete)
+            VStack(spacing: 0) {
+                // ProgressDots — below native titlebar, hidden on Welcome
+                if showProgressDots {
+                    HStack {
+                        ProgressDots(total: progressTotal, current: progressCurrent)
+                            .accessibilityLabel("Step \(progressCurrent + 1) of \(progressTotal)")
+                            .accessibilityHidden(false)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
                 }
+
+                Group {
+                    switch currentStep {
+                    case .welcome:
+                        WelcomeStepView(
+                            jumpToStep: miniFlowSteps?.first,
+                            onContinue: { target in
+                                navigate(to: target ?? .microphonePermission)
+                            }
+                        )
+
+                    case .microphonePermission, .accessibilityPermission:
+                        SetupComputerStepView(
+                            onBack: { navigate(to: .welcome, markCurrentAsComplete: false) },
+                            onContinue: { navigate(to: nextStep(after: .microphonePermission)) },
+                            onSkip: { navigate(to: nextStep(after: .microphonePermission),
+                                               markCurrentAsComplete: false) }
+                        )
+
+                    case .screenRecordingPermission:
+                        ScreenRecordingStepView(
+                            onBack: { navigate(to: prevStep(before: .screenRecordingPermission),
+                                               markCurrentAsComplete: false) },
+                            onContinue: { navigate(to: nextStep(after: .screenRecordingPermission)) },
+                            onSkip: {
+                                SettingsStorage.shared.userDeclinedScreenRecording = true
+                                navigate(to: nextStep(after: .screenRecordingPermission),
+                                         markCurrentAsComplete: false)
+                            }
+                        )
+
+                    case .shortcutSetup:
+                        ShortcutStepView(
+                            onBack: { navigate(to: .screenRecordingPermission,
+                                               markCurrentAsComplete: false) },
+                            onContinue: { navigate(to: nextStep(after: .shortcutSetup)) },
+                            onSkip: { navigate(to: nextStep(after: .shortcutSetup),
+                                               markCurrentAsComplete: false) }
+                        )
+
+                    case .apiSetup:
+                        // Deprecated — see docs/decisions/0008-onboarding-step-enum-stability.md
+                        CompleteStepView(onFinish: onComplete)
+
+                    case .complete:
+                        CompleteStepView(onFinish: onComplete)
+                    }
+                }
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+                .id(currentStep)
             }
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
-            .id(currentStep)
-            .padding(14)
+            .padding(10)
         }
         .onAppear(perform: restoreCurrentStep)
     }
 
+    // MARK: - Navigation helpers
+
     private func restoreCurrentStep() {
         let savedStep = OnboardingManager.shared.currentStep
-        // The .accessibilityPermission step is handled together with .microphonePermission
         if savedStep == .accessibilityPermission {
             currentStep = .microphonePermission
         } else {
@@ -77,11 +167,41 @@ struct OnboardingContainerView: View {
         if markCurrentAsComplete {
             OnboardingManager.shared.completeStep(currentStep)
         }
-        // Always persist the actual destination step
         OnboardingManager.shared.currentStep = step
-
         withAnimation(.easeInOut(duration: 0.28)) {
             currentStep = step
+        }
+    }
+
+    /// Next step in mini-flow context or full flow.
+    private func nextStep(after step: OnboardingStep) -> OnboardingStep {
+        if let steps = miniFlowSteps {
+            if let idx = steps.firstIndex(of: step), idx + 1 < steps.count {
+                return steps[idx + 1]
+            }
+            // Last step in mini-flow — complete
+            return .complete
+        }
+        // Full flow order
+        switch step {
+        case .microphonePermission: return .screenRecordingPermission
+        case .screenRecordingPermission: return .shortcutSetup
+        case .shortcutSetup: return .complete
+        default: return .complete
+        }
+    }
+
+    private func prevStep(before step: OnboardingStep) -> OnboardingStep {
+        if let steps = miniFlowSteps {
+            if let idx = steps.firstIndex(of: step), idx > 0 {
+                return steps[idx - 1]
+            }
+            return steps.first ?? .microphonePermission
+        }
+        switch step {
+        case .screenRecordingPermission: return .microphonePermission
+        case .shortcutSetup: return .screenRecordingPermission
+        default: return .welcome
         }
     }
 }
@@ -92,34 +212,8 @@ private struct OnboardingWindowFrame<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(spacing: 0) {
-            OnboardingHeaderBar()
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.12), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.20), radius: 20, y: 10)
-    }
-}
-
-private struct OnboardingHeaderBar: View {
-    var body: some View {
-        ZStack {
-            OnboardingStyle.brandBlue
-            Text("Diduny app")
-                .font(.system(size: 20, weight: .semibold))
-                .tracking(0.6)
-                .foregroundColor(.white.opacity(0.95))
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
-        }
-        .frame(height: 58)
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -133,21 +227,44 @@ private struct OnboardingSplitFrame<Left: View, Right: View>: View {
     }
 
     var body: some View {
-        OnboardingWindowFrame {
-            GeometryReader { proxy in
-                HStack(spacing: 0) {
-                    left
-                        .frame(width: proxy.size.width * 0.50, height: proxy.size.height, alignment: .topLeading)
-                        .background(Color.white)
+        GeometryReader { proxy in
+            let isWide = proxy.size.width >= 600
+            Group {
+                if isWide {
+                    HStack(spacing: 0) {
+                        ScrollView(.vertical, showsIndicators: false) {
+                            left
+                                .frame(maxWidth: 360, alignment: .topLeading)
+                        }
+                        .frame(width: proxy.size.width * 0.50)
+                        .background(Color(nsColor: .windowBackgroundColor))
 
-                    right
-                        .frame(width: proxy.size.width * 0.50, height: proxy.size.height, alignment: .topLeading)
+                        ScrollView(.vertical, showsIndicators: false) {
+                            right
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                        .frame(width: proxy.size.width * 0.50)
                         .background(OnboardingStyle.panelBlue)
+                    }
+                } else {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            left
+                            right
+                        }
+                        .frame(maxWidth: 480)
+                        .padding(.horizontal, 16)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .background(Color(nsColor: .windowBackgroundColor))
                 }
             }
+            .animation(.easeInOut(duration: 0.2), value: isWide)
         }
     }
 }
+
+// MARK: - Shared Buttons
 
 private struct OnboardingMainButton: View {
     let title: String
@@ -163,12 +280,14 @@ private struct OnboardingMainButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 20, weight: .semibold))
+                .font(OnboardingStyle.button)
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 58)
-                .background(disabled ? OnboardingStyle.brandBlue.opacity(0.45) : OnboardingStyle.brandBlueDark)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .frame(height: 34)
+                .padding(.horizontal, 16)
+                .background(disabled ? OnboardingStyle.brandBlue.opacity(0.45)
+                                     : OnboardingStyle.brandBlueDark)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(disabled)
@@ -194,7 +313,7 @@ private struct OnboardingTextAction: View {
                 }
                 Text(title)
             }
-            .font(.system(size: 18, weight: .semibold))
+            .font(OnboardingStyle.textAction)
             .foregroundColor(OnboardingStyle.titleColor)
         }
         .buttonStyle(.plain)
@@ -215,12 +334,13 @@ private struct PermissionActionButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 18, weight: .semibold))
+                .font(OnboardingStyle.button)
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 46)
-                .background(disabled ? OnboardingStyle.brandBlue.opacity(0.45) : OnboardingStyle.brandBlueDark)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(height: 30)
+                .background(disabled ? OnboardingStyle.brandBlue.opacity(0.45)
+                                     : OnboardingStyle.brandBlueDark)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(disabled)
@@ -234,16 +354,16 @@ private struct PermissionOutlineButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 18, weight: .semibold))
+                .font(OnboardingStyle.button)
                 .foregroundColor(OnboardingStyle.brandBlueDark)
                 .frame(maxWidth: .infinity)
-                .frame(height: 46)
+                .frame(height: 30)
                 .background(Color.white.opacity(0.6))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(OnboardingStyle.brandBlueDark.opacity(0.65), lineWidth: 1.5)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -258,14 +378,14 @@ private struct PermissionCardView: View {
     let onOpenSettings: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.system(size: 22, weight: .bold))
+                    .font(OnboardingStyle.cardTitle)
                     .foregroundColor(OnboardingStyle.titleColor)
 
                 Text(description)
-                    .font(.system(size: 18))
+                    .font(OnboardingStyle.cardBody)
                     .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -275,8 +395,9 @@ private struct PermissionCardView: View {
                     Image(systemName: "checkmark")
                     Text("Granted")
                 }
-                .font(.system(size: 18, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.green)
+                .accessibilityLabel("Permission granted")
             } else {
                 HStack(spacing: 12) {
                     PermissionActionButton(
@@ -284,11 +405,12 @@ private struct PermissionCardView: View {
                         disabled: isRequesting,
                         action: onAllow
                     )
+                    .accessibilityHint(isRequesting ? "Permission is being requested" : "")
                     PermissionOutlineButton(title: "Open settings", action: onOpenSettings)
                 }
             }
         }
-        .padding(24)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(0.95))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -298,7 +420,9 @@ private struct PermissionCardView: View {
 // MARK: - Welcome Step
 
 struct WelcomeStepView: View {
-    let onContinue: () -> Void
+    /// If non-nil, the Continue button jumps to this step (skipping already-granted permissions).
+    let jumpToStep: OnboardingStep?
+    let onContinue: (OnboardingStep?) -> Void
 
     @State private var showButton = false
 
@@ -311,26 +435,26 @@ struct WelcomeStepView: View {
                     endPoint: .bottomTrailing
                 )
 
-                VStack(spacing: 34) {
+                VStack(spacing: 24) {
                     Spacer()
 
                     Text("Any language. Any voice.\nInstantly.")
-                        .font(.system(size: 88, weight: .bold))
+                        .font(OnboardingStyle.display)
                         .foregroundColor(.white.opacity(0.96))
                         .multilineTextAlignment(.center)
-                        .lineSpacing(12)
-                        .minimumScaleFactor(0.6)
-                        .padding(.horizontal, 24)
+                        .lineSpacing(6)
+                        .minimumScaleFactor(0.75)
+                        .padding(.horizontal, 20)
 
                     if showButton {
-                        Button(action: onContinue) {
+                        Button(action: { onContinue(jumpToStep) }) {
                             Text("Start using Diduny")
-                                .font(.system(size: 22, weight: .semibold))
+                                .font(OnboardingStyle.button)
                                 .foregroundColor(OnboardingStyle.brandBlueDark)
-                                .padding(.horizontal, 42)
-                                .padding(.vertical, 18)
+                                .padding(.horizontal, 28)
+                                .padding(.vertical, 10)
                                 .background(Color.white.opacity(0.94))
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         .buttonStyle(.plain)
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -348,7 +472,7 @@ struct WelcomeStepView: View {
     }
 }
 
-// MARK: - Permissions Setup Step
+// MARK: - Permissions Setup Step (mic + accessibility)
 
 struct SetupComputerStepView: View {
     let onBack: () -> Void
@@ -364,17 +488,17 @@ struct SetupComputerStepView: View {
 
     var body: some View {
         OnboardingSplitFrame {
-            VStack(alignment: .leading, spacing: 26) {
+            VStack(alignment: .leading, spacing: 16) {
                 Spacer(minLength: 0)
 
                 Text("Set up your computer")
-                    .font(.system(size: 54, weight: .bold))
+                    .font(OnboardingStyle.title)
                     .foregroundColor(OnboardingStyle.titleColor)
                     .lineLimit(2)
                     .minimumScaleFactor(0.75)
 
                 Text("Enable permissions to start using Diduny.")
-                    .font(.system(size: 30))
+                    .font(OnboardingStyle.subtitle)
                     .foregroundColor(OnboardingStyle.titleColor.opacity(0.92))
 
                 OnboardingMainButton(title: "Next", disabled: !canContinue) {
@@ -384,16 +508,16 @@ struct SetupComputerStepView: View {
 
                 Spacer(minLength: 0)
 
-                HStack(spacing: 32) {
+                HStack(spacing: 24) {
                     OnboardingTextAction(title: "Back", icon: "arrow.uturn.left", action: onBack)
                     OnboardingTextAction(title: "Skip", action: onSkip)
                 }
                 .padding(.bottom, 10)
             }
-            .padding(.horizontal, 60)
-            .padding(.vertical, 46)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
         } right: {
-            VStack(spacing: 20) {
+            VStack(spacing: 12) {
                 PermissionCardView(
                     title: "Allow Diduny to insert spoken words.",
                     description: "This allows Diduny to insert transcribed words into text fields.",
@@ -414,8 +538,8 @@ struct SetupComputerStepView: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 54)
-            .padding(.vertical, 44)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
         }
         .onAppear(perform: refreshPermissionStatus)
         .onReceive(refreshTimer) { _ in
@@ -473,22 +597,22 @@ struct ScreenRecordingStepView: View {
 
     var body: some View {
         OnboardingSplitFrame {
-            VStack(alignment: .leading, spacing: 26) {
+            VStack(alignment: .leading, spacing: 16) {
                 Spacer(minLength: 0)
 
                 Text("Meeting audio capture")
-                    .font(.system(size: 54, weight: .bold))
+                    .font(OnboardingStyle.title)
                     .foregroundColor(OnboardingStyle.titleColor)
                     .lineLimit(2)
                     .minimumScaleFactor(0.75)
 
                 Text("Allow Screen Recording only if you want Diduny to capture audio from Zoom, Meet, Teams, and similar apps.")
-                    .font(.system(size: 26))
+                    .font(OnboardingStyle.subtitle)
                     .foregroundColor(OnboardingStyle.titleColor.opacity(0.92))
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text("Diduny uses this permission only to access meeting audio. It is not required for normal microphone dictation.")
-                    .font(.system(size: 22, weight: .medium))
+                    .font(OnboardingStyle.body)
                     .foregroundColor(OnboardingStyle.titleColor.opacity(0.8))
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -506,16 +630,16 @@ struct ScreenRecordingStepView: View {
 
                 Spacer(minLength: 0)
 
-                HStack(spacing: 32) {
+                HStack(spacing: 24) {
                     OnboardingTextAction(title: "Back", icon: "arrow.uturn.left", action: onBack)
                     OnboardingTextAction(title: "Skip", action: onSkip)
                 }
                 .padding(.bottom, 10)
             }
-            .padding(.horizontal, 60)
-            .padding(.vertical, 46)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
         } right: {
-            VStack(spacing: 20) {
+            VStack(spacing: 12) {
                 PermissionCardView(
                     title: "Allow Diduny to capture meeting audio.",
                     description: "macOS requires Screen Recording permission to access system audio streams from meeting apps.",
@@ -525,28 +649,28 @@ struct ScreenRecordingStepView: View {
                     onOpenSettings: { openSystemSettings(anchor: "Privacy_ScreenCapture") }
                 )
 
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("When this is used")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(OnboardingStyle.cardTitle)
                         .foregroundColor(OnboardingStyle.titleColor)
 
                     Text("Only during Meeting recording mode.")
-                        .font(.system(size: 18))
+                        .font(OnboardingStyle.cardBody)
                         .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
 
                     Text("Not used for standard dictation.")
-                        .font(.system(size: 18))
+                        .font(OnboardingStyle.cardBody)
                         .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
                 }
-                .padding(24)
+                .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.white.opacity(0.95))
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 54)
-            .padding(.vertical, 44)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
         }
         .onAppear {
             Task { await refreshStatus() }
@@ -578,6 +702,8 @@ struct ScreenRecordingStepView: View {
     }
 }
 
+// MARK: - System settings / window helpers
+
 private func openSystemSettings(anchor: String) {
     guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") else {
         return
@@ -592,8 +718,7 @@ private func bringOnboardingWindowToFront() {
         window.orderFrontRegardless()
         return
     }
-
-    for window in NSApp.windows where window.title == "Welcome to Diduny" {
+    for window in NSApp.windows where window.title == "Welcome to Diduny" || window.title == "Permissions Check" {
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         break
@@ -624,10 +749,8 @@ struct ShortcutStepView: View {
 
         var title: String {
             switch self {
-            case .pushToTalk:
-                return "Push-to-talk (Recommended)"
-            case .handsFree:
-                return "Hands-free (Toggle)"
+            case .pushToTalk: return "Push-to-talk (Recommended)"
+            case .handsFree: return "Hands-free (Toggle)"
             }
         }
 
@@ -643,72 +766,75 @@ struct ShortcutStepView: View {
 
     var body: some View {
         OnboardingWindowFrame {
-            VStack(alignment: .leading, spacing: 22) {
-                Spacer(minLength: 0)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Spacer(minLength: 0)
 
-                Text("Hold the keyboard shortcut")
-                    .font(.system(size: 54, weight: .bold))
-                    .foregroundColor(OnboardingStyle.titleColor)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
+                    Text("Hold the keyboard shortcut")
+                        .font(OnboardingStyle.title)
+                        .foregroundColor(OnboardingStyle.titleColor)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
 
-                Text("Choose a default key and mode.")
-                    .font(.system(size: 30))
-                    .foregroundColor(OnboardingStyle.titleColor.opacity(0.92))
+                    Text("Choose a default key and mode.")
+                        .font(OnboardingStyle.subtitle)
+                        .foregroundColor(OnboardingStyle.titleColor.opacity(0.92))
 
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Default key")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Default key")
+                            .font(OnboardingStyle.label)
+                            .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
 
-                    LazyVGrid(columns: keyGridColumns, alignment: .leading, spacing: 10) {
-                        ForEach(availableKeys, id: \.self) { key in
-                            ShortcutKeyChip(key: key, isSelected: selectedKey == key) {
-                                selectedKey = key
+                        LazyVGrid(columns: keyGridColumns, alignment: .leading, spacing: 10) {
+                            ForEach(availableKeys, id: \.self) { key in
+                                ShortcutKeyChip(key: key, isSelected: selectedKey == key) {
+                                    selectedKey = key
+                                }
                             }
                         }
                     }
-                }
-                .padding(.top, 6)
+                    .padding(.top, 6)
 
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Would you like Hands-free mode?")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Would you like Hands-free mode?")
+                            .font(OnboardingStyle.label)
+                            .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
 
-                    ShortcutModeOption(
-                        title: ShortcutMode.pushToTalk.title,
-                        subtitle: ShortcutMode.pushToTalk.subtitle,
-                        isSelected: selectedMode == .pushToTalk
-                    ) {
-                        selectedMode = .pushToTalk
+                        ShortcutModeOption(
+                            title: ShortcutMode.pushToTalk.title,
+                            subtitle: ShortcutMode.pushToTalk.subtitle,
+                            isSelected: selectedMode == .pushToTalk
+                        ) {
+                            selectedMode = .pushToTalk
+                        }
+
+                        ShortcutModeOption(
+                            title: ShortcutMode.handsFree.title,
+                            subtitle: ShortcutMode.handsFree.subtitle,
+                            isSelected: selectedMode == .handsFree
+                        ) {
+                            selectedMode = .handsFree
+                        }
                     }
 
-                    ShortcutModeOption(
-                        title: ShortcutMode.handsFree.title,
-                        subtitle: ShortcutMode.handsFree.subtitle,
-                        isSelected: selectedMode == .handsFree
-                    ) {
-                        selectedMode = .handsFree
+                    OnboardingMainButton(title: "Next") {
+                        saveSettings()
+                        onContinue()
                     }
-                }
+                    .padding(.top, 8)
 
-                OnboardingMainButton(title: "Next") {
-                    saveSettings()
-                    onContinue()
-                }
-                .padding(.top, 8)
+                    Spacer(minLength: 0)
 
-                Spacer(minLength: 0)
-
-                HStack(spacing: 32) {
-                    OnboardingTextAction(title: "Back", icon: "arrow.uturn.left", action: onBack)
-                    OnboardingTextAction(title: "Skip", action: onSkip)
+                    HStack(spacing: 24) {
+                        OnboardingTextAction(title: "Back", icon: "arrow.uturn.left", action: onBack)
+                        OnboardingTextAction(title: "Skip", action: onSkip)
+                    }
+                    .padding(.bottom, 10)
                 }
-                .padding(.bottom, 10)
+                .frame(maxWidth: 480)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 28)
             }
-            .padding(.horizontal, 60)
-            .padding(.vertical, 46)
         }
         .onAppear {
             selectedKey = SettingsStorage.shared.pushToTalkKey == .none ? .rightShift : SettingsStorage.shared.pushToTalkKey
@@ -735,17 +861,17 @@ private struct ShortcutKeyChip: View {
         Button(action: action) {
             VStack(spacing: 6) {
                 Text(key.symbol)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(isSelected ? .white : OnboardingStyle.titleColor)
                 Text(key.displayName.replacingOccurrences(of: "Right ", with: ""))
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundColor(isSelected ? .white.opacity(0.95) : OnboardingStyle.titleColor.opacity(0.8))
             }
-            .frame(width: 90, height: 62)
+            .frame(width: 90, height: 56)
             .background(isSelected ? OnboardingStyle.brandBlueDark : Color.white.opacity(0.82))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(isSelected ? OnboardingStyle.brandBlueDark : OnboardingStyle.titleColor.opacity(0.22), lineWidth: 1.5)
             )
         }
@@ -763,28 +889,28 @@ private struct ShortcutModeOption: View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 18))
+                    .font(.system(size: 15))
                     .foregroundColor(isSelected ? OnboardingStyle.brandBlueDark : OnboardingStyle.titleColor.opacity(0.4))
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(OnboardingStyle.titleColor)
 
                     Text(subtitle)
-                        .font(.system(size: 15))
+                        .font(OnboardingStyle.cardBody)
                         .foregroundColor(OnboardingStyle.titleColor.opacity(0.76))
                 }
                 Spacer()
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(isSelected ? Color.white.opacity(0.95) : Color.white.opacity(0.72))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(isSelected ? OnboardingStyle.brandBlueDark.opacity(0.6) : Color.clear, lineWidth: 1.5)
             )
         }
@@ -799,71 +925,86 @@ struct CompleteStepView: View {
 
     @State private var showConfetti = false
 
-    var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            // Success icon
-            ZStack {
-                Circle()
-                    .fill(Color.green.opacity(0.1))
-                    .frame(width: 100, height: 100)
-
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 50))
-                    .foregroundColor(.green)
-            }
-            .scaleEffect(showConfetti ? 1 : 0.5)
-            .opacity(showConfetti ? 1 : 0)
-
-            VStack(spacing: 12) {
-                Text("You're all set!")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-
-                Text("Start transcribing with your shortcut key\nor use the menu bar.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            // Quick tips
-            VStack(alignment: .leading, spacing: 12) {
-                TipRow(icon: "keyboard", text: "Use hold-to-record or configure multi-tap toggle mode")
-                TipRow(icon: "menubar.rectangle", text: "Click the menu bar icon for more options")
-                TipRow(icon: "gearshape", text: "Access settings anytime from the menu")
-            }
-            .padding(.horizontal, 40)
-            .padding(.top, 20)
-
-            // Privacy & security info
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Your data stays on your device", systemImage: "lock.shield.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(OnboardingStyle.titleColor)
-
-                Text("All your data \u{2014} recordings, transcriptions, and usage stats \u{2014} is stored only on your Mac and never sent to our servers. We only use your email for authorization. Credentials are stored securely in the macOS Keychain.")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(16)
-            .frame(maxWidth: 420, alignment: .leading)
-            .background(Color.green.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.green.opacity(0.2), lineWidth: 1)
-            )
-            .padding(.top, 8)
-
-            Spacer()
-
-            OnboardingPrimaryButton(title: "Start Using Diduny") {
-                onFinish()
-            }
-            .padding(.bottom, 30)
+    private var privacyCopy: String {
+        switch SettingsStorage.shared.transcriptionProvider {
+        case .local:
+            return "All audio is processed on this Mac. Nothing is sent to external servers."
+        case .cloud:
+            return "Audio is sent to Diduny's proxy server and then to Soniox EU for transcription. No audio is stored after transcription completes. Your email is stored securely in the macOS Keychain."
         }
-        .padding(.horizontal, 20)
+    }
+
+    var body: some View {
+        OnboardingWindowFrame {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 20) {
+                    Spacer()
+
+                    // Success icon (reduced from 100/50 to 64/32)
+                    ZStack {
+                        Circle()
+                            .fill(Color.green.opacity(0.1))
+                            .frame(width: 64, height: 64)
+
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(.green)
+                    }
+                    .scaleEffect(showConfetti ? 1 : 0.5)
+                    .opacity(showConfetti ? 1 : 0)
+
+                    VStack(spacing: 8) {
+                        Text("You're all set!")
+                            .font(OnboardingStyle.title)
+
+                        Text("Start transcribing with your shortcut key\nor use the menu bar.")
+                            .font(OnboardingStyle.subtitle)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    // Quick tips
+                    VStack(alignment: .leading, spacing: 10) {
+                        TipRow(icon: "keyboard", text: "Use hold-to-record or configure multi-tap toggle mode")
+                        TipRow(icon: "menubar.rectangle", text: "Click the menu bar icon for more options")
+                        TipRow(icon: "gearshape", text: "Access settings anytime from the menu")
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+
+                    // Privacy block — accurate per transcription provider
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Your audio & privacy", systemImage: "lock.shield.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(OnboardingStyle.titleColor)
+
+                        Text(privacyCopy)
+                            .font(OnboardingStyle.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: 420, alignment: .leading)
+                    .background(Color.green.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.green.opacity(0.2), lineWidth: 1)
+                    )
+                    .padding(.top, 6)
+
+                    Spacer()
+
+                    OnboardingMainButton(title: "Start Using Diduny") {
+                        onFinish()
+                    }
+                    .padding(.bottom, 20)
+                }
+                .frame(maxWidth: 480)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 28)
+            }
+        }
         .onAppear {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                 showConfetti = true
@@ -872,25 +1013,29 @@ struct CompleteStepView: View {
     }
 }
 
+// MARK: - TipRow
+
 struct TipRow: View {
     let icon: String
     let text: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 16))
+                .font(.system(size: 14))
                 .foregroundColor(.accentColor)
-                .frame(width: 24)
+                .frame(width: 20)
 
             Text(text)
-                .font(.callout)
+                .font(OnboardingStyle.tip)
                 .foregroundColor(.secondary)
         }
     }
 }
 
+// MARK: - Preview
+
 #Preview {
     OnboardingContainerView(onComplete: {})
-        .frame(width: 1320, height: 820)
+        .frame(width: 820, height: 600)
 }
