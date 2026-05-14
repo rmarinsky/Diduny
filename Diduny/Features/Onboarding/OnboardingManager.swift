@@ -124,16 +124,19 @@ final class OnboardingManager {
             return .showFullTour(jumpToFirstMissing: nil)
         }
 
-        // Live permission check
+        // Live permission check — must be PASSIVE so we don't surface system prompts
+        // for permissions whose step the user hasn't reached yet.
         let micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         let accessGranted = AXIsProcessTrusted()
-        let screenGranted = await PermissionManager.shared.checkScreenRecordingPermission()
+        let screenGranted = PermissionManager.shared.checkScreenRecordingPermissionPassive()
         let userDeclinedScreen = SettingsStorage.shared.userDeclinedScreenRecording
 
-        // Build ordered missing-steps list
+        // Build ordered missing-steps list.
+        // Microphone + Accessibility share one combined screen
+        // (SetupComputerStepView), so they collapse into a single step —
+        // otherwise the mini-flow renders the identical screen twice.
         var missingSteps: [OnboardingStep] = []
-        if !micGranted { missingSteps.append(.microphonePermission) }
-        if !accessGranted { missingSteps.append(.accessibilityPermission) }
+        if !micGranted || !accessGranted { missingSteps.append(.microphonePermission) }
         if !screenGranted && !userDeclinedScreen { missingSteps.append(.screenRecordingPermission) }
 
         // All permissions satisfied — skip regardless of hasCompletedOnboarding
@@ -251,6 +254,13 @@ final class OnboardingWindowController {
     func showOnboarding(miniFlow: [OnboardingStep]? = nil,
                         completion: @escaping () -> Void)
     {
+        // Promote app to regular activation so the onboarding window appears
+        // in the Dock and Cmd+Tab switcher. Diduny is LSUIElement (menu bar
+        // app), which by default hides windows from the Dock — bad for a
+        // first-run setup flow where the user needs to find the window.
+        // Reverted to .accessory in closeOnboarding().
+        NSApp.setActivationPolicy(.regular)
+
         if let window {
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
@@ -295,6 +305,10 @@ final class OnboardingWindowController {
         window.isMovableByWindowBackground = false
         window.backgroundColor = .windowBackgroundColor
         window.isOpaque = true
+        // The onboarding UI is designed as a light surface (navy text, white
+        // cards, light-blue panel). Pin the window to the light appearance so
+        // system colors don't resolve dark and tank the left-panel contrast.
+        window.appearance = NSAppearance(named: .aqua)
 
         self.windowDelegate = WindowDelegate(onClose: {
             // Close-via-X: save currentStep but do NOT mark hasCompletedOnboarding.
@@ -304,6 +318,8 @@ final class OnboardingWindowController {
             self.window = nil
             self.hostingView = nil
             self.windowDelegate = nil
+            // Revert to menu-bar-only mode now that the onboarding window is gone.
+            NSApp.setActivationPolicy(.accessory)
             // Do NOT call completion() here — that would trigger setupAfterOnboarding
             // prematurely while onboarding is unfinished.
         })
@@ -321,6 +337,9 @@ final class OnboardingWindowController {
         window = nil
         hostingView = nil
         windowDelegate = nil
+        // Revert to menu-bar-only mode (LSUIElement behaviour) — no Dock icon
+        // for normal app usage.
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 

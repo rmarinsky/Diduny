@@ -370,6 +370,7 @@ private struct PermissionOutlineButton: View {
 }
 
 private struct PermissionCardView: View {
+    let number: Int
     let title: String
     let description: String
     let granted: Bool
@@ -379,15 +380,26 @@ private struct PermissionCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .font(OnboardingStyle.cardTitle)
-                    .foregroundColor(OnboardingStyle.titleColor)
+            HStack(alignment: .top, spacing: 10) {
+                Text("\(number)")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 22, height: 22)
+                    .background(
+                        Circle().fill(granted ? Color.green : OnboardingStyle.brandBlueDark)
+                    )
+                    .accessibilityHidden(true)
 
-                Text(description)
-                    .font(OnboardingStyle.cardBody)
-                    .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(OnboardingStyle.cardTitle)
+                        .foregroundColor(OnboardingStyle.titleColor)
+
+                    Text(description)
+                        .font(OnboardingStyle.cardBody)
+                        .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             if granted {
@@ -483,6 +495,7 @@ struct SetupComputerStepView: View {
     @State private var accessibilityGranted = false
     @State private var isRequestingMicrophone = false
     @State private var isRequestingAccessibility = false
+    @State private var didAutoAdvance = false
 
     private let refreshTimer = Timer.publish(every: 0.8, on: .main, in: .common).autoconnect()
 
@@ -519,21 +532,23 @@ struct SetupComputerStepView: View {
         } right: {
             VStack(spacing: 12) {
                 PermissionCardView(
-                    title: "Allow Diduny to insert spoken words.",
-                    description: "This allows Diduny to insert transcribed words into text fields.",
-                    granted: accessibilityGranted,
-                    isRequesting: isRequestingAccessibility,
-                    onAllow: requestAccessibilityPermission,
-                    onOpenSettings: { openSystemSettings(anchor: "Privacy_Accessibility") }
-                )
-
-                PermissionCardView(
+                    number: 1,
                     title: "Allow Diduny to use your microphone.",
                     description: "This allows Diduny to capture your speech for dictation and translation.",
                     granted: microphoneGranted,
                     isRequesting: isRequestingMicrophone,
                     onAllow: requestMicrophonePermission,
                     onOpenSettings: { openSystemSettings(anchor: "Privacy_Microphone") }
+                )
+
+                PermissionCardView(
+                    number: 2,
+                    title: "Allow Diduny to insert spoken words.",
+                    description: "This allows Diduny to insert transcribed words into text fields.",
+                    granted: accessibilityGranted,
+                    isRequesting: isRequestingAccessibility,
+                    onAllow: requestAccessibilityPermission,
+                    onOpenSettings: { openSystemSettings(anchor: "Privacy_Accessibility") }
                 )
 
                 Spacer(minLength: 0)
@@ -554,6 +569,16 @@ struct SetupComputerStepView: View {
     private func refreshPermissionStatus() {
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         accessibilityGranted = AXIsProcessTrusted()
+
+        // Both permissions granted — advance automatically so the user
+        // doesn't have to hunt for the Next button. Fires once; the short
+        // delay lets both cards show their "Granted" state first.
+        if microphoneGranted, accessibilityGranted, !didAutoAdvance {
+            didAutoAdvance = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                onContinue()
+            }
+        }
     }
 
     private func requestMicrophonePermission() {
@@ -575,10 +600,14 @@ struct SetupComputerStepView: View {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+        // Do NOT pull the onboarding window back to the front here: the system
+        // Accessibility prompt is non-modal and would end up hidden behind
+        // onboarding (and the user re-clicking "Allow" feels like a double
+        // prompt). Leave it visible; the poll timer picks up the grant once
+        // the user enables Diduny in System Settings.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.isRequestingAccessibility = false
             self.refreshPermissionStatus()
-            bringOnboardingWindowToFront()
         }
     }
 }
@@ -617,8 +646,19 @@ struct ScreenRecordingStepView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if screenRecordingGranted {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "info.circle.fill")
+                                .foregroundColor(OnboardingStyle.brandBlueDark)
+                            Text("Permission granted. Restart Diduny once you've finished onboarding to enable meeting recording.")
+                                .font(OnboardingStyle.body)
+                                .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.top, 4)
                     OnboardingMainButton(title: "Next", action: onContinue)
-                        .padding(.top, 8)
+                        .padding(.top, 6)
                 } else {
                     OnboardingMainButton(
                         title: isRequesting ? "Requesting..." : "Allow Screen Recording",
@@ -641,6 +681,7 @@ struct ScreenRecordingStepView: View {
         } right: {
             VStack(spacing: 12) {
                 PermissionCardView(
+                    number: 1,
                     title: "Allow Diduny to capture meeting audio.",
                     description: "macOS requires Screen Recording permission to access system audio streams from meeting apps.",
                     granted: screenRecordingGranted,
@@ -681,7 +722,9 @@ struct ScreenRecordingStepView: View {
     }
 
     private func refreshStatus() async {
-        let granted = await PermissionManager.shared.checkScreenRecordingPermission()
+        // Passive TCC read — does NOT trigger SCShareableContent (which would
+        // cache a stale "denied" result inside the running process forever).
+        let granted = PermissionManager.shared.checkScreenRecordingPermissionPassive()
         await MainActor.run {
             screenRecordingGranted = granted
         }
@@ -692,10 +735,15 @@ struct ScreenRecordingStepView: View {
         isRequesting = true
 
         Task {
-            let granted = await PermissionManager.shared.requestScreenRecordingPermission()
+            // ensureScreenRecordingPermission falls back to System Settings if
+            // the status is already `denied` (SCShareableContent only shows the
+            // macOS prompt for `undetermined` status).
+            _ = await PermissionManager.shared.ensureScreenRecordingPermission()
+            // The boolean returned above is unreliable inside the running
+            // process due to SCShareableContent's cached state. The passive
+            // refresh path is the source of truth — it polls TCC directly.
             await MainActor.run {
                 isRequesting = false
-                screenRecordingGranted = granted
                 bringOnboardingWindowToFront()
             }
         }

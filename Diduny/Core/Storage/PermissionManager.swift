@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import AVFAudio
+import CoreGraphics
 import Foundation
 
 /// Manages all permission requests for the app
@@ -111,6 +112,14 @@ final class PermissionManager {
         let granted = await SystemAudioCaptureService.checkPermission()
         status.screenRecording = granted
         return granted
+    }
+
+    /// Truly passive screen-recording check. Does NOT trigger the system permission dialog
+    /// even when status is undetermined — uses CGPreflightScreenCaptureAccess(), which
+    /// merely inspects the TCC database. Use this from the permission-gate startup logic
+    /// so we don't surface the Screen Recording prompt before the user reaches that step.
+    nonisolated func checkScreenRecordingPermissionPassive() -> Bool {
+        CGPreflightScreenCaptureAccess()
     }
 
     /// Request screen recording permission - this triggers the system permission dialog

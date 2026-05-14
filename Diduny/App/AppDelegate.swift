@@ -80,10 +80,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Start Sparkle updater (access lazy var to trigger init)
         _ = updaterManager
 
-        // Eagerly init SupabaseService + AuthService so the auth-state observer
-        // is registered before any UI renders.
-        _ = SupabaseService.shared
-        _ = AuthService.shared
+        // NOTE: SupabaseService + AuthService warm-up is deferred to
+        // setupAfterOnboarding() so the macOS Keychain prompt (asking for
+        // "supabase.gotrue.swift" access) does not appear behind the
+        // onboarding window on the very first launch of a new code signature.
+        // Permission gate uses AuthService.hasStoredSession (cheap UserDefaults
+        // flag) which does not trigger the keychain read.
 
         setupNotchStopHandler()
 
@@ -147,6 +149,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Setup that runs after onboarding completes (or if already completed)
     private func setupAfterOnboarding() {
+        // SupabaseService + AuthService warm-up is fully lazy now: they
+        // initialise only when first used (transcribe, Settings → Account,
+        // menu bar login). This avoids the macOS Keychain prompt for
+        // "supabase.gotrue.swift" appearing without context after onboarding.
+        // The SDK still auto-refreshes tokens on demand via getAccessToken().
+
         // Setup hotkeys and push-to-talk
         setupHotkeys()
         setupPushToTalk()
@@ -163,8 +171,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        if !AuthService.shared.isLoggedIn {
-            Log.app.info("[Auth] Not logged in — cloud preferences remain stored, runtime uses local fallback")
+        // Use hasStoredSession (UserDefaults flag) instead of AuthService.shared.isLoggedIn
+        // so this log line does not trigger the singleton init (and its Keychain prompt).
+        if !AuthService.hasStoredSession {
+            Log.app.info("[Auth] No stored session — cloud preferences remain stored, runtime uses local fallback")
         }
     }
 
