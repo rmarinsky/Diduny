@@ -61,6 +61,12 @@ ARCHIVE_PATH="${BUILD_DIR}/${APP_NAME}.xcarchive"
 EXPORT_PATH="${BUILD_DIR}/export"
 APP_PATH="${EXPORT_PATH}/${APP_NAME}.app"
 
+# The git tag is the single source of truth for the version (same as CI).
+# project.yml's MARKETING_VERSION is only a placeholder. Override with
+# RELEASE_VERSION=X.Y.Z for a local build that isn't on a tag.
+MARKETING_VERSION="${RELEASE_VERSION:-$(git -C "${PROJECT_DIR}" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')}"
+MARKETING_VERSION="${MARKETING_VERSION:-0.0.0}"
+
 echo -e "${BLUE}"
 echo "╔═══════════════════════════════════════════════════════════╗"
 echo "║               ${DISPLAY_NAME} Release Builder                      ║"
@@ -96,7 +102,7 @@ xcodebuild -resolvePackageDependencies \
     -project "${PROJECT_FILE}" \
     -scheme "${SCHEME}"
 
-echo -e "${YELLOW}[3/7] Archiving universal app (arm64 + x86_64)...${NC}"
+echo -e "${YELLOW}[3/7] Archiving universal app (arm64 + x86_64), version ${MARKETING_VERSION}...${NC}"
 xcodebuild archive \
     -project "${PROJECT_FILE}" \
     -scheme "${SCHEME}" \
@@ -107,7 +113,8 @@ xcodebuild archive \
     ONLY_ACTIVE_ARCH=NO \
     CODE_SIGN_STYLE=Manual \
     CODE_SIGN_IDENTITY="Developer ID Application" \
-    DEVELOPMENT_TEAM="${TEAM_ID}"
+    DEVELOPMENT_TEAM="${TEAM_ID}" \
+    MARKETING_VERSION="${MARKETING_VERSION}"
 
 if [ ! -d "${ARCHIVE_PATH}" ]; then
     echo -e "${RED}Error: Archive failed${NC}"

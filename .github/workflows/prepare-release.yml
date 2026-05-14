@@ -1,0 +1,70 @@
+name: Prepare release
+
+# Runs when a PR is merged into main. Reads the PR's release label, computes
+# the next version from the latest tag, pushes an annotated tag, and kicks
+# off release.yml via workflow_dispatch.
+#
+# This is the ONLY automation step that writes a git ref — and it only ever
+# writes a tag, never a commit to main. release.yml is dispatched explicitly
+# (not via the tag push) because tags pushed with GITHUB_TOKEN do not trigger
+# other workflows; this keeps everything on GITHUB_TOKEN with no PAT needed.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version bump from PR label
+        id: bump
+        env:
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          if   echo "$LABELS" | grep -q '"release:major"'; then bump=major
+          elif echo "$LABELS" | grep -q '"release:minor"'; then bump=minor
+          elif echo "$LABELS" | grep -q '"release:patch"'; then bump=patch
+          else
+            echo "No release:patch|minor|major label (release:skip or none) — nothing to release."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+
+      - name: Tag and dispatch release
+        if: steps.bump.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUMP: ${{ steps.bump.outputs.bump }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          TAG="$(scripts/next-version.sh "$BUMP")"
+          echo "Next release: $TAG (from release:$BUMP)"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists — aborting."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG" "$MERGE_SHA"
+          git push origin "$TAG"
+
+          gh workflow run release.yml --ref "$TAG"
+          echo "Pushed $TAG and dispatched release.yml"

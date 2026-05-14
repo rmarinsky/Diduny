@@ -1,0 +1,51 @@
+name: Release label check
+
+# Every PR into main must declare its release intent via exactly one label:
+#   release:patch | release:minor | release:major | release:skip
+# This check fails if that's not the case, and comments the version that
+# will be released on merge. Make it a required status check in branch
+# protection so a PR can't merge without a deliberate release decision.
+
+on:
+  pull_request:
+    types: [opened, edited, labeled, unlabeled, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require exactly one release label
+        env:
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          count=0
+          for l in release:major release:minor release:patch release:skip; do
+            if echo "$LABELS" | grep -q "\"$l\""; then count=$((count + 1)); fi
+          done
+          if [ "$count" -ne 1 ]; then
+            echo "::error::PR must have exactly one of: release:patch, release:minor, release:major, release:skip (found $count)"
+            exit 1
+          fi
+
+      - name: Comment next version
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'release:skip') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if   echo "$LABELS" | grep -q '"release:major"'; then bump=major
+          elif echo "$LABELS" | grep -q '"release:minor"'; then bump=minor
+          else bump=patch; fi
+          TAG="$(scripts/next-version.sh "$bump")"
+          gh pr comment "$PR" --edit-last --create-if-none \
+            --body "🔖 On merge this PR will release **$TAG** (\`release:$bump\`)."
