@@ -117,23 +117,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
-        // Check if onboarding needs to be shown
-        // Uses shouldShowOnboarding which skips for existing users with mic access
-        if OnboardingManager.shared.shouldShowOnboarding {
-            // Setup defaults for new users
-            OnboardingManager.shared.setupDefaultsForNewUser()
+        // Permission-gate: evaluate live permission state before deciding what to show.
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let action = await OnboardingManager.shared.computeStartupAction()
+            switch action {
+            case .skipOnboarding:
+                self.setupAfterOnboarding()
 
-            // Show onboarding window after app launch settles (more reliable for LSUIElement apps)
-            Task { @MainActor [weak self] in
+            case .showFullTour(let jumpStep):
+                OnboardingManager.shared.setupDefaultsForNewUser()
+                if let jump = jumpStep {
+                    OnboardingManager.shared.currentStep = jump
+                }
                 try? await Task.sleep(for: .milliseconds(120))
-                OnboardingWindowController.shared.showOnboarding {
-                    // Setup after onboarding completes
-                    self?.setupAfterOnboarding()
+                OnboardingWindowController.shared.showOnboarding(miniFlow: nil) {
+                    self.setupAfterOnboarding()
+                }
+
+            case .showMiniFlow(let steps):
+                try? await Task.sleep(for: .milliseconds(120))
+                OnboardingManager.shared.currentStep = steps.first ?? .microphonePermission
+                OnboardingWindowController.shared.showOnboarding(miniFlow: steps) {
+                    self.setupAfterOnboarding()
                 }
             }
-        } else {
-            // Normal startup
-            setupAfterOnboarding()
         }
     }
 
