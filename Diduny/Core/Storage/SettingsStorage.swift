@@ -72,6 +72,7 @@ final class SettingsStorage {
         case whisperModelUnloadPolicy
         case proxyBaseURL
         case remoteConfigURL
+        case userDeclinedScreenRecording
     }
 
     private init() {
@@ -678,6 +679,16 @@ final class SettingsStorage {
                 defaults.removeObject(forKey: Key.remoteConfigURL.rawValue)
             }
         }
+    }
+
+    // MARK: - Onboarding
+
+    /// When true, missing Screen Recording permission no longer re-triggers onboarding.
+    /// Set to true when the user taps "Skip" on ScreenRecordingStepView.
+    /// Clearable via Settings → "Re-enable Screen Recording prompt".
+    var userDeclinedScreenRecording: Bool {
+        get { defaults.bool(forKey: Key.userDeclinedScreenRecording.rawValue) }
+        set { defaults.set(newValue, forKey: Key.userDeclinedScreenRecording.rawValue) }
     }
 }
 
