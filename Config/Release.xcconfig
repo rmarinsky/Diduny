@@ -1,8 +1,0 @@
-// Release configuration
-// Use this for production builds
-
-DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
-SWIFT_OPTIMIZATION_LEVEL = -O
-GCC_OPTIMIZATION_LEVEL = s
-ENABLE_TESTABILITY = NO
-VALIDATE_PRODUCT = YES

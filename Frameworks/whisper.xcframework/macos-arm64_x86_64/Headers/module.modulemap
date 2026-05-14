@@ -1,8 +1,0 @@
-module whisper {
-    header "whisper.h"
-    header "ggml.h"
-    header "ggml-cpu.h"
-    header "ggml-alloc.h"
-    header "ggml-backend.h"
-    export *
-}
