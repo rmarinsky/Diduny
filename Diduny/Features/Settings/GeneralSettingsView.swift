@@ -5,6 +5,7 @@ struct GeneralSettingsView: View {
     @State private var autoPaste = SettingsStorage.shared.autoPaste
     @State private var playSound = SettingsStorage.shared.playSoundOnCompletion
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
+    @State private var screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
 
     var body: some View {
         Form {
@@ -29,6 +30,18 @@ struct GeneralSettingsView: View {
             }
 
             Section {
+                // Toggling ON clears the declined flag so next launch can prompt again.
+                Toggle("Re-enable Screen Recording prompt", isOn: $screenRecordingPromptEnabled)
+                    .onChange(of: screenRecordingPromptEnabled) { _, newValue in
+                        SettingsStorage.shared.userDeclinedScreenRecording = !newValue
+                    }
+            } header: {
+                Text("Onboarding")
+            } footer: {
+                Text("When enabled, Diduny will prompt you to grant Screen Recording permission on next launch if it is not yet granted.")
+            }
+
+            Section {
                 Button("Show Welcome Tour") {
                     showOnboarding()
                 }
@@ -40,6 +53,7 @@ struct GeneralSettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             launchAtLogin = LaunchAtLogin.isEnabled
+            screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
         }
     }
 
@@ -48,7 +62,7 @@ struct GeneralSettingsView: View {
     private func showOnboarding() {
         OnboardingManager.shared.showFromSettings()
         OnboardingWindowController.shared.showOnboarding {
-            // Onboarding completed
+            // Onboarding completed from settings
         }
     }
 
