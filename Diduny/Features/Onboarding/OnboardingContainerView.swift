@@ -288,6 +288,7 @@ private struct OnboardingMainButton: View {
                 .background(disabled ? OnboardingStyle.brandBlue.opacity(0.45)
                                      : OnboardingStyle.brandBlueDark)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(disabled)
@@ -341,6 +342,7 @@ private struct PermissionActionButton: View {
                 .background(disabled ? OnboardingStyle.brandBlue.opacity(0.45)
                                      : OnboardingStyle.brandBlueDark)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(disabled)
@@ -364,6 +366,7 @@ private struct PermissionOutlineButton: View {
                         .stroke(OnboardingStyle.brandBlueDark.opacity(0.65), lineWidth: 1.5)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -584,12 +587,34 @@ struct SetupComputerStepView: View {
     private func requestMicrophonePermission() {
         guard !isRequestingMicrophone else { return }
         isRequestingMicrophone = true
-        AVCaptureDevice.requestAccess(for: .audio) { granted in
-            DispatchQueue.main.async {
-                self.isRequestingMicrophone = false
-                self.microphoneGranted = granted
-                bringOnboardingWindowToFront()
+
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            isRequestingMicrophone = false
+            microphoneGranted = true
+
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                DispatchQueue.main.async {
+                    self.isRequestingMicrophone = false
+                    self.microphoneGranted = granted
+                    if granted {
+                        bringOnboardingWindowToFront()
+                    } else {
+                        openSystemSettings(anchor: "Privacy_Microphone")
+                    }
+                }
             }
+
+        case .denied, .restricted:
+            isRequestingMicrophone = false
+            microphoneGranted = false
+            openSystemSettings(anchor: "Privacy_Microphone")
+
+        @unknown default:
+            isRequestingMicrophone = false
+            microphoneGranted = false
+            openSystemSettings(anchor: "Privacy_Microphone")
         }
     }
 
@@ -603,11 +628,14 @@ struct SetupComputerStepView: View {
         // Do NOT pull the onboarding window back to the front here: the system
         // Accessibility prompt is non-modal and would end up hidden behind
         // onboarding (and the user re-clicking "Allow" feels like a double
-        // prompt). Leave it visible; the poll timer picks up the grant once
-        // the user enables Diduny in System Settings.
+        // prompt). If macOS no longer shows the prompt, open the exact Privacy
+        // pane so the Allow click still gives the user a visible next step.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.isRequestingAccessibility = false
             self.refreshPermissionStatus()
+            if !self.accessibilityGranted {
+                openSystemSettings(anchor: "Privacy_Accessibility")
+            }
         }
     }
 }
@@ -735,17 +763,17 @@ struct ScreenRecordingStepView: View {
         isRequesting = true
 
         Task {
-            // ensureScreenRecordingPermission falls back to System Settings if
-            // the status is already `denied` (SCShareableContent only shows the
-            // macOS prompt for `undetermined` status).
-            _ = await PermissionManager.shared.ensureScreenRecordingPermission()
+            // Request only the native macOS TCC prompt here. Do not call
+            // ensureScreenRecordingPermission(), because its fallback alert
+            // duplicates the system "Open System Settings" prompt.
+            _ = await PermissionManager.shared.requestScreenRecordingPermission()
             // The boolean returned above is unreliable inside the running
             // process due to SCShareableContent's cached state. The passive
             // refresh path is the source of truth — it polls TCC directly.
             await MainActor.run {
                 isRequesting = false
-                bringOnboardingWindowToFront()
             }
+            await refreshStatus()
         }
     }
 }
