@@ -8,6 +8,7 @@
 - **Language:** Swift / SwiftUI
 - **App Type:** Menu bar app (LSUIElement = YES, no dock icon)
 - **Transcription:** Proxy-only (all cloud API calls routed through proxy)
+- **Distribution:** notarized DMG via GitHub Releases + Sparkle auto-update (see Release process)
 
 ## Key Architecture
 
