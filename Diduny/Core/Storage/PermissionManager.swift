@@ -149,16 +149,19 @@ final class PermissionManager {
         return granted
     }
 
-    /// Ensure screen recording permission - request if not determined, or prompt to open Settings if denied
+    /// Ensure screen recording permission - request if not determined, or open Settings if denied.
+    /// Do not show an extra NSAlert here: macOS already shows an "Open System Settings"
+    /// prompt for the first Screen Recording request.
     func ensureScreenRecordingPermission() async -> Bool {
         // First, try to get permission (this will trigger the dialog if not determined)
         let granted = await requestScreenRecordingPermission()
 
         if !granted {
-            // If not granted, show alert to open System Settings
-            NSLog("[Diduny] Screen recording permission denied, prompting user to open Settings")
+            // If not granted, open System Settings directly. A custom alert here
+            // duplicates the native TCC prompt and stacks two permission popups.
+            NSLog("[Diduny] Screen recording permission not granted, opening System Settings")
             await MainActor.run {
-                showPermissionAlert(for: .screenRecording)
+                openSystemSettingsForPermission(.screenRecording)
             }
         }
 
