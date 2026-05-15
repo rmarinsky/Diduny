@@ -134,6 +134,12 @@ jobs:
             -exportPath "$EXPORT_DIR" \
             -exportOptionsPlist ExportOptions.plist
 
+          # create-dmg packages everything in $EXPORT_DIR — strip the
+          # xcodebuild export artifacts so only the .app ends up in the DMG.
+          rm -f "$EXPORT_DIR/DistributionSummary.plist" \
+                "$EXPORT_DIR/ExportOptions.plist" \
+                "$EXPORT_DIR/Packaging.log"
+
           echo "Architectures:"
           lipo -archs "$EXPORT_DIR/$APP_BUNDLE_NAME/Contents/MacOS/$APP_NAME"
 
