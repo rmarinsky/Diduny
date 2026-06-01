@@ -21,20 +21,6 @@
                ReferencedContainer = "container:Diduny.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "B58B754E03E21FECE84ABC56"
-               BuildableName = "DidunyTests.xctest"
-               BlueprintName = "DidunyTests"
-               ReferencedContainer = "container:Diduny.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -53,17 +39,6 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "B58B754E03E21FECE84ABC56"
-               BuildableName = "DidunyTests.xctest"
-               BlueprintName = "DidunyTests"
-               ReferencedContainer = "container:Diduny.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
