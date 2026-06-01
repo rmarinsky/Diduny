@@ -50,6 +50,9 @@ extension AppDelegate {
             meetingRecorderService.onRealtimeAudioData = nil
         }
 
+        // Capture in-progress recording ID before stopRecording() clears it (RLR-M1).
+        let cancelInProgressRecordingId = meetingRecorderService.currentRecordingId
+
         if SettingsStorage.shared.escapeCancelSaveAudio, meetingRecorderService.isRecording {
             do {
                 if let audioURL = try await meetingRecorderService.stopRecording() {
@@ -59,6 +62,10 @@ extension AppDelegate {
                         type: .meeting,
                         duration: duration
                     )
+                    // Library has taken ownership — remove the in-progress directory (RLR-M1).
+                    if let ipId = cancelInProgressRecordingId {
+                        try? await InProgressRecordingStore.shared.cleanup(recordingId: ipId)
+                    }
                     try? FileManager.default.removeItem(at: audioURL)
                     Log.app.info("cancelMeetingRecording: audio saved after cancel")
                 } else {
@@ -362,6 +369,8 @@ extension AppDelegate {
         var originalWavURL: URL?
         let stopTime = Date()
         let recordingId = UUID()
+        // Capture in-progress recording ID before stopRecording() clears it (RLR-M1).
+        let inProgressRecordingId = meetingRecorderService.currentRecordingId
 
         func cleanupTemporaryAudio() {
             if let wavURL = originalWavURL {
@@ -369,6 +378,12 @@ extension AppDelegate {
             }
             if let audioURL = capturedAudioURL {
                 try? FileManager.default.removeItem(at: audioURL)
+            }
+        }
+
+        func cleanupInProgressDirectory() {
+            if let ipId = inProgressRecordingId {
+                Task { try? await InProgressRecordingStore.shared.cleanup(recordingId: ipId) }
             }
         }
 
@@ -508,6 +523,8 @@ extension AppDelegate {
                 duration: duration,
                 transcriptionText: text
             )
+            // Library has taken ownership — remove the in-progress directory (RLR-M1).
+            cleanupInProgressDirectory()
 
             if SettingsStorage.shared.playSoundOnCompletion {
                 NSSound(named: .init("Funk"))?.play()
@@ -522,6 +539,7 @@ extension AppDelegate {
         } catch is CancellationError {
             Log.app.info("stopMeetingRecording: Cancelled")
             cleanupTemporaryAudio()
+            cleanupInProgressDirectory()
             RecoveryStateManager.shared.clearState()
             await MainActor.run {
                 appState.meetingRecordingState = .idle
@@ -540,6 +558,8 @@ extension AppDelegate {
                     type: .meeting,
                     duration: duration
                 )
+                // Library has taken ownership — remove the in-progress directory (RLR-M1).
+                cleanupInProgressDirectory()
                 cleanupTemporaryAudio()
                 RecoveryStateManager.shared.clearState()
             }

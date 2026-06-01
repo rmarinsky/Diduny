@@ -9,6 +9,9 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     private var isKeyPressed = false
     private var isReady = false
     private var startTime: Date?
+    private var pendingHoldStartTask: Task<Void, Never>?
+    private var hasStartedAfterHold = false
+    private var sanitizedHoldStartDelaySeconds: TimeInterval = 0.2
 
     // Multi-tap detection for toggle mode
     private var lastToggleTapTime: TimeInterval?
@@ -18,6 +21,10 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
     var selectedKey: PushToTalkKey = .none
     var toggleTapCount: Int = 3
+    var holdStartDelaySeconds: TimeInterval {
+        get { sanitizedHoldStartDelaySeconds }
+        set { sanitizedHoldStartDelaySeconds = Self.sanitizedHoldStartDelaySeconds(newValue) }
+    }
     var onKeyDown: (() -> Void)?
     var onKeyUp: (() -> Void)?
 
@@ -74,6 +81,8 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         isKeyPressed = false
         isReady = false
         startTime = nil
+        cancelPendingHoldStart()
+        hasStartedAfterHold = false
         isHandsFreeMode = false
         lastToggleTapTime = nil
         consecutiveToggleTapCount = 0
@@ -82,6 +91,8 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
     /// Reset hands-free mode (call when recording is cancelled externally)
     func resetHandsFreeMode() {
+        cancelPendingHoldStart()
+        hasStartedAfterHold = false
         isHandsFreeMode = false
         lastToggleTapTime = nil
         consecutiveToggleTapCount = 0
@@ -106,7 +117,7 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         }
 
         // Handle modifier keys with configurable multi-tap detection
-        handleModifierKeyEvent(isPressed: isPressed, eventTime: eventTime)
+        processModifierKeyEvent(isPressed: isPressed, eventTime: eventTime)
     }
 
     private func handleCapsLockEvent(keyCode: UInt16, eventTime: TimeInterval) {
@@ -134,12 +145,13 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         }
     }
 
-    private func handleModifierKeyEvent(isPressed: Bool, eventTime: TimeInterval) {
+    func processModifierKeyEvent(isPressed: Bool, eventTime: TimeInterval) {
         guard isPressed != isKeyPressed else { return }
 
         if isPressed {
             // Key down
             isKeyPressed = true
+            hasStartedAfterHold = false
 
             // Check for configured tap count (toggle mode enabled)
             if isToggleModeEnabled {
@@ -147,23 +159,57 @@ final class PushToTalkService: PushToTalkServiceProtocol {
                 return
             }
 
-            // Hold-to-record mode: start recording on key down
-            Log.app.info("\(self.selectedKey.displayName) pressed - starting recording")
-            onKeyDown?()
+            // Hold-to-record mode: start recording only after the configured hold delay.
+            scheduleHoldStart(keyLabel: selectedKey.displayName)
 
         } else {
             // Key up
             isKeyPressed = false
+            cancelPendingHoldStart()
 
             if isToggleModeEnabled {
                 // In toggle mode: don't stop on release
                 return
             }
 
+            guard hasStartedAfterHold else {
+                Log.app.info("\(self.selectedKey.displayName) released before hold threshold - ignoring")
+                return
+            }
+
             // Hold-to-record mode: stop recording on release
+            hasStartedAfterHold = false
             Log.app.info("\(self.selectedKey.displayName) released - stopping recording")
             onKeyUp?()
         }
+    }
+
+    private func scheduleHoldStart(keyLabel: String) {
+        cancelPendingHoldStart()
+
+        let delay = holdStartDelaySeconds
+        Log.app.info("\(keyLabel) pressed - waiting \(String(format: "%.1f", delay))s before starting recording")
+
+        pendingHoldStartTask = Task { @MainActor [weak self] in
+            let milliseconds = Int((delay * 1000).rounded())
+            try? await Task.sleep(for: .milliseconds(milliseconds))
+
+            guard !Task.isCancelled,
+                  let self,
+                  self.isKeyPressed,
+                  !self.hasStartedAfterHold
+            else { return }
+
+            self.hasStartedAfterHold = true
+            self.pendingHoldStartTask = nil
+            Log.app.info("\(keyLabel) held for \(String(format: "%.1f", delay))s - starting recording")
+            self.onKeyDown?()
+        }
+    }
+
+    private func cancelPendingHoldStart() {
+        pendingHoldStartTask?.cancel()
+        pendingHoldStartTask = nil
     }
 
     private func handleToggleTap(eventTime: TimeInterval, keyLabel: String) {
@@ -194,6 +240,12 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
     private var sanitizedToggleTapCount: Int {
         min(max(toggleTapCount, 2), 3)
+    }
+
+    private static func sanitizedHoldStartDelaySeconds(_ value: TimeInterval) -> TimeInterval {
+        guard value.isFinite else { return 0.2 }
+        let clamped = min(max(value, 0.2), 1.0)
+        return (clamped * 10).rounded() / 10
     }
 
     private func isKeyCurrentlyPressed(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Bool {

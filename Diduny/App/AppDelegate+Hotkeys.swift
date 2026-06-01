@@ -44,6 +44,7 @@ extension AppDelegate {
         let key = SettingsStorage.shared.pushToTalkKey
         pushToTalkService.selectedKey = key
         pushToTalkService.toggleTapCount = SettingsStorage.shared.pushToTalkToggleTapCount
+        pushToTalkService.holdStartDelaySeconds = SettingsStorage.shared.pushToTalkHoldStartDelaySeconds
 
         pushToTalkService.onKeyDown = { [weak self] in
             guard let self else { return }
@@ -78,6 +79,7 @@ extension AppDelegate {
 
         pushToTalkService.stop()
         pushToTalkService.selectedKey = key
+        pushToTalkService.holdStartDelaySeconds = SettingsStorage.shared.pushToTalkHoldStartDelaySeconds
 
         if key != .none {
             pushToTalkService.start()
@@ -91,12 +93,21 @@ extension AppDelegate {
         Log.app.info("Dictation modifier tap count changed to: \(tapCount)x")
     }
 
+    @objc func pushToTalkHoldStartDelayChanged(_ notification: Notification) {
+        guard let delay = notification.object as? TimeInterval else { return }
+        pushToTalkService.holdStartDelaySeconds = delay
+        pushToTalkService.resetHandsFreeMode()
+        Log.app.info("Dictation modifier hold delay changed to: \(String(format: "%.1f", delay))s")
+    }
+
     // MARK: - Translation Push to Talk
 
     func setupTranslationPushToTalk() {
         let key = SettingsStorage.shared.translationPushToTalkKey
         translationPushToTalkService.selectedKey = key
         translationPushToTalkService.toggleTapCount = SettingsStorage.shared.translationPushToTalkToggleTapCount
+        translationPushToTalkService.holdStartDelaySeconds =
+            SettingsStorage.shared.translationPushToTalkHoldStartDelaySeconds
 
         translationPushToTalkService.onKeyDown = { [weak self] in
             guard let self else { return }
@@ -131,6 +142,8 @@ extension AppDelegate {
 
         translationPushToTalkService.stop()
         translationPushToTalkService.selectedKey = key
+        translationPushToTalkService.holdStartDelaySeconds =
+            SettingsStorage.shared.translationPushToTalkHoldStartDelaySeconds
 
         if key != .none {
             translationPushToTalkService.start()
@@ -142,6 +155,13 @@ extension AppDelegate {
         translationPushToTalkService.toggleTapCount = tapCount
         translationPushToTalkService.resetHandsFreeMode()
         Log.app.info("Translation modifier tap count changed to: \(tapCount)x")
+    }
+
+    @objc func translationPushToTalkHoldStartDelayChanged(_ notification: Notification) {
+        guard let delay = notification.object as? TimeInterval else { return }
+        translationPushToTalkService.holdStartDelaySeconds = delay
+        translationPushToTalkService.resetHandsFreeMode()
+        Log.app.info("Translation modifier hold delay changed to: \(String(format: "%.1f", delay))s")
     }
 
 }
