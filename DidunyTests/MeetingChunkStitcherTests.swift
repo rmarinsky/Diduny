@@ -1,6 +1,6 @@
 import AVFoundation
-import XCTest
 @testable import Diduny
+import XCTest
 
 /// Tests for `MeetingChunkStitcher` (RLR-M4).
 ///
@@ -8,7 +8,6 @@ import XCTest
 /// then verify duration and frame counts in the output. Each test writes into an isolated
 /// temp directory so the user's filesystem stays clean.
 final class MeetingChunkStitcherTests: XCTestCase {
-
     private var tmpDir: URL!
 
     override func setUp() {
@@ -90,15 +89,31 @@ final class MeetingChunkStitcherTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: chunk.path))
     }
 
+    func test_stitch_singleEmptyChunk_throwsAllUnreadable() throws {
+        let bad = try writeEmptyFile(name: "chunk_001.wav")
+        let target = tmpDir.appendingPathComponent("out.wav")
+
+        XCTAssertThrowsError(try MeetingChunkStitcher.stitch(chunkURLs: [bad], outputURL: target)) { error in
+            guard case MeetingChunkStitcher.StitchError.allChunksUnreadable = error else {
+                XCTFail("Expected .allChunksUnreadable, got \(error)")
+                return
+            }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: target.path))
+    }
+
     // MARK: - 3. multi-chunk stitch sums duration
 
     func test_stitch_threeChunks_durationIsSum() throws {
-        let c1 = try writeChunk(name: "chunk_001.wav", durationSeconds: 1.0)
-        let c2 = try writeChunk(name: "chunk_002.wav", durationSeconds: 0.5)
-        let c3 = try writeChunk(name: "chunk_003.wav", durationSeconds: 0.7)
+        let firstChunk = try writeChunk(name: "chunk_001.wav", durationSeconds: 1.0)
+        let secondChunk = try writeChunk(name: "chunk_002.wav", durationSeconds: 0.5)
+        let thirdChunk = try writeChunk(name: "chunk_003.wav", durationSeconds: 0.7)
         let target = tmpDir.appendingPathComponent("out.wav")
 
-        let result = try MeetingChunkStitcher.stitch(chunkURLs: [c1, c2, c3], outputURL: target)
+        let result = try MeetingChunkStitcher.stitch(
+            chunkURLs: [firstChunk, secondChunk, thirdChunk],
+            outputURL: target
+        )
 
         XCTAssertEqual(result.appendedChunkCount, 3)
         XCTAssertTrue(result.skippedChunks.isEmpty)
@@ -113,12 +128,12 @@ final class MeetingChunkStitcherTests: XCTestCase {
     // MARK: - 4. skip empty chunk in the middle
 
     func test_stitch_skipsEmptyChunk() throws {
-        let c1 = try writeChunk(name: "chunk_001.wav", durationSeconds: 0.5)
+        let firstChunk = try writeChunk(name: "chunk_001.wav", durationSeconds: 0.5)
         let cBad = try writeEmptyFile(name: "chunk_002.wav")
-        let c3 = try writeChunk(name: "chunk_003.wav", durationSeconds: 0.5)
+        let thirdChunk = try writeChunk(name: "chunk_003.wav", durationSeconds: 0.5)
         let target = tmpDir.appendingPathComponent("out.wav")
 
-        let result = try MeetingChunkStitcher.stitch(chunkURLs: [c1, cBad, c3], outputURL: target)
+        let result = try MeetingChunkStitcher.stitch(chunkURLs: [firstChunk, cBad, thirdChunk], outputURL: target)
 
         XCTAssertEqual(result.appendedChunkCount, 2)
         XCTAssertEqual(result.skippedChunks, [2])
@@ -144,10 +159,10 @@ final class MeetingChunkStitcherTests: XCTestCase {
 
     func test_stitch_leadingEmptyChunk_skippedFirstReadableDefinesFormat() throws {
         let bad = try writeEmptyFile(name: "chunk_001.wav")
-        let c2 = try writeChunk(name: "chunk_002.wav", durationSeconds: 0.5)
+        let secondChunk = try writeChunk(name: "chunk_002.wav", durationSeconds: 0.5)
         let target = tmpDir.appendingPathComponent("out.wav")
 
-        let result = try MeetingChunkStitcher.stitch(chunkURLs: [bad, c2], outputURL: target)
+        let result = try MeetingChunkStitcher.stitch(chunkURLs: [bad, secondChunk], outputURL: target)
 
         XCTAssertEqual(result.appendedChunkCount, 1)
         XCTAssertEqual(result.skippedChunks, [1])

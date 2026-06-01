@@ -1,5 +1,5 @@
-import XCTest
 @testable import Diduny
+import XCTest
 
 /// Tests for the RLR-M0 data-model additions:
 ///   - `RecoverySource` enum + `Recording.recoverySource` property
@@ -11,23 +11,22 @@ import XCTest
 ///   2. Round-trip fidelity for the new fields.
 ///   3. Exhaustive switch coverage for `ProcessingStatus` (compiler-enforced).
 final class RecordingModelMigrationTests: XCTestCase {
-
     // MARK: - Helpers
 
     private let iso8601: JSONDecoder = {
-        let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
-        return d
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }()
 
     private let iso8601Encoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.dateEncodingStrategy = .iso8601
-        return e
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
     }()
 
-    // A minimal JSON object that represents a Recording saved before RLR-M0.
-    // It intentionally omits `recoverySource` and uses only pre-M0 status values.
+    /// A minimal JSON object that represents a Recording saved before RLR-M0.
+    /// It intentionally omits `recoverySource` and uses only pre-M0 status values.
     private let legacyJSON = """
     [
       {
@@ -61,22 +60,22 @@ final class RecordingModelMigrationTests: XCTestCase {
 
     func test_legacyJSON_originalFieldsIntact() throws {
         let data = try XCTUnwrap(legacyJSON.data(using: .utf8))
-        let r = try iso8601.decode([Recording].self, from: data)[0]
+        let recording = try iso8601.decode([Recording].self, from: data)[0]
 
-        XCTAssertEqual(r.id.uuidString, "12345678-1234-1234-1234-123456789ABC")
-        XCTAssertEqual(r.type, .meeting)
-        XCTAssertEqual(r.audioFileName, "12345678-1234-1234-1234-123456789ABC.wav")
-        XCTAssertEqual(r.durationSeconds, 3600.0, accuracy: 0.001)
-        XCTAssertEqual(r.fileSizeBytes, 675_000_000)
-        XCTAssertEqual(r.status, .transcribed)
-        XCTAssertEqual(r.transcriptionText, "Hello world.")
+        XCTAssertEqual(recording.id.uuidString, "12345678-1234-1234-1234-123456789ABC")
+        XCTAssertEqual(recording.type, .meeting)
+        XCTAssertEqual(recording.audioFileName, "12345678-1234-1234-1234-123456789ABC.wav")
+        XCTAssertEqual(recording.durationSeconds, 3600.0, accuracy: 0.001)
+        XCTAssertEqual(recording.fileSizeBytes, 675_000_000)
+        XCTAssertEqual(recording.status, .transcribed)
+        XCTAssertEqual(recording.transcriptionText, "Hello world.")
     }
 
     // MARK: - 2. Round-trip
 
     func test_roundTrip_orphanedSession_partiallyRecovered() throws {
-        let original = Recording(
-            id: UUID(uuidString: "AABBCCDD-AABB-CCDD-AABB-CCDDAABBCCDD")!,
+        let original = try Recording(
+            id: XCTUnwrap(UUID(uuidString: "AABBCCDD-AABB-CCDD-AABB-CCDDAABBCCDD")),
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
             type: .meeting,
             audioFileName: "AABBCCDD-AABB-CCDD-AABB-CCDDAABBCCDD.flac",
@@ -137,7 +136,7 @@ final class RecordingModelMigrationTests: XCTestCase {
             .transcribed,
             .translated,
             .failed,
-            .partiallyRecovered,
+            .partiallyRecovered
         ]
 
         for status in allCases {

@@ -142,7 +142,8 @@ final class SystemAudioCaptureService: NSObject {
         isRecoveringSystem = false
         isRecoveringMicrophone = false
 
-        Log.audio.info("Starting system audio capture (captureMicrophone=\(self.captureMicrophone))...")
+        let captureMicrophoneAtStart = captureMicrophone
+        Log.audio.info("Starting system audio capture (captureMicrophone=\(captureMicrophoneAtStart))...")
 
         try setupAudioFile(at: outputURL)
 
@@ -188,7 +189,8 @@ final class SystemAudioCaptureService: NSObject {
             }
         }
 
-        Log.audio.info("Capture started (16kHz mono, captureMicrophone=\(self.captureMicrophone))")
+        let captureMicrophoneAfterStart = captureMicrophone
+        Log.audio.info("Capture started (16kHz mono, captureMicrophone=\(captureMicrophoneAfterStart))")
         NSLog("[AudioCapture] Capture started — waiting for delegate callbacks...")
         onCaptureStarted?()
     }
@@ -282,8 +284,10 @@ final class SystemAudioCaptureService: NSObject {
             throw SystemAudioError.microphoneFormatInvalid
         }
 
+        let hardwareFormatDescription = formatDescription(hardwareInputFormat)
+        let tapFormatDescription = formatDescription(tapFormat)
         Log.audio.info(
-            "Meeting mic format resolved: input=\(self.formatDescription(hardwareInputFormat)), output=\(self.formatDescription(tapFormat)), explicitBinding=\(didBindExplicitDevice)"
+            "Meeting mic format resolved: input=\(hardwareFormatDescription), output=\(tapFormatDescription), explicitBinding=\(didBindExplicitDevice)"
         )
         NSLog(
             "[AudioCapture] Mic input format: sampleRate=%.0f, channels=%d",
@@ -316,8 +320,10 @@ final class SystemAudioCaptureService: NSObject {
                 }
             }
         } catch {
+            let hardwareFormatDescription = formatDescription(hardwareInputFormat)
+            let tapFormatDescription = formatDescription(tapFormat)
             Log.audio.error(
-                "Meeting mic tap install failed. tapFormat=\(self.formatDescription(tapFormat)), nodeOutputFormat=\(self.formatDescription(hardwareInputFormat)), error=\(error.localizedDescription)"
+                "Meeting mic tap install failed. tapFormat=\(tapFormatDescription), nodeOutputFormat=\(hardwareFormatDescription), error=\(error.localizedDescription)"
             )
             throw SystemAudioError.microphoneStartFailed(
                 "Could not start meeting microphone with the current route. Try reconnecting AirPods or choosing System Default."
@@ -365,8 +371,10 @@ final class SystemAudioCaptureService: NSObject {
     private func handleMicrophoneConfigurationChange() {
         let currentInputFormat = micEngine?.inputNode.inputFormat(forBus: 0)
         let currentOutputFormat = micEngine?.inputNode.outputFormat(forBus: 0)
+        let currentInputDescription = formatDescription(currentInputFormat)
+        let currentOutputDescription = formatDescription(currentOutputFormat)
         Log.audio.info(
-            "Meeting mic configuration changed - input=\(self.formatDescription(currentInputFormat)), output=\(self.formatDescription(currentOutputFormat))"
+            "Meeting mic configuration changed - input=\(currentInputDescription), output=\(currentOutputDescription)"
         )
 
         guard captureMicrophone,
@@ -385,6 +393,7 @@ final class SystemAudioCaptureService: NSObject {
 
     /// Convert mic buffer to 16kHz mono Float32 and dispatch to mixer queue.
     private func processMicBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard isCapturing, !isStoppingCapture else { return }
         guard let converter = micConverter else { return }
 
         let inputFormat = buffer.format
@@ -440,12 +449,13 @@ final class SystemAudioCaptureService: NSObject {
     func synchronousFlushForSleep() -> URL? {
         guard isCapturing else { return nil }
         let url = outputURL
+        isStoppingCapture = true
+        isCapturing = false
         // Cancel recovery tasks to prevent them from re-opening the stream.
         cancelRecoveryTasks()
+        stopMicrophoneCapture()
         // Flush remaining buffers and close AVAudioFile synchronously.
         synchronizedTeardown(flushPendingAudio: true)
-        // Mark as not capturing so further SCStream callbacks are dropped.
-        isCapturing = false
         Log.audio.info("[Sleep] synchronousFlushForSleep: file closed at \(url?.path ?? "nil")")
         return url
     }
@@ -474,13 +484,14 @@ final class SystemAudioCaptureService: NSObject {
         if let stream {
             try await stream.stopCapture()
         }
-        self.stream = nil
+        stream = nil
         isCapturing = false
 
         synchronizedTeardown(flushPendingAudio: true)
 
-        Log.audio.info("Capture stopped, file saved to: \(self.outputURL?.path ?? "nil")")
-        return outputURL
+        let capturedOutputURL = outputURL
+        Log.audio.info("Capture stopped, file saved to: \(capturedOutputURL?.path ?? "nil")")
+        return capturedOutputURL
     }
 
     private func cleanupFailedStart(removeOutputFile: Bool) async throws {
@@ -546,35 +557,35 @@ final class SystemAudioCaptureService: NSObject {
                 self.systemRecoveryTask = nil
             }
 
-            for attempt in 1 ... self.maxSystemRecoveryAttempts {
+            for attempt in 1 ... maxSystemRecoveryAttempts {
                 if attempt == 1 {
-                    try? await Task.sleep(for: .seconds(self.initialRecoveryDelay))
+                    try? await Task.sleep(for: .seconds(initialRecoveryDelay))
                 } else {
-                    try? await Task.sleep(for: .seconds(self.recoveryDelay(for: attempt)))
+                    try? await Task.sleep(for: .seconds(recoveryDelay(for: attempt)))
                 }
 
-                guard !Task.isCancelled, self.isCapturing, !self.isStoppingCapture else { return }
+                guard !Task.isCancelled, isCapturing, !isStoppingCapture else { return }
 
                 do {
-                    try await self.createAndStartSystemStream()
+                    try await createAndStartSystemStream()
                     Log.audio.info("System audio recovered on attempt \(attempt)")
 
-                    if self.captureMicrophone {
+                    if captureMicrophone {
                         do {
-                            try self.startMicrophoneCapture()
-                            self.microphoneCaptureStarted = true
+                            try startMicrophoneCapture()
+                            microphoneCaptureStarted = true
                         } catch {
                             Log.audio.warning(
                                 "Microphone restart after system recovery failed: \(error.localizedDescription)"
                             )
-                            self.scheduleMicrophoneRecovery(
+                            scheduleMicrophoneRecovery(
                                 reason: "system audio recovered",
                                 allowDuringSystemRecovery: true
                             )
                         }
                     }
 
-                    self.emitStatusMessage("System audio reconnected")
+                    emitStatusMessage("System audio reconnected")
                     return
                 } catch {
                     Log.audio.warning(
@@ -586,7 +597,7 @@ final class SystemAudioCaptureService: NSObject {
             let recoveryError = SystemAudioError.streamRecoveryFailed(
                 "System audio capture was interrupted and could not reconnect."
             )
-            self.failCapture(recoveryError)
+            failCapture(recoveryError)
         }
     }
 
@@ -597,7 +608,7 @@ final class SystemAudioCaptureService: NSObject {
         guard captureMicrophone,
               isCapturing,
               !isStoppingCapture,
-              (!isRecoveringSystem || allowDuringSystemRecovery),
+              !isRecoveringSystem || allowDuringSystemRecovery,
               !isRecoveringMicrophone
         else { return }
 
@@ -615,32 +626,32 @@ final class SystemAudioCaptureService: NSObject {
 
             var triedDefaultFallback = false
 
-            for attempt in 1 ... self.maxMicrophoneRecoveryAttempts {
-                try? await Task.sleep(for: .seconds(self.recoveryDelay(for: attempt)))
-                guard !Task.isCancelled, self.isCapturing, !self.isStoppingCapture else { return }
+            for attempt in 1 ... maxMicrophoneRecoveryAttempts {
+                try? await Task.sleep(for: .seconds(recoveryDelay(for: attempt)))
+                guard !Task.isCancelled, isCapturing, !isStoppingCapture else { return }
 
                 do {
-                    try self.startMicrophoneCapture()
-                    self.microphoneCaptureStarted = true
+                    try startMicrophoneCapture()
+                    microphoneCaptureStarted = true
                     Log.audio.info("Microphone recovered after \(reason) on attempt \(attempt)")
-                    self.emitStatusMessage("Microphone reconnected")
+                    emitStatusMessage("Microphone reconnected")
                     return
                 } catch {
                     Log.audio.warning(
                         "Microphone recovery attempt \(attempt) after \(reason) failed: \(error.localizedDescription)"
                     )
 
-                    if !triedDefaultFallback, self.microphoneDevice != nil {
-                        let failedDeviceName = self.microphoneDevice?.name ?? "selected microphone"
-                        self.microphoneDevice = nil
+                    if !triedDefaultFallback, microphoneDevice != nil {
+                        let failedDeviceName = microphoneDevice?.name ?? "selected microphone"
+                        microphoneDevice = nil
                         triedDefaultFallback = true
-                        self.emitStatusMessage("\(failedDeviceName) unavailable. Using System Default…")
+                        emitStatusMessage("\(failedDeviceName) unavailable. Using System Default…")
                     }
                 }
             }
 
-            self.captureMicrophone = false
-            self.emitStatusMessage("Microphone unavailable. Continuing with system audio")
+            captureMicrophone = false
+            emitStatusMessage("Microphone unavailable. Continuing with system audio")
         }
     }
 
@@ -732,7 +743,7 @@ final class SystemAudioCaptureService: NSObject {
 
 extension SystemAudioCaptureService: SCStreamDelegate {
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        guard let activeStream = self.stream, activeStream === stream else { return }
+        guard let activeStream = self.stream, activeStream === stream, isCapturing, !isStoppingCapture else { return }
         Log.audio.error("Stream stopped with error: \(error)")
         scheduleSystemRecovery(after: error)
     }
@@ -742,7 +753,7 @@ extension SystemAudioCaptureService: SCStreamDelegate {
 
 extension SystemAudioCaptureService: SCStreamOutput {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard let activeStream = self.stream, activeStream === stream, isCapturing else { return }
+        guard let activeStream = self.stream, activeStream === stream, isCapturing, !isStoppingCapture else { return }
         delegateCallCount += 1
         if delegateCallCount <= 5 {
             NSLog("[AudioCapture] delegate called #%d, type=%d (.screen=0, .audio=1)", delegateCallCount, type.rawValue)
@@ -910,8 +921,9 @@ extension SystemAudioCaptureService: SCStreamOutput {
             currentChunkFrameCount += samples.count
 
             let now = Date()
-            if now.timeIntervalSince(lastFlushTime) >= self.flushInterval {
-                Log.audio.info("Audio buffer auto-flush (every \(self.flushInterval)s)")
+            let currentFlushInterval = flushInterval
+            if now.timeIntervalSince(lastFlushTime) >= currentFlushInterval {
+                Log.audio.info("Audio buffer auto-flush (every \(currentFlushInterval)s)")
                 lastFlushTime = now
             }
         } catch {
@@ -968,7 +980,10 @@ extension SystemAudioCaptureService: SCStreamOutput {
 
             onChunkRotated?(closedIndex, closedURL, closedAt, byteCount, durationSeconds)
         } catch {
-            Log.audio.error("[ChunkRotate] FAILED to open chunk \(newIndex) at \(newURL.path): \(error.localizedDescription)")
+            Log.audio
+                .error(
+                    "[ChunkRotate] FAILED to open chunk \(newIndex) at \(newURL.path): \(error.localizedDescription)"
+                )
             // Recording is now broken — subsequent writeSamples will drop because audioFile is nil.
             // Surface to caller so it can transition state and persist whatever chunks already closed.
             onError?(SystemAudioError.chunkRotationFailed(error.localizedDescription))
@@ -1009,10 +1024,11 @@ extension SystemAudioCaptureService: SCStreamOutput {
         }
         guard frameCount > 0 else { return nil }
 
-        if self.sampleCount <= 3 {
+        let currentSampleCount = sampleCount
+        if currentSampleCount <= 3 {
             Log.audio
                 .info(
-                    "Audio sample \(self.sampleCount): frames=\(frameCount), sampleRate=\(asbd.pointee.mSampleRate), ch=\(channelCount), bits=\(bitsPerChannel), float=\(isFloat)"
+                    "Audio sample \(currentSampleCount): frames=\(frameCount), sampleRate=\(asbd.pointee.mSampleRate), ch=\(channelCount), bits=\(bitsPerChannel), float=\(isFloat)"
                 )
         }
 
@@ -1061,8 +1077,8 @@ extension SystemAudioCaptureService: SCStreamOutput {
     private func rms(_ samples: [Float]) -> Float {
         guard !samples.isEmpty else { return 0 }
         var sum: Float = 0
-        for s in samples {
-            sum += s * s
+        for sample in samples {
+            sum += sample * sample
         }
         return sqrt(sum / Float(samples.count))
     }

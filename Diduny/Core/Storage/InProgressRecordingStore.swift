@@ -10,21 +10,31 @@ import os
 /// **M1 scope:** single chunk per recording (`chunk_001.wav`).
 /// Chunk rotation is M3; orphan detection is M5a; sleep handling is M2.
 actor InProgressRecordingStore {
-    static let shared = InProgressRecordingStore()
+    private static let sharedResult = Result { try InProgressRecordingStore() }
+
+    static func sharedStore() throws -> InProgressRecordingStore {
+        try sharedResult.get()
+    }
 
     private let baseDirectory: URL
     private let fileManager: FileManager
 
     // MARK: - Init
 
-    init(baseDirectory: URL? = nil, fileManager: FileManager = .default) {
+    init(baseDirectory: URL? = nil, fileManager: FileManager = .default) throws {
         self.fileManager = fileManager
-        let bundleID = Bundle.main.bundleIdentifier ?? "Diduny"
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        self.baseDirectory = baseDirectory ?? appSupport
-            .appendingPathComponent(bundleID)
-            .appendingPathComponent("InProgressRecordings")
-        try? fileManager.createDirectory(at: self.baseDirectory, withIntermediateDirectories: true)
+        if let baseDirectory {
+            self.baseDirectory = baseDirectory
+        } else {
+            let bundleID = Bundle.main.bundleIdentifier ?? "Diduny"
+            guard let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+                throw InProgressRecordingStoreError.applicationSupportDirectoryUnavailable
+            }
+            self.baseDirectory = appSupport
+                .appendingPathComponent(bundleID)
+                .appendingPathComponent("InProgressRecordings")
+        }
+        try fileManager.createDirectory(at: self.baseDirectory, withIntermediateDirectories: true)
     }
 
     // MARK: - Directory
@@ -108,6 +118,17 @@ actor InProgressRecordingStore {
         let dir = baseDirectory.appendingPathComponent(recordingId.uuidString)
         if fileManager.fileExists(atPath: dir.path) {
             try fileManager.removeItem(at: dir)
+        }
+    }
+}
+
+enum InProgressRecordingStoreError: LocalizedError {
+    case applicationSupportDirectoryUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .applicationSupportDirectoryUnavailable:
+            "Application Support directory is unavailable."
         }
     }
 }

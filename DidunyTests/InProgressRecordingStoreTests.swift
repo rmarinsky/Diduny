@@ -1,19 +1,18 @@
-import XCTest
 @testable import Diduny
+import XCTest
 
 /// Tests for `InProgressRecordingStore` (RLR-M1).
 ///
 /// Each test uses an isolated temp directory as `baseDirectory:` so the user's
 /// Application Support is never polluted.
 final class InProgressRecordingStoreTests: XCTestCase {
-
     // MARK: - Helpers
 
     /// Creates an isolated store backed by a fresh temp directory.
-    private func makeStore() -> (InProgressRecordingStore, URL) {
+    private func makeStore() throws -> (InProgressRecordingStore, URL) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
-        let store = InProgressRecordingStore(baseDirectory: dir)
+        let store = try InProgressRecordingStore(baseDirectory: dir)
         return (store, dir)
     }
 
@@ -46,7 +45,7 @@ final class InProgressRecordingStoreTests: XCTestCase {
     // MARK: - 1. beginRecording_createsDirectory
 
     func test_chunkURL_createsDirectory() async throws {
-        let (store, _) = makeStore()
+        let (store, _) = try makeStore()
         let id = UUID()
 
         let chunkURL = try await store.chunkURL(for: id)
@@ -62,7 +61,7 @@ final class InProgressRecordingStoreTests: XCTestCase {
     // MARK: - 2. writeManifest_roundTrip
 
     func test_writeManifest_roundTrip() async throws {
-        let (store, _) = makeStore()
+        let (store, _) = try makeStore()
         let id = UUID()
         var manifest = sampleManifest(id: id)
         manifest.chunks[0].byteCount = 28_800_000
@@ -93,7 +92,7 @@ final class InProgressRecordingStoreTests: XCTestCase {
     // MARK: - 3. writeManifest_atomic_temp_cleaned
 
     func test_writeManifest_noTempFileRemains() async throws {
-        let (store, _) = makeStore()
+        let (store, _) = try makeStore()
         let id = UUID()
         let manifest = sampleManifest(id: id)
 
@@ -108,7 +107,7 @@ final class InProgressRecordingStoreTests: XCTestCase {
     // MARK: - 4. readManifest_missing_returnsNil
 
     func test_readManifest_missingID_returnsNil() async throws {
-        let (store, _) = makeStore()
+        let (store, _) = try makeStore()
         let unknownID = UUID()
 
         // Should not throw, should return nil
@@ -119,7 +118,7 @@ final class InProgressRecordingStoreTests: XCTestCase {
     // MARK: - 5. cleanup_removesDirectory
 
     func test_cleanup_removesDirectory() async throws {
-        let (store, _) = makeStore()
+        let (store, _) = try makeStore()
         let id = UUID()
 
         // Write something so the directory exists
@@ -138,7 +137,7 @@ final class InProgressRecordingStoreTests: XCTestCase {
     // MARK: - 6. allInProgressRecordingIDs_listsExistingDirs
 
     func test_allInProgressRecordingIDs_filtersNonUUIDs() async throws {
-        let (store, baseDir) = makeStore()
+        let (store, baseDir) = try makeStore()
 
         let id1 = UUID()
         let id2 = UUID()
@@ -156,5 +155,15 @@ final class InProgressRecordingStoreTests: XCTestCase {
         XCTAssertEqual(ids.count, 2, "Should return exactly 2 UUID entries, ignoring non-UUID dirs")
         XCTAssertTrue(ids.contains(id1), "Should contain id1")
         XCTAssertTrue(ids.contains(id2), "Should contain id2")
+    }
+
+    func test_init_throwsWhenBaseDirectoryCannotBeCreated() throws {
+        let blockedFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("InProgressRecordingStoreTests-\(UUID().uuidString)")
+        try Data("not a directory".utf8).write(to: blockedFile)
+        defer { try? FileManager.default.removeItem(at: blockedFile) }
+
+        let impossibleDirectory = blockedFile.appendingPathComponent("child")
+        XCTAssertThrowsError(try InProgressRecordingStore(baseDirectory: impossibleDirectory))
     }
 }

@@ -25,6 +25,7 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         get { sanitizedHoldStartDelaySeconds }
         set { sanitizedHoldStartDelaySeconds = Self.sanitizedHoldStartDelaySeconds(newValue) }
     }
+
     var onKeyDown: (() -> Void)?
     var onKeyUp: (() -> Void)?
 
@@ -66,7 +67,8 @@ final class PushToTalkService: PushToTalkServiceProtocol {
             Log.app.info("Push-to-talk ready for \(self?.selectedKey.displayName ?? "unknown")")
         }
 
-        Log.app.info("Started monitoring for \(self.selectedKey.displayName)")
+        let selectedKeyLabel = selectedKey.displayName
+        Log.app.info("Started monitoring for \(selectedKeyLabel)")
     }
 
     func stop() {
@@ -91,8 +93,12 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
     /// Reset hands-free mode (call when recording is cancelled externally)
     func resetHandsFreeMode() {
-        cancelPendingHoldStart()
-        hasStartedAfterHold = false
+        if !hasStartedAfterHold {
+            cancelPendingHoldStart()
+        }
+        if !isKeyPressed {
+            hasStartedAfterHold = false
+        }
         isHandsFreeMode = false
         lastToggleTapTime = nil
         consecutiveToggleTapCount = 0
@@ -173,13 +179,15 @@ final class PushToTalkService: PushToTalkServiceProtocol {
             }
 
             guard hasStartedAfterHold else {
-                Log.app.info("\(self.selectedKey.displayName) released before hold threshold - ignoring")
+                let selectedKeyLabel = selectedKey.displayName
+                Log.app.info("\(selectedKeyLabel) released before hold threshold - ignoring")
                 return
             }
 
             // Hold-to-record mode: stop recording on release
             hasStartedAfterHold = false
-            Log.app.info("\(self.selectedKey.displayName) released - stopping recording")
+            let selectedKeyLabel = selectedKey.displayName
+            Log.app.info("\(selectedKeyLabel) released - stopping recording")
             onKeyUp?()
         }
     }
@@ -196,14 +204,14 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
             guard !Task.isCancelled,
                   let self,
-                  self.isKeyPressed,
+                  isKeyPressed,
                   !self.hasStartedAfterHold
             else { return }
 
-            self.hasStartedAfterHold = true
-            self.pendingHoldStartTask = nil
+            hasStartedAfterHold = true
+            pendingHoldStartTask = nil
             Log.app.info("\(keyLabel) held for \(String(format: "%.1f", delay))s - starting recording")
-            self.onKeyDown?()
+            onKeyDown?()
         }
     }
 
@@ -251,25 +259,25 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     private func isKeyCurrentlyPressed(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Bool {
         switch selectedKey {
         case .none:
-            return false
+            false
         case .capsLock:
-            return keyCode == 57 && flags.contains(.capsLock)
+            keyCode == 57 && flags.contains(.capsLock)
         case .leftShift:
-            return keyCode == 56 && flags.contains(.shift)
+            keyCode == 56 && flags.contains(.shift)
         case .leftOption:
-            return keyCode == 58 && flags.contains(.option)
+            keyCode == 58 && flags.contains(.option)
         case .leftCommand:
-            return keyCode == 55 && flags.contains(.command)
+            keyCode == 55 && flags.contains(.command)
         case .leftControl:
-            return keyCode == 59 && flags.contains(.control)
+            keyCode == 59 && flags.contains(.control)
         case .rightShift:
-            return keyCode == 60 && flags.contains(.shift)
+            keyCode == 60 && flags.contains(.shift)
         case .rightOption:
-            return keyCode == 61 && flags.contains(.option)
+            keyCode == 61 && flags.contains(.option)
         case .rightCommand:
-            return keyCode == 54 && flags.contains(.command)
+            keyCode == 54 && flags.contains(.command)
         case .rightControl:
-            return keyCode == 62 && flags.contains(.control)
+            keyCode == 62 && flags.contains(.control)
         }
     }
 

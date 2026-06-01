@@ -17,7 +17,6 @@ import os
 /// **Performance:** sequential `AVAudioFile` read/write. PoC ballpark for 24 × 5-min chunks:
 /// median 1480 ms, p95 2127 ms. Caller should run on a background queue.
 enum MeetingChunkStitcher {
-
     // MARK: - Types
 
     struct Result {
@@ -70,23 +69,35 @@ enum MeetingChunkStitcher {
     // MARK: - Single-Chunk Path
 
     private static func stitchSingleChunk(_ chunkURL: URL, outputURL: URL) throws -> Result {
-        // Try to compute duration before deciding whether to copy or signal empty.
-        var duration: Double = 0
-        if let file = try? AVAudioFile(forReading: chunkURL), file.fileFormat.sampleRate > 0 {
-            duration = Double(file.length) / file.fileFormat.sampleRate
-        }
-
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: chunkURL.path) else {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: chunkURL.path) else {
             throw StitchError.allChunksUnreadable
         }
-        try fm.copyItem(at: chunkURL, to: outputURL)
+
+        let file: AVAudioFile
+        do {
+            file = try AVAudioFile(forReading: chunkURL)
+        } catch {
+            Log.audio
+                .warning(
+                    "[Stitch] single chunk at \(chunkURL.lastPathComponent) unreadable: \(error.localizedDescription)"
+                )
+            throw StitchError.allChunksUnreadable
+        }
+
+        guard file.length > 0, file.fileFormat.sampleRate > 0 else {
+            Log.audio.warning("[Stitch] single chunk at \(chunkURL.lastPathComponent) empty or invalid")
+            throw StitchError.allChunksUnreadable
+        }
+
+        let duration = Double(file.length) / file.fileFormat.sampleRate
+        try fileManager.copyItem(at: chunkURL, to: outputURL)
 
         return Result(
             outputURL: outputURL,
             totalDurationSeconds: duration,
-            skippedChunks: duration > 0 ? [] : [1],
-            appendedChunkCount: duration > 0 ? 1 : 0
+            skippedChunks: [],
+            appendedChunkCount: 1
         )
     }
 
@@ -137,7 +148,10 @@ enum MeetingChunkStitcher {
             try appendFile(firstFile, into: outputFile, totalFrames: &totalFrames)
             appendedCount += 1
         } catch {
-            Log.audio.warning("[Stitch] chunk \(firstReadableIndex + 1) read failed mid-append: \(error.localizedDescription)")
+            Log.audio
+                .warning(
+                    "[Stitch] chunk \(firstReadableIndex + 1) read failed mid-append: \(error.localizedDescription)"
+                )
             skipped.append(firstReadableIndex + 1)
         }
 
@@ -195,7 +209,7 @@ enum MeetingChunkStitcher {
         into destination: AVAudioFile,
         totalFrames: inout AVAudioFramePosition
     ) throws {
-        let bufferFrames: AVAudioFrameCount = 32_768
+        let bufferFrames: AVAudioFrameCount = 32768
         let processingFormat = source.processingFormat
         guard let buffer = AVAudioPCMBuffer(pcmFormat: processingFormat, frameCapacity: bufferFrames) else {
             return

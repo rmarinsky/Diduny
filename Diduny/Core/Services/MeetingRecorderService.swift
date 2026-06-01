@@ -71,7 +71,8 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         let directoryURL: URL
         let firstChunkURL: URL
         do {
-            directoryURL = try await InProgressRecordingStore.shared.directoryURL(for: recordingId)
+            let store = try InProgressRecordingStore.sharedStore()
+            directoryURL = try await store.directoryURL(for: recordingId)
             firstChunkURL = directoryURL.appendingPathComponent(Self.chunkFilename(forIndex: 1))
         } catch {
             Log.recording.error("Failed to create in-progress recording directory: \(error)")
@@ -180,7 +181,9 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
             lastWriteAt: startTime!,
             recordingInterruptedBySleep: false
         )
-        try? await InProgressRecordingStore.shared.writeManifest(initialManifest, for: recordingId)
+        if let store = try? InProgressRecordingStore.sharedStore() {
+            try? await store.writeManifest(initialManifest, for: recordingId)
+        }
 
         Log.recording.info("Recording started (captureMicrophone=\(service.captureMicrophone))")
         onRecordingStarted?()
@@ -251,7 +254,8 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         // Update manifest: mark the last (currently-writing) chunk as cleanly closed.
         // Earlier chunks already have closedAt set by handleChunkRotated; nothing to update there.
         if let recordingId = capturedRecordingId,
-           var manifest = try? await InProgressRecordingStore.shared.readManifest(for: recordingId),
+           let store = try? InProgressRecordingStore.sharedStore(),
+           var manifest = try? await store.readManifest(for: recordingId),
            !manifest.chunks.isEmpty,
            let lastChunkURL = capturedChunkURLs.last
         {
@@ -276,7 +280,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
             manifest.chunks[lastIdx].byteCount = lastByteCount
             manifest.chunks[lastIdx].durationSeconds = lastDuration
             manifest.lastWriteAt = stopTime
-            try? await InProgressRecordingStore.shared.writeManifest(manifest, for: recordingId)
+            try? await store.writeManifest(manifest, for: recordingId)
         }
 
         onRecordingStopped?(stitchedURL)
@@ -326,7 +330,9 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
 
         // Remove the entire in-progress directory (chunks + manifest + any stitched output).
         if let recordingId = capturedRecordingId {
-            try? await InProgressRecordingStore.shared.cleanup(recordingId: recordingId)
+            if let store = try? InProgressRecordingStore.sharedStore() {
+                try? await store.cleanup(recordingId: recordingId)
+            }
         }
 
         Log.recording.info("Meeting recording canceled")
@@ -358,8 +364,8 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         guard let recordingId = currentRecordingId else { return }
         Task { [weak self] in
             guard self != nil else { return }
-            let store = InProgressRecordingStore.shared
             do {
+                let store = try InProgressRecordingStore.sharedStore()
                 guard var manifest = try await store.readManifest(for: recordingId) else { return }
                 // Update closed entry (1-based → 0-based index)
                 let closedIdx0 = closedIndex - 1

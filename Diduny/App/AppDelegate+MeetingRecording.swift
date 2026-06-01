@@ -64,7 +64,9 @@ extension AppDelegate {
                     )
                     // Library has taken ownership — remove the in-progress directory (RLR-M1).
                     if let ipId = cancelInProgressRecordingId {
-                        try? await InProgressRecordingStore.shared.cleanup(recordingId: ipId)
+                        if let store = try? InProgressRecordingStore.sharedStore() {
+                            try? await store.cleanup(recordingId: ipId)
+                        }
                     }
                     try? FileManager.default.removeItem(at: audioURL)
                     Log.app.info("cancelMeetingRecording: audio saved after cancel")
@@ -383,7 +385,11 @@ extension AppDelegate {
 
         func cleanupInProgressDirectory() {
             if let ipId = inProgressRecordingId {
-                Task { try? await InProgressRecordingStore.shared.cleanup(recordingId: ipId) }
+                Task {
+                    if let store = try? InProgressRecordingStore.sharedStore() {
+                        try? await store.cleanup(recordingId: ipId)
+                    }
+                }
             }
         }
 
