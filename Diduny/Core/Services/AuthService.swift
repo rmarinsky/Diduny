@@ -139,7 +139,7 @@ final class AuthService {
                 return token
             }
         #endif
-        await supabase.currentAccessToken
+        return await supabase.currentAccessToken
     }
 
     /// Attaches `Authorization: Bearer <token>` to a URLRequest.

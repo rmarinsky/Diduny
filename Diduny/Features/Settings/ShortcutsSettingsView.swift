@@ -5,8 +5,11 @@ import SwiftUI
 struct ShortcutsSettingsView: View {
     @State private var pushToTalkKey = SettingsStorage.shared.pushToTalkKey
     @State private var pushToTalkTapCount = SettingsStorage.shared.pushToTalkToggleTapCount
+    @State private var pushToTalkHoldStartDelay = SettingsStorage.shared.pushToTalkHoldStartDelaySeconds
     @State private var translationPushToTalkKey = SettingsStorage.shared.translationPushToTalkKey
     @State private var translationPushToTalkTapCount = SettingsStorage.shared.translationPushToTalkToggleTapCount
+    @State private var translationPushToTalkHoldStartDelay =
+        SettingsStorage.shared.translationPushToTalkHoldStartDelaySeconds
     @State private var handsFreeModeEnabled = SettingsStorage.shared.handsFreeModeEnabled
     @State private var recordingHotkeyPressCount = SettingsStorage.shared.recordingHotkeyPressCount
     @State private var translationHotkeyPressCount = SettingsStorage.shared.translationHotkeyPressCount
@@ -72,7 +75,7 @@ struct ShortcutsSettingsView: View {
                 Text(
                     handsFreeModeEnabled
                         ? "Use the selected tap count to start and stop recording from the modifier key."
-                        : "Hold the key down while speaking, release to transcribe."
+                        : "Hold the selected key until the delay passes. Release earlier to ignore."
                 )
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -81,6 +84,7 @@ struct ShortcutsSettingsView: View {
                     title: "Dictation:",
                     key: $pushToTalkKey,
                     tapCount: $pushToTalkTapCount,
+                    holdStartDelay: $pushToTalkHoldStartDelay,
                     keyStore: {
                         SettingsStorage.shared.pushToTalkKey = $0
                         NotificationCenter.default.post(name: .pushToTalkKeyChanged, object: $0)
@@ -88,6 +92,10 @@ struct ShortcutsSettingsView: View {
                     tapCountStore: {
                         SettingsStorage.shared.pushToTalkToggleTapCount = $0
                         NotificationCenter.default.post(name: .pushToTalkTapCountChanged, object: $0)
+                    },
+                    holdStartDelayStore: {
+                        SettingsStorage.shared.pushToTalkHoldStartDelaySeconds = $0
+                        NotificationCenter.default.post(name: .pushToTalkHoldStartDelayChanged, object: $0)
                     }
                 )
 
@@ -95,6 +103,7 @@ struct ShortcutsSettingsView: View {
                     title: "Translation:",
                     key: $translationPushToTalkKey,
                     tapCount: $translationPushToTalkTapCount,
+                    holdStartDelay: $translationPushToTalkHoldStartDelay,
                     keyStore: {
                         SettingsStorage.shared.translationPushToTalkKey = $0
                         NotificationCenter.default.post(name: .translationPushToTalkKeyChanged, object: $0)
@@ -102,6 +111,10 @@ struct ShortcutsSettingsView: View {
                     tapCountStore: {
                         SettingsStorage.shared.translationPushToTalkToggleTapCount = $0
                         NotificationCenter.default.post(name: .translationPushToTalkTapCountChanged, object: $0)
+                    },
+                    holdStartDelayStore: {
+                        SettingsStorage.shared.translationPushToTalkHoldStartDelaySeconds = $0
+                        NotificationCenter.default.post(name: .translationPushToTalkHoldStartDelayChanged, object: $0)
                     }
                 )
             }
@@ -195,8 +208,10 @@ struct ShortcutsSettingsView: View {
         title: String,
         key: Binding<PushToTalkKey>,
         tapCount: Binding<Int>,
+        holdStartDelay: Binding<TimeInterval>,
         keyStore: @escaping (PushToTalkKey) -> Void,
-        tapCountStore: @escaping (Int) -> Void
+        tapCountStore: @escaping (Int) -> Void,
+        holdStartDelayStore: @escaping (TimeInterval) -> Void
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
@@ -212,19 +227,28 @@ struct ShortcutsSettingsView: View {
 
                 Spacer(minLength: 12)
 
-                pressCountPicker(
-                    title: "Toggle after",
-                    selection: tapCount,
-                    options: toggleTapCountOptions
-                )
+                if handsFreeModeEnabled {
+                    pressCountPicker(
+                        title: "Toggle after",
+                        selection: tapCount,
+                        options: toggleTapCountOptions
+                    )
                     .disabled(!handsFreeModeEnabled)
                     .opacity(handsFreeModeEnabled ? 1.0 : 0.45)
+                } else {
+                    holdDelaySlider(
+                        title: "Start after",
+                        selection: holdStartDelay
+                    )
+                    .disabled(key.wrappedValue == .none)
+                    .opacity(key.wrappedValue == .none ? 0.45 : 1.0)
+                }
             }
 
             Text(
                 handsFreeModeEnabled
                     ? "Use \(tapCount.wrappedValue)x press\(tapCount.wrappedValue == 1 ? "" : "es") on the selected key to toggle."
-                    : "Tap count applies only in Toggle mode."
+                    : "Start after \(formattedHoldDelay(holdStartDelay.wrappedValue)) hold. Shorter presses are ignored."
             )
             .font(.caption)
             .foregroundColor(.secondary)
@@ -235,6 +259,9 @@ struct ShortcutsSettingsView: View {
         }
         .onChange(of: tapCount.wrappedValue) { _, newValue in
             tapCountStore(newValue)
+        }
+        .onChange(of: holdStartDelay.wrappedValue) { _, newValue in
+            holdStartDelayStore(newValue)
         }
     }
 
@@ -254,6 +281,29 @@ struct ShortcutsSettingsView: View {
         }
         .frame(width: 150, alignment: .leading)
     }
+
+    private func holdDelaySlider(title: String, selection: Binding<TimeInterval>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 8) {
+                Slider(value: selection, in: 0.2...1.0, step: 0.1)
+                    .accessibilityLabel("Start recording after hold duration")
+                    .accessibilityValue(formattedHoldDelay(selection.wrappedValue))
+
+                Text(formattedHoldDelay(selection.wrappedValue))
+                    .monospacedDigit()
+                    .frame(width: 42, alignment: .leading)
+            }
+        }
+        .frame(width: 190, alignment: .leading)
+    }
+
+    private func formattedHoldDelay(_ value: TimeInterval) -> String {
+        String(format: "%.1f s", value)
+    }
 }
 
 extension Notification.Name {
@@ -261,6 +311,9 @@ extension Notification.Name {
     static let translationPushToTalkKeyChanged = Notification.Name("translationPushToTalkKeyChanged")
     static let pushToTalkTapCountChanged = Notification.Name("pushToTalkTapCountChanged")
     static let translationPushToTalkTapCountChanged = Notification.Name("translationPushToTalkTapCountChanged")
+    static let pushToTalkHoldStartDelayChanged = Notification.Name("pushToTalkHoldStartDelayChanged")
+    static let translationPushToTalkHoldStartDelayChanged =
+        Notification.Name("translationPushToTalkHoldStartDelayChanged")
 }
 
 #Preview {

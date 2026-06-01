@@ -19,6 +19,84 @@ enum RecordingKind {
     }
 }
 
+private final class SleepRecordingFlushBridge {
+    private let meetingRecorderService: MeetingRecorderService
+    private let stateLock = NSLock()
+    private var recordingWasInterruptedBySleep = false
+
+    var releaseActivityTokens: (() -> Void)?
+
+    init(meetingRecorderService: MeetingRecorderService) {
+        self.meetingRecorderService = meetingRecorderService
+    }
+
+    /// Flushes the active meeting recording synchronously on the willSleep thread.
+    /// Voice/translation recordings hold audio in memory until stop() is called; their
+    /// recovery state is already persisted on disk so there is nothing extra to flush.
+    func flushActiveRecordingForSleep() -> Bool {
+        let meetingActive = meetingRecorderService.isRecording
+
+        guard meetingActive else {
+            Log.recording.info("[Sleep] flushActiveRecordingForSleep: no active meeting recording")
+            setRecordingWasInterruptedBySleep(false)
+            return true
+        }
+
+        Log.recording.info("[Sleep] flushActiveRecordingForSleep: flushing meeting recording chunk")
+
+        let flushedURL = meetingRecorderService.synchronousFlushForSleep()
+        let flushSucceeded = flushedURL != nil
+        setRecordingWasInterruptedBySleep(true)
+
+        let recordingId = meetingRecorderService.currentRecordingId
+        if let recordingId {
+            Task {
+                do {
+                    let store = try InProgressRecordingStore.sharedStore()
+                    if var manifest = try await store.readManifest(for: recordingId) {
+                        manifest.recordingInterruptedBySleep = true
+                        manifest.lastWriteAt = Date()
+                        if !manifest.chunks.isEmpty {
+                            let closeTime: Date? = flushSucceeded ? Date() : nil
+                            manifest.chunks[manifest.chunks.count - 1].closedAt = closeTime
+                            if let url = flushedURL,
+                               let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+                               let size = attrs[.size] as? Int64
+                            {
+                                manifest.chunks[manifest.chunks.count - 1].byteCount = size
+                            }
+                        }
+                        try await store.writeManifest(manifest, for: recordingId)
+                        Log.recording
+                            .info(
+                                "[Sleep] manifest updated: recordingInterruptedBySleep=true, chunk closedAt=\(flushSucceeded ? "set" : "nil")"
+                            )
+                    }
+                } catch {
+                    Log.recording.error("[Sleep] Failed to update manifest: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        releaseActivityTokens?()
+        return flushSucceeded
+    }
+
+    func consumeRecordingWasInterruptedBySleep() -> Bool {
+        stateLock.lock()
+        let value = recordingWasInterruptedBySleep
+        recordingWasInterruptedBySleep = false
+        stateLock.unlock()
+        return value
+    }
+
+    private func setRecordingWasInterruptedBySleep(_ value: Bool) {
+        stateLock.lock()
+        recordingWasInterruptedBySleep = value
+        stateLock.unlock()
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Properties
@@ -33,6 +111,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var meetingActivityToken: NSObjectProtocol?
     var meetingTranslationActivityToken: NSObjectProtocol?
     var translationActivityToken: NSObjectProtocol?
+
+    // Sleep handling (RLR-M2)
+    private var sleepFlushCoordinator: SleepFlushCoordinator?
+    private var sleepRecordingFlushBridge: SleepRecordingFlushBridge?
 
     // Pipeline Tasks (stored so cancel can abort them)
     var voicePipelineTask: Task<Void, Never>?
@@ -119,15 +201,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(pushToTalkHoldStartDelayChanged(_:)),
+            name: .pushToTalkHoldStartDelayChanged,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(translationPushToTalkHoldStartDelayChanged(_:)),
+            name: .translationPushToTalkHoldStartDelayChanged,
+            object: nil
+        )
+
         // Permission-gate: evaluate live permission state before deciding what to show.
         Task { @MainActor [weak self] in
             guard let self else { return }
             let action = await OnboardingManager.shared.computeStartupAction()
             switch action {
             case .skipOnboarding:
-                self.setupAfterOnboarding()
+                setupAfterOnboarding()
 
-            case .showFullTour(let jumpStep):
+            case let .showFullTour(jumpStep):
                 OnboardingManager.shared.setupDefaultsForNewUser()
                 if let jump = jumpStep {
                     OnboardingManager.shared.currentStep = jump
@@ -137,7 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.setupAfterOnboarding()
                 }
 
-            case .showMiniFlow(let steps):
+            case let .showMiniFlow(steps):
                 try? await Task.sleep(for: .milliseconds(120))
                 OnboardingManager.shared.currentStep = steps.first ?? .microphonePermission
                 OnboardingWindowController.shared.showOnboarding(miniFlow: steps) {
@@ -159,6 +255,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupHotkeys()
         setupPushToTalk()
         setupTranslationPushToTalk()
+
+        // Setup sleep handling for all recording modes (RLR-M2).
+        // Must be registered before OrphanedRecordingDetector (M5a) to ensure the
+        // coordinator is active if a recording is started immediately after onboarding.
+        setupSleepHandling()
 
         // Check for orphaned recordings from previous crash
         checkForOrphanedRecordings()
@@ -187,6 +288,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // File doesn't exist, just clear the state
                 RecoveryStateManager.shared.clearState()
             }
+        }
+    }
+
+    // MARK: - Sleep Handling (RLR-M2)
+
+    private func setupSleepHandling() {
+        let coordinator = SleepFlushCoordinator()
+        let bridge = SleepRecordingFlushBridge(meetingRecorderService: meetingRecorderService)
+
+        bridge.releaseActivityTokens = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.releaseMeetingSleepActivityTokens()
+            }
+        }
+
+        coordinator.flushCurrentChunk = { [weak bridge] in
+            bridge?.flushActiveRecordingForSleep() ?? true
+        }
+
+        coordinator.onWake = { [weak bridge, weak self] in
+            guard bridge?.consumeRecordingWasInterruptedBySleep() == true else { return }
+            Task { @MainActor [weak self] in
+                self?.showWakeAfterRecordingInterrupt()
+            }
+        }
+
+        sleepRecordingFlushBridge = bridge
+        sleepFlushCoordinator = coordinator
+        Log.app.info("[Sleep] SleepFlushCoordinator registered for willSleep / didWake")
+    }
+
+    private func releaseMeetingSleepActivityTokens() {
+        if let token = meetingActivityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            meetingActivityToken = nil
+        }
+        if let token = meetingTranslationActivityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            meetingTranslationActivityToken = nil
+        }
+    }
+
+    private func showWakeAfterRecordingInterrupt() {
+        Log.recording.info("[Sleep] wake after recording interrupt — surfacing notch message")
+
+        NotchManager.shared.showInfo(
+            message: "Recording stopped. Open Recordings to recover audio.",
+            duration: 5.0
+        )
+        // Transition recording states to idle so the UI is consistent.
+        // The in-progress directory is left intact for OrphanedRecordingDetector (M5a).
+        if appState.meetingRecordingState == .recording {
+            appState.meetingRecordingState = .idle
+            appState.meetingRecordingStartTime = nil
+            handleMeetingStateChange(.idle)
+        }
+        if appState.meetingTranslationRecordingState == .recording {
+            appState.meetingTranslationRecordingState = .idle
+            appState.meetingTranslationRecordingStartTime = nil
+            handleMeetingTranslationStateChange(.idle)
         }
     }
 
@@ -279,6 +440,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushToTalkService.stop()
         translationPushToTalkService.stop()
         NotificationCenter.default.removeObserver(self)
+        // Release all activity tokens on termination to avoid leaking wake locks.
+        if let token = recordingActivityToken { ProcessInfo.processInfo.endActivity(token) }
+        if let token = translationActivityToken { ProcessInfo.processInfo.endActivity(token) }
+        if let token = meetingActivityToken { ProcessInfo.processInfo.endActivity(token) }
+        if let token = meetingTranslationActivityToken { ProcessInfo.processInfo.endActivity(token) }
+        sleepFlushCoordinator = nil
     }
 
     func loadAudioData(from url: URL) async throws -> Data {
@@ -597,9 +764,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     var translationPairLabel: String {
-        let a = SettingsStorage.shared.translationLanguageA.uppercased()
-        let b = SettingsStorage.shared.translationLanguageB.uppercased()
-        return "\(a) <-> \(b)"
+        let firstLanguage = SettingsStorage.shared.translationLanguageA.uppercased()
+        let secondLanguage = SettingsStorage.shared.translationLanguageB.uppercased()
+        return "\(firstLanguage) <-> \(secondLanguage)"
     }
 
     func handleTranslationStateChange(_ state: RecordingState) {

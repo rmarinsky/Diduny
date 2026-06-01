@@ -290,7 +290,8 @@ final class RecordingsLibraryStorage {
                 errorMessage: recording.errorMessage,
                 processedAt: recording.processedAt,
                 chapters: recording.chapters,
-                sourceDevice: recording.sourceDevice
+                sourceDevice: recording.sourceDevice,
+                recoverySource: recording.recoverySource
             )
             saveMetadata()
 
