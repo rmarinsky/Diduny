@@ -9,6 +9,15 @@ struct RecordingDeviceInfo: Codable, Equatable {
     let wasDefaultRoute: Bool
 }
 
+/// Describes how a recording entered the library via a non-normal stop path.
+/// `nil` on `Recording.recoverySource` means the recording was stopped normally.
+enum RecoverySource: String, Codable, Sendable {
+    /// The recording was assembled from an orphaned in-progress session directory
+    /// (e.g. after a crash, force-quit, or sleep interruption).
+    case orphanedSession
+    // Future cases: .importedFile, .crashRecovery — out of scope for M0.
+}
+
 struct Recording: Identifiable, Codable, Equatable {
     let id: UUID
     let createdAt: Date
@@ -22,6 +31,10 @@ struct Recording: Identifiable, Codable, Equatable {
     var processedAt: Date?
     var chapters: [MeetingChapter]?
     let sourceDevice: RecordingDeviceInfo?
+    /// Non-nil when this recording was saved via a recovery path rather than a normal stop.
+    /// Drives the "Recovered" badge in the library and the detail-view notice.
+    /// Set once at recovery-save time; never cleared.
+    var recoverySource: RecoverySource?
 
     /// Nested to avoid conflict with RecoveryState.RecordingType
     enum RecordingType: String, Codable, CaseIterable {
@@ -73,6 +86,9 @@ struct Recording: Identifiable, Codable, Equatable {
         case transcribed
         case translated
         case failed
+        /// Audio was recovered from an interrupted session and one or more chunks
+        /// were unreadable. The reported duration reflects only the intact chunks.
+        case partiallyRecovered
 
         var displayName: String {
             switch self {
@@ -81,6 +97,7 @@ struct Recording: Identifiable, Codable, Equatable {
             case .transcribed: "Transcribed"
             case .translated: "Translated"
             case .failed: "Failed"
+            case .partiallyRecovered: "Partially Recovered"
             }
         }
     }

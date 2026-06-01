@@ -41,11 +41,13 @@ final class SettingsStorage {
         case launchAtLogin
         case pushToTalkKey
         case pushToTalkToggleTapCount
+        case pushToTalkHoldStartDelaySeconds
         case meetingAudioSource
         case meetingMicGain
         case meetingSystemGain
         case translationPushToTalkKey
         case translationPushToTalkToggleTapCount
+        case translationPushToTalkHoldStartDelaySeconds
         case handsFreeModeEnabled
         case recordingHotkeyPressCount
         case translationHotkeyPressCount
@@ -113,14 +115,14 @@ final class SettingsStorage {
         defaults.removeObject(forKey: Key.selectedDeviceUID.rawValue)
     }
 
-    /// One-time migration: users who had the v1 proxy URL explicitly saved → upgrade to v2.
-    /// Users who never touched the setting will get v2 via the updated defaultProxyBaseURL.
+    /// One-time migration: users who had the temporary v2 proxy URL explicitly saved → canonical host.
+    /// Users who never touched the setting will get the canonical host via defaultProxyBaseURL.
     private func migrateProxyURLIfNeeded() {
-        let v1URL = "https://diduny-ears-proxy.fly.dev"
+        let canonicalURL = "https://diduny-ears-proxy.fly.dev"
         let v2URL = "https://diduny-ears-proxy-v2.fly.dev"
         guard let stored = defaults.string(forKey: Key.proxyBaseURL.rawValue),
-              stored == v1URL else { return }
-        defaults.set(v2URL, forKey: Key.proxyBaseURL.rawValue)
+              stored == v2URL else { return }
+        defaults.set(canonicalURL, forKey: Key.proxyBaseURL.rawValue)
     }
 
     /// Migrate old provider rawValues: "soniox" → "cloud", "whisper_local" → "local"
@@ -286,6 +288,21 @@ final class SettingsStorage {
         }
     }
 
+    /// Hold duration required before dictation starts from a modifier key.
+    var pushToTalkHoldStartDelaySeconds: TimeInterval {
+        get {
+            let stored = defaults.object(forKey: Key.pushToTalkHoldStartDelaySeconds.rawValue) as? TimeInterval
+                ?? Self.defaultHoldStartDelaySeconds
+            return Self.sanitizedHoldStartDelaySeconds(stored)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedHoldStartDelaySeconds(newValue),
+                forKey: Key.pushToTalkHoldStartDelaySeconds.rawValue
+            )
+        }
+    }
+
     // MARK: - Meeting Recording
 
     var meetingAudioSource: MeetingAudioSource {
@@ -346,6 +363,21 @@ final class SettingsStorage {
             defaults.set(
                 Self.sanitizedTapCount(newValue, fallback: 3),
                 forKey: Key.translationPushToTalkToggleTapCount.rawValue
+            )
+        }
+    }
+
+    /// Hold duration required before translation starts from a modifier key.
+    var translationPushToTalkHoldStartDelaySeconds: TimeInterval {
+        get {
+            let stored = defaults.object(forKey: Key.translationPushToTalkHoldStartDelaySeconds.rawValue) as? TimeInterval
+                ?? Self.defaultHoldStartDelaySeconds
+            return Self.sanitizedHoldStartDelaySeconds(stored)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedHoldStartDelaySeconds(newValue),
+                forKey: Key.translationPushToTalkHoldStartDelaySeconds.rawValue
             )
         }
     }
@@ -657,12 +689,20 @@ final class SettingsStorage {
         return min(max(value, 2), 3)
     }
 
+    private static let defaultHoldStartDelaySeconds: TimeInterval = 0.2
+
+    private static func sanitizedHoldStartDelaySeconds(_ value: TimeInterval) -> TimeInterval {
+        guard value.isFinite else { return defaultHoldStartDelaySeconds }
+        let clamped = min(max(value, 0.2), 1.0)
+        return (clamped * 10).rounded() / 10
+    }
+
     // MARK: - Proxy Settings
 
     #if DEV_BUILD
         private static let defaultProxyBaseURL = "http://localhost:3000"
     #else
-        private static let defaultProxyBaseURL = "https://diduny-ears-proxy-v2.fly.dev"
+        private static let defaultProxyBaseURL = "https://diduny-ears-proxy.fly.dev"
     #endif
 
     var proxyBaseURL: String {

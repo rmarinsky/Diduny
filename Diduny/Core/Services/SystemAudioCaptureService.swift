@@ -34,6 +34,15 @@ final class SystemAudioCaptureService: NSObject {
     private let maxMicrophoneRecoveryAttempts = 3
     private let initialRecoveryDelay: TimeInterval = 0.75
 
+    // MARK: - Chunk Rotation State (accessed only on fileWriteQueue)
+
+    /// 1-based index of the chunk currently being written.
+    private var currentChunkIndex: Int = 1
+    /// Wall-clock time when the current chunk file was opened.
+    private var currentChunkStartedAt: Date = .init()
+    /// Frames written into the current chunk; used to compute durationSeconds on rotation.
+    private var currentChunkFrameCount: Int = 0
+
     // MARK: - Public Configuration
 
     /// Enable microphone capture alongside system audio.
@@ -47,6 +56,21 @@ final class SystemAudioCaptureService: NSObject {
 
     /// Gain applied to system audio samples before mixing with microphone (0–2, default 0.3).
     var systemGain: Float = 0.3
+
+    /// Wall-clock duration of a single chunk file before rotation (RLR-M3b).
+    /// Default 300 s (5 min) per ADR-0009 §D3. Tests may shrink this.
+    var chunkDurationSeconds: TimeInterval = 300
+
+    /// Supplies the URL for chunk `index` (1-based).
+    /// When `nil`, rotation is disabled and the service writes the entire capture to the URL
+    /// passed to `startCapture(to:)` (legacy single-file mode used by non-meeting modes / tests).
+    var chunkURLProvider: ((Int) -> URL)?
+
+    /// Fired on the fileWriteQueue when a chunk file is closed (rotation boundary).
+    /// Params: closedIndex, closedURL, closedAt, byteCount, durationSeconds.
+    /// The caller is expected to spawn an async Task to update the on-disk manifest;
+    /// the callback itself must not block.
+    var onChunkRotated: ((Int, URL, Date, Int64, Double) -> Void)?
 
     var onError: ((Error) -> Void)?
     var onCaptureStarted: (() -> Void)?
@@ -121,6 +145,11 @@ final class SystemAudioCaptureService: NSObject {
         Log.audio.info("Starting system audio capture (captureMicrophone=\(self.captureMicrophone))...")
 
         try setupAudioFile(at: outputURL)
+
+        // Reset chunk rotation state (RLR-M3b)
+        currentChunkIndex = 1
+        currentChunkStartedAt = Date()
+        currentChunkFrameCount = 0
 
         // Reset mixer state
         systemBuffer.removeAll()
@@ -397,6 +426,30 @@ final class SystemAudioCaptureService: NSObject {
 
     // MARK: - Stop Capture
 
+    /// Synchronously flushes and closes the audio file for the willSleep notification handler.
+    ///
+    /// Called from a power-management background thread (NOT MainActor). Does NOT stop the
+    /// SCStream (that requires async); it only closes the `AVAudioFile` so all buffered audio
+    /// is flushed to disk before the system sleeps.
+    ///
+    /// The `AVAudioFile` close is synchronous (OS file close with header update). The
+    /// `synchronizedTeardown` uses `mixerQueue.sync { fileWriteQueue.sync { ... } }` which
+    /// drains any in-flight audio buffers before closing. No semaphore needed — already sync.
+    ///
+    /// Returns the URL of the closed file (or nil if not capturing).
+    func synchronousFlushForSleep() -> URL? {
+        guard isCapturing else { return nil }
+        let url = outputURL
+        // Cancel recovery tasks to prevent them from re-opening the stream.
+        cancelRecoveryTasks()
+        // Flush remaining buffers and close AVAudioFile synchronously.
+        synchronizedTeardown(flushPendingAudio: true)
+        // Mark as not capturing so further SCStream callbacks are dropped.
+        isCapturing = false
+        Log.audio.info("[Sleep] synchronousFlushForSleep: file closed at \(url?.path ?? "nil")")
+        return url
+    }
+
     func stopCapture() async throws -> URL? {
         guard isCapturing else {
             Log.audio.warning("Not capturing")
@@ -644,6 +697,7 @@ final class SystemAudioCaptureService: NSObject {
     /// Flush any remaining buffered audio directly to file.
     /// IMPORTANT: Called from `fileWriteQueue.sync` inside `mixerQueue.sync` —
     /// must NOT dispatch to either queue (would deadlock or drop data).
+    /// Pass `allowRotation: false` to keep the final flush in a single chunk.
     private func flushRemainingBuffers() {
         guard audioFile != nil else { return }
 
@@ -657,18 +711,18 @@ final class SystemAudioCaptureService: NSObject {
                 }
                 systemBuffer.removeFirst(mixCount)
                 micBuffer.removeFirst(mixCount)
-                writeSamples(mixed)
+                writeSamples(mixed, allowRotation: false)
             }
             if !systemBuffer.isEmpty {
-                writeSamples(systemBuffer)
+                writeSamples(systemBuffer, allowRotation: false)
                 systemBuffer.removeAll()
             }
             if !micBuffer.isEmpty {
-                writeSamples(micBuffer)
+                writeSamples(micBuffer, allowRotation: false)
                 micBuffer.removeAll()
             }
         } else if !systemBuffer.isEmpty {
-            writeSamples(systemBuffer)
+            writeSamples(systemBuffer, allowRotation: false)
             systemBuffer.removeAll()
         }
     }
@@ -830,7 +884,12 @@ extension SystemAudioCaptureService: SCStreamOutput {
 
     /// Write Float samples to the audio file. AVAudioFile accepts Float32 buffers matching
     /// its `processingFormat` and internally converts to the file's Int16 format.
-    private func writeSamples(_ samples: [Float]) {
+    ///
+    /// When `allowRotation` is true (default), checks the 5-min boundary after writing and
+    /// rotates to the next chunk if `chunkURLProvider` is set. Teardown paths
+    /// (`flushRemainingBuffers`) pass `allowRotation: false` to keep the final flush
+    /// in a single chunk file.
+    private func writeSamples(_ samples: [Float], allowRotation: Bool = true) {
         guard let audioFile else { return }
 
         let processingFormat = audioFile.processingFormat
@@ -848,6 +907,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
 
         do {
             try audioFile.write(from: buffer)
+            currentChunkFrameCount += samples.count
 
             let now = Date()
             if now.timeIntervalSince(lastFlushTime) >= self.flushInterval {
@@ -856,6 +916,62 @@ extension SystemAudioCaptureService: SCStreamOutput {
             }
         } catch {
             Log.audio.error("Error writing audio: \(error)")
+        }
+
+        if allowRotation {
+            rotateChunkIfNeededOnFileWriteQueue()
+        }
+    }
+
+    // MARK: - Chunk Rotation (RLR-M3b)
+
+    /// Closes the current chunk and opens the next one when wall-clock elapsed since
+    /// chunk-open exceeds `chunkDurationSeconds`. Must only be called on `fileWriteQueue`.
+    ///
+    /// No-op when `chunkURLProvider` is nil (legacy single-file mode).
+    private func rotateChunkIfNeededOnFileWriteQueue() {
+        guard let provider = chunkURLProvider else { return }
+        guard audioFile != nil else { return }
+        let elapsed = Date().timeIntervalSince(currentChunkStartedAt)
+        guard elapsed >= chunkDurationSeconds else { return }
+
+        let closedIndex = currentChunkIndex
+        guard let closedURL = outputURL else { return }
+        let closedAt = Date()
+        let closedFrameCount = currentChunkFrameCount
+        let sampleRate = outputFormat?.sampleRate ?? 16000
+        let durationSeconds = sampleRate > 0 ? Double(closedFrameCount) / sampleRate : 0
+
+        // Close current AVAudioFile — write of header trailer happens on dealloc.
+        // AVAudioFile close is synchronous; rotation gap is sub-ms (PoC: no-writer p95 = 6.0 ms).
+        audioFile = nil
+
+        var byteCount: Int64 = 0
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: closedURL.path),
+           let size = attrs[.size] as? Int64
+        {
+            byteCount = size
+        }
+
+        let newIndex = closedIndex + 1
+        let newURL = provider(newIndex)
+        do {
+            try setupAudioFile(at: newURL)
+            outputURL = newURL
+            currentChunkIndex = newIndex
+            currentChunkStartedAt = Date()
+            currentChunkFrameCount = 0
+
+            Log.audio.info(
+                "[ChunkRotate] closed chunk \(closedIndex) (\(byteCount) B, \(String(format: "%.1f", durationSeconds))s); opened chunk \(newIndex) at \(newURL.lastPathComponent)"
+            )
+
+            onChunkRotated?(closedIndex, closedURL, closedAt, byteCount, durationSeconds)
+        } catch {
+            Log.audio.error("[ChunkRotate] FAILED to open chunk \(newIndex) at \(newURL.path): \(error.localizedDescription)")
+            // Recording is now broken — subsequent writeSamples will drop because audioFile is nil.
+            // Surface to caller so it can transition state and persist whatever chunks already closed.
+            onError?(SystemAudioError.chunkRotationFailed(error.localizedDescription))
         }
     }
 
@@ -1006,6 +1122,7 @@ enum SystemAudioError: LocalizedError {
     case permissionDenied
     case microphoneFormatInvalid
     case microphoneStartFailed(String)
+    case chunkRotationFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -1021,6 +1138,8 @@ enum SystemAudioError: LocalizedError {
             "Invalid microphone audio format"
         case let .microphoneStartFailed(reason):
             reason
+        case let .chunkRotationFailed(reason):
+            "Failed to rotate recording chunk: \(reason)"
         }
     }
 }
