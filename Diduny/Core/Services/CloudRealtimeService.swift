@@ -150,7 +150,17 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         let configString = String(data: configData, encoding: .utf8) ?? "{}"
 
         NSLog("[Cloud RT] Sending config: %@", configString)
-        try await task.send(.string(configString))
+        do {
+            try await task.send(.string(configString))
+        } catch {
+            // A refused upgrade (e.g. HTTP 402 usage limit) surfaces as the first
+            // send/receive throwing. Map 402 to a typed usage error so the caller
+            // shows "limit reached" instead of a generic connection failure.
+            if let usageError = await usageLimitUpgradeError() {
+                throw usageError
+            }
+            throw error
+        }
         NSLog("[Cloud RT] Config sent successfully, WebSocket connected")
 
         isConnected = true
@@ -417,6 +427,21 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
 
     // MARK: - Reconnect
 
+    /// If the last WS upgrade was refused with HTTP 402, map it to a typed usage
+    /// error (using the best usage numbers we have) and kick off a refresh so the
+    /// UI shows accurate figures shortly. Returns nil for any other status.
+    private func usageLimitUpgradeError() async -> RealtimeTranscriptionError? {
+        guard (webSocketTask?.response as? HTTPURLResponse)?.statusCode == 402 else {
+            return nil
+        }
+        let usage = await UsageService.shared.cachedUsage
+        await UsageService.shared.refresh()
+        return .usageLimitExceeded(
+            usedHours: usage?.usedHours ?? 0,
+            limitHours: usage?.limitHours ?? 5
+        )
+    }
+
     /// Called when the receive loop exits due to an error or a server-initiated close.
     ///
     /// ADR-0004 edge cases handled here:
@@ -427,6 +452,26 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private func handleDisconnect(closeCode: URLSessionWebSocketTask.CloseCode? = nil) {
         guard isConnected else { return }
         isConnected = false
+
+        // A refused WS upgrade (HTTP 402 usage limit) lands here via the receive
+        // loop with no close code. Reconnecting is futile — the server will keep
+        // refusing — and would surface a generic "Connection lost" instead of the
+        // real reason. Detect it synchronously to stop the reconnect, then surface
+        // the typed usage error with the best numbers we have.
+        if (webSocketTask?.response as? HTTPURLResponse)?.statusCode == 402 {
+            Log.transcription.warning("Cloud RT: WS upgrade returned 402 — usage limit, not reconnecting")
+            Task { [weak self] in
+                guard let self else { return }
+                let usage = await UsageService.shared.cachedUsage
+                await UsageService.shared.refresh()
+                self.onError?(RealtimeTranscriptionError.usageLimitExceeded(
+                    usedHours: usage?.usedHours ?? 0,
+                    limitHours: usage?.limitHours ?? 5
+                ))
+                self.onConnectionStatusChanged?(.failed("Cloud usage limit reached"))
+            }
+            return
+        }
 
         // 1001 Going Away — proxy-initiated graceful close (8h cap or rolling restart).
         // Per ADR-0004: save partial transcript, show non-error UI, do NOT reconnect.

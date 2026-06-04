@@ -613,14 +613,17 @@ extension AppDelegate {
         duration: TimeInterval,
         didReceiveFinalization: Bool
     ) -> Bool {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
         if didReceiveFinalization { return true }
 
         // Short recordings often stop before Soniox emits an explicit finished frame.
         // For longer meetings, a tiny unfinalized transcript is usually partial and
-        // should fall back to the async jobs pipeline for a complete result.
+        // should fall back to the async jobs pipeline for a complete result. Measure
+        // visible content (trimmed) so a whitespace-padded transcript can't masquerade
+        // as substantial.
         guard duration >= 30 else { return true }
-        return text.count >= 120
+        return trimmed.count >= 120
     }
 
     // MARK: - Escape Cancel Handler
