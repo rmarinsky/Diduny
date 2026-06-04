@@ -31,9 +31,15 @@ struct Recording: Identifiable, Codable, Equatable {
     var processedAt: Date?
     var chapters: [MeetingChapter]?
     let sourceDevice: RecordingDeviceInfo?
-    /// Non-nil when this recording was saved via a recovery path rather than a normal stop.
-    /// Drives the "Recovered" badge in the library and the detail-view notice.
-    /// Set once at recovery-save time; never cleared.
+    /// Marks a recording that originated from a recovery path rather than a normal
+    /// stop; intended to drive the "Recovered" badge in the library and the
+    /// detail-view notice. Once set it is preserved (never cleared), including
+    /// across `RecordingsLibraryStorage.replaceStoredAudioFile`.
+    ///
+    /// NOTE: no production save path sets this yet — `saveRecording(...)` doesn't
+    /// accept it and `recoverRecording(from:)` transcribes then discards without
+    /// creating a library entry. So in practice this is currently always nil.
+    /// TODO: populate it when the recovery-save-to-library flow is implemented.
     var recoverySource: RecoverySource?
 
     /// Nested to avoid conflict with RecoveryState.RecordingType

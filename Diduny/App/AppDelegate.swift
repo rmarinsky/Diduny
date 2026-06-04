@@ -50,7 +50,15 @@ private final class SleepRecordingFlushBridge {
 
         let recordingId = meetingRecorderService.currentRecordingId
         if let recordingId {
-            Task {
+            // Persist the manifest synchronously before returning: the app can be
+            // suspended the instant this sleep-flush returns, so a deferred async
+            // write could be lost and leave recovery reading stale state after
+            // wake/crash. Block on a detached task (detached → not MainActor-bound,
+            // so waiting on the main thread can't deadlock the actor) with a short
+            // timeout so a wedged store can't hang the sleep transition.
+            let sem = DispatchSemaphore(value: 0)
+            Task.detached(priority: .userInitiated) {
+                defer { sem.signal() }
                 do {
                     let store = try InProgressRecordingStore.sharedStore()
                     if var manifest = try await store.readManifest(for: recordingId) {
@@ -75,6 +83,10 @@ private final class SleepRecordingFlushBridge {
                 } catch {
                     Log.recording.error("[Sleep] Failed to update manifest: \(error.localizedDescription)")
                 }
+            }
+            if sem.wait(timeout: .now() + 2) == .timedOut {
+                Log.recording
+                    .error("[Sleep] manifest update timed out (2s) — proceeding without confirmed persist")
             }
         }
 
