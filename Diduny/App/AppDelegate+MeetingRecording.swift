@@ -346,8 +346,9 @@ extension AppDelegate {
 
         // Finalize and disconnect real-time transcription (if active)
         let hasRealtimeSession = await MainActor.run { appState.liveTranscriptStore != nil }
+        var didReceiveRealtimeFinalization = true
         if hasRealtimeSession {
-            _ = await realtimeTranscriptionService.finalize()
+            didReceiveRealtimeFinalization = await realtimeTranscriptionService.finalize()
             await realtimeTranscriptionService.disconnect()
             meetingRecorderService.onRealtimeAudioData = nil
         }
@@ -370,6 +371,7 @@ extension AppDelegate {
         var capturedAudioURL: URL?
         var originalWavURL: URL?
         let stopTime = Date()
+        let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
         let recordingId = UUID()
         // Capture in-progress recording ID before stopRecording() clears it (RLR-M1).
         let inProgressRecordingId = meetingRecorderService.currentRecordingId
@@ -411,12 +413,23 @@ extension AppDelegate {
 
             let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
             let cloudModeEnabled = SettingsStorage.shared.effectiveMeetingRealtimeTranscriptionEnabled
+            let shouldUseRealtimeText = shouldAcceptRealtimeTranscript(
+                realtimeText,
+                duration: duration,
+                didReceiveFinalization: didReceiveRealtimeFinalization
+            )
 
             let rawText: String?
-            if !realtimeText.isEmpty {
+            if shouldUseRealtimeText {
                 rawText = realtimeText
                 Log.app.info("Using real-time transcript (\(realtimeText.count) chars)")
             } else if cloudModeEnabled {
+                if !realtimeText.isEmpty {
+                    Log.app
+                        .warning(
+                            "Ignoring partial real-time transcript (\(realtimeText.count) chars, finalized=\(didReceiveRealtimeFinalization)); falling back to async jobs API"
+                        )
+                }
                 Log.app.info("No real-time transcript, falling back to async jobs API...")
                 let audioData = try await loadAudioData(from: compressedURL)
                 Log.app.info("Meeting recording size = \(audioData.count) bytes")
@@ -521,7 +534,6 @@ extension AppDelegate {
             }
             Log.app.info("stopMeetingRecording: SUCCESS")
 
-            let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
                 audioURL: compressedURL,
@@ -594,6 +606,21 @@ extension AppDelegate {
         }
 
         Log.app.info("stopMeetingRecording: END")
+    }
+
+    private func shouldAcceptRealtimeTranscript(
+        _ text: String,
+        duration: TimeInterval,
+        didReceiveFinalization: Bool
+    ) -> Bool {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        if didReceiveFinalization { return true }
+
+        // Short recordings often stop before Soniox emits an explicit finished frame.
+        // For longer meetings, a tiny unfinalized transcript is usually partial and
+        // should fall back to the async jobs pipeline for a complete result.
+        guard duration >= 30 else { return true }
+        return text.count >= 120
     }
 
     // MARK: - Escape Cancel Handler
