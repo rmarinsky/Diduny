@@ -29,10 +29,8 @@ configs:
 
 settings:
   base:
-    # Placeholder — CI overrides both from the git tag / commit count at release
-    # time (see CLAUDE.md "Release process"). Do not hand-edit to a release version.
-    MARKETING_VERSION: "0.0.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.14.4"
+    CURRENT_PROJECT_VERSION: "4"
     DEVELOPMENT_TEAM: "8JL9TM5WLG"
     CODE_SIGN_STYLE: Automatic
     ARCHS: "arm64 x86_64"
