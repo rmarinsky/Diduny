@@ -6,7 +6,7 @@ final class AsyncTranscriptionJobService {
         SettingsStorage.shared.proxyBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
-    private let maxRetries = 3
+    private let maxJobWaitSeconds: TimeInterval = 7200
     private let maxAudioBytesForSpeechPrecheck = 25 * 1024 * 1024
     private let longRunningSessionBodyThresholdBytes = 10 * 1024 * 1024
     private let strictSpeechPrecheck = false
@@ -167,9 +167,10 @@ final class AsyncTranscriptionJobService {
         try Task.checkCancellation()
         let submission = try await submitJob(audioData: audioData, config: config)
 
-        var retries = 0
+        var sseFailures = 0
+        let deadline = Date().addingTimeInterval(maxJobWaitSeconds)
 
-        while retries < self.maxRetries {
+        while Date() < deadline {
             try Task.checkCancellation()
             do {
                 let result = try await streamJobResult(jobId: submission.jobId, onUpdate: onUpdate)
@@ -177,8 +178,8 @@ final class AsyncTranscriptionJobService {
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                retries += 1
-                Log.transcription.warning("SSE stream failed (attempt \(retries)/\(self.maxRetries)): \(error)")
+                sseFailures += 1
+                Log.transcription.warning("SSE stream failed (attempt \(sseFailures)): \(error)")
 
                 // Check if job finished while disconnected
                 let status = try await getJobStatus(jobId: submission.jobId)
@@ -188,14 +189,19 @@ final class AsyncTranscriptionJobService {
                 if status.status == "error" {
                     throw TranscriptionError.apiError(status.error ?? "Transcription failed")
                 }
+                if let parsed = JobStatus(rawValue: status.status) {
+                    onUpdate(parsed)
+                }
 
-                // Still in progress — backoff and retry SSE
+                // Still in progress. SSE is best-effort; keep polling/retrying until
+                // the server-side job reaches a terminal state or the long job timeout.
                 try Task.checkCancellation()
-                try await Task.sleep(nanoseconds: UInt64(retries) * 2_000_000_000)
+                let delaySeconds = min(Double(max(sseFailures, 1)) * 2, 30)
+                try await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
             }
         }
 
-        throw TranscriptionError.apiError("Failed to get transcription result after \(self.maxRetries) retries")
+        throw TranscriptionError.apiError("Timed out waiting for transcription result")
     }
 
     // MARK: - Upload Preparation
@@ -405,8 +411,13 @@ final class AsyncTranscriptionJobService {
         guard let jsonData = data.data(using: .utf8) else {
             throw TranscriptionError.invalidResponse
         }
-        let result = try JSONDecoder().decode(JobTranscriptionResult.self, from: jsonData)
-        return JobResult(text: result.text)
+        if let wrapped = try? JSONDecoder().decode(JobStatusResponse.self, from: jsonData),
+           let result = wrapped.result
+        {
+            return JobResult(text: result.text)
+        }
+        let direct = try JSONDecoder().decode(JobTranscriptionResult.self, from: jsonData)
+        return JobResult(text: direct.text)
     }
 
     private func parseErrorMessage(_ data: String) -> String {

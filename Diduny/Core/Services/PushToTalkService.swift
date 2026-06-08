@@ -256,28 +256,45 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         return (clamped * 10).rounded() / 10
     }
 
+    // Device-dependent modifier masks (NX_DEVICE*KEYMASK). NSEvent.ModifierFlags
+    // family bits (.shift/.option/.command/.control) don't tell left from right,
+    // so a side-specific key can't detect its own key-up while the opposite-side
+    // key is still held. These raw masks distinguish the physical side.
+    private enum DeviceModifierMask {
+        static let leftControl: UInt = 0x0000_0001
+        static let leftShift: UInt = 0x0000_0002
+        static let rightShift: UInt = 0x0000_0004
+        static let leftCommand: UInt = 0x0000_0008
+        static let rightCommand: UInt = 0x0000_0010
+        static let leftOption: UInt = 0x0000_0020
+        static let rightOption: UInt = 0x0000_0040
+        static let rightControl: UInt = 0x0000_2000
+    }
+
     private func isKeyCurrentlyPressed(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Bool {
+        func has(_ mask: UInt) -> Bool { flags.rawValue & mask != 0 }
         switch selectedKey {
         case .none:
-            false
+            return false
         case .capsLock:
-            keyCode == 57 && flags.contains(.capsLock)
+            // Caps Lock has no left/right variant; the family flag is correct here.
+            return keyCode == 57 && flags.contains(.capsLock)
         case .leftShift:
-            keyCode == 56 && flags.contains(.shift)
+            return keyCode == 56 && has(DeviceModifierMask.leftShift)
         case .leftOption:
-            keyCode == 58 && flags.contains(.option)
+            return keyCode == 58 && has(DeviceModifierMask.leftOption)
         case .leftCommand:
-            keyCode == 55 && flags.contains(.command)
+            return keyCode == 55 && has(DeviceModifierMask.leftCommand)
         case .leftControl:
-            keyCode == 59 && flags.contains(.control)
+            return keyCode == 59 && has(DeviceModifierMask.leftControl)
         case .rightShift:
-            keyCode == 60 && flags.contains(.shift)
+            return keyCode == 60 && has(DeviceModifierMask.rightShift)
         case .rightOption:
-            keyCode == 61 && flags.contains(.option)
+            return keyCode == 61 && has(DeviceModifierMask.rightOption)
         case .rightCommand:
-            keyCode == 54 && flags.contains(.command)
+            return keyCode == 54 && has(DeviceModifierMask.rightCommand)
         case .rightControl:
-            keyCode == 62 && flags.contains(.control)
+            return keyCode == 62 && has(DeviceModifierMask.rightControl)
         }
     }
 
