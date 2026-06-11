@@ -592,7 +592,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func refreshActivationPolicy() {
-        let shouldShowInAppSwitcher = isStateInProgress(appState.meetingRecordingState) || isSettingsWindowVisible()
+        let shouldShowInAppSwitcher = isStateInProgress(appState.meetingRecordingState)
+            || MainWindowController.shared.isVisible
+            || isSettingsWindowVisible()
         NSApp.setActivationPolicy(shouldShowInAppSwitcher ? .regular : .accessory)
     }
 
@@ -796,8 +798,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Settings
 
-    func openSettings() {
-        // Trigger settings opening via AppState (observed by SwiftUI)
-        appState.shouldOpenSettings = true
+    func openSettings(tab: MainSection = .general) {
+        MainWindowController.shared.showWindow(section: tab)
     }
 }

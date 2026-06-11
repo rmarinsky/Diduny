@@ -84,7 +84,7 @@ struct HistoryPaletteView: View {
                 Spacer()
                 Button("View All") {
                     HistoryPaletteWindowController.shared.closeWindow()
-                    RecordingsLibraryWindowController.shared.showWindow()
+                    MainWindowController.shared.showWindow(section: .recordings)
                 }
                 .font(.caption2)
                 .buttonStyle(.plain)

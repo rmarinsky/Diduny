@@ -4,7 +4,6 @@ import SwiftUI
 struct MenuBarContentView: View {
     @Environment(AppState.self) var appState
     var audioDeviceManager: AudioDeviceManager
-    @Environment(\.openSettings) private var openSettings
 
     var onToggleRecording: @MainActor () -> Void
     var onToggleTranslationRecording: @MainActor () -> Void
@@ -93,16 +92,14 @@ struct MenuBarContentView: View {
             Button("Transcribe File…", action: onTranscribeFile)
                 .disabled(appState.recordingState == .processing)
 
-            Button("Recordings", action: openLibrary)
+            Button("Recordings") {
+                MainWindowController.shared.showWindow(section: .recordings)
+            }
 
             Divider()
 
             Button {
-                openSettings()
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(100))
-                    NSApp.activate(ignoringOtherApps: true)
-                }
+                MainWindowController.shared.showWindow(section: .general)
             } label: {
                 HStack {
                     Text("Settings")
@@ -243,11 +240,7 @@ struct MenuBarContentView: View {
     }
 
     private func openLibrary() {
-        RecordingsLibraryWindowController.shared.showWindow()
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(100))
-            NSApp.activate(ignoringOtherApps: true)
-        }
+        MainWindowController.shared.showWindow(section: .recordings)
     }
 
     private var isCloudMode: Bool {
@@ -260,7 +253,7 @@ struct MenuBarContentView: View {
     private func selectCloudMode() {
         guard AuthService.shared.isLoggedIn else {
             NotchManager.shared.showInfo(message: "Log in to use cloud processing", duration: 3.0)
-            appState.settingsTabToOpen = .account
+            MainWindowController.shared.showWindow(section: .account)
             return
         }
         let settings = SettingsStorage.shared
