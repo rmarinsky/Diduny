@@ -18,7 +18,7 @@ struct LiveTranscriptView: View {
             Divider()
             footerBar
         }
-        .frame(minWidth: 350, minHeight: 300)
+        .frame(minWidth: 500, idealWidth: 500, minHeight: 500)
         .onAppear { seedDurationFromRecordingStart(); startTimer() }
         .onDisappear { stopTimer() }
     }

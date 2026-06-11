@@ -51,7 +51,7 @@ struct HistoryPaletteView: View {
                     Spacer()
                     Image(systemName: "doc.text.magnifyingglass")
                         .font(.system(size: 28))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("BrandAccentDeep").opacity(0.5))
                     Text(searchText.isEmpty ? "No transcriptions yet" : "No results")
                         .font(.caption)
                         .foregroundColor(.secondary)
