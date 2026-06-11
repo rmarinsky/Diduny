@@ -16,6 +16,7 @@
 		0FFD1A4567A90C61047FD763 /* SettingsStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91E893AF3E6C20B492D3CB7 /* SettingsStorage.swift */; };
 		107FDBF081DEEF30BD2A922D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F0D8B455676B571AEC778E72 /* Assets.xcassets */; };
 		154F9E85CEDA37FE7E88EE36 /* CloudTranscriptionServiceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2D4C4C36B3BB89D1A2E8BD /* CloudTranscriptionServiceE2ETests.swift */; };
+		1D8F54C7E34D0BF458CDE89A /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D10CEDBC544B56C03986007 /* OverviewView.swift */; };
 		1FC13B68C69A30C9FD13E2F0 /* ShortcutsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B0622318D71BD3A1EEA701 /* ShortcutsSettingsView.swift */; };
 		214683A40F227DDAE1D64C8B /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5A6F95E2FA37D325086B2BC /* OnboardingComponents.swift */; };
 		22F85E040AEC97503AF68835 /* OnboardingContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1967633DAD0607B3B2756CC8 /* OnboardingContainerView.swift */; };
@@ -202,6 +203,7 @@
 		924F66A90537891F57F1CF0D /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
 		9357A98372102BF3B285A2AD /* HistoryPaletteWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPaletteWindowController.swift; sourceTree = "<group>"; };
 		9C38884243E804534AE077F9 /* InProgressRecordingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InProgressRecordingStore.swift; sourceTree = "<group>"; };
+		9D10CEDBC544B56C03986007 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
 		A5A6F95E2FA37D325086B2BC /* OnboardingComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingComponents.swift; sourceTree = "<group>"; };
 		A71FCAF64D600F8EFA8B20A2 /* WhisperModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModelManager.swift; sourceTree = "<group>"; };
 		A90DC34399C728FB2BD9C292 /* AuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthServiceTests.swift; sourceTree = "<group>"; };
@@ -353,6 +355,14 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		4B8A68CAD04C9047027A278E /* Overview */ = {
+			isa = PBXGroup;
+			children = (
+				9D10CEDBC544B56C03986007 /* OverviewView.swift */,
+			);
+			path = Overview;
+			sourceTree = "<group>";
+		};
 		4E9257208A1E961F03A1A487 /* Services */ = {
 			isa = PBXGroup;
 			children = (
@@ -420,6 +430,7 @@
 				6C36C552190EC6F27298225F /* MenuBar */,
 				1D2A9DD81BDB6D428A219153 /* Notch */,
 				24CE2F228CAA8E6C664796F8 /* Onboarding */,
+				4B8A68CAD04C9047027A278E /* Overview */,
 				9DDE6C7594E6F4CA5171F56A /* RecordingsLibrary */,
 				8F1DB771BE47D76906F11C84 /* Settings */,
 				80BA8191113D56E490C4FF8A /* TextTranslation */,
@@ -736,6 +747,7 @@
 				214683A40F227DDAE1D64C8B /* OnboardingComponents.swift in Sources */,
 				22F85E040AEC97503AF68835 /* OnboardingContainerView.swift in Sources */,
 				03EBBAC2178925692C5B0F28 /* OnboardingManager.swift in Sources */,
+				1D8F54C7E34D0BF458CDE89A /* OverviewView.swift in Sources */,
 				3857104F9A2310C3DA6E8290 /* PermissionManager.swift in Sources */,
 				CAA3AF319715F9DD611CCC8B /* PermissionsSettingsView.swift in Sources */,
 				86207F57859F544F066B0140 /* PushToTalkKey.swift in Sources */,

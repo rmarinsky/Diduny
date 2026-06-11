@@ -44,7 +44,7 @@ struct MainWindowView: View {
     private var detailView: some View {
         switch selectedSection {
         case .overview:
-            OverviewPlaceholderView()
+            OverviewView()
         case .recordings:
             RecordingsLibraryView()
                 .environment(audioDeviceManager)
@@ -65,22 +65,7 @@ struct MainWindowView: View {
     }
 }
 
-// MARK: - Placeholder views (D5 and D6 will replace these)
-
-struct OverviewPlaceholderView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "square.grid.2x2")
-                .font(.system(size: 48))
-                .foregroundColor(Color("BrandTintSoft"))
-            Text("Overview")
-                .font(.title2.bold())
-            Text("Coming in D5")
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
+// MARK: - Meetings placeholder (D6 will replace this)
 
 struct MeetingsPlaceholderView: View {
     var body: some View {
