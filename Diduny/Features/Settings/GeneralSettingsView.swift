@@ -7,6 +7,13 @@ struct GeneralSettingsView: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
 
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
+    private var buildNumber: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+    }
+
     var body: some View {
         Form {
             Section {
@@ -48,6 +55,39 @@ struct GeneralSettingsView: View {
                 .buttonStyle(.link)
             } header: {
                 Text("Help")
+            }
+
+            Section {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Diduny")
+                            .font(.headline)
+                        Text("Version \(appVersion) (\(buildNumber))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Button("Check for Updates…") {
+                        (NSApp.delegate as? AppDelegate)?.updaterManager.checkForUpdates()
+                    }
+                    .buttonStyle(.link)
+                }
+
+                Link(destination: URL(string: "https://rmarinsky.com.ua")!) {
+                    HStack {
+                        Text("Website")
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Text("Made in Ukraine · © 2024–2026 Roman Marinsky")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } header: {
+                Text("About")
             }
         }
         .formStyle(.grouped)

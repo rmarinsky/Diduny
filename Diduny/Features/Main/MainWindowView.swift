@@ -16,10 +16,6 @@ struct MainWindowView: View {
         .toolbar(removing: .sidebarToggle)
         .frame(minWidth: 1000, idealWidth: 1000, minHeight: 680, idealHeight: 680)
         .onAppear {
-            if let tab = appState.settingsTabToOpen {
-                selectedSection = tab.mainSection
-                appState.settingsTabToOpen = nil
-            }
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -28,12 +24,6 @@ struct MainWindowView: View {
                 appDelegate.refreshActivationPolicy()
             } else {
                 NSApp.setActivationPolicy(.accessory)
-            }
-        }
-        .onChange(of: appState.settingsTabToOpen) { _, tab in
-            if let tab {
-                selectedSection = tab.mainSection
-                appState.settingsTabToOpen = nil
             }
         }
         .onChange(of: appState.shouldOpenSettings) { _, shouldOpen in
@@ -63,7 +53,7 @@ struct MainWindowView: View {
         case .general:
             GeneralSettingsView()
         case .audioDictation:
-            AudioSettingsView()
+            AudioDictationSettingsView()
                 .environment(audioDeviceManager)
         case .models:
             OfflineModelsSettingsView()

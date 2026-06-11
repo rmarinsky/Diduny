@@ -63,9 +63,6 @@ final class AppState {
     // Settings trigger (for opening settings from non-SwiftUI code)
     var shouldOpenSettings: Bool = false
 
-    /// When set, the Settings window opens directly on this tab, then resets to nil.
-    var settingsTabToOpen: SettingsTab?
-
     // Meeting recording
     var meetingRecordingState: RecordingState = .idle {
         didSet {

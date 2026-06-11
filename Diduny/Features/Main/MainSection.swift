@@ -45,18 +45,3 @@ enum MainSection: String, Hashable {
     }
 }
 
-extension SettingsTab {
-    var mainSection: MainSection {
-        switch self {
-        case .general: .general
-        case .shortcuts: .shortcuts
-        case .audio: .audioDictation
-        case .dictation: .audioDictation
-        case .offlineModels: .models
-        case .translation: .audioDictation
-        case .meetings: .meetings
-        case .account: .account
-        case .about: .general
-        }
-    }
-}
