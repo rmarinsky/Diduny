@@ -7,7 +7,7 @@ struct LiveTranscriptView: View {
     @State private var timer: Timer?
 
     private let speakerColors: [Color] = [
-        .blue, .green, .orange, .purple, .pink, .teal, .indigo, .mint
+        Color("BrandAccentDeep"), .green, .orange, .brown, .pink, .teal, .cyan, .mint
     ]
 
     var body: some View {

@@ -41,14 +41,7 @@ struct RecordingRowView: View {
         .padding(.vertical, 2)
     }
 
-    private var typeColor: Color {
-        switch recording.type {
-        case .voice: .blue
-        case .translation: .green
-        case .meeting: .orange
-        case .fileTranscription: .purple
-        }
-    }
+    private var typeColor: Color { recording.type.brandColor }
 
     private var formattedTime: String {
         let formatter = DateFormatter()

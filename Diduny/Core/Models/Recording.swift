@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 struct RecordingDeviceInfo: Codable, Equatable {
     let uid: String
@@ -82,6 +83,15 @@ struct Recording: Identifiable, Codable, Equatable {
                 .cleaned
             case .meeting:
                 .raw
+            }
+        }
+
+        var brandColor: Color {
+            switch self {
+            case .voice: Color("BrandAccentDeep")
+            case .translation: .teal
+            case .meeting: .orange
+            case .fileTranscription: .brown
             }
         }
     }

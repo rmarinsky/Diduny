@@ -5,11 +5,11 @@ import SwiftUI
 // MARK: - Style & Typography Tokens
 
 private enum OnboardingStyle {
-    // Colors
-    static let brandBlue = Color(red: 0.15, green: 0.51, blue: 0.95)
-    static let brandBlueDark = Color(red: 0.09, green: 0.41, blue: 0.84)
-    static let panelBlue = Color(red: 0.80, green: 0.88, blue: 0.98)
-    static let titleColor = Color(red: 0.16, green: 0.24, blue: 0.50)
+    // Colors — brand tokens (raspberry rebrand 2026-06)
+    static let brandBlue = Color.accentColor
+    static let brandBlueDark = Color("BrandAccentDeep")
+    static let panelBlue = Color("BrandTintSoft")
+    static let titleColor = Color("BrandAccentDeep")
 
     // Typography tokens (design doc §2)
     static let display   = Font.system(size: 30, weight: .bold)

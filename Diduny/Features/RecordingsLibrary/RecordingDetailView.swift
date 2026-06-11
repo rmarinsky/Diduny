@@ -181,7 +181,7 @@ struct RecordingDetailView: View {
         VStack(alignment: .leading, spacing: 6) {
             Label("Cloud", systemImage: "cloud.fill")
                 .font(.caption)
-                .foregroundColor(.blue)
+                .foregroundColor(Color("BrandAccentDeep"))
 
             VStack(alignment: .leading, spacing: 6) {
                 Button("Transcribe") {
@@ -295,14 +295,7 @@ struct RecordingDetailView: View {
 
     // MARK: - Helpers
 
-    private var iconColor: Color {
-        switch recording.type {
-        case .voice: .blue
-        case .translation: .green
-        case .meeting: .orange
-        case .fileTranscription: .purple
-        }
-    }
+    private var iconColor: Color { recording.type.brandColor }
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()

@@ -305,10 +305,6 @@ final class OnboardingWindowController {
         window.isMovableByWindowBackground = false
         window.backgroundColor = .windowBackgroundColor
         window.isOpaque = true
-        // The onboarding UI is designed as a light surface (navy text, white
-        // cards, light-blue panel). Pin the window to the light appearance so
-        // system colors don't resolve dark and tank the left-panel contrast.
-        window.appearance = NSAppearance(named: .aqua)
 
         self.windowDelegate = WindowDelegate(onClose: {
             // Close-via-X: save currentStep but do NOT mark hasCompletedOnboarding.

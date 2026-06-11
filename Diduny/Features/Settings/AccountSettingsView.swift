@@ -244,7 +244,7 @@ struct AccountSettingsView: View {
 
                 Divider()
 
-                usageRow(icon: "mic.fill", label: "Voice dictation", duration: voiceDuration, color: .blue)
+                usageRow(icon: "mic.fill", label: "Voice dictation", duration: voiceDuration, color: Color("BrandAccentDeep"))
                 usageRow(icon: "globe", label: "Translation", duration: translationDuration, color: .green)
                 usageRow(icon: "person.3.fill", label: "Meetings", duration: meetingDuration, color: .orange)
 
