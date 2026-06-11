@@ -49,7 +49,7 @@ struct MainWindowView: View {
             RecordingsLibraryView()
                 .environment(audioDeviceManager)
         case .meetings:
-            MeetingsPlaceholderView()
+            MeetingsView()
         case .general:
             GeneralSettingsView()
         case .audioDictation:
@@ -65,19 +65,3 @@ struct MainWindowView: View {
     }
 }
 
-// MARK: - Meetings placeholder (D6 will replace this)
-
-struct MeetingsPlaceholderView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "calendar")
-                .font(.system(size: 48))
-                .foregroundColor(Color("BrandTintSoft"))
-            Text("Meetings")
-                .font(.title2.bold())
-            Text("Coming in D6")
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
