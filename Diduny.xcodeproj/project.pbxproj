@@ -16,7 +16,6 @@
 		0FFD1A4567A90C61047FD763 /* SettingsStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91E893AF3E6C20B492D3CB7 /* SettingsStorage.swift */; };
 		107FDBF081DEEF30BD2A922D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F0D8B455676B571AEC778E72 /* Assets.xcassets */; };
 		154F9E85CEDA37FE7E88EE36 /* CloudTranscriptionServiceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2D4C4C36B3BB89D1A2E8BD /* CloudTranscriptionServiceE2ETests.swift */; };
-		1CBA3DB7D76838DB69D9DDDE /* RecordingsLibraryWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDED8DC543F3EEDBCAC5A5D7 /* RecordingsLibraryWindowController.swift */; };
 		1FC13B68C69A30C9FD13E2F0 /* ShortcutsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B0622318D71BD3A1EEA701 /* ShortcutsSettingsView.swift */; };
 		214683A40F227DDAE1D64C8B /* OnboardingComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5A6F95E2FA37D325086B2BC /* OnboardingComponents.swift */; };
 		22F85E040AEC97503AF68835 /* OnboardingContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1967633DAD0607B3B2756CC8 /* OnboardingContainerView.swift */; };
@@ -246,7 +245,6 @@
 		F91E893AF3E6C20B492D3CB7 /* SettingsStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStorage.swift; sourceTree = "<group>"; };
 		F94036B3B62E2E2464BB3750 /* InProgressRecordingManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InProgressRecordingManifest.swift; sourceTree = "<group>"; };
 		FB2D4C4C36B3BB89D1A2E8BD /* CloudTranscriptionServiceE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudTranscriptionServiceE2ETests.swift; sourceTree = "<group>"; };
-		FDED8DC543F3EEDBCAC5A5D7 /* RecordingsLibraryWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingsLibraryWindowController.swift; sourceTree = "<group>"; };
 		FE4A0D0C3F98F775DE8EE4AA /* TranslationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationSettingsView.swift; sourceTree = "<group>"; };
 		FE81A3506184A31D459CC1DA /* MeetingRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRecorderService.swift; sourceTree = "<group>"; };
 		FEEA00E234538355F573DD94 /* TranscriptCleanupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptCleanupService.swift; sourceTree = "<group>"; };
@@ -497,7 +495,6 @@
 				741CC380B9BFEAA01C4EC5E4 /* RecordingDetailView.swift */,
 				30A4F862A41E4EC48E5CAEFB /* RecordingRowView.swift */,
 				B2217BBA473011B6506284B3 /* RecordingsLibraryView.swift */,
-				FDED8DC543F3EEDBCAC5A5D7 /* RecordingsLibraryWindowController.swift */,
 			);
 			path = RecordingsLibrary;
 			sourceTree = "<group>";
@@ -764,7 +761,6 @@
 				E5A43EA1048E2701A2B0498B /* RecordingRowView.swift in Sources */,
 				E52ED7C098FF6FA9C0554C28 /* RecordingsLibraryStorage.swift in Sources */,
 				E8268E59FC06679FC0BABA3D /* RecordingsLibraryView.swift in Sources */,
-				1CBA3DB7D76838DB69D9DDDE /* RecordingsLibraryWindowController.swift in Sources */,
 				DEE6BFC7FC33767EDB94BFDE /* RecoveryStateManager.swift in Sources */,
 				818876F960D5611C3320AEC9 /* RemoteConfig.swift in Sources */,
 				F1802FC4C604B7FB3AA13B96 /* RemoteConfigService.swift in Sources */,

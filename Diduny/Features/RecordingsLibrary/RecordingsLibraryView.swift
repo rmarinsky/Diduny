@@ -3,70 +3,32 @@ import SwiftUI
 struct RecordingsLibraryView: View {
     @State private var storage = RecordingsLibraryStorage.shared
     @State private var queueService = RecordingQueueService.shared
-    @State private var selectedIds: Set<UUID> = []
-    @State private var filterType: RecordingTypeFilter = .all
     @State private var searchText = ""
+    @State private var filter: RecordingTypeFilter = .all
+    @State private var selectedRecording: Recording? = nil
     @State private var showDeleteConfirmation = false
+    @State private var recordingToDelete: Recording? = nil
 
     enum RecordingTypeFilter: String, CaseIterable {
         case all = "All"
-        case voice = "Voice"
-        case translation = "Translation"
-        case meeting = "Meeting"
-        case fileTranscription = "File"
+        case meetings = "Meetings"
+        case voiceNotes = "Voice notes"
     }
 
     private var filteredRecordings: [Recording] {
         storage.recordings.filter { recording in
-            // Type filter
-            let matchesType: Bool
-            switch filterType {
-            case .all: matchesType = true
-            case .voice: matchesType = recording.type == .voice
-            case .translation: matchesType = recording.type == .translation
-            case .meeting: matchesType = recording.type == .meeting
-            case .fileTranscription: matchesType = recording.type == .fileTranscription
+            let matchesFilter: Bool
+            switch filter {
+            case .all: matchesFilter = true
+            case .meetings: matchesFilter = recording.type == .meeting
+            case .voiceNotes: matchesFilter = recording.type != .meeting
             }
-
-            // Search filter
-            let matchesSearch: Bool
-            if searchText.isEmpty {
-                matchesSearch = true
-            } else {
-                let query = searchText.lowercased()
-                matchesSearch = recording.type.displayName.lowercased().contains(query)
-                    || (recording.transcriptionText?.lowercased().contains(query) ?? false)
-            }
-
-            return matchesType && matchesSearch
+            guard matchesFilter else { return false }
+            guard !searchText.isEmpty else { return true }
+            let query = searchText.lowercased()
+            return recording.type.displayName.lowercased().contains(query)
+                || (recording.transcriptionText?.lowercased().contains(query) ?? false)
         }
-    }
-
-    private static let groupDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
-    }()
-
-    /// Recordings grouped by date (day), sorted newest first
-    private var groupedRecordings: [(date: String, recordings: [Recording])] {
-        let calendar = Calendar.current
-
-        let grouped = Dictionary(grouping: filteredRecordings) { recording in
-            calendar.startOfDay(for: recording.createdAt)
-        }
-
-        return grouped
-            .sorted { $0.key > $1.key }
-            .map { (date: Self.groupDateFormatter.string(from: $0.key), recordings: $0.value) }
-    }
-
-    private var singleSelectedRecording: Recording? {
-        guard selectedIds.count == 1,
-              let id = selectedIds.first
-        else { return nil }
-        return filteredRecordings.first(where: { $0.id == id })
     }
 
     private var favoriteLanguages: [SupportedLanguage] {
@@ -79,107 +41,119 @@ struct RecordingsLibraryView: View {
         return SupportedLanguage.allLanguages.filter { !favCodes.contains($0.code) }
     }
 
-    private var currentQueueStatusText: String? {
-        guard let status = queueService.currentJobStatus else { return nil }
-        switch status {
-        case .queued:
-            return "Queued"
-        case .uploading:
-            return "Uploading"
-        case .processing:
-            return "Transcribing"
-        case .finalizing:
-            return "Finalizing"
-        case .completed, .error:
-            return nil
-        }
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            // Toolbar
-            toolbar
+        VStack(alignment: .leading, spacing: 0) {
+            header
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+                .padding(.bottom, 16)
 
-            Divider()
+            filterChips
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
 
-            // Content
             if storage.recordings.isEmpty {
                 emptyState
             } else if filteredRecordings.isEmpty {
                 noResultsState
             } else {
-                HSplitView {
-                    recordingsList
-                        .frame(minWidth: 220, idealWidth: 280)
-
-                    if let recording = singleSelectedRecording {
-                        RecordingDetailView(recording: recording)
-                            .frame(minWidth: 650, idealWidth: 800)
-                    }
-                }
+                recordingsCard
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
             }
-
-            Divider()
-
-            // Footer
-            footer
         }
-        .frame(minWidth: 700, minHeight: 400)
-        .alert("Delete Recordings", isPresented: $showDeleteConfirmation) {
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .sheet(item: $selectedRecording) { recording in
+            RecordingDetailView(recording: recording)
+                .frame(minWidth: 640, idealWidth: 700, minHeight: 500)
+        }
+        .alert("Delete Recording", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
-                storage.deleteRecordings(selectedIds)
-                selectedIds.removeAll()
+                if let r = recordingToDelete {
+                    storage.deleteRecording(r)
+                    if selectedRecording?.id == r.id { selectedRecording = nil }
+                }
+                recordingToDelete = nil
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) { recordingToDelete = nil }
         } message: {
-            Text("Are you sure you want to delete \(selectedIds.count) recording(s)? This cannot be undone.")
+            Text("Are you sure you want to delete this recording? This cannot be undone.")
         }
     }
 
-    // MARK: - Toolbar
+    // MARK: - Header
 
-    private var toolbar: some View {
-        HStack(spacing: 12) {
-            Picker("Filter", selection: $filterType) {
-                ForEach(RecordingTypeFilter.allCases, id: \.self) { type in
-                    Text(type.rawValue).tag(type)
+    private var header: some View {
+        HStack(alignment: .center) {
+            Text("Recordings")
+                .font(.title2.bold())
+            Spacer()
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 13))
+                TextField("Search transcripts", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .frame(width: 160)
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 300)
-
-            Spacer()
-
-            TextField("Search...", text: $searchText)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 200)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color(.quaternaryLabelColor).opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
     }
 
-    // MARK: - List
+    // MARK: - Filter Chips
 
-    private var recordingsList: some View {
-        List(selection: $selectedIds) {
-            ForEach(groupedRecordings, id: \.date) { group in
-                Section(header: Text(group.date)) {
-                    ForEach(group.recordings) { recording in
-                        RecordingRowView(recording: recording)
-                            .tag(recording.id)
-                            .contextMenu {
-                                contextMenu(for: recording)
-                            }
+    private var filterChips: some View {
+        HStack(spacing: 6) {
+            ForEach(RecordingTypeFilter.allCases, id: \.self) { type in
+                FilterChip(label: type.rawValue, isSelected: filter == type) {
+                    filter = type
+                }
+            }
+            Spacer()
+        }
+    }
+
+    // MARK: - Recordings Card
+
+    private var recordingsCard: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(Array(filteredRecordings.enumerated()), id: \.element.id) { index, recording in
+                    RecordingRowView(recording: recording)
+                        .onTapGesture { selectedRecording = recording }
+                        .contextMenu { recordingContextMenu(for: recording) }
+                    if index < filteredRecordings.count - 1 {
+                        Divider()
+                            .padding(.horizontal, 16)
                     }
                 }
             }
         }
+        .background(Color(.windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+        )
     }
 
     // MARK: - Context Menu
 
     @ViewBuilder
-    private func contextMenu(for recording: Recording) -> some View {
+    private func recordingContextMenu(for recording: Recording) -> some View {
         Button("Transcribe") {
             queueService.enqueue([recording.id], action: .transcribe)
         }
@@ -192,27 +166,17 @@ struct RecordingsLibraryView: View {
             .disabled(recording.status == .processing)
         }
 
-        // Translate submenu with favorite languages
         Menu("Translate to") {
             ForEach(favoriteLanguages) { lang in
                 Button(lang.name) {
-                    queueService.enqueue(
-                        [recording.id],
-                        action: .translate,
-                        targetLanguage: lang.code
-                    )
+                    queueService.enqueue([recording.id], action: .translate, targetLanguage: lang.code)
                 }
             }
-
             if !otherLanguages.isEmpty {
                 Divider()
                 ForEach(otherLanguages) { lang in
                     Button(lang.name) {
-                        queueService.enqueue(
-                            [recording.id],
-                            action: .translate,
-                            targetLanguage: lang.code
-                        )
+                        queueService.enqueue([recording.id], action: .translate, targetLanguage: lang.code)
                     }
                 }
             }
@@ -229,8 +193,8 @@ struct RecordingsLibraryView: View {
         Divider()
 
         Button("Delete", role: .destructive) {
-            storage.deleteRecording(recording)
-            selectedIds.remove(recording.id)
+            recordingToDelete = recording
+            showDeleteConfirmation = true
         }
     }
 
@@ -241,7 +205,7 @@ struct RecordingsLibraryView: View {
             Spacer()
             Image(systemName: "waveform.circle")
                 .font(.system(size: 48))
-                .foregroundColor(.secondary)
+                .foregroundColor(Color("BrandTintSoft"))
             Text("No Recordings Yet")
                 .font(.title2)
                 .foregroundColor(.secondary)
@@ -258,7 +222,7 @@ struct RecordingsLibraryView: View {
             Spacer()
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 36))
-                .foregroundColor(.secondary)
+                .foregroundColor(Color("BrandTintSoft"))
             Text("No Results")
                 .font(.title3)
                 .foregroundColor(.secondary)
@@ -266,74 +230,36 @@ struct RecordingsLibraryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+}
 
-    // MARK: - Footer
+// MARK: - Filter Chip
 
-    private var footer: some View {
-        HStack(spacing: 12) {
-            // Stats
-            Text("\(filteredRecordings.count) recording(s) \u{00B7} \(formattedTotalSize)")
-                .font(.caption)
-                .foregroundColor(.secondary)
+private struct FilterChip: View {
+    let label: String
+    let isSelected: Bool
+    let action: () -> Void
 
-            // Queue progress
-            if queueService.isProcessing {
-                HStack(spacing: 4) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(
-                        currentQueueStatusText.map {
-                            "\($0) (\(queueService.queueCount) remaining)"
-                        } ?? "Processing (\(queueService.queueCount) remaining)"
-                    )
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            Spacer()
-
-            // Batch actions (when items selected)
-            if !selectedIds.isEmpty {
-                Button("Transcribe") {
-                    queueService.enqueue(Array(selectedIds), action: .transcribe)
-                }
-
-                Menu("Translate to") {
-                    ForEach(favoriteLanguages) { lang in
-                        Button(lang.name) {
-                            queueService.enqueue(
-                                Array(selectedIds),
-                                action: .translate,
-                                targetLanguage: lang.code
-                            )
-                        }
-                    }
-
-                    if !otherLanguages.isEmpty {
-                        Divider()
-                        ForEach(otherLanguages) { lang in
-                            Button(lang.name) {
-                                queueService.enqueue(
-                                    Array(selectedIds),
-                                    action: .translate,
-                                    targetLanguage: lang.code
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Button("Delete", role: .destructive) {
-                    showDeleteConfirmation = true
-                }
-            }
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                .foregroundColor(isSelected ? .white : .primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(
+                    isSelected
+                        ? Color("BrandAccentDeep")
+                        : Color(.quaternaryLabelColor).opacity(0.08),
+                    in: Capsule()
+                )
+                .overlay(
+                    Capsule()
+                        .strokeBorder(
+                            isSelected ? Color.clear : Color(.separatorColor),
+                            lineWidth: 0.5
+                        )
+                )
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    private var formattedTotalSize: String {
-        ByteCountFormatter.string(fromByteCount: storage.totalSizeBytes, countStyle: .file)
+        .buttonStyle(.plain)
     }
 }
