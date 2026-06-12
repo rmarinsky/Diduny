@@ -295,6 +295,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // settle after all setup above finishes.
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(200))
+            NSLog("[Diduny] setupAfterOnboarding deferred: isVisible=%d policy=%d",
+                  MainWindowController.shared.isVisible ? 1 : 0, NSApp.activationPolicy().rawValue)
             if !MainWindowController.shared.isVisible {
                 MainWindowController.shared.showWindow()
             }
@@ -461,10 +463,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // (Spotlight press Enter, Dock click). If no windows are visible, open
     // the main window so the UI actually appears.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        NSLog("[Diduny] applicationShouldHandleReopen: hasVisibleWindows=%d", hasVisibleWindows)
         if !hasVisibleWindows {
+            NSLog("[Diduny] applicationShouldHandleReopen: calling showWindow")
             MainWindowController.shared.showWindow()
         }
-        return false
+        return true
     }
 
     func applicationWillTerminate(_: Notification) {

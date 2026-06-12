@@ -322,9 +322,20 @@ final class OnboardingWindowController {
         window.delegate = self.windowDelegate
 
         self.window = window
+        // Activate BEFORE ordering the window front: on macOS 26 a window
+        // ordered while the app is not active (right after the .accessory →
+        // .regular policy switch) can stay behind other apps' windows.
+        NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
+        // Belt-and-braces: the policy switch is asynchronous in the process
+        // manager, so retry activation once it has settled.
+        Task { @MainActor [weak window] in
+            try? await Task.sleep(for: .milliseconds(150))
+            NSApp.activate(ignoringOtherApps: true)
+            window?.makeKeyAndOrderFront(nil)
+            window?.orderFrontRegardless()
+        }
     }
 
     func closeOnboarding() {

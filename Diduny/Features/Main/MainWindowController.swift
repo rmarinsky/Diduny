@@ -25,14 +25,25 @@ final class MainWindowController {
             makeWindow()
         }
 
+        NSLog("[Diduny] showWindow: policy=%d window=%d visible=%d",
+              NSApp.activationPolicy().rawValue, window != nil ? 1 : 0, window?.isVisible ?? false ? 1 : 0)
+
         // Promote to regular BEFORE makeKeyAndOrderFront so the window can
         // actually appear on screen. LSUIElement/.accessory apps cannot bring
         // windows to front without first switching activation policy.
         NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(50))
+        window?.orderFrontRegardless()
+        NSLog("[Diduny] showWindow: after show, visible=%d", window?.isVisible ?? false ? 1 : 0)
+        // The .accessory → .regular switch settles asynchronously in the
+        // process manager; without this retry the window can stay behind
+        // other apps' windows on macOS 26.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
             NSApp.activate(ignoringOtherApps: true)
+            self?.window?.makeKeyAndOrderFront(nil)
+            self?.window?.orderFrontRegardless()
         }
     }
 

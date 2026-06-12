@@ -649,6 +649,7 @@ struct ScreenRecordingStepView: View {
 
     @State private var screenRecordingGranted = false
     @State private var isRequesting = false
+    @State private var showStaleGrantHint = false
 
     private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -694,6 +695,21 @@ struct ScreenRecordingStepView: View {
                         action: requestScreenRecordingPermission
                     )
                     .padding(.top, 8)
+
+                    if showStaleGrantHint {
+                        // Stale TCC grant: System Settings shows the toggle ON,
+                        // but the recorded code signature no longer matches this
+                        // binary, so macOS silently refuses without re-prompting.
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
+                            Text("Already enabled in System Settings but still not working? Toggle Diduny off and on in Screen & System Audio Recording, then relaunch the app.")
+                                .font(OnboardingStyle.body)
+                                .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.top, 4)
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -774,6 +790,14 @@ struct ScreenRecordingStepView: View {
                 isRequesting = false
             }
             await refreshStatus()
+            // If the request came back and TCC still says no, the user is in
+            // the stale-grant dead end (toggle ON in Settings, signature
+            // mismatch) — surface the recovery hint instead of failing silently.
+            await MainActor.run {
+                if !screenRecordingGranted {
+                    showStaleGrantHint = true
+                }
+            }
         }
     }
 }
