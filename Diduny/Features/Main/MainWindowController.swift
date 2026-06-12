@@ -25,9 +25,13 @@ final class MainWindowController {
             makeWindow()
         }
 
+        // Promote to regular BEFORE makeKeyAndOrderFront so the window can
+        // actually appear on screen. LSUIElement/.accessory apps cannot bring
+        // windows to front without first switching activation policy.
+        NSApp.setActivationPolicy(.regular)
         window?.makeKeyAndOrderFront(nil)
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(100))
+            try? await Task.sleep(for: .milliseconds(50))
             NSApp.activate(ignoringOtherApps: true)
         }
     }
