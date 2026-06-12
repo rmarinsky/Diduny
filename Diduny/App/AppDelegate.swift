@@ -289,6 +289,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !AuthService.hasStoredSession {
             Log.app.info("[Auth] No stored session — cloud preferences remain stored, runtime uses local fallback")
         }
+
+        // Show main window so a Spotlight launch (fresh, app was not running)
+        // actually surfaces the UI. Deferred 200 ms to let the window system
+        // settle after all setup above finishes.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
+            if !MainWindowController.shared.isVisible {
+                MainWindowController.shared.showWindow()
+            }
+        }
     }
 
     private func checkForOrphanedRecordings() {
@@ -445,6 +455,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? FileManager.default.removeItem(atPath: state.tempFilePath)
         RecoveryStateManager.shared.clearState()
         Log.app.info("Orphaned recording discarded")
+    }
+
+    // Called when the app is already running and the user activates it again
+    // (Spotlight press Enter, Dock click). If no windows are visible, open
+    // the main window so the UI actually appears.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows {
+            MainWindowController.shared.showWindow()
+        }
+        return false
     }
 
     func applicationWillTerminate(_: Notification) {
