@@ -117,7 +117,7 @@ extension AppDelegate {
         }
 
         // Request screen capture permission on-demand
-        let hasPermission = await PermissionManager.shared.ensureScreenRecordingPermission()
+        let hasPermission = await PermissionManager.shared.ensureScreenRecordingPermission(context: .meetingRecording)
         appState.screenCapturePermissionGranted = hasPermission
 
         guard hasPermission else {

@@ -54,10 +54,14 @@ final class RecordingQueueService {
         guard !newItems.isEmpty else { return }
 
         for item in newItems {
+            if let error = preflightError(for: item) {
+                storage.updateRecording(id: item.id, status: .failed, error: error)
+                continue
+            }
             storage.updateRecording(id: item.id, status: .processing, error: nil)
+            pendingItems.append(item)
         }
 
-        pendingItems.append(contentsOf: newItems)
         refreshQueueState()
         startProcessingIfNeeded()
     }
@@ -129,15 +133,11 @@ final class RecordingQueueService {
         do {
             let audioData = try Data(contentsOf: audioURL)
 
-            let provider: TranscriptionProvider = if let override = item.providerOverride {
-                override
-            } else {
-                switch item.action {
-                case .transcribe, .transcribeDiarize:
-                    SettingsStorage.shared.effectiveTranscriptionProvider
-                case .translate:
-                    SettingsStorage.shared.effectiveTranslationProvider
-                }
+            let provider = configuredProvider(for: item)
+
+            if let error = preflightError(for: item, provider: provider) {
+                storage.updateRecording(id: item.id, status: .failed, error: error)
+                return
             }
 
             let service = createTranscriptionService(
@@ -259,6 +259,52 @@ final class RecordingQueueService {
             whisperModelOverride: whisperModelOverride,
             targetLanguage: targetLanguage
         )
+    }
+
+    private func configuredProvider(for item: QueueItem) -> TranscriptionProvider {
+        if let override = item.providerOverride {
+            return override
+        }
+
+        switch item.action {
+        case .transcribe, .transcribeDiarize:
+            return SettingsStorage.shared.transcriptionProvider
+        case .translate:
+            return SettingsStorage.shared.translationProvider
+        }
+    }
+
+    private func preflightError(for item: QueueItem) -> String? {
+        preflightError(for: item, provider: configuredProvider(for: item))
+    }
+
+    private func preflightError(for item: QueueItem, provider: TranscriptionProvider) -> String? {
+        switch provider {
+        case .cloud:
+            guard hasCloudCredentials else {
+                return "Log in to use Cloud transcription."
+            }
+            return nil
+        case .local:
+            let modelName = item.whisperModelOverride ?? SettingsStorage.shared.selectedWhisperModel
+            guard let model = WhisperModelManager.availableModels.first(where: { $0.name == modelName }),
+                  WhisperModelManager.shared.isModelDownloaded(model)
+            else {
+                return "No local Whisper model downloaded. Log in for Cloud or download a model in Settings."
+            }
+            return nil
+        }
+    }
+
+    private var hasCloudCredentials: Bool {
+        #if TEST_BUILD
+            if let token = ProcessInfo.processInfo.environment["DIDUNY_E2E_ACCESS_TOKEN"],
+               !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                return true
+            }
+        #endif
+        return AuthService.hasStoredSession
     }
 
     private func refreshQueueState() {

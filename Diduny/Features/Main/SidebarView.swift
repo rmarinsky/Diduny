@@ -11,30 +11,30 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             brandTile
                 .padding(.horizontal, 16)
-                .padding(.top, 20)
+                .padding(.top, 50)
                 .padding(.bottom, 12)
 
-            List(selection: $selectedSection) {
-                ForEach(mainItems, id: \.self) { section in
-                    SidebarRow(section: section, isSelected: selectedSection == section)
-                        .tag(section)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
-                }
-
-                Section {
-                    ForEach(settingsItems, id: \.self) { section in
-                        SidebarRow(section: section, isSelected: selectedSection == section)
-                            .tag(section)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(mainItems, id: \.self) { section in
+                        sidebarRow(for: section)
                     }
-                } header: {
+
                     Text("SETTINGS")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.secondary)
+                        .padding(.top, 22)
+                        .padding(.bottom, 4)
                         .padding(.leading, 4)
+
+                    ForEach(settingsItems, id: \.self) { section in
+                        sidebarRow(for: section)
+                    }
                 }
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .listStyle(.sidebar)
+            .scrollIndicators(.never)
 
             footerCTA
                 .padding(.horizontal, 16)
@@ -48,17 +48,11 @@ struct SidebarView: View {
         HStack(spacing: 10) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color("BrandAccentDeep").opacity(0.85), Color("BrandAccentDeep")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(Color("BrandTintSoft"))
                     .frame(width: 32, height: 32)
                 Image(systemName: "mic.fill")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(Color("BrandAccentDeep"))
             }
 
             VStack(alignment: .leading, spacing: 1) {
@@ -85,9 +79,7 @@ struct SidebarView: View {
 
     private var footerCTA: some View {
         Button {
-            if let appDelegate = NSApp.delegate as? AppDelegate {
-                appDelegate.toggleRecording()
-            }
+            MainWindowController.shared.toggleRecording()
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "mic.fill")
@@ -95,7 +87,7 @@ struct SidebarView: View {
                 Text("Start Recording")
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
-                Text("⌘⌃D")
+                Text("⌘⇧D")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .opacity(0.7)
             }
@@ -105,6 +97,20 @@ struct SidebarView: View {
             .background(Color("BrandAccentDeep"), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+        .help("Start Recording")
+        .accessibilityLabel(Text("Start Recording"))
+        .accessibilityIdentifier("Start Recording")
+    }
+
+    private func sidebarRow(for section: MainSection) -> some View {
+        SidebarRow(section: section, isSelected: selectedSection == section)
+            .onTapGesture {
+                selectedSection = section
+            }
+            .focusable(false)
+            .accessibilityLabel(Text(section.label))
+            .accessibilityValue(Text(selectedSection == section ? "Selected" : ""))
+            .accessibilityIdentifier("Sidebar \(section.label)")
     }
 }
 
@@ -127,6 +133,7 @@ private struct SidebarRow: View {
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
+        .frame(width: 208, alignment: .leading)
         .background(
             isSelected
                 ? Color("BrandAccentDeep")
@@ -134,7 +141,5 @@ private struct SidebarRow: View {
             in: RoundedRectangle(cornerRadius: 6, style: .continuous)
         )
         .contentShape(Rectangle())
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
     }
 }

@@ -38,6 +38,38 @@ struct OverviewView: View {
 
     private var totalHours: Double { totalSeconds / 3600 }
 
+    private var previousPeriodStart: Date {
+        Calendar.current.date(byAdding: .day, value: -(timePeriod.daysBack * 2), to: Date()) ?? Date()
+    }
+
+    private var previousPeriodRecordings: [Recording] {
+        storage.recordings.filter { $0.createdAt >= previousPeriodStart && $0.createdAt < periodStart }
+    }
+
+    private var previousTotalSeconds: Double {
+        previousPeriodRecordings.reduce(0) { $0 + $1.durationSeconds }
+    }
+
+    private var trendPercent: Int? {
+        guard previousTotalSeconds > 0 else { return nil }
+        return Int(((totalSeconds - previousTotalSeconds) / previousTotalSeconds * 100).rounded())
+    }
+
+    private var comparisonLabel: String {
+        switch timePeriod {
+        case .week:
+            return "last week"
+        case .month:
+            let date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM"
+            return formatter.string(from: date)
+        case .year:
+            let year = Calendar.current.component(.year, from: Date()) - 1
+            return "\(year)"
+        }
+    }
+
     private var recordingCount: Int { periodRecordings.count }
 
     private var totalWords: Int {
@@ -181,9 +213,7 @@ struct OverviewView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 2) {
-                Text("↑ trending")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(Color("BrandAccentDeep"))
+                trendView
                 waveformRibbon
             }
         }
@@ -193,6 +223,15 @@ struct OverviewView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(Color("BrandTintBorder"), lineWidth: 1)
         )
+    }
+
+    private var trendView: some View {
+        let value = trendPercent ?? 0
+        let arrow = value >= 0 ? "↗" : "↘"
+        let magnitude = abs(value)
+        return (Text(arrow).foregroundColor(.green) +
+            Text(" \(magnitude)% vs \(comparisonLabel)").foregroundColor(.secondary))
+            .font(.system(size: 12, weight: .medium))
     }
 
     private var waveformRibbon: some View {
@@ -231,7 +270,7 @@ struct OverviewView: View {
                 )
                 MetricCard(
                     icon: nil,
-                    value: "\(streak)-day",
+                    value: "\(streak)-day streak",
                     label: streak > 0 ? streakSubtitle : "Start today",
                     isStreak: true,
                     streakCount: streak
@@ -241,7 +280,7 @@ struct OverviewView: View {
     }
 
     private var streakSubtitle: String {
-        "streak"
+        "\(max(0, 14 - streak)) days to milestone"
     }
 
     // MARK: - Chart Card
@@ -375,16 +414,23 @@ private struct MetricCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: 14))
-                    .foregroundColor(Color("BrandAccentDeep"))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color("BrandTintSoft"))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color("BrandAccentDeep"))
+                }
             } else if isStreak {
                 streakDots
             }
 
             Text(value)
-                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
 
             Text(label)
                 .font(.system(size: 11))
@@ -393,7 +439,9 @@ private struct MetricCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Color(.windowBackgroundColor))
+        .background(
+            isStreak ? Color("BrandTintSoft") : Color(.windowBackgroundColor)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -475,6 +523,7 @@ private struct RecentRow: View {
         case .voice: return "Voice note — \(f.string(from: recording.createdAt))"
         case .translation: return "Translation — \(f.string(from: recording.createdAt))"
         case .meeting: return "Meeting — \(f.string(from: recording.createdAt))"
+        case .meetingTranslation: return "Meeting translation — \(f.string(from: recording.createdAt))"
         case .fileTranscription: return "File — \(f.string(from: recording.createdAt))"
         }
     }

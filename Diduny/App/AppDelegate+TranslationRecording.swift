@@ -157,7 +157,7 @@ extension AppDelegate {
         }
 
         // Request microphone permission on-demand
-        let micGranted = await PermissionManager.shared.ensureMicrophonePermission()
+        let micGranted = await PermissionManager.shared.ensureMicrophonePermission(context: .translation)
         appState.microphonePermissionGranted = micGranted
 
         guard micGranted else {
@@ -257,11 +257,12 @@ extension AppDelegate {
                 appState.translationRecordingStartTime = Date()
                 handleTranslationStateChange(.recording)
 
-                // Pipe audio level to notch
+                // Pipe audio level to the selected recording feedback surface.
+                let feedbackMode: RecordingMode = .translation(languagePair: translationPairLabel)
                 audioLevelCancellable = audioRecorder.$audioLevel
                     .receive(on: DispatchQueue.main)
-                    .sink { level in
-                        NotchManager.shared.audioLevel = level
+                    .sink { [weak self] level in
+                        self?.updateRecordingFeedbackAudioLevel(level, mode: feedbackMode)
                     }
             }
 
@@ -355,8 +356,7 @@ extension AppDelegate {
             let audioData = try await audioRecorder.stopRecording()
             Log.app.info("stopTranslationRecording: Got audio data, size = \(audioData.count) bytes")
 
-            let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
-            capturedAudioData = compressedData
+            capturedAudioData = audioData
 
             let realtimeResult = await stopTranslationRealtimeSession(finalize: true)
 
@@ -413,6 +413,8 @@ extension AppDelegate {
             Log.app.info("stopTranslationRecording: SUCCESS")
 
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
+            capturedAudioData = compressedData
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
                 audioData: compressedData,
@@ -487,8 +489,7 @@ extension AppDelegate {
     // MARK: - Realtime Translation (WebSocket)
 
     private func setupRealtimeTranslationIfNeeded() {
-        guard SettingsStorage.shared.effectiveTranslationProvider == .cloud,
-              SettingsStorage.shared.translationRealtimeSocketEnabled else {
+        guard SettingsStorage.shared.effectiveTranslationProvider == .cloud else {
             audioRecorder.onRealtimeAudioData = nil
             translationRealtimeSessionEnabled = false
             translationRealtimeAccumulator = nil
@@ -496,6 +497,7 @@ extension AppDelegate {
         }
 
         let pair = translationLanguagePair()
+        let feedbackMode: RecordingMode = .translation(languagePair: translationPairLabel)
         let accumulator = RealtimeTranslationAccumulator()
         translationRealtimeAccumulator = accumulator
 
@@ -504,15 +506,22 @@ extension AppDelegate {
             rtService?.sendAudioData(pcmData)
         }
 
-        rtService.onTokensReceived = { [weak accumulator] tokens in
-            guard let accumulator else { return }
-            Task {
-                await accumulator.process(tokens: tokens)
+        rtService.onTokensReceived = { [weak self, weak accumulator] tokens in
+            if let accumulator {
+                Task {
+                    await accumulator.process(tokens: tokens)
+                }
+            }
+            Task { @MainActor in
+                self?.updateRecordingFeedbackTokens(tokens, mode: feedbackMode)
             }
         }
 
-        rtService.onConnectionStatusChanged = { status in
+        rtService.onConnectionStatusChanged = { [weak self] status in
             Log.transcription.info("Translation RT status: \(String(describing: status))")
+            Task { @MainActor in
+                self?.updateRecordingFeedbackConnectionStatus(status, mode: feedbackMode)
+            }
         }
 
         rtService.onSegmentBoundary = { [weak accumulator] _ in
@@ -522,8 +531,11 @@ extension AppDelegate {
             }
         }
 
-        rtService.onError = { error in
+        rtService.onError = { [weak self] error in
             Log.transcription.error("Translation RT error: \(error.localizedDescription)")
+            Task { @MainActor in
+                self?.updateRecordingFeedbackConnectionStatus(.failed(error.localizedDescription), mode: feedbackMode)
+            }
         }
 
         translationRealtimeConnectionError = nil
@@ -537,11 +549,13 @@ extension AppDelegate {
                     audioConfig: .defaultPCM16kMono,
                     translationConfig: RealtimeTranslationConfig(
                         mode: .twoWay(languageA: pair.languageA, languageB: pair.languageB)
-                    )
+                    ),
+                    enableSpeakerDiarization: false
                 )
 
                 await MainActor.run {
                     self.translationRealtimeSessionEnabled = true
+                    self.updateRecordingFeedbackConnectionStatus(.connected, mode: feedbackMode)
                 }
                 NSLog("[Transcription] Translation RT connected (%@ <-> %@)", pair.languageA, pair.languageB)
             } catch {
@@ -550,6 +564,7 @@ extension AppDelegate {
                     self.translationRealtimeSessionEnabled = false
                     self.translationRealtimeAccumulator = nil
                     self.translationRealtimeConnectionError = error.localizedDescription
+                    self.updateRecordingFeedbackConnectionStatus(.failed(error.localizedDescription), mode: feedbackMode)
                 }
                 NSLog("[Transcription] Translation RT connection failed: %@", error.localizedDescription)
             }
@@ -605,7 +620,7 @@ extension AppDelegate {
 
         escapeService.onProgressEscape = { [weak self] pressCount, _ in
             guard let self else { return }
-            NotchManager.shared.showInfoDuringRecording(
+            self.showRecordingInfoDuringActiveRecording(
                 message: SettingsStorage.shared.escapeCancelRepeatHint(afterPressCount: pressCount),
                 mode: .translation(languagePair: translationPairLabel),
                 duration: 1.5
@@ -615,10 +630,14 @@ extension AppDelegate {
         // On second shortcut press (confirmed cancel): cancel recording
         escapeService.onCancel = { [weak self] in
             Task { @MainActor in
+                guard let self else { return }
                 let shouldSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
-                await self?.cancelTranslationRecording()
+                await self.cancelTranslationRecording()
                 let message = shouldSaveAudio ? "Recording cancelled and saved" : "Recording cancelled"
-                NotchManager.shared.showInfo(message: message)
+                self.showRecordingFeedbackInfo(
+                    message: message,
+                    mode: .translation(languagePair: self.translationPairLabel)
+                )
             }
         }
 

@@ -229,7 +229,7 @@ struct AccountSettingsView: View {
             let totalDuration = recordings.reduce(0.0) { $0 + $1.durationSeconds }
             let voiceDuration = recordings.filter { $0.type == .voice }.reduce(0.0) { $0 + $1.durationSeconds }
             let translationDuration = recordings.filter { $0.type == .translation }.reduce(0.0) { $0 + $1.durationSeconds }
-            let meetingDuration = recordings.filter { $0.type == .meeting }.reduce(0.0) { $0 + $1.durationSeconds }
+            let meetingDuration = recordings.filter { $0.type.isMeetingLike }.reduce(0.0) { $0 + $1.durationSeconds }
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack {

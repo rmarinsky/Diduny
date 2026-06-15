@@ -165,6 +165,7 @@ final class AsyncTranscriptionJobService {
         onUpdate: @escaping (JobStatus) -> Void
     ) async throws -> String {
         try Task.checkCancellation()
+        let preferSpeakerDiarization = shouldPreferSpeakerDiarization(config: config)
         let submission = try await submitJob(audioData: audioData, config: config)
 
         var sseFailures = 0
@@ -174,7 +175,7 @@ final class AsyncTranscriptionJobService {
             try Task.checkCancellation()
             do {
                 let result = try await streamJobResult(jobId: submission.jobId, onUpdate: onUpdate)
-                return result.text
+                return result.outputText(preferSpeakerDiarization: preferSpeakerDiarization)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -184,7 +185,7 @@ final class AsyncTranscriptionJobService {
                 // Check if job finished while disconnected
                 let status = try await getJobStatus(jobId: submission.jobId)
                 if status.status == "completed", let result = status.result {
-                    return result.text
+                    return result.outputText(preferSpeakerDiarization: preferSpeakerDiarization)
                 }
                 if status.status == "error" {
                     throw TranscriptionError.apiError(status.error ?? "Transcription failed")
@@ -414,10 +415,10 @@ final class AsyncTranscriptionJobService {
         if let wrapped = try? JSONDecoder().decode(JobStatusResponse.self, from: jsonData),
            let result = wrapped.result
         {
-            return JobResult(text: result.text)
+            return JobResult(text: result.text, tokens: result.tokens)
         }
         let direct = try JSONDecoder().decode(JobTranscriptionResult.self, from: jsonData)
-        return JobResult(text: direct.text)
+        return JobResult(text: direct.text, tokens: direct.tokens)
     }
 
     private func parseErrorMessage(_ data: String) -> String {
@@ -428,5 +429,24 @@ final class AsyncTranscriptionJobService {
             return message
         }
         return data.trimmingCharacters(in: .whitespaces)
+    }
+
+    private func shouldPreferSpeakerDiarization(config: [String: Any]) -> Bool {
+        let value = config["enable_speaker_diarization"]
+        if let bool = value as? Bool {
+            return bool
+        }
+        if let number = value as? NSNumber {
+            return number.boolValue
+        }
+        if let string = value as? String {
+            switch string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "1", "true", "t", "yes", "y":
+                return true
+            default:
+                return false
+            }
+        }
+        return false
     }
 }

@@ -81,7 +81,10 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         let settings = SettingsStorage.shared
         let language = settings.whisperLanguage.isEmpty || settings.whisperLanguage == "auto" ? nil : settings
             .whisperLanguage
-        let prompt = settings.whisperPrompt.isEmpty ? nil : settings.whisperPrompt
+        let prompt = ProtectedLexiconPromptBuilder.mergedPrompt(
+            userPrompt: settings.whisperPrompt,
+            language: language
+        )
 
         let text = try await context.transcribe(
             samples: samples,

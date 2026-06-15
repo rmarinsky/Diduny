@@ -3,7 +3,11 @@ import SwiftUI
 struct MainWindowView: View {
     @Environment(AppState.self) var appState
     @Environment(AudioDeviceManager.self) var audioDeviceManager
-    @State private var selectedSection: MainSection = .overview
+    @State private var selectedSection: MainSection
+
+    init(initialSection: MainSection = .overview) {
+        _selectedSection = State(initialValue: initialSection)
+    }
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.all)) {
@@ -20,11 +24,7 @@ struct MainWindowView: View {
             NSApp.activate(ignoringOtherApps: true)
         }
         .onDisappear {
-            if let appDelegate = NSApp.delegate as? AppDelegate {
-                appDelegate.refreshActivationPolicy()
-            } else {
-                NSApp.setActivationPolicy(.accessory)
-            }
+            MainWindowController.shared.refreshActivationPolicy()
         }
         .onChange(of: appState.shouldOpenSettings) { _, shouldOpen in
             if shouldOpen {
@@ -64,4 +64,3 @@ struct MainWindowView: View {
         }
     }
 }
-

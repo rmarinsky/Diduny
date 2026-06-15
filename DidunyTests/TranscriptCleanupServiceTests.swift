@@ -81,6 +81,15 @@ struct TranscriptCleanupServiceTests {
         #expect(ClipboardService.preparedText("", behavior: .cleaned) == "")
     }
 
+    @Test("Auto-paste artificial delay stays under 75 ms")
+    func autoPasteDelayBudget() {
+        let totalArtificialDelayMs =
+            (ClipboardService.pasteReadinessDelayNanoseconds / 1_000_000) +
+            UInt64(ClipboardService.shortcutKeyHoldMicroseconds / 1_000)
+
+        #expect(totalArtificialDelayMs <= 75)
+    }
+
     // MARK: - Reachability default
 
     @Test("isReachable is true immediately after service init (optimistic default)")
@@ -88,5 +97,81 @@ struct TranscriptCleanupServiceTests {
         // The monitor starts as true so the first dictation after cold launch
         // is not blocked before NWPathMonitor fires its first update.
         #expect(TranscriptCleanupService.shared.isReachable == true)
+    }
+
+    // MARK: - Jobs diarization formatting
+
+    @Test("Job result keeps plain text for normal transcription")
+    func jobResultKeepsPlainTextWhenDiarizationIsNotPreferred() throws {
+        let json = """
+        {
+          "text": "Plain transcript returned by the backend.",
+          "tokens": [
+            { "text": "Hello ", "start_ms": 0, "end_ms": 400, "speaker": "1" },
+            { "text": "Roman", "start_ms": 400, "end_ms": 800, "speaker": "1" }
+          ]
+        }
+        """
+
+        let result = try JSONDecoder().decode(JobTranscriptionResult.self, from: Data(json.utf8))
+
+        #expect(result.outputText(preferSpeakerDiarization: false) == "Plain transcript returned by the backend.")
+    }
+
+    @Test("Job result formats speaker diarization with timestamps")
+    func jobResultFormatsSpeakerDiarization() throws {
+        let json = """
+        {
+          "text": "Plain transcript returned by the backend.",
+          "tokens": [
+            { "text": "Hello ", "start_ms": 0, "end_ms": 400, "speaker": "1" },
+            { "text": "Roman", "start_ms": 400, "end_ms": 800, "speaker": "1" },
+            { "text": "Hi", "start_ms": 1500, "end_ms": 1900, "speaker": "2" }
+          ]
+        }
+        """
+
+        let result = try JSONDecoder().decode(JobTranscriptionResult.self, from: Data(json.utf8))
+
+        #expect(
+            result.outputText(preferSpeakerDiarization: true) ==
+                "[00:00] Speaker 1: Hello Roman\n\n[00:01] Speaker 2: Hi"
+        )
+    }
+
+    @Test("Job result supports words payload and same-speaker timing gaps")
+    func jobResultSupportsWordsPayloadAndTimingGaps() throws {
+        let json = """
+        {
+          "words": [
+            { "word": "First sentence.", "start": 0.0, "end": 0.9, "speaker_id": 1 },
+            { "word": "Later sentence.", "start": 5.0, "end": 5.7, "speaker_id": 1 }
+          ]
+        }
+        """
+
+        let result = try JSONDecoder().decode(JobTranscriptionResult.self, from: Data(json.utf8))
+
+        #expect(
+            result.outputText(preferSpeakerDiarization: true) ==
+                "[00:00] Speaker 1: First sentence.\n\n[00:05] Speaker 1: Later sentence."
+        )
+    }
+
+    @Test("Job result inserts spaces between word payload tokens")
+    func jobResultInsertsSpacesBetweenWordTokens() throws {
+        let json = """
+        {
+          "words": [
+            { "word": "Hello", "start": 0.0, "end": 0.2, "speaker_id": 1 },
+            { "word": "Roman", "start": 0.2, "end": 0.5, "speaker_id": 1 },
+            { "word": ".", "start": 0.5, "end": 0.6, "speaker_id": 1 }
+          ]
+        }
+        """
+
+        let result = try JSONDecoder().decode(JobTranscriptionResult.self, from: Data(json.utf8))
+
+        #expect(result.outputText(preferSpeakerDiarization: true) == "[00:00] Speaker 1: Hello Roman.")
     }
 }

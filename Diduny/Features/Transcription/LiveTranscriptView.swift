@@ -55,7 +55,7 @@ struct LiveTranscriptView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.bar)
+        .background(Color(.windowBackgroundColor))
     }
 
     @ViewBuilder
@@ -204,7 +204,7 @@ struct LiveTranscriptView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(.bar)
+        .background(Color(.windowBackgroundColor))
     }
 
     // MARK: - Helpers

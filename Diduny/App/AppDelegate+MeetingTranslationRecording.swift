@@ -61,7 +61,7 @@ extension AppDelegate {
                     let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                     RecordingsLibraryStorage.shared.saveRecording(
                         audioURL: audioURL,
-                        type: .meeting,
+                        type: .meetingTranslation,
                         duration: duration
                     )
                     // Library has taken ownership — remove the in-progress directory (RLR-M1).
@@ -121,7 +121,7 @@ extension AppDelegate {
         }
 
         // Request screen capture permission on-demand
-        let hasPermission = await PermissionManager.shared.ensureScreenRecordingPermission()
+        let hasPermission = await PermissionManager.shared.ensureScreenRecordingPermission(context: .meetingTranslation)
         appState.screenCapturePermissionGranted = hasPermission
 
         guard hasPermission else {
@@ -493,7 +493,7 @@ extension AppDelegate {
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
                 audioURL: compressedURL,
-                type: .meeting,
+                type: .meetingTranslation,
                 duration: duration,
                 transcriptionText: text
             )
@@ -531,7 +531,7 @@ extension AppDelegate {
                 RecordingsLibraryStorage.shared.saveRecording(
                     id: recordingId,
                     audioURL: audioURLForLibrarySave,
-                    type: .meeting,
+                    type: .meetingTranslation,
                     duration: duration
                 )
                 // Library has taken ownership — remove the in-progress directory (RLR-M1).

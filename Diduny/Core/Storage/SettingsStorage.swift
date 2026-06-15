@@ -2,6 +2,49 @@ import CoreAudio
 import Foundation
 import LaunchAtLogin
 
+enum HistoryRetentionPolicy: String, CaseIterable, Identifiable {
+    case never
+    case days7
+    case days30
+    case days90
+    case year1
+    case forever
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .never: "Never"
+        case .days7: "7 days"
+        case .days30: "30 days"
+        case .days90: "90 days"
+        case .year1: "1 year"
+        case .forever: "Forever"
+        }
+    }
+
+    var savesNewRecordings: Bool {
+        self != .never
+    }
+
+    func expirationCutoff(now: Date = Date()) -> Date? {
+        switch self {
+        case .never:
+            now
+        case .days7:
+            Calendar.current.date(byAdding: .day, value: -7, to: now)
+        case .days30:
+            Calendar.current.date(byAdding: .day, value: -30, to: now)
+        case .days90:
+            Calendar.current.date(byAdding: .day, value: -90, to: now)
+        case .year1:
+            Calendar.current.date(byAdding: .year, value: -1, to: now)
+        case .forever:
+            nil
+        }
+    }
+}
+
 final class SettingsStorage {
     static let shared = SettingsStorage()
 
@@ -39,6 +82,7 @@ final class SettingsStorage {
         case autoPaste
         case playSoundOnCompletion
         case launchAtLogin
+        case recordingFeedbackSurface
         case pushToTalkKey
         case pushToTalkToggleTapCount
         case pushToTalkHoldStartDelaySeconds
@@ -71,6 +115,8 @@ final class SettingsStorage {
         case escapeCancelSaveAudio
         case textCleanupEnabled
         case fillerWords
+        case dictationTranslationHistoryRetentionPolicy
+        case meetingHistoryRetentionPolicy
         case whisperModelUnloadPolicy
         case proxyBaseURL
         case remoteConfigURL
@@ -183,6 +229,49 @@ final class SettingsStorage {
     var launchAtLogin: Bool {
         get { LaunchAtLogin.isEnabled }
         set { LaunchAtLogin.isEnabled = newValue }
+    }
+
+    var recordingFeedbackSurface: RecordingFeedbackSurface {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.recordingFeedbackSurface.rawValue),
+                  let surface = RecordingFeedbackSurface(rawValue: rawValue)
+            else {
+                return .notch
+            }
+            return surface
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.recordingFeedbackSurface.rawValue) }
+    }
+
+    // MARK: - History Storage
+
+    var dictationTranslationHistoryRetentionPolicy: HistoryRetentionPolicy {
+        get { historyRetentionPolicy(forKey: .dictationTranslationHistoryRetentionPolicy) }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.dictationTranslationHistoryRetentionPolicy.rawValue)
+            NotificationCenter.default.post(name: .historyRetentionSettingsChanged, object: nil)
+        }
+    }
+
+    var meetingHistoryRetentionPolicy: HistoryRetentionPolicy {
+        get { historyRetentionPolicy(forKey: .meetingHistoryRetentionPolicy) }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.meetingHistoryRetentionPolicy.rawValue)
+            NotificationCenter.default.post(name: .historyRetentionSettingsChanged, object: nil)
+        }
+    }
+
+    func historyRetentionPolicy(for type: Recording.RecordingType) -> HistoryRetentionPolicy {
+        type.isMeetingLike ? meetingHistoryRetentionPolicy : dictationTranslationHistoryRetentionPolicy
+    }
+
+    private func historyRetentionPolicy(forKey key: Key) -> HistoryRetentionPolicy {
+        guard let rawValue = defaults.string(forKey: key.rawValue),
+              let policy = HistoryRetentionPolicy(rawValue: rawValue)
+        else {
+            return .forever
+        }
+        return policy
     }
 
     var textCleanupEnabled: Bool {
@@ -472,7 +561,7 @@ final class SettingsStorage {
             guard let rawValue = defaults.string(forKey: Key.transcriptionProvider.rawValue),
                   let provider = TranscriptionProvider(rawValue: rawValue)
             else {
-                return .local
+                return .cloud
             }
             return provider
         }
@@ -543,7 +632,7 @@ final class SettingsStorage {
     var translationRealtimeSocketEnabled: Bool {
         get {
             if defaults.object(forKey: Key.translationRealtimeSocketEnabled.rawValue) == nil {
-                return false
+                return true
             }
             return defaults.bool(forKey: Key.translationRealtimeSocketEnabled.rawValue)
         }
@@ -553,9 +642,13 @@ final class SettingsStorage {
     // MARK: - Transcription Realtime Socket
 
     /// Enables cloud realtime transcription over websocket during voice dictation.
-    /// Disabled by default to keep existing async cloud behavior unless explicitly enabled.
     var transcriptionRealtimeSocketEnabled: Bool {
-        get { defaults.bool(forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) }
+        get {
+            if defaults.object(forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.transcriptionRealtimeSocketEnabled.rawValue)
+        }
         set { defaults.set(newValue, forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) }
     }
 
@@ -734,5 +827,6 @@ final class SettingsStorage {
 
 extension Notification.Name {
     static let textCleanupSettingsChanged = Notification.Name("textCleanupSettingsChanged")
+    static let historyRetentionSettingsChanged = Notification.Name("historyRetentionSettingsChanged")
     static let whisperModelUnloadPolicyChanged = Notification.Name("whisperModelUnloadPolicyChanged")
 }

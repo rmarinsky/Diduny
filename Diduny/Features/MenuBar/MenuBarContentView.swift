@@ -10,6 +10,7 @@ struct MenuBarContentView: View {
     var onToggleMeetingRecording: @MainActor () -> Void
     var onToggleMeetingTranslationRecording: @MainActor () -> Void
     var onTranscribeFile: @MainActor () -> Void
+    var onOpenMainWindow: @MainActor (MainSection) -> Void
     var onCheckForUpdates: @MainActor () -> Void
 
     var body: some View {
@@ -89,17 +90,21 @@ struct MenuBarContentView: View {
 
             Divider()
 
+            Button("Open Diduny") {
+                onOpenMainWindow(.overview)
+            }
+
             Button("Transcribe File…", action: onTranscribeFile)
                 .disabled(appState.recordingState == .processing)
 
             Button("Recordings") {
-                MainWindowController.shared.showWindow(section: .recordings)
+                onOpenMainWindow(.recordings)
             }
 
             Divider()
 
             Button {
-                MainWindowController.shared.showWindow(section: .general)
+                onOpenMainWindow(.general)
             } label: {
                 HStack {
                     Text("Settings")
@@ -239,10 +244,6 @@ struct MenuBarContentView: View {
         return "System Default"
     }
 
-    private func openLibrary() {
-        MainWindowController.shared.showWindow(section: .recordings)
-    }
-
     private var isCloudMode: Bool {
         let settings = SettingsStorage.shared
         return settings.effectiveTranscriptionProvider == .cloud
@@ -253,7 +254,7 @@ struct MenuBarContentView: View {
     private func selectCloudMode() {
         guard AuthService.shared.isLoggedIn else {
             NotchManager.shared.showInfo(message: "Log in to use cloud processing", duration: 3.0)
-            MainWindowController.shared.showWindow(section: .account)
+            onOpenMainWindow(.account)
             return
         }
         let settings = SettingsStorage.shared

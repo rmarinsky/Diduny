@@ -13,6 +13,7 @@ struct DidunyApp: App {
                 onToggleMeetingRecording: { appDelegate.toggleMeetingRecording() },
                 onToggleMeetingTranslationRecording: { appDelegate.toggleMeetingTranslationRecording() },
                 onTranscribeFile: { appDelegate.transcribeFile() },
+                onOpenMainWindow: { section in appDelegate.openMainWindow(section: section) },
                 onCheckForUpdates: { appDelegate.updaterManager.checkForUpdates() }
             )
             .environment(appDelegate.appState)

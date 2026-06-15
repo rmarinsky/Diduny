@@ -5,7 +5,10 @@ struct GeneralSettingsView: View {
     @State private var autoPaste = SettingsStorage.shared.autoPaste
     @State private var playSound = SettingsStorage.shared.playSoundOnCompletion
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
+    @State private var recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
     @State private var screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
+    @State private var dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
+    @State private var meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -32,8 +35,49 @@ struct GeneralSettingsView: View {
                         LaunchAtLogin.isEnabled = newValue
                     }
 
+                Picker("Recording feedback", selection: $recordingFeedbackSurface) {
+                    ForEach(RecordingFeedbackSurface.allCases) { surface in
+                        Text(surface.displayName).tag(surface)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: recordingFeedbackSurface) { _, newValue in
+                    SettingsStorage.shared.recordingFeedbackSurface = newValue
+                }
+
             } header: {
                 Text("Behavior")
+            }
+
+            Section {
+                Picker("Dictation & translation", selection: $dictationRetention) {
+                    ForEach(HistoryRetentionPolicy.allCases) { policy in
+                        Text(policy.displayName).tag(policy)
+                    }
+                }
+                .onChange(of: dictationRetention) { _, newValue in
+                    SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy = newValue
+                    pruneExpiredHistoryIfNeeded()
+                }
+
+                Picker("Meetings & meeting translation", selection: $meetingRetention) {
+                    ForEach(HistoryRetentionPolicy.allCases) { policy in
+                        Text(policy.displayName).tag(policy)
+                    }
+                }
+                .onChange(of: meetingRetention) { _, newValue in
+                    SettingsStorage.shared.meetingHistoryRetentionPolicy = newValue
+                    pruneExpiredHistoryIfNeeded()
+                }
+
+                Button("Delete Expired History Now") {
+                    RecordingsLibraryStorage.shared.pruneExpiredRecordings()
+                }
+                .buttonStyle(.link)
+            } header: {
+                Text("History & Storage")
+            } footer: {
+                Text("Choose how long Diduny keeps recordings in the library. Never skips saving new recordings for that group.")
             }
 
             Section {
@@ -68,7 +112,7 @@ struct GeneralSettingsView: View {
                     }
                     Spacer()
                     Button("Check for Updates…") {
-                        (NSApp.delegate as? AppDelegate)?.updaterManager.checkForUpdates()
+                        MainWindowController.shared.checkForUpdates()
                     }
                     .buttonStyle(.link)
                 }
@@ -93,7 +137,10 @@ struct GeneralSettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             launchAtLogin = LaunchAtLogin.isEnabled
+            recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
             screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
+            dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
+            meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
         }
     }
 
@@ -106,6 +153,9 @@ struct GeneralSettingsView: View {
         }
     }
 
+    private func pruneExpiredHistoryIfNeeded() {
+        RecordingsLibraryStorage.shared.pruneExpiredRecordings()
+    }
 }
 
 #Preview {

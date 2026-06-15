@@ -3,11 +3,15 @@ import SwiftUI
 struct RecordingsLibraryView: View {
     @State private var storage = RecordingsLibraryStorage.shared
     @State private var queueService = RecordingQueueService.shared
+    @State private var playbackService = AudioPlaybackService.shared
     @State private var searchText = ""
     @State private var filter: RecordingTypeFilter = .all
     @State private var selectedRecording: Recording? = nil
     @State private var showDeleteConfirmation = false
+    @State private var showBulkDeleteConfirmation = false
     @State private var recordingToDelete: Recording? = nil
+    @State private var isSelectionMode = false
+    @State private var selectedRecordingIds = Set<UUID>()
 
     enum RecordingTypeFilter: String, CaseIterable {
         case all = "All"
@@ -20,8 +24,8 @@ struct RecordingsLibraryView: View {
             let matchesFilter: Bool
             switch filter {
             case .all: matchesFilter = true
-            case .meetings: matchesFilter = recording.type == .meeting
-            case .voiceNotes: matchesFilter = recording.type != .meeting
+            case .meetings: matchesFilter = recording.type.isMeetingLike
+            case .voiceNotes: matchesFilter = !recording.type.isMeetingLike
             }
             guard matchesFilter else { return false }
             guard !searchText.isEmpty else { return true }
@@ -39,6 +43,10 @@ struct RecordingsLibraryView: View {
     private var otherLanguages: [SupportedLanguage] {
         let favCodes = Set(SettingsStorage.shared.favoriteLanguages)
         return SupportedLanguage.allLanguages.filter { !favCodes.contains($0.code) }
+    }
+
+    private var selectedVisibleCount: Int {
+        filteredRecordings.filter { selectedRecordingIds.contains($0.id) }.count
     }
 
     var body: some View {
@@ -70,7 +78,11 @@ struct RecordingsLibraryView: View {
         .alert("Delete Recording", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 if let r = recordingToDelete {
+                    if playbackService.playingRecordingId == r.id {
+                        playbackService.stop()
+                    }
                     storage.deleteRecording(r)
+                    selectedRecordingIds.remove(r.id)
                     if selectedRecording?.id == r.id { selectedRecording = nil }
                 }
                 recordingToDelete = nil
@@ -78,6 +90,14 @@ struct RecordingsLibraryView: View {
             Button("Cancel", role: .cancel) { recordingToDelete = nil }
         } message: {
             Text("Are you sure you want to delete this recording? This cannot be undone.")
+        }
+        .alert("Delete Selected Recordings", isPresented: $showBulkDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                deleteSelectedRecordings()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Delete \(selectedRecordingIds.count) selected recordings? This cannot be undone.")
         }
     }
 
@@ -88,6 +108,17 @@ struct RecordingsLibraryView: View {
             Text("Recordings")
                 .font(.title2.bold())
             Spacer()
+            Button {
+                toggleSelectionMode()
+            } label: {
+                Label(isSelectionMode ? "Done" : "Select", systemImage: isSelectionMode ? "checkmark.circle" : "checklist")
+            }
+            .labelStyle(.titleAndIcon)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(storage.recordings.isEmpty)
+            .accessibilityIdentifier("Toggle recording selection")
+
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
@@ -116,13 +147,49 @@ struct RecordingsLibraryView: View {
     // MARK: - Filter Chips
 
     private var filterChips: some View {
-        HStack(spacing: 6) {
-            ForEach(RecordingTypeFilter.allCases, id: \.self) { type in
-                FilterChip(label: type.rawValue, isSelected: filter == type) {
-                    filter = type
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                ForEach(RecordingTypeFilter.allCases, id: \.self) { type in
+                    FilterChip(label: type.rawValue, isSelected: filter == type) {
+                        filter = type
+                    }
                 }
+                Spacer()
             }
+
+            if isSelectionMode {
+                bulkSelectionBar
+            }
+        }
+    }
+
+    private var bulkSelectionBar: some View {
+        HStack(spacing: 8) {
+            Label("\(selectedRecordingIds.count) selected", systemImage: "checkmark.circle.fill")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+
             Spacer()
+
+            Button("Select Visible") {
+                selectVisibleRecordings()
+            }
+            .buttonStyle(.link)
+            .disabled(filteredRecordings.isEmpty || selectedVisibleCount == filteredRecordings.count)
+
+            Button("Delete") {
+                showBulkDeleteConfirmation = true
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(selectedRecordingIds.isEmpty)
+            .accessibilityIdentifier("Delete selected recordings")
+
+            Button("Cancel") {
+                cancelSelection()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
     }
 
@@ -132,8 +199,21 @@ struct RecordingsLibraryView: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(Array(filteredRecordings.enumerated()), id: \.element.id) { index, recording in
-                    RecordingRowView(recording: recording)
-                        .onTapGesture { selectedRecording = recording }
+                    RecordingRowView(
+                        recording: recording,
+                        onOpen: {
+                            if isSelectionMode {
+                                toggleSelection(for: recording)
+                            } else {
+                                selectedRecording = recording
+                            }
+                        },
+                        onTranscribe: { transcribe(recording) },
+                        onDelete: { requestDelete(recording) },
+                        isSelectionMode: isSelectionMode,
+                        isSelected: selectedRecordingIds.contains(recording.id),
+                        onToggleSelection: { toggleSelection(for: recording) }
+                    )
                         .contextMenu { recordingContextMenu(for: recording) }
                     if index < filteredRecordings.count - 1 {
                         Divider()
@@ -155,11 +235,11 @@ struct RecordingsLibraryView: View {
     @ViewBuilder
     private func recordingContextMenu(for recording: Recording) -> some View {
         Button("Transcribe") {
-            queueService.enqueue([recording.id], action: .transcribe)
+            transcribe(recording)
         }
         .disabled(recording.status == .processing)
 
-        if recording.type == .meeting {
+        if recording.type.isMeetingLike {
             Button("Transcribe with Speakers") {
                 queueService.enqueue([recording.id], action: .transcribeDiarize, providerOverride: .cloud)
             }
@@ -193,9 +273,54 @@ struct RecordingsLibraryView: View {
         Divider()
 
         Button("Delete", role: .destructive) {
-            recordingToDelete = recording
-            showDeleteConfirmation = true
+            requestDelete(recording)
         }
+    }
+
+    private func transcribe(_ recording: Recording) {
+        queueService.enqueue([recording.id], action: .transcribe)
+    }
+
+    private func requestDelete(_ recording: Recording) {
+        recordingToDelete = recording
+        showDeleteConfirmation = true
+    }
+
+    private func toggleSelectionMode() {
+        isSelectionMode.toggle()
+        if !isSelectionMode {
+            selectedRecordingIds.removeAll()
+        }
+    }
+
+    private func cancelSelection() {
+        isSelectionMode = false
+        selectedRecordingIds.removeAll()
+    }
+
+    private func toggleSelection(for recording: Recording) {
+        if selectedRecordingIds.contains(recording.id) {
+            selectedRecordingIds.remove(recording.id)
+        } else {
+            selectedRecordingIds.insert(recording.id)
+        }
+    }
+
+    private func selectVisibleRecordings() {
+        selectedRecordingIds.formUnion(filteredRecordings.map(\.id))
+    }
+
+    private func deleteSelectedRecordings() {
+        let ids = selectedRecordingIds
+        guard !ids.isEmpty else { return }
+        if let playingId = playbackService.playingRecordingId, ids.contains(playingId) {
+            playbackService.stop()
+        }
+        if let selectedRecording, ids.contains(selectedRecording.id) {
+            self.selectedRecording = nil
+        }
+        storage.deleteRecordings(ids)
+        cancelSelection()
     }
 
     // MARK: - Empty States
@@ -248,7 +373,7 @@ private struct FilterChip: View {
                 .padding(.vertical, 6)
                 .background(
                     isSelected
-                        ? Color("BrandAccentDeep")
+                        ? Color.accentColor
                         : Color(.quaternaryLabelColor).opacity(0.08),
                     in: Capsule()
                 )

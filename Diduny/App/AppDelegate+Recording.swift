@@ -144,7 +144,7 @@ extension AppDelegate {
         }
 
         // Request microphone permission on-demand
-        let micGranted = await PermissionManager.shared.ensureMicrophonePermission()
+        let micGranted = await PermissionManager.shared.ensureMicrophonePermission(context: .dictation)
         appState.microphonePermissionGranted = micGranted
 
         guard micGranted else {
@@ -248,11 +248,11 @@ extension AppDelegate {
                 appState.recordingStartTime = Date()
                 handleRecordingStateChange(.recording)
 
-                // Pipe audio level to notch
+                // Pipe audio level to the selected recording feedback surface.
                 audioLevelCancellable = audioRecorder.$audioLevel
                     .receive(on: DispatchQueue.main)
-                    .sink { level in
-                        NotchManager.shared.audioLevel = level
+                    .sink { [weak self] level in
+                        self?.updateRecordingFeedbackAudioLevel(level, mode: .voice)
                     }
             }
 
@@ -357,10 +357,7 @@ extension AppDelegate {
 
             // Preserve original capture bytes for fallback paths that should avoid any storage-time conversion
             originalWAVData = audioData
-
-            // Compress WAV → FLAC for smaller storage (skipped for < 1MB)
-            let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
-            capturedAudioData = compressedData
+            capturedAudioData = audioData
 
             let realtimeResult = await stopVoiceRealtimeSession(finalize: true)
 
@@ -418,6 +415,8 @@ extension AppDelegate {
 
             // Save to recordings library (uses compressed data if available)
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
+            capturedAudioData = compressedData
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
                 audioData: compressedData,
@@ -450,13 +449,24 @@ extension AppDelegate {
 
             // Try falling back to local Whisper model using the original capture bytes
             if let wavData = originalWAVData, WhisperModelManager.shared.selectedModel() != nil {
-                NotchManager.shared.showInfo(message: "Cloud limit reached. Switching to local model.", duration: 2.0)
+                showRecordingFeedbackInfo(
+                    message: "Cloud limit reached. Switching to local model.",
+                    mode: .voice,
+                    duration: 2.0
+                )
                 do {
                     let text = try await whisperTranscriptionService.transcribe(audioData: wavData)
                     Log.app.info("stopRecording: Whisper fallback succeeded (\(text.count) chars)")
                     clipboardService.copy(text: text)
                     if SettingsStorage.shared.autoPaste {
-                        try? await clipboardService.paste()
+                        do {
+                            try await clipboardService.paste()
+                        } catch ClipboardError.accessibilityNotGranted {
+                            Log.app.warning("stopRecording: Accessibility permission needed during Whisper fallback")
+                            PermissionManager.shared.showPermissionAlert(for: .accessibility)
+                        } catch {
+                            Log.app.error("stopRecording: Whisper fallback paste failed - \(error.localizedDescription)")
+                        }
                     }
                     guard appState.recordingState == .processing else { return }
                     await MainActor.run {
@@ -553,8 +563,7 @@ extension AppDelegate {
     // MARK: - Realtime Transcription (WebSocket)
 
     private func setupVoiceRealtimeTranscriptionIfNeeded() {
-        guard SettingsStorage.shared.effectiveTranscriptionProvider == .cloud,
-              SettingsStorage.shared.transcriptionRealtimeSocketEnabled else {
+        guard SettingsStorage.shared.effectiveTranscriptionProvider == .cloud else {
             audioRecorder.onRealtimeAudioData = nil
             voiceRealtimeSessionEnabled = false
             voiceRealtimeAccumulator = nil
@@ -569,15 +578,22 @@ extension AppDelegate {
             rtService?.sendAudioData(pcmData)
         }
 
-        rtService.onTokensReceived = { [weak accumulator] tokens in
-            guard let accumulator else { return }
-            Task {
-                await accumulator.process(tokens: tokens)
+        rtService.onTokensReceived = { [weak self, weak accumulator] tokens in
+            if let accumulator {
+                Task {
+                    await accumulator.process(tokens: tokens)
+                }
+            }
+            Task { @MainActor in
+                self?.updateRecordingFeedbackTokens(tokens, mode: .voice)
             }
         }
 
-        rtService.onConnectionStatusChanged = { status in
+        rtService.onConnectionStatusChanged = { [weak self] status in
             Log.transcription.info("Dictation RT status: \(String(describing: status))")
+            Task { @MainActor in
+                self?.updateRecordingFeedbackConnectionStatus(status, mode: .voice)
+            }
         }
 
         rtService.onSegmentBoundary = { [weak accumulator] _ in
@@ -587,8 +603,11 @@ extension AppDelegate {
             }
         }
 
-        rtService.onError = { error in
+        rtService.onError = { [weak self] error in
             Log.transcription.error("Dictation RT error: \(error.localizedDescription)")
+            Task { @MainActor in
+                self?.updateRecordingFeedbackConnectionStatus(.failed(error.localizedDescription), mode: .voice)
+            }
         }
 
         voiceRealtimeConnectionError = nil
@@ -601,11 +620,13 @@ extension AppDelegate {
                 try await rtService.connect(
                     languageHints: languageHints,
                     strictLanguageHints: !languageHints.isEmpty,
-                    audioConfig: .defaultPCM16kMono
+                    audioConfig: .defaultPCM16kMono,
+                    enableSpeakerDiarization: false
                 )
 
                 await MainActor.run {
                     self.voiceRealtimeSessionEnabled = true
+                    self.updateRecordingFeedbackConnectionStatus(.connected, mode: .voice)
                 }
                 Log.transcription.info("Dictation RT connected")
             } catch {
@@ -614,6 +635,7 @@ extension AppDelegate {
                     self.voiceRealtimeSessionEnabled = false
                     self.voiceRealtimeAccumulator = nil
                     self.voiceRealtimeConnectionError = error.localizedDescription
+                    self.updateRecordingFeedbackConnectionStatus(.failed(error.localizedDescription), mode: .voice)
                 }
                 Log.transcription.warning(
                     "Dictation RT connection failed: \(error.localizedDescription)"
@@ -660,8 +682,8 @@ extension AppDelegate {
             return
         }
 
-        escapeService.onProgressEscape = { pressCount, _ in
-            NotchManager.shared.showInfoDuringRecording(
+        escapeService.onProgressEscape = { [weak self] pressCount, _ in
+            self?.showRecordingInfoDuringActiveRecording(
                 message: SettingsStorage.shared.escapeCancelRepeatHint(afterPressCount: pressCount),
                 mode: .voice,
                 duration: 1.5
@@ -671,10 +693,11 @@ extension AppDelegate {
         // On second shortcut press (confirmed cancel): cancel recording
         escapeService.onCancel = { [weak self] in
             Task { @MainActor in
+                guard let self else { return }
                 let shouldSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
-                await self?.cancelRecording()
+                await self.cancelRecording()
                 let message = shouldSaveAudio ? "Recording cancelled and saved" : "Recording cancelled"
-                NotchManager.shared.showInfo(message: message)
+                self.showRecordingFeedbackInfo(message: message, mode: .voice)
             }
         }
 

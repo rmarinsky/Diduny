@@ -24,6 +24,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private var strictLanguageHints = false
     private var audioConfig: RealtimeAudioConfig = .defaultPCM16kMono
     private var translationConfig: RealtimeTranslationConfig?
+    private var enableSpeakerDiarization = true
     private let finalizeStateLock = NSLock()
     private var awaitingFinalizeResponse = false
     private var didReceiveFinishedSignal = false
@@ -60,12 +61,14 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         languageHints: [String] = [],
         strictLanguageHints: Bool = false,
         audioConfig: RealtimeAudioConfig = .defaultPCM16kMono,
-        translationConfig: RealtimeTranslationConfig? = nil
+        translationConfig: RealtimeTranslationConfig? = nil,
+        enableSpeakerDiarization: Bool = true
     ) async throws {
         self.languageHints = languageHints
         self.strictLanguageHints = strictLanguageHints
         self.audioConfig = audioConfig
         self.translationConfig = translationConfig
+        self.enableSpeakerDiarization = enableSpeakerDiarization
         reconnectAttempt = 0
         try await connectWebSocket()
     }
@@ -135,7 +138,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
             "audio_format": audioConfig.audioFormat,
             "sample_rate": audioConfig.sampleRate,
             "num_channels": audioConfig.numChannels,
-            "enable_speaker_diarization": true
+            "enable_speaker_diarization": enableSpeakerDiarization
         ]
 
         if !languageHints.isEmpty {

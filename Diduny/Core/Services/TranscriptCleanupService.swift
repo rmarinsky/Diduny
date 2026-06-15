@@ -38,18 +38,18 @@ final class TranscriptCleanupService {
         }
         guard AuthService.hasStoredSession else {
             Log.app.info("[Cleanup] No auth session — skipping server cleanup")
-            return rawText
+            return localLexiconPostprocess(rawText)
         }
         guard isReachable else {
             Log.app.info("[Cleanup] No network — skipping server cleanup")
-            return rawText
+            return localLexiconPostprocess(rawText)
         }
 
         let baseURL = SettingsStorage.shared.proxyBaseURL
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: "\(baseURL)/api/v1/transcriptions/clean") else {
             Log.app.warning("[Cleanup] Invalid proxy URL — skipping")
-            return rawText
+            return localLexiconPostprocess(rawText)
         }
 
         var body: [String: Any] = ["text": rawText]
@@ -59,7 +59,7 @@ final class TranscriptCleanupService {
 
         guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
             Log.app.warning("[Cleanup] JSON serialization failed — skipping")
-            return rawText
+            return localLexiconPostprocess(rawText)
         }
 
         var request = URLRequest(url: url, timeoutInterval: 3)
@@ -75,22 +75,26 @@ final class TranscriptCleanupService {
                   (200 ... 299).contains(http.statusCode) else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? -1
                 Log.app.warning("[Cleanup] Server returned \(code) — using raw text")
-                return rawText
+                return localLexiconPostprocess(rawText)
             }
 
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let cleaned = json["text"] as? String else {
                 Log.app.warning("[Cleanup] Unexpected response shape — using raw text")
-                return rawText
+                return localLexiconPostprocess(rawText)
             }
 
             let applied = json["applied"] as? Bool ?? false
             Log.app.info("[Cleanup] Server cleanup applied=\(applied), chars \(rawText.count) → \(cleaned.count)")
-            return cleaned
+            return localLexiconPostprocess(cleaned)
 
         } catch {
             Log.app.warning("[Cleanup] Request failed (\(error.localizedDescription)) — using raw text")
-            return rawText
+            return localLexiconPostprocess(rawText)
         }
+    }
+
+    private func localLexiconPostprocess(_ text: String) -> String {
+        ProtectedLexiconService.shared.postprocessTranscript(text)
     }
 }

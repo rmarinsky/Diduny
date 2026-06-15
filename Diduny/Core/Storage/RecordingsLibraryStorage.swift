@@ -28,6 +28,7 @@ final class RecordingsLibraryStorage {
 
         loadMetadata()
         pruneOrphaned()
+        pruneExpiredRecordings()
     }
 
     // MARK: - Save (from Data — voice/translation)
@@ -40,6 +41,8 @@ final class RecordingsLibraryStorage {
         transcriptionText: String? = nil,
         sourceDevice: RecordingDeviceInfo? = nil
     ) {
+        guard shouldSaveRecording(type: type) else { return }
+
         let recordingID = id ?? UUID()
         let fileExtension = detectedAudioFileExtension(for: audioData)
         let fileName = "\(recordingID.uuidString).\(fileExtension)"
@@ -53,7 +56,7 @@ final class RecordingsLibraryStorage {
         }
 
         let status: Recording.ProcessingStatus = if transcriptionText != nil {
-            type == .translation ? .translated : .transcribed
+            type.usesTranslatedStatusWhenSavedWithText ? .translated : .transcribed
         } else {
             .unprocessed
         }
@@ -72,6 +75,7 @@ final class RecordingsLibraryStorage {
 
         recordings.insert(recording, at: 0)
         saveMetadata()
+        pruneExpiredRecordingsIfEnabled()
         Log.app.info("Recording saved: \(type.rawValue), \(audioData.count) bytes")
     }
 
@@ -85,6 +89,8 @@ final class RecordingsLibraryStorage {
         transcriptionText: String? = nil,
         sourceDevice: RecordingDeviceInfo? = nil
     ) {
+        guard shouldSaveRecording(type: type) else { return }
+
         let recordingID = id ?? UUID()
         let ext = audioURL.pathExtension.isEmpty ? "wav" : audioURL.pathExtension
         let fileName = "\(recordingID.uuidString).\(ext)"
@@ -106,7 +112,7 @@ final class RecordingsLibraryStorage {
         }
 
         let status: Recording.ProcessingStatus = if transcriptionText != nil {
-            type == .translation ? .translated : .transcribed
+            type.usesTranslatedStatusWhenSavedWithText ? .translated : .transcribed
         } else {
             .unprocessed
         }
@@ -126,6 +132,7 @@ final class RecordingsLibraryStorage {
 
         recordings.insert(recording, at: 0)
         saveMetadata()
+        pruneExpiredRecordingsIfEnabled()
         Log.app.info("Recording saved from file: \(type.rawValue), \(fileSize) bytes")
     }
 
@@ -139,6 +146,8 @@ final class RecordingsLibraryStorage {
     }
 
     func deleteRecordings(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+
         for id in ids {
             if let recording = recordings.first(where: { $0.id == id }) {
                 let fileURL = recordingsDir.appendingPathComponent(recording.audioFileName)
@@ -147,6 +156,22 @@ final class RecordingsLibraryStorage {
         }
         recordings.removeAll { ids.contains($0.id) }
         saveMetadata()
+    }
+
+    func pruneExpiredRecordings(now: Date = Date()) {
+        let expiredIds = Set(recordings.compactMap { recording -> UUID? in
+            let policy = SettingsStorage.shared.historyRetentionPolicy(for: recording.type)
+            guard let cutoff = policy.expirationCutoff(now: now),
+                  recording.createdAt <= cutoff
+            else {
+                return nil
+            }
+            return recording.id
+        })
+
+        guard !expiredIds.isEmpty else { return }
+        deleteRecordings(expiredIds)
+        Log.app.info("Pruned \(expiredIds.count) expired recording entries")
     }
 
     // MARK: - Update
@@ -253,6 +278,19 @@ final class RecordingsLibraryStorage {
             Log.app.info("Pruned \(prunedCount) orphaned recording entries")
             saveMetadata()
         }
+    }
+
+    private func shouldSaveRecording(type: Recording.RecordingType) -> Bool {
+        let policy = SettingsStorage.shared.historyRetentionPolicy(for: type)
+        guard policy.savesNewRecordings else {
+            Log.app.info("Skipping recording history save because \(type.rawValue) retention is Never")
+            return false
+        }
+        return true
+    }
+
+    private func pruneExpiredRecordingsIfEnabled() {
+        pruneExpiredRecordings()
     }
 
     private func replaceStoredAudioFile(
