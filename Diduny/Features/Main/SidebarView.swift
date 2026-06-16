@@ -4,18 +4,25 @@ struct SidebarView: View {
     @Binding var selectedSection: MainSection
     @Environment(AppState.self) var appState
 
+    let topInset: CGFloat
+
     private let mainItems: [MainSection] = [.overview, .recordings, .meetings]
     private let settingsItems: [MainSection] = [.general, .audioDictation, .models, .shortcuts, .account]
+
+    init(selectedSection: Binding<MainSection>, topInset: CGFloat = 34) {
+        _selectedSection = selectedSection
+        self.topInset = topInset
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             brandTile
-                .padding(.horizontal, 16)
-                .padding(.top, 50)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 14)
+                .padding(.top, topInset)
+                .padding(.bottom, 10)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     ForEach(mainItems, id: \.self) { section in
                         sidebarRow(for: section)
                     }
@@ -23,41 +30,41 @@ struct SidebarView: View {
                     Text("SETTINGS")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.secondary)
-                        .padding(.top, 22)
-                        .padding(.bottom, 4)
+                        .padding(.top, 14)
+                        .padding(.bottom, 3)
                         .padding(.leading, 4)
 
                     ForEach(settingsItems, id: \.self) { section in
                         sidebarRow(for: section)
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollIndicators(.never)
 
             footerCTA
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 14)
         }
     }
 
     // MARK: - Brand Tile
 
     private var brandTile: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 9) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(Color("BrandTintSoft"))
-                    .frame(width: 32, height: 32)
+                    .frame(width: 30, height: 30)
                 Image(systemName: "mic.fill")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(Color("BrandAccentDeep"))
             }
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("Diduny")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.primary)
                 proBadge
             }
@@ -133,7 +140,7 @@ private struct SidebarRow: View {
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
-        .frame(width: 208, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
         .background(
             isSelected
                 ? Color("BrandAccentDeep")

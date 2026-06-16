@@ -1,5 +1,11 @@
 import SwiftUI
 
+private enum MainWindowLayout {
+    static let sidebarWidth: CGFloat = 238
+    static let sidebarTopInset: CGFloat = 34
+    static let detailTopInset: CGFloat = 14
+}
+
 struct MainWindowView: View {
     @Environment(AppState.self) var appState
     @Environment(AudioDeviceManager.self) var audioDeviceManager
@@ -10,14 +16,25 @@ struct MainWindowView: View {
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: .constant(.all)) {
-            SidebarView(selectedSection: $selectedSection)
-                .navigationSplitViewColumnWidth(min: 210, ideal: 238, max: 280)
-        } detail: {
+        HStack(spacing: 0) {
+            SidebarView(
+                selectedSection: $selectedSection,
+                topInset: MainWindowLayout.sidebarTopInset
+            )
+            .frame(width: MainWindowLayout.sidebarWidth)
+            .background(.bar)
+
+            Rectangle()
+                .fill(Color(.separatorColor).opacity(0.35))
+                .frame(width: 0.5)
+
             detailView
+                .padding(.top, MainWindowLayout.detailTopInset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(Color(.windowBackgroundColor))
         }
-        .toolbar(removing: .sidebarToggle)
+        .background(Color(.windowBackgroundColor))
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
         .frame(minWidth: 1000, idealWidth: 1000, minHeight: 680, idealHeight: 680)
         .onAppear {
             NSApp.setActivationPolicy(.regular)
