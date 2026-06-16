@@ -60,7 +60,7 @@ struct GeneralSettingsView: View {
                     pruneExpiredHistoryIfNeeded()
                 }
 
-                Picker("Meetings & meeting translation", selection: $meetingRetention) {
+                Picker("Meeting recordings (beta)", selection: $meetingRetention) {
                     ForEach(HistoryRetentionPolicy.allCases) { policy in
                         Text(policy.displayName).tag(policy)
                     }
@@ -77,7 +77,7 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("History & Storage")
             } footer: {
-                Text("Choose how long Diduny keeps recordings in the library. Never skips saving new recordings for that group.")
+                Text("Choose how long Diduny keeps recordings in the library. Meeting recordings remain available under Recordings while Meetings is in beta.")
             }
 
             Section {

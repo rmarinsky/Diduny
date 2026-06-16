@@ -938,17 +938,21 @@ struct ShortcutStepView: View {
         }
         .onAppear {
             selectedKey = SettingsStorage.shared.pushToTalkKey == .none ? .rightShift : SettingsStorage.shared.pushToTalkKey
-            selectedMode = SettingsStorage.shared.handsFreeModeEnabled ? .handsFree : .pushToTalk
+            selectedMode = SettingsStorage.shared.pushToTalkToggleEnabled ? .handsFree : .pushToTalk
         }
     }
 
     private func saveSettings() {
         SettingsStorage.shared.pushToTalkKey = selectedKey
-        SettingsStorage.shared.handsFreeModeEnabled = selectedMode == .handsFree
+        SettingsStorage.shared.pushToTalkHoldEnabled = selectedMode == .pushToTalk
+        SettingsStorage.shared.pushToTalkToggleEnabled = selectedMode == .handsFree
         if selectedMode == .handsFree {
             SettingsStorage.shared.pushToTalkToggleTapCount = 3
+        } else {
+            SettingsStorage.shared.pushToTalkHoldStartDelaySeconds = 1.2
         }
         NotificationCenter.default.post(name: .pushToTalkKeyChanged, object: selectedKey)
+        NotificationCenter.default.post(name: .pushToTalkModeChanged, object: nil)
     }
 }
 

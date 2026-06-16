@@ -84,12 +84,16 @@ final class SettingsStorage {
         case launchAtLogin
         case recordingFeedbackSurface
         case pushToTalkKey
+        case pushToTalkHoldEnabled
+        case pushToTalkToggleEnabled
         case pushToTalkToggleTapCount
         case pushToTalkHoldStartDelaySeconds
         case meetingAudioSource
         case meetingMicGain
         case meetingSystemGain
         case translationPushToTalkKey
+        case translationPushToTalkHoldEnabled
+        case translationPushToTalkToggleEnabled
         case translationPushToTalkToggleTapCount
         case translationPushToTalkHoldStartDelaySeconds
         case handsFreeModeEnabled
@@ -363,6 +367,26 @@ final class SettingsStorage {
         }
     }
 
+    var pushToTalkHoldEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.pushToTalkHoldEnabled.rawValue) != nil {
+                return defaults.bool(forKey: Key.pushToTalkHoldEnabled.rawValue)
+            }
+            return !legacyHandsFreeModeEnabled
+        }
+        set { defaults.set(newValue, forKey: Key.pushToTalkHoldEnabled.rawValue) }
+    }
+
+    var pushToTalkToggleEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.pushToTalkToggleEnabled.rawValue) != nil {
+                return defaults.bool(forKey: Key.pushToTalkToggleEnabled.rawValue)
+            }
+            return legacyHandsFreeModeEnabled
+        }
+        set { defaults.set(newValue, forKey: Key.pushToTalkToggleEnabled.rawValue) }
+    }
+
     /// Number of presses required to toggle dictation via the selected modifier key in hands-free mode.
     var pushToTalkToggleTapCount: Int {
         get {
@@ -442,6 +466,26 @@ final class SettingsStorage {
         }
     }
 
+    var translationPushToTalkHoldEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.translationPushToTalkHoldEnabled.rawValue) != nil {
+                return defaults.bool(forKey: Key.translationPushToTalkHoldEnabled.rawValue)
+            }
+            return translationPushToTalkKey != .none && !legacyHandsFreeModeEnabled
+        }
+        set { defaults.set(newValue, forKey: Key.translationPushToTalkHoldEnabled.rawValue) }
+    }
+
+    var translationPushToTalkToggleEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.translationPushToTalkToggleEnabled.rawValue) != nil {
+                return defaults.bool(forKey: Key.translationPushToTalkToggleEnabled.rawValue)
+            }
+            return translationPushToTalkKey != .none && legacyHandsFreeModeEnabled
+        }
+        set { defaults.set(newValue, forKey: Key.translationPushToTalkToggleEnabled.rawValue) }
+    }
+
     /// Number of presses required to toggle translation via the selected modifier key in hands-free mode.
     var translationPushToTalkToggleTapCount: Int {
         get {
@@ -473,18 +517,15 @@ final class SettingsStorage {
 
     // MARK: - Hands-Free Mode (Multi-Tap Toggle)
 
-    /// When enabled, multi-tap starts/stops recording (toggle mode)
-    /// When disabled, hold-to-record mode is used
+    /// Legacy compatibility surface for the old mutually-exclusive modifier-key mode.
+    /// New code should use the per-flow hold/toggle flags above.
     var handsFreeModeEnabled: Bool {
-        get {
-            // Default to false (push-to-talk hold mode)
-            // Use object check to distinguish "not set" from "set to false"
-            if defaults.object(forKey: Key.handsFreeModeEnabled.rawValue) == nil {
-                return false
-            }
-            return defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue)
+        get { pushToTalkToggleEnabled }
+        set {
+            defaults.set(newValue, forKey: Key.handsFreeModeEnabled.rawValue)
+            pushToTalkToggleEnabled = newValue
+            pushToTalkHoldEnabled = !newValue
         }
-        set { defaults.set(newValue, forKey: Key.handsFreeModeEnabled.rawValue) }
     }
 
     // MARK: - Global Hotkey Press Counts
@@ -782,11 +823,18 @@ final class SettingsStorage {
         return min(max(value, 2), 3)
     }
 
-    private static let defaultHoldStartDelaySeconds: TimeInterval = 0.2
+    private var legacyHandsFreeModeEnabled: Bool {
+        guard defaults.object(forKey: Key.handsFreeModeEnabled.rawValue) != nil else {
+            return false
+        }
+        return defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue)
+    }
+
+    private static let defaultHoldStartDelaySeconds: TimeInterval = 1.2
 
     private static func sanitizedHoldStartDelaySeconds(_ value: TimeInterval) -> TimeInterval {
         guard value.isFinite else { return defaultHoldStartDelaySeconds }
-        let clamped = min(max(value, 0.2), 1.0)
+        let clamped = min(max(value, 0.5), 2.0)
         return (clamped * 10).rounded() / 10
     }
 

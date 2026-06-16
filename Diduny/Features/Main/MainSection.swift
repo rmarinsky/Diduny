@@ -43,5 +43,8 @@ enum MainSection: String, Hashable {
         default: false
         }
     }
-}
 
+    var isBetaDisabled: Bool {
+        self == .meetings
+    }
+}

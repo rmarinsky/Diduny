@@ -210,8 +210,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(pushToTalkModeChanged(_:)),
+            name: .pushToTalkModeChanged,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(translationPushToTalkTapCountChanged(_:)),
             name: .translationPushToTalkTapCountChanged,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(translationPushToTalkModeChanged(_:)),
+            name: .translationPushToTalkModeChanged,
             object: nil
         )
 

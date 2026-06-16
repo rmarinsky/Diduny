@@ -110,14 +110,16 @@ struct SidebarView: View {
     }
 
     private func sidebarRow(for section: MainSection) -> some View {
-        SidebarRow(section: section, isSelected: selectedSection == section)
+        SidebarRow(section: section, isSelected: selectedSection == section, isDisabled: section.isBetaDisabled)
             .onTapGesture {
+                guard !section.isBetaDisabled else { return }
                 selectedSection = section
             }
             .focusable(false)
             .accessibilityLabel(Text(section.label))
-            .accessibilityValue(Text(selectedSection == section ? "Selected" : ""))
+            .accessibilityValue(Text(section.isBetaDisabled ? "Beta, unavailable" : selectedSection == section ? "Selected" : ""))
             .accessibilityIdentifier("Sidebar \(section.label)")
+            .help(section.isBetaDisabled ? "Meetings is in beta. Meeting recordings are available in Recordings." : section.label)
     }
 }
 
@@ -126,17 +128,26 @@ struct SidebarView: View {
 private struct SidebarRow: View {
     let section: MainSection
     let isSelected: Bool
+    let isDisabled: Bool
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: section.iconName)
                 .font(.system(size: 13, weight: .regular))
                 .frame(width: 18)
-                .foregroundColor(isSelected ? .white : .secondary)
+                .foregroundColor(iconColor)
             Text(section.label)
                 .font(.system(size: 13))
-                .foregroundColor(isSelected ? .white : .primary)
+                .foregroundColor(textColor)
             Spacer()
+            if isDisabled {
+                Text("BETA")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Color(.quaternaryLabelColor).opacity(0.14), in: Capsule())
+            }
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
@@ -148,5 +159,16 @@ private struct SidebarRow: View {
             in: RoundedRectangle(cornerRadius: 6, style: .continuous)
         )
         .contentShape(Rectangle())
+        .opacity(isDisabled ? 0.55 : 1.0)
+    }
+
+    private var iconColor: Color {
+        if isDisabled { return .secondary.opacity(0.8) }
+        return isSelected ? .white : .secondary
+    }
+
+    private var textColor: Color {
+        if isDisabled { return .secondary }
+        return isSelected ? .white : .primary
     }
 }

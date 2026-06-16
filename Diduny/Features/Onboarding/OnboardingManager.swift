@@ -230,11 +230,16 @@ final class OnboardingManager {
         guard isFirstLaunch else { return }
 
         SettingsStorage.shared.pushToTalkKey = .rightShift
-        SettingsStorage.shared.handsFreeModeEnabled = false
+        SettingsStorage.shared.pushToTalkHoldEnabled = true
+        SettingsStorage.shared.pushToTalkToggleEnabled = false
+        SettingsStorage.shared.translationPushToTalkHoldEnabled = false
+        SettingsStorage.shared.translationPushToTalkToggleEnabled = false
+        SettingsStorage.shared.pushToTalkHoldStartDelaySeconds = 1.2
+        SettingsStorage.shared.translationPushToTalkHoldStartDelaySeconds = 1.2
         SettingsStorage.shared.pushToTalkToggleTapCount = 3
         SettingsStorage.shared.translationPushToTalkToggleTapCount = 3
-        SettingsStorage.shared.meetingHotkeyPressCount = 1
-        SettingsStorage.shared.meetingTranslationHotkeyPressCount = 1
+        SettingsStorage.shared.meetingHotkeyPressCount = 3
+        SettingsStorage.shared.meetingTranslationHotkeyPressCount = 3
         SettingsStorage.shared.autoPaste = true
         SettingsStorage.shared.playSoundOnCompletion = true
     }

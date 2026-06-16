@@ -24,12 +24,12 @@ struct MenuBarContentView: View {
                 .disabled(isTranslationButtonDisabled)
 
             Button(meetingButtonTitle, action: onToggleMeetingRecording)
-                .globalKeyboardShortcut(.toggleMeetingRecording)
-                .disabled(isMeetingButtonDisabled)
+                .disabled(true)
+                .help("Meetings is in beta. Use Recordings for saved audio.")
 
             Button(meetingTranslationButtonTitle, action: onToggleMeetingTranslationRecording)
-                .globalKeyboardShortcut(.toggleMeetingTranslation)
-                .disabled(isMeetingTranslationButtonDisabled)
+                .disabled(true)
+                .help("Meeting Translation is in beta.")
 
             Divider()
 
@@ -179,45 +179,31 @@ struct MenuBarContentView: View {
     private var meetingButtonTitle: String {
         switch appState.meetingRecordingState {
         case .idle:
-            "Meeting"
+            "Meeting (Beta)"
         case .recording:
             "Stop Meeting"
         case .processing:
             "Processing Meeting…"
         case .success:
-            "Meeting"
+            "Meeting (Beta)"
         case .error:
-            "Meeting"
+            "Meeting (Beta)"
         }
-    }
-
-    private var isMeetingButtonDisabled: Bool {
-        appState.meetingRecordingState == .idle
-            && (isInProgress(appState.recordingState)
-                || isInProgress(appState.translationRecordingState)
-                || isInProgress(appState.meetingTranslationRecordingState))
     }
 
     private var meetingTranslationButtonTitle: String {
         switch appState.meetingTranslationRecordingState {
         case .idle:
-            "Meeting Translation"
+            "Meeting Translation (Beta)"
         case .recording:
             "Stop Meeting Translation"
         case .processing:
             "Processing Meeting Translation…"
         case .success:
-            "Meeting Translation"
+            "Meeting Translation (Beta)"
         case .error:
-            "Meeting Translation"
+            "Meeting Translation (Beta)"
         }
-    }
-
-    private var isMeetingTranslationButtonDisabled: Bool {
-        appState.meetingTranslationRecordingState == .idle
-            && (isInProgress(appState.recordingState)
-                || isInProgress(appState.translationRecordingState)
-                || isInProgress(appState.meetingRecordingState))
     }
 
     private func deviceMenuLabel(_ device: AudioDevice) -> String {
@@ -248,7 +234,6 @@ struct MenuBarContentView: View {
         let settings = SettingsStorage.shared
         return settings.effectiveTranscriptionProvider == .cloud
             && settings.effectiveTranslationProvider == .cloud
-            && settings.effectiveMeetingRealtimeTranscriptionEnabled
     }
 
     private func selectCloudMode() {
@@ -260,7 +245,6 @@ struct MenuBarContentView: View {
         let settings = SettingsStorage.shared
         settings.transcriptionProvider = .cloud
         settings.translationProvider = .cloud
-        settings.meetingRealtimeTranscriptionEnabled = true
     }
 
     private func selectLocalMode() {
