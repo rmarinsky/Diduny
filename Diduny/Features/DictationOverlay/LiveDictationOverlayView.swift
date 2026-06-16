@@ -4,6 +4,7 @@ struct LiveDictationOverlayView: View {
     let store: LiveDictationOverlayStore
     let onCopy: () -> Void
     let onStop: () -> Void
+    private static let transcriptBottomID = "transcript-bottom"
 
     var body: some View {
         TimelineView(.periodic(from: store.startedAt, by: 1)) { timeline in
@@ -30,13 +31,7 @@ struct LiveDictationOverlayView: View {
                             .lineLimit(1)
                     }
 
-                    Text(displayText)
-                        .font(.system(size: 14))
-                        .foregroundStyle(store.hasText ? Color.primary : Color.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentTransition(.opacity)
+                    transcriptView
                 }
 
                 controls
@@ -55,6 +50,45 @@ struct LiveDictationOverlayView: View {
 
     private var displayText: String {
         store.visibleText.isEmpty ? "Listening..." : store.visibleText
+    }
+
+    private var transcriptView: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(displayText)
+                        .font(.system(size: 14))
+                        .foregroundStyle(store.hasText ? Color.primary : Color.secondary)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentTransition(.opacity)
+
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.transcriptBottomID)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.hidden)
+            .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 38, alignment: .bottomLeading)
+            .onAppear {
+                scrollTranscriptToBottom(proxy)
+            }
+            .onChange(of: store.visibleText) { _, _ in
+                scrollTranscriptToBottom(proxy)
+            }
+            .onChange(of: store.phase) { _, _ in
+                scrollTranscriptToBottom(proxy)
+            }
+        }
+    }
+
+    private func scrollTranscriptToBottom(_ proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            withTransaction(Transaction(animation: nil)) {
+                proxy.scrollTo(Self.transcriptBottomID, anchor: .bottom)
+            }
+        }
     }
 
     private var statusIcon: some View {
