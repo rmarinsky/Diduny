@@ -59,8 +59,8 @@ struct GeneralSettingsView: View {
                         .monospacedDigit()
                 }
 
-                Button("Run Typing Speed Test…") {
-                    TypingTestWindowController.shared.showWindow()
+                Button("Open Typing Speed Test…") {
+                    MainWindowController.shared.showWindow(section: .typingTest)
                 }
                 .buttonStyle(.link)
             } header: {

@@ -14,7 +14,6 @@ struct DidunyApp: App {
                 onToggleMeetingTranslationRecording: { appDelegate.toggleMeetingTranslationRecording() },
                 onTranscribeFile: { appDelegate.transcribeFile() },
                 onOpenMainWindow: { section in appDelegate.openMainWindow(section: section) },
-                onOpenTypingTest: { TypingTestWindowController.shared.showWindow() },
                 onCheckForUpdates: { appDelegate.updaterManager.checkForUpdates() }
             )
             .environment(appDelegate.appState)

@@ -123,7 +123,6 @@
 		EBD6CE2EED71E6F9BC63E53E /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C864D23789DFC70C7FE0D3 /* MenuBarContentView.swift */; };
 		F1802FC4C604B7FB3AA13B96 /* RemoteConfigService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4852162851F73B8352C95E25 /* RemoteConfigService.swift */; };
 		F293480FBFF36536227A5878 /* TranscriptionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF5B2157378ABF82C5B80572 /* TranscriptionProvider.swift */; };
-		4FE43C59398C4F73ABF18B7F /* TypingTestWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0218C1A8A8094DE79A1863FD /* TypingTestWindowController.swift */; };
 		95C9CE064CC2410EB46F0BCF /* TypingSpeedMeasurementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4779A91E28C54DE8A7CC5F78 /* TypingSpeedMeasurementTests.swift */; };
 		B4AA58AA307C410FA6755D56 /* TypingSpeedMeasurement.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEB516FDE22E4469AF6568A1 /* TypingSpeedMeasurement.swift */; };
 		F64CD3B70A52B315B4110B8C /* CloudRealtimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001D5E66F362C783C621055C /* CloudRealtimeService.swift */; };
@@ -144,7 +143,6 @@
 /* Begin PBXFileReference section */
 		001D5E66F362C783C621055C /* CloudRealtimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudRealtimeService.swift; sourceTree = "<group>"; };
 		01E272A8E12D4EEF5D724E91 /* AppDelegate+TranslationRecording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+TranslationRecording.swift"; sourceTree = "<group>"; };
-		0218C1A8A8094DE79A1863FD /* TypingTestWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingTestWindowController.swift; sourceTree = "<group>"; };
 		0491E26240E167BDB5DCACEE /* HotkeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyService.swift; sourceTree = "<group>"; };
 		06C864D23789DFC70C7FE0D3 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
 		09A53A5FD4196FA12DF76141 /* MeetingChapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingChapter.swift; sourceTree = "<group>"; };
@@ -482,7 +480,6 @@
 			isa = PBXGroup;
 			children = (
 				1EA1CD5086FD4EA0922A5A3E /* TypingTestView.swift */,
-				0218C1A8A8094DE79A1863FD /* TypingTestWindowController.swift */,
 			);
 			path = TypingTest;
 			sourceTree = "<group>";
@@ -841,7 +838,6 @@
 				BB39149383C71119B82FE3AD /* TranscriptCleanupService.swift in Sources */,
 				B4AA58AA307C410FA6755D56 /* TypingSpeedMeasurement.swift in Sources */,
 				D04D8395563E428F839BE368 /* TypingTestView.swift in Sources */,
-				4FE43C59398C4F73ABF18B7F /* TypingTestWindowController.swift in Sources */,
 				F293480FBFF36536227A5878 /* TranscriptionProvider.swift in Sources */,
 				50CD068CB639D75D27C09787 /* TranscriptionWindowController.swift in Sources */,
 				4E4C0DD6E977C6306BD0289C /* UpdaterManager.swift in Sources */,

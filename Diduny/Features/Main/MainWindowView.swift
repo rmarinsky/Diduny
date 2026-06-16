@@ -65,6 +65,8 @@ struct MainWindowView: View {
         case .recordings:
             RecordingsLibraryView()
                 .environment(audioDeviceManager)
+        case .typingTest:
+            TypingTestView()
         case .meetings:
             RecordingsLibraryView()
                 .environment(audioDeviceManager)
