@@ -5,21 +5,52 @@ import Foundation
 actor RealtimeTranslationAccumulator {
     private var finalOriginalText: String = ""
     private var finalTranslatedText: String = ""
+    private var provisionalOriginalText: String = ""
+    private var provisionalTranslatedText: String = ""
 
     func process(tokens: [RealtimeToken]) {
-        let finalTokens = tokens.filter(\.isFinal)
-        guard !finalTokens.isEmpty else { return }
+        var latestProvisionalOriginalText = ""
+        var latestProvisionalTranslatedText = ""
+        var didReceiveFinalOriginalToken = false
+        var didReceiveFinalTranslatedToken = false
 
-        for token in finalTokens {
+        for token in tokens where !token.text.isEmpty {
             let status = token.translationStatus?.lowercased()
             switch status {
             case "translation":
-                finalTranslatedText += token.text
+                if token.isFinal {
+                    finalTranslatedText += token.text
+                    didReceiveFinalTranslatedToken = true
+                } else {
+                    latestProvisionalTranslatedText += token.text
+                }
             case "transcription", "source", "original", "none", nil:
-                finalOriginalText += token.text
+                if token.isFinal {
+                    finalOriginalText += token.text
+                    didReceiveFinalOriginalToken = true
+                } else {
+                    latestProvisionalOriginalText += token.text
+                }
             default:
-                finalOriginalText += token.text
+                if token.isFinal {
+                    finalOriginalText += token.text
+                    didReceiveFinalOriginalToken = true
+                } else {
+                    latestProvisionalOriginalText += token.text
+                }
             }
+        }
+
+        if !latestProvisionalTranslatedText.isEmpty {
+            provisionalTranslatedText = latestProvisionalTranslatedText
+        } else if didReceiveFinalTranslatedToken {
+            provisionalTranslatedText = ""
+        }
+
+        if !latestProvisionalOriginalText.isEmpty {
+            provisionalOriginalText = latestProvisionalOriginalText
+        } else if didReceiveFinalOriginalToken {
+            provisionalOriginalText = ""
         }
     }
 
@@ -27,13 +58,19 @@ actor RealtimeTranslationAccumulator {
         // No-op: pause-based formatting removed
     }
 
-    func bestText() -> String {
-        let translated = finalTranslatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+    func bestText(includeProvisional: Bool = true) -> String {
+        let translatedText = includeProvisional
+            ? finalTranslatedText + provisionalTranslatedText
+            : finalTranslatedText
+        let translated = translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !translated.isEmpty {
             return translated
         }
 
-        return finalOriginalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let originalText = includeProvisional
+            ? finalOriginalText + provisionalOriginalText
+            : finalOriginalText
+        return originalText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -350,6 +387,9 @@ extension AppDelegate {
         var capturedAudioData: Data?
         let recordingId = UUID()
         let sourceDevice = audioRecorder.currentRecordingDeviceInfo
+        let realtimeStopTask = Task { @MainActor in
+            await self.stopTranslationRealtimeSession(finalize: true)
+        }
 
         do {
             Log.app.info("stopTranslationRecording: Stopping audio recorder")
@@ -358,7 +398,7 @@ extension AppDelegate {
 
             capturedAudioData = audioData
 
-            let realtimeResult = await stopTranslationRealtimeSession(finalize: true)
+            let realtimeResult = await realtimeStopTask.value
 
             let rawText: String
             if !realtimeResult.text.isEmpty {
@@ -372,10 +412,19 @@ extension AppDelegate {
                 rawText = try await transcriptionService.translateAndTranscribe(audioData: audioData)
                 Log.app.info("stopTranslationRecording: HTTP cloud translation (\(rawText.count) chars)")
             }
-            let cleanedRawText = await TranscriptCleanupService.shared.clean(
-                rawText,
-                fillerWords: SettingsStorage.shared.fillerWords
-            )
+            let cleanedRawText: String
+            if !realtimeResult.text.isEmpty {
+                cleanedRawText = await cleanRealtimeResultText(
+                    rawText,
+                    realtimeResult: realtimeResult,
+                    logPrefix: "Translation"
+                )
+            } else {
+                cleanedRawText = await TranscriptCleanupService.shared.clean(
+                    rawText,
+                    fillerWords: SettingsStorage.shared.fillerWords
+                )
+            }
             let text = ClipboardService.preparedText(cleanedRawText, behavior: .cleaned)
             Log.app.info("stopTranslationRecording: Translation received (\(text.count) chars)")
 
@@ -432,7 +481,7 @@ extension AppDelegate {
             RecoveryStateManager.shared.clearState()
 
         } catch is CancellationError {
-            _ = await stopTranslationRealtimeSession(finalize: false)
+            _ = await realtimeStopTask.value
             Log.app.info("stopTranslationRecording: Cancelled")
             await MainActor.run {
                 appState.translationRecordingState = .idle
@@ -441,7 +490,7 @@ extension AppDelegate {
             }
             return
         } catch {
-            _ = await stopTranslationRealtimeSession(finalize: false)
+            _ = await realtimeStopTask.value
             Log.app.error("stopTranslationRecording: ERROR - \(error.localizedDescription)")
             let isEmptyTranscription: Bool = {
                 guard case .emptyTranscription = error as? TranscriptionError else { return false }
@@ -571,16 +620,18 @@ extension AppDelegate {
         }
     }
 
-    private func stopTranslationRealtimeSession(finalize: Bool) async -> (text: String, didReceiveFinalization: Bool) {
+    private func stopTranslationRealtimeSession(finalize: Bool) async -> RealtimeSessionStopResult {
         translationRealtimeConnectionTask?.cancel()
         translationRealtimeConnectionTask = nil
-        audioRecorder.onRealtimeAudioData = nil
+        if !finalize {
+            audioRecorder.onRealtimeAudioData = nil
+        }
 
         let accumulator = translationRealtimeAccumulator
         let wasEnabled = translationRealtimeSessionEnabled
-        var didReceiveFinalization = false
 
         defer {
+            audioRecorder.onRealtimeAudioData = nil
             translationRealtimeSessionEnabled = false
             translationRealtimeAccumulator = nil
             realtimeTranscriptionService.onTokensReceived = nil
@@ -590,16 +641,47 @@ extension AppDelegate {
         }
 
         guard wasEnabled else {
-            return ("", false)
+            return .empty
         }
 
+        let preFinalizeText: String
         if finalize {
-            didReceiveFinalization = await realtimeTranscriptionService.finalize()
+            preFinalizeText = await accumulator?.bestText(includeProvisional: true) ?? ""
+        } else {
+            preFinalizeText = ""
+        }
+        let optimisticCleanupTask = finalize
+            ? startOptimisticRealtimeCleanup(for: preFinalizeText)
+            : nil
+        var finalizeResult: RealtimeFinalizeResult = .skipped
+        if finalize {
+            finalizeResult = await realtimeTranscriptionService.finalize(profile: .dictationFast)
         }
         await realtimeTranscriptionService.disconnect()
 
-        let text = await accumulator?.bestText() ?? ""
-        return (text.trimmingCharacters(in: .whitespacesAndNewlines), didReceiveFinalization)
+        let text = (await accumulator?.bestText(includeProvisional: true) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let preFinalizeTrimmed = preFinalizeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let textChangedAfterFinalize = text != preFinalizeTrimmed
+        let optimisticCleanedText: String?
+
+        if let optimisticCleanupTask, !textChangedAfterFinalize {
+            optimisticCleanedText = await optimisticCleanupTask.value
+        } else {
+            optimisticCleanupTask?.cancel()
+            optimisticCleanedText = nil
+        }
+
+        Log.transcription.info(
+            "Translation RT stop: finalizeProfile=\(finalizeResult.profileName), finished=\(finalizeResult.didReceiveFinishedSignal), timedOut=\(finalizeResult.timedOut), durationMs=\(finalizeResult.durationMs), tokensAfterFinalize=\(finalizeResult.tokensAfterFinalize), charsAfterFinalize=\(finalizeResult.charactersAfterFinalize), textChangedAfterFinalize=\(textChangedAfterFinalize), charsDelta=\(text.count - preFinalizeTrimmed.count), optimisticCleanupReused=\(optimisticCleanedText != nil)"
+        )
+
+        return RealtimeSessionStopResult(
+            text: text,
+            preFinalizeText: preFinalizeTrimmed,
+            optimisticCleanedText: optimisticCleanedText,
+            finalizeResult: finalizeResult
+        )
     }
 
     private func translationLanguagePair() -> (languageA: String, languageB: String) {

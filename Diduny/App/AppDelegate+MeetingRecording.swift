@@ -348,7 +348,8 @@ extension AppDelegate {
         let hasRealtimeSession = await MainActor.run { appState.liveTranscriptStore != nil }
         var didReceiveRealtimeFinalization = true
         if hasRealtimeSession {
-            didReceiveRealtimeFinalization = await realtimeTranscriptionService.finalize()
+            let finalizeResult = await realtimeTranscriptionService.finalize(profile: .safe)
+            didReceiveRealtimeFinalization = finalizeResult.didReceiveFinishedSignal
             await realtimeTranscriptionService.disconnect()
             meetingRecorderService.onRealtimeAudioData = nil
         }

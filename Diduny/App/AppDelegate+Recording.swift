@@ -4,13 +4,25 @@ import Foundation
 
 actor RealtimeVoiceAccumulator {
     private var finalText: String = ""
+    private var provisionalText: String = ""
 
     func process(tokens: [RealtimeToken]) {
-        let finalTokens = tokens.filter(\.isFinal)
-        guard !finalTokens.isEmpty else { return }
+        var latestProvisionalText = ""
+        var didReceiveFinalToken = false
 
-        for token in finalTokens {
-            finalText += token.text
+        for token in tokens where !token.text.isEmpty {
+            if token.isFinal {
+                finalText += token.text
+                didReceiveFinalToken = true
+            } else {
+                latestProvisionalText += token.text
+            }
+        }
+
+        if !latestProvisionalText.isEmpty {
+            provisionalText = latestProvisionalText
+        } else if didReceiveFinalToken {
+            provisionalText = ""
         }
     }
 
@@ -18,8 +30,9 @@ actor RealtimeVoiceAccumulator {
         // No-op: pause-based formatting removed
     }
 
-    func bestText() -> String {
-        finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+    func bestText(includeProvisional: Bool = true) -> String {
+        let text = includeProvisional ? finalText + provisionalText : finalText
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -349,6 +362,9 @@ extension AppDelegate {
         var originalWAVData: Data?
         let recordingId = UUID()
         let sourceDevice = audioRecorder.currentRecordingDeviceInfo
+        let realtimeStopTask = Task { @MainActor in
+            await self.stopVoiceRealtimeSession(finalize: true)
+        }
 
         do {
             Log.app.info("stopRecording: Stopping audio recorder")
@@ -359,7 +375,7 @@ extension AppDelegate {
             originalWAVData = audioData
             capturedAudioData = audioData
 
-            let realtimeResult = await stopVoiceRealtimeSession(finalize: true)
+            let realtimeResult = await realtimeStopTask.value
 
             let rawText: String
             if !realtimeResult.text.isEmpty {
@@ -373,10 +389,19 @@ extension AppDelegate {
                 rawText = try await transcriptionService.transcribe(audioData: audioData)
                 Log.app.info("stopRecording: HTTP cloud transcription (\(rawText.count) chars)")
             }
-            let cleanedRawText = await TranscriptCleanupService.shared.clean(
-                rawText,
-                fillerWords: SettingsStorage.shared.fillerWords
-            )
+            let cleanedRawText: String
+            if !realtimeResult.text.isEmpty {
+                cleanedRawText = await cleanRealtimeResultText(
+                    rawText,
+                    realtimeResult: realtimeResult,
+                    logPrefix: "Dictation"
+                )
+            } else {
+                cleanedRawText = await TranscriptCleanupService.shared.clean(
+                    rawText,
+                    fillerWords: SettingsStorage.shared.fillerWords
+                )
+            }
             let text = ClipboardService.preparedText(cleanedRawText, behavior: .cleaned)
             Log.app.info("stopRecording: Transcription received (\(text.count) chars)")
 
@@ -434,7 +459,7 @@ extension AppDelegate {
             RecoveryStateManager.shared.clearState()
 
         } catch is CancellationError {
-            _ = await stopVoiceRealtimeSession(finalize: false)
+            _ = await realtimeStopTask.value
             Log.app.info("stopRecording: Cancelled")
             await MainActor.run {
                 appState.recordingState = .idle
@@ -444,7 +469,7 @@ extension AppDelegate {
             }
             return
         } catch let limitError as TranscriptionError where limitError.isUsageLimitExceeded {
-            _ = await stopVoiceRealtimeSession(finalize: false)
+            _ = await realtimeStopTask.value
             Log.app.warning("stopRecording: Usage limit exceeded, attempting Whisper fallback")
 
             // Try falling back to local Whisper model using the original capture bytes
@@ -520,7 +545,7 @@ extension AppDelegate {
                 }
             }
         } catch {
-            _ = await stopVoiceRealtimeSession(finalize: false)
+            _ = await realtimeStopTask.value
             Log.app.error("stopRecording: ERROR - \(error.localizedDescription)")
             let isEmptyTranscription: Bool = {
                 guard case .emptyTranscription = error as? TranscriptionError else { return false }
@@ -644,14 +669,16 @@ extension AppDelegate {
         }
     }
 
-    private func stopVoiceRealtimeSession(finalize: Bool) async -> (text: String, didReceiveFinalization: Bool) {
-        audioRecorder.onRealtimeAudioData = nil
+    private func stopVoiceRealtimeSession(finalize: Bool) async -> RealtimeSessionStopResult {
+        if !finalize {
+            audioRecorder.onRealtimeAudioData = nil
+        }
 
         let accumulator = voiceRealtimeAccumulator
         let wasEnabled = voiceRealtimeSessionEnabled
-        var didReceiveFinalization = false
 
         defer {
+            audioRecorder.onRealtimeAudioData = nil
             voiceRealtimeSessionEnabled = false
             voiceRealtimeAccumulator = nil
             realtimeTranscriptionService.onTokensReceived = nil
@@ -661,16 +688,89 @@ extension AppDelegate {
         }
 
         guard wasEnabled else {
-            return ("", false)
+            return .empty
         }
 
+        let preFinalizeText: String
         if finalize {
-            didReceiveFinalization = await realtimeTranscriptionService.finalize()
+            preFinalizeText = await accumulator?.bestText(includeProvisional: true) ?? ""
+        } else {
+            preFinalizeText = ""
+        }
+        let optimisticCleanupTask = finalize
+            ? startOptimisticRealtimeCleanup(for: preFinalizeText)
+            : nil
+        var finalizeResult: RealtimeFinalizeResult = .skipped
+        if finalize {
+            finalizeResult = await realtimeTranscriptionService.finalize(profile: .dictationFast)
         }
         await realtimeTranscriptionService.disconnect()
 
-        let text = await accumulator?.bestText() ?? ""
-        return (text.trimmingCharacters(in: .whitespacesAndNewlines), didReceiveFinalization)
+        let text = (await accumulator?.bestText(includeProvisional: true) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let preFinalizeTrimmed = preFinalizeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let textChangedAfterFinalize = text != preFinalizeTrimmed
+        let optimisticCleanedText: String?
+
+        if let optimisticCleanupTask, !textChangedAfterFinalize {
+            optimisticCleanedText = await optimisticCleanupTask.value
+        } else {
+            optimisticCleanupTask?.cancel()
+            optimisticCleanedText = nil
+        }
+
+        Log.transcription.info(
+            "Dictation RT stop: finalizeProfile=\(finalizeResult.profileName), finished=\(finalizeResult.didReceiveFinishedSignal), timedOut=\(finalizeResult.timedOut), durationMs=\(finalizeResult.durationMs), tokensAfterFinalize=\(finalizeResult.tokensAfterFinalize), charsAfterFinalize=\(finalizeResult.charactersAfterFinalize), textChangedAfterFinalize=\(textChangedAfterFinalize), charsDelta=\(text.count - preFinalizeTrimmed.count), optimisticCleanupReused=\(optimisticCleanedText != nil)"
+        )
+
+        return RealtimeSessionStopResult(
+            text: text,
+            preFinalizeText: preFinalizeTrimmed,
+            optimisticCleanedText: optimisticCleanedText,
+            finalizeResult: finalizeResult
+        )
+    }
+
+    func startOptimisticRealtimeCleanup(
+        for rawText: String,
+        timeoutInterval: TimeInterval = 1.0
+    ) -> Task<String, Never>? {
+        guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        return Task {
+            await TranscriptCleanupService.shared.clean(
+                rawText,
+                fillerWords: SettingsStorage.shared.fillerWords,
+                timeoutInterval: timeoutInterval
+            )
+        }
+    }
+
+    func cleanRealtimeResultText(
+        _ rawText: String,
+        realtimeResult: RealtimeSessionStopResult,
+        logPrefix: String,
+        timeoutInterval: TimeInterval = 1.0
+    ) async -> String {
+        if let optimisticCleanedText = realtimeResult.optimisticCleanedText,
+           !realtimeResult.textChangedAfterFinalize {
+            Log.app.info("[\(logPrefix)] Reusing optimistic cleanup result")
+            return optimisticCleanedText
+        }
+
+        if realtimeResult.textChangedAfterFinalize {
+            Log.app.info(
+                "[\(logPrefix)] Finalize changed text; running one cleanup retry on final transcript"
+            )
+        }
+
+        return await TranscriptCleanupService.shared.clean(
+            rawText,
+            fillerWords: SettingsStorage.shared.fillerWords,
+            timeoutInterval: timeoutInterval
+        )
     }
 
     // MARK: - Escape Cancel Handler

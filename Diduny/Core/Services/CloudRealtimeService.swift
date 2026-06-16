@@ -29,6 +29,8 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private var awaitingFinalizeResponse = false
     private var didReceiveFinishedSignal = false
     private var lastRealtimeTokenAt: Date?
+    private var finalizeTokenCount = 0
+    private var finalizeCharacterCount = 0
 
     private var _onTokensReceived: (([RealtimeToken]) -> Void)?
     private var _onError: ((Error) -> Void)?
@@ -214,17 +216,30 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
 
     // MARK: - Finalize
 
-    func finalize() async -> Bool {
-        guard isConnected, let task = webSocketTask else { return false }
+    func finalize(profile: RealtimeFinalizeProfile = .safe) async -> RealtimeFinalizeResult {
+        guard isConnected, let task = webSocketTask else {
+            return RealtimeFinalizeResult(
+                profileName: profile.name,
+                didReceiveFinishedSignal: false,
+                durationMs: 0,
+                tokensAfterFinalize: 0,
+                charactersAfterFinalize: 0,
+                timedOut: false,
+                quietWindowReached: true
+            )
+        }
 
+        let startedAt = Date()
         setFinalizeState(awaiting: true, finished: false)
 
         do {
             let finalizePayloadData = try JSONSerialization.data(withJSONObject: ["type": "finalize"])
             if let finalizePayload = String(data: finalizePayloadData, encoding: .utf8) {
                 try await task.send(.string(finalizePayload))
-                Log.transcription.info("Cloud RT: Finalize control message sent")
-                try? await Task.sleep(for: .milliseconds(350))
+                Log.transcription.info("Cloud RT: Finalize control message sent (\(profile.name))")
+                if profile.controlMessageDelayMs > 0 {
+                    try? await Task.sleep(for: .milliseconds(profile.controlMessageDelayMs))
+                }
             }
 
             // Empty frame ends the stream and flushes pending final tokens.
@@ -232,37 +247,64 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
             Log.transcription.info("Cloud RT: Empty frame sent (finalize)")
 
             // Wait for explicit finished signal and a short quiet window for final tokens.
-            let timeoutSeconds = 5.0
-            let quietWindowSeconds = 0.35
-            let deadline = Date().addingTimeInterval(timeoutSeconds)
+            let deadline = Date().addingTimeInterval(profile.timeoutSeconds)
 
             while Date() < deadline {
                 let snapshot = readFinalizeState()
-                let hasQuietWindow: Bool = {
-                    guard let lastTokenAt = snapshot.lastTokenAt else { return true }
-                    return Date().timeIntervalSince(lastTokenAt) >= quietWindowSeconds
-                }()
+                let hasQuietWindow = hasFinalizeQuietWindow(
+                    snapshot: snapshot,
+                    quietWindowSeconds: profile.quietWindowSeconds
+                )
 
                 if snapshot.finished && hasQuietWindow {
+                    let result = makeFinalizeResult(
+                        profile: profile,
+                        startedAt: startedAt,
+                        snapshot: snapshot,
+                        timedOut: false,
+                        quietWindowReached: true
+                    )
                     setFinalizeState(awaiting: false, finished: false)
-                    return true
+                    logFinalizeResult(result)
+                    return result
                 }
 
                 try? await Task.sleep(for: .milliseconds(50))
             }
 
             let timedOutSnapshot = readFinalizeState()
+            let quietWindowReached = hasFinalizeQuietWindow(
+                snapshot: timedOutSnapshot,
+                quietWindowSeconds: profile.quietWindowSeconds
+            )
+            let result = makeFinalizeResult(
+                profile: profile,
+                startedAt: startedAt,
+                snapshot: timedOutSnapshot,
+                timedOut: true,
+                quietWindowReached: quietWindowReached
+            )
             setFinalizeState(awaiting: false, finished: false)
             if !timedOutSnapshot.finished {
-                Log.transcription.warning("Cloud RT: Finalize timeout — finished signal was not received")
+                Log.transcription.warning("Cloud RT: Finalize timeout - finished signal was not received")
             } else {
-                Log.transcription.warning("Cloud RT: Finalize timeout — finished received but quiet window not reached")
+                Log.transcription.warning("Cloud RT: Finalize timeout - finished received but quiet window not reached")
             }
-            return timedOutSnapshot.finished
+            logFinalizeResult(result)
+            return result
         } catch {
             Log.transcription.error("Cloud RT: Finalize error - \(error.localizedDescription)")
+            let snapshot = readFinalizeState()
+            let result = makeFinalizeResult(
+                profile: profile,
+                startedAt: startedAt,
+                snapshot: snapshot,
+                timedOut: false,
+                quietWindowReached: false
+            )
             setFinalizeState(awaiting: false, finished: false)
-            return false
+            logFinalizeResult(result)
+            return result
         }
     }
 
@@ -374,7 +416,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                     if let boundary = segmentBoundary(from: token.text) {
                         // Flush buffered tokens before emitting boundary to preserve ordering
                         if !bufferedTokens.isEmpty {
-                            markTokenArrival()
+                            markTokenArrival(tokens: bufferedTokens)
                             onTokensReceived?(bufferedTokens)
                             bufferedTokens.removeAll()
                         }
@@ -397,7 +439,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                 }
 
                 if !bufferedTokens.isEmpty {
-                    markTokenArrival()
+                    markTokenArrival(tokens: bufferedTokens)
                     onTokensReceived?(bufferedTokens)
                 }
             }
@@ -568,16 +610,22 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         finalizeStateLock.lock()
         awaitingFinalizeResponse = awaiting
         didReceiveFinishedSignal = finished
-        if !awaiting {
+        if awaiting {
+            lastRealtimeTokenAt = nil
+            finalizeTokenCount = 0
+            finalizeCharacterCount = 0
+        } else {
             lastRealtimeTokenAt = nil
         }
         finalizeStateLock.unlock()
     }
 
-    private func markTokenArrival() {
+    private func markTokenArrival(tokens: [RealtimeToken]) {
         finalizeStateLock.lock()
         if awaitingFinalizeResponse {
             lastRealtimeTokenAt = Date()
+            finalizeTokenCount += tokens.count
+            finalizeCharacterCount += tokens.reduce(0) { $0 + $1.text.count }
         }
         finalizeStateLock.unlock()
     }
@@ -590,11 +638,53 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         finalizeStateLock.unlock()
     }
 
-    private func readFinalizeState() -> (finished: Bool, lastTokenAt: Date?) {
+    private func readFinalizeState() -> (
+        finished: Bool,
+        lastTokenAt: Date?,
+        tokenCount: Int,
+        characterCount: Int
+    ) {
         finalizeStateLock.lock()
-        let snapshot = (finished: didReceiveFinishedSignal, lastTokenAt: lastRealtimeTokenAt)
+        let snapshot = (
+            finished: didReceiveFinishedSignal,
+            lastTokenAt: lastRealtimeTokenAt,
+            tokenCount: finalizeTokenCount,
+            characterCount: finalizeCharacterCount
+        )
         finalizeStateLock.unlock()
         return snapshot
+    }
+
+    private func hasFinalizeQuietWindow(
+        snapshot: (finished: Bool, lastTokenAt: Date?, tokenCount: Int, characterCount: Int),
+        quietWindowSeconds: TimeInterval
+    ) -> Bool {
+        guard let lastTokenAt = snapshot.lastTokenAt else { return true }
+        return Date().timeIntervalSince(lastTokenAt) >= quietWindowSeconds
+    }
+
+    private func makeFinalizeResult(
+        profile: RealtimeFinalizeProfile,
+        startedAt: Date,
+        snapshot: (finished: Bool, lastTokenAt: Date?, tokenCount: Int, characterCount: Int),
+        timedOut: Bool,
+        quietWindowReached: Bool
+    ) -> RealtimeFinalizeResult {
+        RealtimeFinalizeResult(
+            profileName: profile.name,
+            didReceiveFinishedSignal: snapshot.finished,
+            durationMs: Int(Date().timeIntervalSince(startedAt) * 1000),
+            tokensAfterFinalize: snapshot.tokenCount,
+            charactersAfterFinalize: snapshot.characterCount,
+            timedOut: timedOut,
+            quietWindowReached: quietWindowReached
+        )
+    }
+
+    private func logFinalizeResult(_ result: RealtimeFinalizeResult) {
+        Log.transcription.info(
+            "Cloud RT: Finalize result profile=\(result.profileName), finished=\(result.didReceiveFinishedSignal), timedOut=\(result.timedOut), quiet=\(result.quietWindowReached), durationMs=\(result.durationMs), tokensAfterFinalize=\(result.tokensAfterFinalize), charsAfterFinalize=\(result.charactersAfterFinalize)"
+        )
     }
 }
 

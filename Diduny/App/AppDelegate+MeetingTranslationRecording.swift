@@ -387,7 +387,7 @@ extension AppDelegate {
         // Finalize and disconnect real-time translation (if active)
         let hasRealtimeSession = await MainActor.run { appState.liveTranscriptStore != nil }
         if hasRealtimeSession {
-            _ = await realtimeTranscriptionService.finalize()
+            _ = await realtimeTranscriptionService.finalize(profile: .safe)
             await realtimeTranscriptionService.disconnect()
             meetingRecorderService.onRealtimeAudioData = nil
         }
