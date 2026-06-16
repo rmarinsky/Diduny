@@ -6,6 +6,7 @@ struct OverviewView: View {
     @State private var playbackService = AudioPlaybackService.shared
     @State private var timePeriod: TimePeriod = .week
     @State private var selectedRecording: Recording? = nil
+    @State private var typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
 
     enum TimePeriod: String, CaseIterable {
         case week = "Week"
@@ -36,7 +37,16 @@ struct OverviewView: View {
         periodRecordings.reduce(0) { $0 + $1.durationSeconds }
     }
 
-    private var totalHours: Double { totalSeconds / 3600 }
+    private var typingTimeAvoidedSeconds: Double {
+        guard totalWords > 0 else { return 0 }
+        return Double(totalWords) / max(typingSpeedWordsPerMinute, 1) * 60
+    }
+
+    private var netTimeSavedSeconds: Double {
+        max(typingTimeAvoidedSeconds - totalSeconds, 0)
+    }
+
+    private var totalHours: Double { typingTimeAvoidedSeconds / 3600 }
 
     private var previousPeriodStart: Date {
         Calendar.current.date(byAdding: .day, value: -(timePeriod.daysBack * 2), to: Date()) ?? Date()
@@ -46,13 +56,18 @@ struct OverviewView: View {
         storage.recordings.filter { $0.createdAt >= previousPeriodStart && $0.createdAt < periodStart }
     }
 
-    private var previousTotalSeconds: Double {
-        previousPeriodRecordings.reduce(0) { $0 + $1.durationSeconds }
+    private var previousTotalWords: Int {
+        previousPeriodRecordings.compactMap(\.transcriptionText).reduce(0) { $0 + $1.split(separator: " ").count }
+    }
+
+    private var previousTypingTimeAvoidedSeconds: Double {
+        guard previousTotalWords > 0 else { return 0 }
+        return Double(previousTotalWords) / max(typingSpeedWordsPerMinute, 1) * 60
     }
 
     private var trendPercent: Int? {
-        guard previousTotalSeconds > 0 else { return nil }
-        return Int(((totalSeconds - previousTotalSeconds) / previousTotalSeconds * 100).rounded())
+        guard previousTypingTimeAvoidedSeconds > 0 else { return nil }
+        return Int(((typingTimeAvoidedSeconds - previousTypingTimeAvoidedSeconds) / previousTypingTimeAvoidedSeconds * 100).rounded())
     }
 
     private var comparisonLabel: String {
@@ -74,15 +89,6 @@ struct OverviewView: View {
 
     private var totalWords: Int {
         periodRecordings.compactMap(\.transcriptionText).reduce(0) { $0 + $1.split(separator: " ").count }
-    }
-
-    private var avgWordsPerMin: Int {
-        let withText = periodRecordings.filter { ($0.transcriptionText?.isEmpty == false) }
-        guard !withText.isEmpty else { return 0 }
-        let words = withText.compactMap(\.transcriptionText).reduce(0) { $0 + $1.split(separator: " ").count }
-        let mins = withText.reduce(0) { $0 + $1.durationSeconds } / 60
-        guard mins > 0 else { return 0 }
-        return Int(Double(words) / mins)
     }
 
     private var streak: Int {
@@ -141,12 +147,12 @@ struct OverviewView: View {
     // MARK: - Hero description
 
     private var heroDescription: String {
-        let workDays = totalHours / 8.0
-        if workDays >= 1 {
-            return String(format: "≈ %.1f work days — a short novel, dictated", workDays)
+        guard typingTimeAvoidedSeconds > 0 else {
+            return "Based on \(formatWordsPerMinute(typingSpeedWordsPerMinute)) WPM typing baseline"
         }
-        let mins = Int(totalSeconds / 60)
-        return "≈ \(mins) minutes of speaking time"
+
+        let netSaved = formatDurationCompact(netTimeSavedSeconds)
+        return "\(netSaved) net saved · \(formatWordsPerMinute(typingSpeedWordsPerMinute)) WPM typing baseline"
     }
 
     // MARK: - Body
@@ -183,6 +189,9 @@ struct OverviewView: View {
         .sheet(item: $selectedRecording) { recording in
             RecordingDetailView(recording: recording)
                 .frame(minWidth: 640, idealWidth: 700, minHeight: 500)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
+            typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
         }
     }
 
@@ -265,8 +274,8 @@ struct OverviewView: View {
                 )
                 MetricCard(
                     icon: "dial.medium",
-                    value: "\(avgWordsPerMin)",
-                    label: "Avg words / min"
+                    value: "\(formatWordsPerMinute(typingSpeedWordsPerMinute))",
+                    label: "Typing speed WPM"
                 )
                 MetricCard(
                     icon: nil,
@@ -399,6 +408,19 @@ struct OverviewView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
         )
+    }
+
+    private func formatWordsPerMinute(_ value: Double) -> String {
+        String(format: "%.0f", value)
+    }
+
+    private func formatDurationCompact(_ seconds: TimeInterval) -> String {
+        let totalMinutes = Int((seconds / 60).rounded())
+        if totalMinutes >= 60 {
+            let hours = Double(totalMinutes) / 60
+            return String(format: "≈ %.1f hrs", hours)
+        }
+        return "≈ \(totalMinutes) min"
     }
 }
 

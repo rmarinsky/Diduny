@@ -6,6 +6,7 @@ struct GeneralSettingsView: View {
     @State private var playSound = SettingsStorage.shared.playSoundOnCompletion
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
+    @State private var typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
     @State private var screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
     @State private var dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
     @State private var meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
@@ -47,6 +48,25 @@ struct GeneralSettingsView: View {
 
             } header: {
                 Text("Behavior")
+            }
+
+            Section {
+                HStack {
+                    Text("Typing speed")
+                    Spacer()
+                    Text("\(formatWordsPerMinute(typingSpeedWordsPerMinute)) WPM")
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                }
+
+                Button("Run Typing Speed Test…") {
+                    TypingTestWindowController.shared.showWindow()
+                }
+                .buttonStyle(.link)
+            } header: {
+                Text("Statistics")
+            } footer: {
+                Text("Used to estimate typing time avoided in Overview.")
             }
 
             Section {
@@ -138,9 +158,13 @@ struct GeneralSettingsView: View {
         .onAppear {
             launchAtLogin = LaunchAtLogin.isEnabled
             recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
+            typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
             screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
             dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
             meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
+            typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
         }
     }
 
@@ -155,6 +179,10 @@ struct GeneralSettingsView: View {
 
     private func pruneExpiredHistoryIfNeeded() {
         RecordingsLibraryStorage.shared.pruneExpiredRecordings()
+    }
+
+    private func formatWordsPerMinute(_ value: Double) -> String {
+        String(format: "%.0f", value)
     }
 }
 

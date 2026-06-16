@@ -242,6 +242,7 @@ final class OnboardingManager {
         SettingsStorage.shared.meetingTranslationHotkeyPressCount = 3
         SettingsStorage.shared.autoPaste = true
         SettingsStorage.shared.playSoundOnCompletion = true
+        SettingsStorage.shared.typingSpeedWordsPerMinute = 40
     }
 }
 

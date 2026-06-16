@@ -11,6 +11,7 @@ struct MenuBarContentView: View {
     var onToggleMeetingTranslationRecording: @MainActor () -> Void
     var onTranscribeFile: @MainActor () -> Void
     var onOpenMainWindow: @MainActor (MainSection) -> Void
+    var onOpenTypingTest: @MainActor () -> Void
     var onCheckForUpdates: @MainActor () -> Void
 
     var body: some View {
@@ -100,6 +101,8 @@ struct MenuBarContentView: View {
             Button("Recordings") {
                 onOpenMainWindow(.recordings)
             }
+
+            Button("Typing Speed Test…", action: onOpenTypingTest)
 
             Divider()
 

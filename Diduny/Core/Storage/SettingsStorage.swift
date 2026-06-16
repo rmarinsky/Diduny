@@ -83,6 +83,7 @@ final class SettingsStorage {
         case playSoundOnCompletion
         case launchAtLogin
         case recordingFeedbackSurface
+        case typingSpeedWordsPerMinute
         case pushToTalkKey
         case pushToTalkHoldEnabled
         case pushToTalkToggleEnabled
@@ -245,6 +246,20 @@ final class SettingsStorage {
             return surface
         }
         set { defaults.set(newValue.rawValue, forKey: Key.recordingFeedbackSurface.rawValue) }
+    }
+
+    var typingSpeedWordsPerMinute: Double {
+        get {
+            let stored = defaults.object(forKey: Key.typingSpeedWordsPerMinute.rawValue) as? Double ?? 40
+            return Self.sanitizedTypingSpeedWordsPerMinute(stored)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedTypingSpeedWordsPerMinute(newValue),
+                forKey: Key.typingSpeedWordsPerMinute.rawValue
+            )
+            NotificationCenter.default.post(name: .typingSpeedSettingsChanged, object: nil)
+        }
     }
 
     // MARK: - History Storage
@@ -813,6 +828,12 @@ final class SettingsStorage {
         return min(max(value, 0), 2.0)
     }
 
+    static func sanitizedTypingSpeedWordsPerMinute(_ value: Double) -> Double {
+        guard value.isFinite else { return 40 }
+        let clamped = min(max(value, 10), 160)
+        return clamped.rounded()
+    }
+
     private static func sanitizedPressCount(_ value: Int, fallback: Int) -> Int {
         guard value != 0 else { return fallback }
         return min(max(value, 1), 3)
@@ -876,5 +897,6 @@ final class SettingsStorage {
 extension Notification.Name {
     static let textCleanupSettingsChanged = Notification.Name("textCleanupSettingsChanged")
     static let historyRetentionSettingsChanged = Notification.Name("historyRetentionSettingsChanged")
+    static let typingSpeedSettingsChanged = Notification.Name("typingSpeedSettingsChanged")
     static let whisperModelUnloadPolicyChanged = Notification.Name("whisperModelUnloadPolicyChanged")
 }
