@@ -32,6 +32,7 @@ struct Recording: Identifiable, Codable, Equatable {
     var processedAt: Date?
     var chapters: [MeetingChapter]?
     let sourceDevice: RecordingDeviceInfo?
+    var translationTargetLanguageCode: String? = nil
     /// Marks a recording that originated from a recovery path rather than a normal
     /// stop; intended to drive the "Recovered" badge in the library and the
     /// detail-view notice. Once set it is preserved (never cleared), including

@@ -39,7 +39,8 @@ final class RecordingsLibraryStorage {
         type: Recording.RecordingType,
         duration: TimeInterval,
         transcriptionText: String? = nil,
-        sourceDevice: RecordingDeviceInfo? = nil
+        sourceDevice: RecordingDeviceInfo? = nil,
+        translationTargetLanguageCode: String? = nil
     ) {
         guard shouldSaveRecording(type: type) else { return }
 
@@ -70,7 +71,8 @@ final class RecordingsLibraryStorage {
             status: status,
             transcriptionText: transcriptionText,
             processedAt: transcriptionText != nil ? Date() : nil,
-            sourceDevice: sourceDevice
+            sourceDevice: sourceDevice,
+            translationTargetLanguageCode: translationTargetLanguageCode
         )
 
         recordings.insert(recording, at: 0)
@@ -87,7 +89,8 @@ final class RecordingsLibraryStorage {
         type: Recording.RecordingType,
         duration: TimeInterval,
         transcriptionText: String? = nil,
-        sourceDevice: RecordingDeviceInfo? = nil
+        sourceDevice: RecordingDeviceInfo? = nil,
+        translationTargetLanguageCode: String? = nil
     ) {
         guard shouldSaveRecording(type: type) else { return }
 
@@ -127,7 +130,8 @@ final class RecordingsLibraryStorage {
             status: status,
             transcriptionText: transcriptionText,
             processedAt: transcriptionText != nil ? Date() : nil,
-            sourceDevice: sourceDevice
+            sourceDevice: sourceDevice,
+            translationTargetLanguageCode: translationTargetLanguageCode
         )
 
         recordings.insert(recording, at: 0)
@@ -180,12 +184,16 @@ final class RecordingsLibraryStorage {
         id: UUID,
         status: Recording.ProcessingStatus,
         text: String? = nil,
-        error: String? = nil
+        error: String? = nil,
+        translationTargetLanguageCode: String? = nil
     ) {
         guard let index = recordings.firstIndex(where: { $0.id == id }) else { return }
         recordings[index].status = status
         recordings[index].transcriptionText = text ?? recordings[index].transcriptionText
         recordings[index].errorMessage = error
+        if let translationTargetLanguageCode {
+            recordings[index].translationTargetLanguageCode = translationTargetLanguageCode
+        }
         if status == .transcribed || status == .translated {
             recordings[index].processedAt = Date()
         }
