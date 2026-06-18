@@ -50,7 +50,15 @@ private final class SleepRecordingFlushBridge {
 
         let recordingId = meetingRecorderService.currentRecordingId
         if let recordingId {
-            Task {
+            // Persist the manifest synchronously before returning: the app can be
+            // suspended the instant this sleep-flush returns, so a deferred async
+            // write could be lost and leave recovery reading stale state after
+            // wake/crash. Block on a detached task (detached → not MainActor-bound,
+            // so waiting on the main thread can't deadlock the actor) with a short
+            // timeout so a wedged store can't hang the sleep transition.
+            let sem = DispatchSemaphore(value: 0)
+            Task.detached(priority: .userInitiated) {
+                defer { sem.signal() }
                 do {
                     let store = try InProgressRecordingStore.sharedStore()
                     if var manifest = try await store.readManifest(for: recordingId) {
@@ -75,6 +83,10 @@ private final class SleepRecordingFlushBridge {
                 } catch {
                     Log.recording.error("[Sleep] Failed to update manifest: \(error.localizedDescription)")
                 }
+            }
+            if sem.wait(timeout: .now() + 2) == .timedOut {
+                Log.recording
+                    .error("[Sleep] manifest update timed out (2s) — proceeding without confirmed persist")
             }
         }
 
@@ -148,6 +160,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var translationRealtimeSessionEnabled: Bool = false
     var translationRealtimeConnectionError: String?
     var translationRealtimeConnectionTask: Task<Void, Never>?
+    var activeTranslationLanguagePair: TranslationLanguagePair?
+    var activeMeetingTranslationLanguagePair: TranslationLanguagePair?
+    var activeTranslationTargetLanguage: String?
+    var activeMeetingTranslationTargetLanguage: String?
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
         switch SettingsStorage.shared.effectiveTranscriptionProvider {
@@ -159,6 +175,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_: Notification) {
+        MainWindowController.shared.configure(appDelegate: self)
+
         // Start Sparkle updater (access lazy var to trigger init)
         _ = updaterManager
 
@@ -196,8 +214,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(pushToTalkModeChanged(_:)),
+            name: .pushToTalkModeChanged,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(translationPushToTalkTapCountChanged(_:)),
             name: .translationPushToTalkTapCountChanged,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(translationPushToTalkModeChanged(_:)),
+            name: .translationPushToTalkModeChanged,
             object: nil
         )
 
@@ -276,6 +308,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // so this log line does not trigger the singleton init (and its Keychain prompt).
         if !AuthService.hasStoredSession {
             Log.app.info("[Auth] No stored session — cloud preferences remain stored, runtime uses local fallback")
+        }
+
+        // Show main window so a Spotlight launch (fresh, app was not running)
+        // actually surfaces the UI. Deferred 200 ms to let the window system
+        // settle after all setup above finishes.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
+            NSLog("[Diduny] setupAfterOnboarding deferred: isVisible=%d policy=%d",
+                  MainWindowController.shared.isVisible ? 1 : 0, NSApp.activationPolicy().rawValue)
+            if !MainWindowController.shared.isVisible {
+                MainWindowController.shared.showWindow()
+            }
         }
     }
 
@@ -435,6 +479,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.app.info("Orphaned recording discarded")
     }
 
+    // Called when the app is already running and the user activates it again
+    // (Spotlight press Enter, Dock click). If no windows are visible, open
+    // the main window so the UI actually appears.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        NSLog("[Diduny] applicationShouldHandleReopen: hasVisibleWindows=%d", hasVisibleWindows)
+        if !hasVisibleWindows {
+            NSLog("[Diduny] applicationShouldHandleReopen: calling showWindow")
+            MainWindowController.shared.showWindow()
+        }
+        return true
+    }
+
     func applicationWillTerminate(_: Notification) {
         hotkeyService.unregisterAll()
         pushToTalkService.stop()
@@ -457,9 +513,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Shared Recording Helpers
 
     func wireDeviceLostNotification() {
-        audioRecorder.onDeviceLost = {
+        audioRecorder.onDeviceLost = { [weak self] in
             Task { @MainActor in
-                NotchManager.shared.showInfo(message: "Microphone disconnected", duration: 2.0)
+                guard let self else { return }
+                if self.appState.translationRecordingState == .recording {
+                    self.showRecordingInfoDuringActiveRecording(
+                        message: "Microphone disconnected",
+                        mode: .translation(targetLanguage: self.translationPairLabel),
+                        duration: 2.0
+                    )
+                } else if self.appState.recordingState == .recording {
+                    self.showRecordingInfoDuringActiveRecording(
+                        message: "Microphone disconnected",
+                        mode: .voice,
+                        duration: 2.0
+                    )
+                } else {
+                    NotchManager.shared.showInfo(message: "Microphone disconnected", duration: 2.0)
+                }
             }
         }
     }
@@ -468,6 +539,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupNotchStopHandler() {
         NotchManager.shared.setStopHandler { [weak self] in
+            await self?.stopActiveRecordingFromNotch()
+        }
+        DictationOverlayController.shared.setStopHandler { [weak self] in
             await self?.stopActiveRecordingFromNotch()
         }
     }
@@ -506,39 +580,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
 
             if appState.meetingTranslationRecordingState == .recording {
-                NotchManager.shared.startRecording(mode: .meetingTranslation)
+                showFeedbackRecording(mode: .meetingTranslation)
                 return
             }
             if appState.meetingTranslationRecordingState == .processing {
-                NotchManager.shared.startProcessing(mode: .meetingTranslation)
+                showFeedbackProcessing(mode: .meetingTranslation)
                 return
             }
 
             if appState.meetingRecordingState == .recording {
-                NotchManager.shared.startRecording(mode: .meeting)
+                showFeedbackRecording(mode: .meeting)
                 return
             }
             if appState.meetingRecordingState == .processing {
-                NotchManager.shared.startProcessing(mode: .meeting)
+                showFeedbackProcessing(mode: .meeting)
                 return
             }
 
-            let translationMode: RecordingMode = .translation(languagePair: translationPairLabel)
+            let translationMode: RecordingMode = .translation(targetLanguage: translationPairLabel)
             if appState.translationRecordingState == .recording {
-                NotchManager.shared.startRecording(mode: translationMode)
+                showFeedbackRecording(mode: translationMode)
                 return
             }
             if appState.translationRecordingState == .processing {
-                NotchManager.shared.startProcessing(mode: translationMode)
+                showFeedbackProcessing(mode: translationMode)
                 return
             }
 
             if appState.recordingState == .recording {
-                NotchManager.shared.startRecording(mode: .voice)
+                showFeedbackRecording(mode: .voice)
                 return
             }
             if appState.recordingState == .processing {
-                NotchManager.shared.startProcessing(mode: .voice)
+                showFeedbackProcessing(mode: .voice)
             }
         }
     }
@@ -580,7 +654,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func refreshActivationPolicy() {
-        let shouldShowInAppSwitcher = isStateInProgress(appState.meetingRecordingState) || isSettingsWindowVisible()
+        let shouldShowInAppSwitcher = isStateInProgress(appState.meetingRecordingState)
+            || MainWindowController.shared.isVisible
+            || isSettingsWindowVisible()
         NSApp.setActivationPolicy(shouldShowInAppSwitcher ? .regular : .accessory)
     }
 
@@ -604,10 +680,159 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let blockersText = blockers.map(\.displayName).joined(separator: ", ")
         Log.app.warning("Cannot start \(kind.displayName) while \(blockersText) is in progress")
-        NotchManager.shared.showInfo(message: "Stop current recording first", duration: 1.5)
+        if let activeMode = activeFeedbackMode(for: blockers.first) {
+            showRecordingInfoDuringActiveRecording(
+                message: "Stop current recording first",
+                mode: activeMode,
+                duration: 1.5
+            )
+        } else {
+            NotchManager.shared.showInfo(message: "Stop current recording first", duration: 1.5)
+        }
         restoreNotchForActiveRecordingAfterInfo()
 
         return false
+    }
+
+    private func activeFeedbackMode(for kind: RecordingKind?) -> RecordingMode? {
+        switch kind {
+        case .voice:
+            .voice
+        case .translation:
+            .translation(targetLanguage: translationPairLabel)
+        case .meeting:
+            .meeting
+        case .meetingTranslation:
+            .meetingTranslation
+        case nil:
+            nil
+        }
+    }
+
+    private func shouldUseCompactOverlay(for mode: RecordingMode) -> Bool {
+        guard SettingsStorage.shared.recordingFeedbackSurface == .compactPanel else {
+            return false
+        }
+
+        switch mode {
+        case .voice, .translation:
+            return true
+        case .meeting, .meetingTranslation, .fileTranscription:
+            return false
+        }
+    }
+
+    private func startDate(for mode: RecordingMode) -> Date? {
+        switch mode {
+        case .voice:
+            appState.recordingStartTime
+        case .translation:
+            appState.translationRecordingStartTime
+        case .meeting:
+            appState.meetingRecordingStartTime
+        case .meetingTranslation:
+            appState.meetingTranslationRecordingStartTime
+        case .fileTranscription:
+            nil
+        }
+    }
+
+    private func showFeedbackRecording(mode: RecordingMode) {
+        if shouldUseCompactOverlay(for: mode) {
+            NotchManager.shared.hide()
+            DictationOverlayController.shared.startRecording(mode: mode)
+        } else {
+            DictationOverlayController.shared.hide()
+            NotchManager.shared.startRecording(mode: mode)
+        }
+    }
+
+    private func showFeedbackProcessing(mode: RecordingMode) {
+        if shouldUseCompactOverlay(for: mode) {
+            NotchManager.shared.hide()
+            if startDate(for: mode) == nil {
+                DictationOverlayController.shared.begin(mode: mode)
+            } else {
+                DictationOverlayController.shared.startFinalizing(mode: mode)
+            }
+        } else {
+            DictationOverlayController.shared.hide()
+            NotchManager.shared.startProcessing(mode: mode)
+        }
+    }
+
+    private func showFeedbackSuccess(text: String, mode: RecordingMode) {
+        if shouldUseCompactOverlay(for: mode) {
+            NotchManager.shared.hide()
+            DictationOverlayController.shared.showSuccess(text: text)
+        } else {
+            DictationOverlayController.shared.hide()
+            NotchManager.shared.showSuccess(text: text)
+        }
+    }
+
+    private func showFeedbackError(message: String, mode: RecordingMode) {
+        if shouldUseCompactOverlay(for: mode) {
+            NotchManager.shared.hide()
+            DictationOverlayController.shared.showError(message: message)
+        } else {
+            DictationOverlayController.shared.hide()
+            NotchManager.shared.showError(message: message)
+        }
+    }
+
+    private func hideFeedback(mode: RecordingMode) {
+        if shouldUseCompactOverlay(for: mode) {
+            DictationOverlayController.shared.hide()
+        } else {
+            NotchManager.shared.hide()
+        }
+    }
+
+    func updateRecordingFeedbackAudioLevel(_ level: Float, mode: RecordingMode) {
+        if shouldUseCompactOverlay(for: mode) {
+            DictationOverlayController.shared.updateAudioLevel(level)
+        } else {
+            NotchManager.shared.audioLevel = level
+        }
+    }
+
+    func updateRecordingFeedbackTokens(_ tokens: [RealtimeToken], mode: RecordingMode) {
+        guard shouldUseCompactOverlay(for: mode) else { return }
+        DictationOverlayController.shared.processTokens(tokens)
+    }
+
+    func updateRecordingFeedbackConnectionStatus(_ status: RealtimeConnectionStatus, mode: RecordingMode) {
+        guard shouldUseCompactOverlay(for: mode) else { return }
+        DictationOverlayController.shared.updateConnectionStatus(status)
+    }
+
+    func showRecordingInfoDuringActiveRecording(
+        message: String,
+        mode: RecordingMode,
+        duration: TimeInterval = 1.5
+    ) {
+        if shouldUseCompactOverlay(for: mode) {
+            DictationOverlayController.shared.showInfoDuringRecording(
+                message: message,
+                mode: mode,
+                duration: duration
+            )
+        } else {
+            NotchManager.shared.showInfoDuringRecording(message: message, mode: mode, duration: duration)
+        }
+    }
+
+    func showRecordingFeedbackInfo(
+        message: String,
+        mode: RecordingMode,
+        duration: TimeInterval = 1.5
+    ) {
+        if shouldUseCompactOverlay(for: mode) {
+            DictationOverlayController.shared.showInfo(message: message, duration: duration)
+        } else {
+            NotchManager.shared.showInfo(message: message, duration: duration)
+        }
     }
 
     func startAudioRecorderWithFallback(
@@ -691,14 +916,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch state {
         case .recording:
-            NotchManager.shared.startRecording(mode: mode)
+            showFeedbackRecording(mode: mode)
         case .processing:
-            NotchManager.shared.startProcessing(mode: mode)
+            showFeedbackProcessing(mode: mode)
         case .success:
             if let text = appState.lastTranscription {
-                NotchManager.shared.showSuccess(text: text)
+                showFeedbackSuccess(text: text, mode: mode)
             } else {
-                NotchManager.shared.hide()
+                hideFeedback(mode: mode)
             }
             let task = Task {
                 try? await Task.sleep(for: .seconds(successDelay))
@@ -709,7 +934,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             autoResetTaskSetter(task)
         case .error:
-            NotchManager.shared.showError(message: appState.errorMessage ?? "Error")
+            showFeedbackError(message: appState.errorMessage ?? "Error", mode: mode)
             let task = Task {
                 try? await Task.sleep(for: .seconds(errorDelay))
                 guard !Task.isCancelled else { return }
@@ -719,7 +944,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             autoResetTaskSetter(task)
         case .idle:
-            break
+            hideFeedback(mode: mode)
         }
     }
 
@@ -763,17 +988,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    var translationTargetLanguage: String {
+        activeTranslationLanguagePair?.languageB
+            ?? activeTranslationTargetLanguage
+            ?? SettingsStorage.shared.defaultTranslationLanguagePair.languageB
+    }
+
+    var translationTargetLabel: String {
+        translationTargetLanguage.uppercased()
+    }
+
+    var translationTargetDisplayName: String {
+        SupportedLanguage.language(for: translationTargetLanguage)?.name ?? translationTargetLabel
+    }
+
     var translationPairLabel: String {
-        let firstLanguage = SettingsStorage.shared.translationLanguageA.uppercased()
-        let secondLanguage = SettingsStorage.shared.translationLanguageB.uppercased()
-        return "\(firstLanguage) <-> \(secondLanguage)"
+        (activeTranslationLanguagePair ?? SettingsStorage.shared.defaultTranslationLanguagePair).displayLabel
     }
 
     func handleTranslationStateChange(_ state: RecordingState) {
         translationAutoResetTask?.cancel()
         handleStateChange(
             state,
-            mode: .translation(languagePair: translationPairLabel),
+            mode: .translation(targetLanguage: translationPairLabel),
             currentStateGetter: { self.appState.translationRecordingState },
             stateResetter: { self.appState.translationRecordingState = $0 },
             autoResetTaskSetter: { self.translationAutoResetTask = $0 },
@@ -784,8 +1021,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Settings
 
-    func openSettings() {
-        // Trigger settings opening via AppState (observed by SwiftUI)
-        appState.shouldOpenSettings = true
+    func openMainWindow(section: MainSection = .overview) {
+        MainWindowController.shared.showWindow(section: section)
+    }
+
+    func openSettings(tab: MainSection = .general) {
+        openMainWindow(section: tab)
     }
 }

@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import Foundation
 
 struct SupportedLanguage: Identifiable, Hashable {
@@ -132,6 +133,208 @@ struct SupportedLanguage: Identifiable, Hashable {
     static let allLanguages: [SupportedLanguage] = cloudLanguages
 
     static func language(for code: String) -> SupportedLanguage? {
-        cloudLanguages.first(where: { $0.code == code })
+        guard let normalized = normalizedCode(code) else { return nil }
+        return cloudLanguages.first(where: { $0.code == normalized })
+    }
+
+    static func normalizedCode(_ code: String?, allowAuto: Bool = false) -> String? {
+        guard let code else { return nil }
+
+        let trimmed = code
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "-")
+        guard !trimmed.isEmpty else { return nil }
+        if allowAuto, trimmed == "auto" { return trimmed }
+
+        let languageCode = String(trimmed.split(separator: "-").first ?? Substring(trimmed))
+        let aliases: [String: String] = [
+            "ua": "uk",
+            "iw": "he",
+            "in": "id",
+            "nb": "no",
+            "nn": "no",
+            "cmn": "zh",
+            "yue": "zh"
+        ]
+        let normalized = aliases[languageCode] ?? languageCode
+        return cloudLanguages.contains(where: { $0.code == normalized }) ? normalized : nil
+    }
+}
+
+struct TranslationLanguagePair: Identifiable, Codable, Hashable {
+    let id: String
+    let languageA: String
+    let languageB: String
+
+    init(id: String? = nil, languageA: String, languageB: String) {
+        let normalizedA = SupportedLanguage.normalizedCode(languageA) ?? "en"
+        let normalizedB = SupportedLanguage.normalizedCode(languageB) ?? "uk"
+        self.languageA = normalizedA
+        self.languageB = normalizedB == normalizedA ? Self.fallbackLanguage(opposite: normalizedA) : normalizedB
+        self.id = id?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+            ?? "\(self.languageA)-\(self.languageB)"
+    }
+
+    var codes: [String] {
+        [languageA, languageB]
+    }
+
+    var displayLabel: String {
+        "\(languageA.uppercased()) ⇄ \(languageB.uppercased())"
+    }
+
+    func contains(_ languageCode: String?) -> Bool {
+        guard let normalized = SupportedLanguage.normalizedCode(languageCode) else { return false }
+        return languageA == normalized || languageB == normalized
+    }
+
+    func opposite(of languageCode: String?) -> String? {
+        guard let normalized = SupportedLanguage.normalizedCode(languageCode) else { return nil }
+        if normalized == languageA { return languageB }
+        if normalized == languageB { return languageA }
+        return nil
+    }
+
+    static let defaultPair = TranslationLanguagePair(languageA: "en", languageB: "uk")
+
+    private static func fallbackLanguage(opposite language: String) -> String {
+        language == "en" ? "uk" : "en"
+    }
+}
+
+struct KeyboardLanguageDetector {
+    struct DetectedLanguage: Identifiable, Hashable {
+        let code: String
+        let sourceName: String
+        let sourceID: String
+
+        var id: String {
+            "\(sourceID):\(code)"
+        }
+    }
+
+    static func detectedLanguages() -> [DetectedLanguage] {
+        selectableInputSources().flatMap { source -> [DetectedLanguage] in
+            let id = stringProperty(source, key: kTISPropertyInputSourceID) ?? ""
+            let name = stringProperty(source, key: kTISPropertyLocalizedName) ?? id
+            let languages = stringArrayProperty(source, key: kTISPropertyInputSourceLanguages)
+            return languageCodes(
+                inputSourceLanguages: languages,
+                inputSourceID: id,
+                localizedName: name
+            ).map { DetectedLanguage(code: $0, sourceName: name, sourceID: id) }
+        }
+        .deduplicatedByCode()
+    }
+
+    static func detectedLanguageCodes() -> [String] {
+        detectedLanguages().map(\.code)
+    }
+
+    static func currentLanguageCode() -> String? {
+        let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+        let id = stringProperty(source, key: kTISPropertyInputSourceID) ?? ""
+        let name = stringProperty(source, key: kTISPropertyLocalizedName) ?? id
+        let languages = stringArrayProperty(source, key: kTISPropertyInputSourceLanguages)
+        return languageCodes(inputSourceLanguages: languages, inputSourceID: id, localizedName: name).first
+    }
+
+    static func languageCodes(
+        inputSourceLanguages: [String],
+        inputSourceID: String,
+        localizedName: String
+    ) -> [String] {
+        let languageCodesFromProperty = SupportedLanguageCodes.normalized(inputSourceLanguages)
+        let fallbackCodes = fallbackLanguageCodes(inputSourceID: inputSourceID, localizedName: localizedName)
+
+        if languageCodesFromProperty.count > 2, !fallbackCodes.isEmpty {
+            return fallbackCodes
+        }
+
+        if !languageCodesFromProperty.isEmpty {
+            return languageCodesFromProperty
+        }
+
+        return fallbackCodes
+    }
+
+    private static func fallbackLanguageCodes(inputSourceID: String, localizedName: String) -> [String] {
+        let fallbackSource = "\(inputSourceID) \(localizedName)".lowercased()
+        let fragments: [(needle: String, code: String)] = [
+            ("ukrain", "uk"),
+            (".us", "en"),
+            ("u.s.", "en"),
+            ("abc", "en"),
+            ("british", "en"),
+            ("english", "en"),
+            ("german", "de"),
+            ("deutsch", "de"),
+            ("french", "fr"),
+            ("francais", "fr"),
+            ("spanish", "es"),
+            ("polish", "pl"),
+            ("italian", "it"),
+            ("portuguese", "pt"),
+            ("chinese", "zh"),
+            ("japanese", "ja"),
+            ("korean", "ko")
+        ]
+
+        guard let match = fragments.first(where: { fallbackSource.contains($0.needle) }) else {
+            return []
+        }
+        return [match.code]
+    }
+
+    private static func selectableInputSources() -> [TISInputSource] {
+        let conditions = [
+            kTISPropertyInputSourceCategory!: kTISCategoryKeyboardInputSource!,
+            kTISPropertyInputSourceIsSelectCapable!: true
+        ] as CFDictionary
+
+        return TISCreateInputSourceList(conditions, false)?.takeRetainedValue() as? [TISInputSource] ?? []
+    }
+
+    private static func stringProperty(_ source: TISInputSource, key: CFString) -> String? {
+        guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
+        return Unmanaged<CFString>.fromOpaque(pointer).takeUnretainedValue() as String
+    }
+
+    private static func stringArrayProperty(_ source: TISInputSource, key: CFString) -> [String] {
+        guard let pointer = TISGetInputSourceProperty(source, key) else { return [] }
+        let array = Unmanaged<CFArray>.fromOpaque(pointer).takeUnretainedValue()
+        return array as? [String] ?? []
+    }
+}
+
+private enum SupportedLanguageCodes {
+    static func normalized(_ codes: [String]) -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+        for code in codes {
+            guard let normalized = SupportedLanguage.normalizedCode(code),
+                  seen.insert(normalized).inserted
+            else { continue }
+            result.append(normalized)
+        }
+        return result
+    }
+}
+
+private extension Array where Element == KeyboardLanguageDetector.DetectedLanguage {
+    func deduplicatedByCode() -> [Element] {
+        var result: [Element] = []
+        var seen = Set<String>()
+        for language in self where seen.insert(language.code).inserted {
+            result.append(language)
+        }
+        return result
+    }
+}
+
+private extension String {
+    var nonEmpty: String? {
+        isEmpty ? nil : self
     }
 }

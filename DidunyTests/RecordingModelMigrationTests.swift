@@ -124,6 +124,32 @@ final class RecordingModelMigrationTests: XCTestCase {
         XCTAssertNil(decoded.recoverySource)
     }
 
+    func test_meetingTranslationType_roundTripsAndUsesMeetingBucket() throws {
+        let original = Recording(
+            id: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_700_200_000),
+            type: .meetingTranslation,
+            audioFileName: "meeting-translation.flac",
+            durationSeconds: 120.0,
+            fileSizeBytes: 2048,
+            status: .translated,
+            transcriptionText: "Translated meeting.",
+            errorMessage: nil,
+            processedAt: Date(timeIntervalSince1970: 1_700_200_120),
+            chapters: nil,
+            sourceDevice: nil,
+            recoverySource: nil
+        )
+
+        let data = try iso8601Encoder.encode([original])
+        let decoded = try iso8601.decode([Recording].self, from: data)[0]
+
+        XCTAssertEqual(decoded.type, .meetingTranslation)
+        XCTAssertTrue(decoded.type.isMeetingLike)
+        XCTAssertEqual(decoded.type.clipboardCopyBehavior, .raw)
+        XCTAssertTrue(decoded.type.usesTranslatedStatusWhenSavedWithText)
+    }
+
     // MARK: - 3. Exhaustive switch coverage (compiler-enforced)
 
     /// This test's body must enumerate every `ProcessingStatus` case.

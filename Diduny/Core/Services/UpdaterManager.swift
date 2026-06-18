@@ -43,6 +43,6 @@ extension UpdaterManager: @preconcurrency SPUStandardUserDriverDelegate {
 
     func standardUserDriverWillFinishUpdateSession() {
         // Restore accessory (menu-bar-only) mode after update UI closes
-        (NSApp.delegate as? AppDelegate)?.refreshActivationPolicy()
+        MainWindowController.shared.refreshActivationPolicy()
     }
 }

@@ -24,10 +24,14 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private var strictLanguageHints = false
     private var audioConfig: RealtimeAudioConfig = .defaultPCM16kMono
     private var translationConfig: RealtimeTranslationConfig?
+    private var enableSpeakerDiarization = true
     private let finalizeStateLock = NSLock()
+    private let lifecycleLock = NSLock()
     private var awaitingFinalizeResponse = false
     private var didReceiveFinishedSignal = false
     private var lastRealtimeTokenAt: Date?
+    private var finalizeTokenCount = 0
+    private var finalizeCharacterCount = 0
 
     private var _onTokensReceived: (([RealtimeToken]) -> Void)?
     private var _onError: ((Error) -> Void)?
@@ -60,12 +64,14 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         languageHints: [String] = [],
         strictLanguageHints: Bool = false,
         audioConfig: RealtimeAudioConfig = .defaultPCM16kMono,
-        translationConfig: RealtimeTranslationConfig? = nil
+        translationConfig: RealtimeTranslationConfig? = nil,
+        enableSpeakerDiarization: Bool = true
     ) async throws {
         self.languageHints = languageHints
         self.strictLanguageHints = strictLanguageHints
         self.audioConfig = audioConfig
         self.translationConfig = translationConfig
+        self.enableSpeakerDiarization = enableSpeakerDiarization
         reconnectAttempt = 0
         try await connectWebSocket()
     }
@@ -88,9 +94,11 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
         urlSession = nil
+        lifecycleLock.lock()
         audioBytesSent = 0
         audioChunkCount = 0
         proxyReady = false
+        lifecycleLock.unlock()
 
         onConnectionStatusChanged?(.connecting)
 
@@ -131,39 +139,52 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         self.webSocketTask = task
         task.resume()
 
-        var config: [String: Any] = [
-            "audio_format": audioConfig.audioFormat,
-            "sample_rate": audioConfig.sampleRate,
-            "num_channels": audioConfig.numChannels,
-            "enable_speaker_diarization": true
-        ]
-
-        if !languageHints.isEmpty {
-            config["language_hints"] = languageHints
-        }
-
-        if let translationPayload = makeTranslationPayload(from: translationConfig) {
-            config["translation"] = translationPayload
-        }
+        let config = Self.makeConnectionConfig(
+            languageHints: languageHints,
+            strictLanguageHints: strictLanguageHints,
+            audioConfig: audioConfig,
+            translationConfig: translationConfig,
+            enableSpeakerDiarization: enableSpeakerDiarization
+        )
 
         let configData = try JSONSerialization.data(withJSONObject: config)
         let configString = String(data: configData, encoding: .utf8) ?? "{}"
 
         NSLog("[Cloud RT] Sending config: %@", configString)
-        try await task.send(.string(configString))
+        do {
+            try await task.send(.string(configString))
+        } catch {
+            // A refused upgrade (e.g. HTTP 402 usage limit) surfaces as the first
+            // send/receive throwing. Map 402 to a typed usage error so the caller
+            // shows "limit reached" instead of a generic connection failure.
+            if let usageError = await usageLimitUpgradeError() {
+                throw usageError
+            }
+            throw error
+        }
         NSLog("[Cloud RT] Config sent successfully, WebSocket connected")
 
+        lifecycleLock.lock()
         isConnected = true
+        lifecycleLock.unlock()
 
         startReceiveLoop()
         startPingLoop()
 
         // Wait for proxy_ready before marking connected
         let deadline = Date().addingTimeInterval(10)
-        while !proxyReady && Date() < deadline {
+        while Date() < deadline {
+            lifecycleLock.lock()
+            let ready = proxyReady
+            lifecycleLock.unlock()
+            if ready { break }
             try? await Task.sleep(for: .milliseconds(50))
         }
-        guard proxyReady else {
+        lifecycleLock.lock()
+        let proxyIsReady = proxyReady
+        lifecycleLock.unlock()
+        guard proxyIsReady else {
+            await disconnect()
             throw RealtimeTranscriptionError.connectionFailed("Proxy did not send ready signal")
         }
 
@@ -176,18 +197,27 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private var audioChunkCount: Int = 0
 
     func sendAudioData(_ data: Data) {
-        guard isConnected, let task = webSocketTask else { return }
         guard !data.isEmpty else { return }
 
+        // Capture task reference under the lock so we don't race with disconnect.
+        // Do NOT hold the lock while calling task.send (may block on internal queues).
+        lifecycleLock.lock()
+        guard isConnected, let task = webSocketTask else {
+            lifecycleLock.unlock()
+            return
+        }
         audioBytesSent += data.count
         audioChunkCount += 1
+        let chunkNum = audioChunkCount
+        let totalBytes = audioBytesSent
+        lifecycleLock.unlock()
 
-        if audioChunkCount <= 5 || audioChunkCount % 100 == 0 {
+        if chunkNum <= 5 || chunkNum % 100 == 0 {
             NSLog(
                 "[Cloud RT] Sending audio chunk #%d, size=%d, total=%d bytes",
-                audioChunkCount,
+                chunkNum,
                 data.count,
-                audioBytesSent
+                totalBytes
             )
         }
 
@@ -201,17 +231,30 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
 
     // MARK: - Finalize
 
-    func finalize() async -> Bool {
-        guard isConnected, let task = webSocketTask else { return false }
+    func finalize(profile: RealtimeFinalizeProfile = .safe) async -> RealtimeFinalizeResult {
+        guard isConnected, let task = webSocketTask else {
+            return RealtimeFinalizeResult(
+                profileName: profile.name,
+                didReceiveFinishedSignal: false,
+                durationMs: 0,
+                tokensAfterFinalize: 0,
+                charactersAfterFinalize: 0,
+                timedOut: false,
+                quietWindowReached: true
+            )
+        }
 
+        let startedAt = Date()
         setFinalizeState(awaiting: true, finished: false)
 
         do {
             let finalizePayloadData = try JSONSerialization.data(withJSONObject: ["type": "finalize"])
             if let finalizePayload = String(data: finalizePayloadData, encoding: .utf8) {
                 try await task.send(.string(finalizePayload))
-                Log.transcription.info("Cloud RT: Finalize control message sent")
-                try? await Task.sleep(for: .milliseconds(350))
+                Log.transcription.info("Cloud RT: Finalize control message sent (\(profile.name))")
+                if profile.controlMessageDelayMs > 0 {
+                    try? await Task.sleep(for: .milliseconds(profile.controlMessageDelayMs))
+                }
             }
 
             // Empty frame ends the stream and flushes pending final tokens.
@@ -219,37 +262,64 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
             Log.transcription.info("Cloud RT: Empty frame sent (finalize)")
 
             // Wait for explicit finished signal and a short quiet window for final tokens.
-            let timeoutSeconds = 5.0
-            let quietWindowSeconds = 0.35
-            let deadline = Date().addingTimeInterval(timeoutSeconds)
+            let deadline = Date().addingTimeInterval(profile.timeoutSeconds)
 
             while Date() < deadline {
                 let snapshot = readFinalizeState()
-                let hasQuietWindow: Bool = {
-                    guard let lastTokenAt = snapshot.lastTokenAt else { return true }
-                    return Date().timeIntervalSince(lastTokenAt) >= quietWindowSeconds
-                }()
+                let hasQuietWindow = hasFinalizeQuietWindow(
+                    snapshot: snapshot,
+                    quietWindowSeconds: profile.quietWindowSeconds
+                )
 
                 if snapshot.finished && hasQuietWindow {
+                    let result = makeFinalizeResult(
+                        profile: profile,
+                        startedAt: startedAt,
+                        snapshot: snapshot,
+                        timedOut: false,
+                        quietWindowReached: true
+                    )
                     setFinalizeState(awaiting: false, finished: false)
-                    return true
+                    logFinalizeResult(result)
+                    return result
                 }
 
                 try? await Task.sleep(for: .milliseconds(50))
             }
 
             let timedOutSnapshot = readFinalizeState()
+            let quietWindowReached = hasFinalizeQuietWindow(
+                snapshot: timedOutSnapshot,
+                quietWindowSeconds: profile.quietWindowSeconds
+            )
+            let result = makeFinalizeResult(
+                profile: profile,
+                startedAt: startedAt,
+                snapshot: timedOutSnapshot,
+                timedOut: true,
+                quietWindowReached: quietWindowReached
+            )
             setFinalizeState(awaiting: false, finished: false)
             if !timedOutSnapshot.finished {
-                Log.transcription.warning("Cloud RT: Finalize timeout — finished signal was not received")
+                Log.transcription.warning("Cloud RT: Finalize timeout - finished signal was not received")
             } else {
-                Log.transcription.warning("Cloud RT: Finalize timeout — finished received but quiet window not reached")
+                Log.transcription.warning("Cloud RT: Finalize timeout - finished received but quiet window not reached")
             }
-            return timedOutSnapshot.finished
+            logFinalizeResult(result)
+            return result
         } catch {
             Log.transcription.error("Cloud RT: Finalize error - \(error.localizedDescription)")
+            let snapshot = readFinalizeState()
+            let result = makeFinalizeResult(
+                profile: profile,
+                startedAt: startedAt,
+                snapshot: snapshot,
+                timedOut: false,
+                quietWindowReached: false
+            )
             setFinalizeState(awaiting: false, finished: false)
-            return false
+            logFinalizeResult(result)
+            return result
         }
     }
 
@@ -263,14 +333,15 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         receiveTask?.cancel()
         receiveTask = nil
 
-        if let task = webSocketTask {
-            task.cancel(with: .normalClosure, reason: nil)
-        }
-
+        lifecycleLock.lock()
+        let task = webSocketTask
         webSocketTask = nil
+        isConnected = false
+        lifecycleLock.unlock()
+
+        task?.cancel(with: .normalClosure, reason: nil)
         urlSession?.invalidateAndCancel()
         urlSession = nil
-        isConnected = false
         onConnectionStatusChanged?(.disconnected)
 
         Log.transcription.info("Cloud RT: Disconnected")
@@ -325,7 +396,9 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         // Handle proxy_ready signal
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            json["type"] as? String == "proxy_ready" {
+            lifecycleLock.lock()
             proxyReady = true
+            lifecycleLock.unlock()
             NSLog("[Cloud RT] Received proxy_ready signal")
             return
         }
@@ -361,7 +434,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                     if let boundary = segmentBoundary(from: token.text) {
                         // Flush buffered tokens before emitting boundary to preserve ordering
                         if !bufferedTokens.isEmpty {
-                            markTokenArrival()
+                            markTokenArrival(tokens: bufferedTokens)
                             onTokensReceived?(bufferedTokens)
                             bufferedTokens.removeAll()
                         }
@@ -384,7 +457,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                 }
 
                 if !bufferedTokens.isEmpty {
-                    markTokenArrival()
+                    markTokenArrival(tokens: bufferedTokens)
                     onTokensReceived?(bufferedTokens)
                 }
             }
@@ -417,6 +490,21 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
 
     // MARK: - Reconnect
 
+    /// If the last WS upgrade was refused with HTTP 402, map it to a typed usage
+    /// error (using the best usage numbers we have) and kick off a refresh so the
+    /// UI shows accurate figures shortly. Returns nil for any other status.
+    private func usageLimitUpgradeError() async -> RealtimeTranscriptionError? {
+        guard (webSocketTask?.response as? HTTPURLResponse)?.statusCode == 402 else {
+            return nil
+        }
+        let usage = await UsageService.shared.cachedUsage
+        await UsageService.shared.refresh()
+        return .usageLimitExceeded(
+            usedHours: usage?.usedHours ?? 0,
+            limitHours: usage?.limitHours ?? 5
+        )
+    }
+
     /// Called when the receive loop exits due to an error or a server-initiated close.
     ///
     /// ADR-0004 edge cases handled here:
@@ -425,8 +513,32 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     /// - `401` from proxy on reconnect: refresh Supabase session silently, retry once.
     ///   Never loop — if the refresh fails the user is prompted to re-login.
     private func handleDisconnect(closeCode: URLSessionWebSocketTask.CloseCode? = nil) {
-        guard isConnected else { return }
+        // Atomic check-and-clear prevents two concurrent callers (receive loop error
+        // + URLSessionWebSocketDelegate) from both passing the guard and double-reconnecting.
+        lifecycleLock.lock()
+        guard isConnected else { lifecycleLock.unlock(); return }
         isConnected = false
+        lifecycleLock.unlock()
+
+        // A refused WS upgrade (HTTP 402 usage limit) lands here via the receive
+        // loop with no close code. Reconnecting is futile — the server will keep
+        // refusing — and would surface a generic "Connection lost" instead of the
+        // real reason. Detect it synchronously to stop the reconnect, then surface
+        // the typed usage error with the best numbers we have.
+        if (webSocketTask?.response as? HTTPURLResponse)?.statusCode == 402 {
+            Log.transcription.warning("Cloud RT: WS upgrade returned 402 — usage limit, not reconnecting")
+            Task { [weak self] in
+                guard let self else { return }
+                let usage = await UsageService.shared.cachedUsage
+                await UsageService.shared.refresh()
+                self.onError?(RealtimeTranscriptionError.usageLimitExceeded(
+                    usedHours: usage?.usedHours ?? 0,
+                    limitHours: usage?.limitHours ?? 5
+                ))
+                self.onConnectionStatusChanged?(.failed("Cloud usage limit reached"))
+            }
+            return
+        }
 
         // 1001 Going Away — proxy-initiated graceful close (8h cap or rolling restart).
         // Per ADR-0004: save partial transcript, show non-error UI, do NOT reconnect.
@@ -486,7 +598,33 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         }
     }
 
-    private func makeTranslationPayload(from config: RealtimeTranslationConfig?) -> [String: Any]? {
+    static func makeConnectionConfig(
+        languageHints: [String],
+        strictLanguageHints: Bool,
+        audioConfig: RealtimeAudioConfig,
+        translationConfig: RealtimeTranslationConfig?,
+        enableSpeakerDiarization: Bool
+    ) -> [String: Any] {
+        var config: [String: Any] = [
+            "audio_format": audioConfig.audioFormat,
+            "sample_rate": audioConfig.sampleRate,
+            "num_channels": audioConfig.numChannels,
+            "enable_speaker_diarization": enableSpeakerDiarization
+        ]
+
+        if !languageHints.isEmpty {
+            config["language_hints"] = languageHints
+            config["language_hints_strict"] = strictLanguageHints || !languageHints.isEmpty
+        }
+
+        if let translationPayload = makeTranslationPayload(from: translationConfig) {
+            config["translation"] = translationPayload
+        }
+
+        return config
+    }
+
+    static func makeTranslationPayload(from config: RealtimeTranslationConfig?) -> [String: Any]? {
         guard let config else { return nil }
         switch config.mode {
         case let .twoWay(languageA, languageB):
@@ -495,10 +633,9 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                 "language_a": languageA,
                 "language_b": languageB
             ]
-        case let .oneWay(sourceLanguage, targetLanguage):
+        case let .oneWay(targetLanguage):
             return [
                 "type": "one_way",
-                "source_language": sourceLanguage,
                 "target_language": targetLanguage
             ]
         }
@@ -520,16 +657,22 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         finalizeStateLock.lock()
         awaitingFinalizeResponse = awaiting
         didReceiveFinishedSignal = finished
-        if !awaiting {
+        if awaiting {
+            lastRealtimeTokenAt = nil
+            finalizeTokenCount = 0
+            finalizeCharacterCount = 0
+        } else {
             lastRealtimeTokenAt = nil
         }
         finalizeStateLock.unlock()
     }
 
-    private func markTokenArrival() {
+    private func markTokenArrival(tokens: [RealtimeToken]) {
         finalizeStateLock.lock()
         if awaitingFinalizeResponse {
             lastRealtimeTokenAt = Date()
+            finalizeTokenCount += tokens.count
+            finalizeCharacterCount += tokens.reduce(0) { $0 + $1.text.count }
         }
         finalizeStateLock.unlock()
     }
@@ -542,11 +685,53 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         finalizeStateLock.unlock()
     }
 
-    private func readFinalizeState() -> (finished: Bool, lastTokenAt: Date?) {
+    private func readFinalizeState() -> (
+        finished: Bool,
+        lastTokenAt: Date?,
+        tokenCount: Int,
+        characterCount: Int
+    ) {
         finalizeStateLock.lock()
-        let snapshot = (finished: didReceiveFinishedSignal, lastTokenAt: lastRealtimeTokenAt)
+        let snapshot = (
+            finished: didReceiveFinishedSignal,
+            lastTokenAt: lastRealtimeTokenAt,
+            tokenCount: finalizeTokenCount,
+            characterCount: finalizeCharacterCount
+        )
         finalizeStateLock.unlock()
         return snapshot
+    }
+
+    private func hasFinalizeQuietWindow(
+        snapshot: (finished: Bool, lastTokenAt: Date?, tokenCount: Int, characterCount: Int),
+        quietWindowSeconds: TimeInterval
+    ) -> Bool {
+        guard let lastTokenAt = snapshot.lastTokenAt else { return true }
+        return Date().timeIntervalSince(lastTokenAt) >= quietWindowSeconds
+    }
+
+    private func makeFinalizeResult(
+        profile: RealtimeFinalizeProfile,
+        startedAt: Date,
+        snapshot: (finished: Bool, lastTokenAt: Date?, tokenCount: Int, characterCount: Int),
+        timedOut: Bool,
+        quietWindowReached: Bool
+    ) -> RealtimeFinalizeResult {
+        RealtimeFinalizeResult(
+            profileName: profile.name,
+            didReceiveFinishedSignal: snapshot.finished,
+            durationMs: Int(Date().timeIntervalSince(startedAt) * 1000),
+            tokensAfterFinalize: snapshot.tokenCount,
+            charactersAfterFinalize: snapshot.characterCount,
+            timedOut: timedOut,
+            quietWindowReached: quietWindowReached
+        )
+    }
+
+    private func logFinalizeResult(_ result: RealtimeFinalizeResult) {
+        Log.transcription.info(
+            "Cloud RT: Finalize result profile=\(result.profileName), finished=\(result.didReceiveFinishedSignal), timedOut=\(result.timedOut), quiet=\(result.quietWindowReached), durationMs=\(result.durationMs), tokensAfterFinalize=\(result.tokensAfterFinalize), charsAfterFinalize=\(result.charactersAfterFinalize)"
+        )
     }
 }
 

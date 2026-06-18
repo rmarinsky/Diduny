@@ -200,9 +200,10 @@ struct TextTranslationView: View {
                     if !viewModel.detectedLanguageName.isEmpty {
                         Text(viewModel.detectedLanguageName)
                             .font(.caption)
+                            .foregroundColor(Color("BrandAccentDeep"))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.secondary.opacity(0.2)))
+                            .background(Capsule().fill(Color("BrandAccentDeep").opacity(0.10)))
                     }
 
                     Spacer()
@@ -241,6 +242,7 @@ struct TextTranslationView: View {
                         .frame(minWidth: 80)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Color("BrandAccentDeep"))
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(viewModel.isTranslating || viewModel.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

@@ -4,62 +4,41 @@ struct MenuBarIconView: View {
     @Environment(AppState.self) var appState
 
     var body: some View {
-        if let statusEmoji = statusEmoji {
-            Text(statusEmoji)
-        } else {
-            Image("MenuBarIcon")
-        }
+        Image(systemName: iconName)
+            .font(.system(size: 14, weight: .regular))
     }
 
-    /// Returns an emoji for active states, or nil for idle (to show robot icon)
-    private var statusEmoji: String? {
+    private var iconName: String {
         // Meeting translation takes priority
-        if appState.meetingTranslationRecordingState == .recording {
-            return "🌐"
-        }
-        if appState.meetingTranslationRecordingState == .processing {
-            return "⏳"
-        }
+        if appState.meetingTranslationRecordingState == .recording { return "globe" }
+        if appState.meetingTranslationRecordingState == .processing { return "waveform" }
 
         // Meeting recording
-        if appState.meetingRecordingState == .recording {
-            return "🎙️"
-        }
-        if appState.meetingRecordingState == .processing {
-            return "⏳"
-        }
+        if appState.meetingRecordingState == .recording { return "laptopcomputer.and.arrow.down" }
+        if appState.meetingRecordingState == .processing { return "waveform" }
 
         // Translation recording
         switch appState.translationRecordingState {
-        case .recording:
-            return "🔴"
-        case .processing:
-            return "⏳"
-        case .success:
-            return "✅"
-        case .error:
-            return "❌"
-        case .idle:
-            break
+        case .recording: return "character.bubble.fill"
+        case .processing: return "waveform"
+        case .success: return "checkmark"
+        case .error: return "xmark"
+        case .idle: break
         }
 
         // Regular recording
         switch appState.recordingState {
         case .idle:
             if appState.meetingTranslationRecordingState == .success || appState.meetingRecordingState == .success {
-                return "✅"
+                return "checkmark"
             } else if appState.meetingTranslationRecordingState == .error || appState.meetingRecordingState == .error {
-                return "❌"
+                return "xmark"
             }
-            return nil // Show robot icon
-        case .recording:
-            return "🔴"
-        case .processing:
-            return "⏳"
-        case .success:
-            return "✅"
-        case .error:
-            return "❌"
+            return "mic"
+        case .recording: return "waveform.badge.mic"
+        case .processing: return "waveform"
+        case .success: return "checkmark"
+        case .error: return "xmark"
         }
     }
 }

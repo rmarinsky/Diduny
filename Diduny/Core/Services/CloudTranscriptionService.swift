@@ -1,6 +1,11 @@
 import Foundation
 import os
 
+struct CloudLanguageConfig: Equatable {
+    let hints: [String]
+    let strict: Bool
+}
+
 final class CloudTranscriptionService: TranscriptionServiceProtocol {
     private static let defaultModel = "stt-async-v4"
 
@@ -34,10 +39,7 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
         try await ensureSpeechDetected(audioData, context: "transcribe")
 
         let languageConfig = resolveLanguageConfig(explicitLanguage: language)
-        var config: [String: Any] = ["mode": "transcribe"]
-        if !languageConfig.hints.isEmpty {
-            config["language_hints"] = languageConfig.hints
-        }
+        let config = Self.makeTranscriptionConfig(languageConfig: languageConfig)
         let response = try await proxyTranscribe(audioData: audioData, config: config)
         let text = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw TranscriptionError.emptyTranscription }
@@ -52,13 +54,10 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
         try await ensureSpeechDetected(audioData, context: "transcribeMeeting")
 
         let languageConfig = resolveLanguageConfig()
-        var config: [String: Any] = [
-            "mode": "transcribe",
-            "enable_speaker_diarization": true
-        ]
-        if !languageConfig.hints.isEmpty {
-            config["language_hints"] = languageConfig.hints
-        }
+        let config = Self.makeTranscriptionConfig(
+            languageConfig: languageConfig,
+            enableSpeakerDiarization: true
+        )
         let response = try await proxyTranscribe(audioData: audioData, config: config)
         let text = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw TranscriptionError.emptyTranscription }
@@ -66,42 +65,54 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
         return text
     }
 
-    /// Transcribe and translate using the configured language pair from settings
+    /// Transcribe speech in any detected source language and translate to the configured target language.
     func translateAndTranscribe(audioData: Data) async throws -> String {
-        let langA = SettingsStorage.shared.translationLanguageA
-        let langB = SettingsStorage.shared.translationLanguageB
-        return try await translateAndTranscribe(audioData: audioData, languageA: langA, languageB: langB)
+        try await translateAndTranscribe(
+            audioData: audioData,
+            languagePair: SettingsStorage.shared.resolveTranslationLanguagePair()
+        )
     }
 
-    /// Transcribe and translate to a specific target language (legacy, pairs with stored Language A)
+    /// Transcribe speech in any detected source language and translate to a specific target language.
     func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String {
-        let langA = SettingsStorage.shared.translationLanguageA
-        return try await translateAndTranscribe(audioData: audioData, languageA: langA, languageB: targetLanguage)
-    }
+        let target = SettingsStorage.normalizedLanguageCode(targetLanguage)
+            ?? SettingsStorage.shared.voiceTranslationTargetLanguage
 
-    private func translateAndTranscribe(audioData: Data, languageA: String, languageB: String) async throws -> String {
         Log.transcription
             .info(
-                "translateAndTranscribe: BEGIN, audioData size = \(audioData.count) bytes, pair = \(languageA) <-> \(languageB)"
+                "translateAndTranscribe: BEGIN, audioData size = \(audioData.count) bytes, target = \(target)"
             )
 
         try await ensureSpeechDetected(audioData, context: "translateAndTranscribe")
 
-        let langA = languageA
-        let langB = languageB
+        let languageConfig = resolveLanguageConfig()
+        let config = Self.makeOneWayTranslationConfig(
+            targetLanguage: target,
+            languageConfig: languageConfig
+        )
+        let response = try await proxyTranscribe(audioData: audioData, config: config)
+        let text = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw TranscriptionError.emptyTranscription }
+        return text
+    }
 
-        let languageConfig = resolveLanguageConfig(forcedLanguageHints: [langA, langB])
-        var config: [String: Any] = [
-            "mode": "translate",
-            "translation": [
-                "type": "two_way",
-                "language_a": langA,
-                "language_b": langB
-            ]
-        ]
-        if !languageConfig.hints.isEmpty {
-            config["language_hints"] = languageConfig.hints
-        }
+    /// Transcribe and translate within a configured two-way language pair.
+    func translateAndTranscribe(audioData: Data, languagePair: TranslationLanguagePair) async throws -> String {
+        Log.transcription
+            .info(
+                "translateAndTranscribe: BEGIN, audioData size = \(audioData.count) bytes, pair = \(languagePair.displayLabel)"
+            )
+
+        try await ensureSpeechDetected(audioData, context: "translateAndTranscribe")
+
+        let languageConfig = resolveLanguageConfig(
+            forcedLanguageHints: SettingsStorage.shared.translationLanguageHints(for: languagePair)
+        )
+        let config = Self.makeTwoWayTranslationConfig(
+            languagePair: languagePair,
+            languageConfig: languageConfig
+        )
+
         let response = try await proxyTranscribe(audioData: audioData, config: config)
         let text = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw TranscriptionError.emptyTranscription }
@@ -328,25 +339,72 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
     private func resolveLanguageConfig(
         explicitLanguage: String? = nil,
         forcedLanguageHints: [String]? = nil
-    ) -> (hints: [String], strict: Bool) {
+    ) -> CloudLanguageConfig {
         if let forcedLanguageHints {
             let hints = forcedLanguageHints.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            return (hints, !hints.isEmpty)
+            return CloudLanguageConfig(hints: hints, strict: !hints.isEmpty)
         }
 
         if let explicitLanguage {
             let trimmed = explicitLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
-                return ([trimmed], true)
+                return CloudLanguageConfig(hints: [trimmed], strict: true)
             }
         }
 
-        let hints = SettingsStorage.shared.favoriteLanguages
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        let hints = SettingsStorage.shared.speechLanguageHints
 
-        return (hints, !hints.isEmpty)
+        return CloudLanguageConfig(hints: hints, strict: !hints.isEmpty)
+    }
+
+    static func makeTranscriptionConfig(
+        languageConfig: CloudLanguageConfig,
+        enableSpeakerDiarization: Bool = false
+    ) -> [String: Any] {
+        var config: [String: Any] = ["mode": "transcribe"]
+        if enableSpeakerDiarization {
+            config["enable_speaker_diarization"] = true
+        }
+        applyLanguageConfig(languageConfig, to: &config)
+        return config
+    }
+
+    static func makeOneWayTranslationConfig(
+        targetLanguage: String,
+        languageConfig: CloudLanguageConfig
+    ) -> [String: Any] {
+        var config: [String: Any] = [
+            "mode": "translate",
+            "translation": [
+                "type": "one_way",
+                "target_language": targetLanguage
+            ]
+        ]
+        applyLanguageConfig(languageConfig, to: &config)
+        return config
+    }
+
+    static func makeTwoWayTranslationConfig(
+        languagePair: TranslationLanguagePair,
+        languageConfig: CloudLanguageConfig
+    ) -> [String: Any] {
+        var config: [String: Any] = [
+            "mode": "translate",
+            "translation": [
+                "type": "two_way",
+                "language_a": languagePair.languageA,
+                "language_b": languagePair.languageB
+            ]
+        ]
+        applyLanguageConfig(languageConfig, to: &config)
+        return config
+    }
+
+    static func applyLanguageConfig(_ languageConfig: CloudLanguageConfig, to config: inout [String: Any]) {
+        guard !languageConfig.hints.isEmpty else { return }
+        config["language_hints"] = languageConfig.hints
+        config["language_hints_strict"] = languageConfig.strict || !languageConfig.hints.isEmpty
     }
 
     // MARK: - HTTP Debug Wrapper

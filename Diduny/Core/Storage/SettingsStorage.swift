@@ -2,6 +2,49 @@ import CoreAudio
 import Foundation
 import LaunchAtLogin
 
+enum HistoryRetentionPolicy: String, CaseIterable, Identifiable {
+    case never
+    case days7
+    case days30
+    case days90
+    case year1
+    case forever
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .never: "Never"
+        case .days7: "7 days"
+        case .days30: "30 days"
+        case .days90: "90 days"
+        case .year1: "1 year"
+        case .forever: "Forever"
+        }
+    }
+
+    var savesNewRecordings: Bool {
+        self != .never
+    }
+
+    func expirationCutoff(now: Date = Date()) -> Date? {
+        switch self {
+        case .never:
+            now
+        case .days7:
+            Calendar.current.date(byAdding: .day, value: -7, to: now)
+        case .days30:
+            Calendar.current.date(byAdding: .day, value: -30, to: now)
+        case .days90:
+            Calendar.current.date(byAdding: .day, value: -90, to: now)
+        case .year1:
+            Calendar.current.date(byAdding: .year, value: -1, to: now)
+        case .forever:
+            nil
+        }
+    }
+}
+
 final class SettingsStorage {
     static let shared = SettingsStorage()
 
@@ -39,13 +82,19 @@ final class SettingsStorage {
         case autoPaste
         case playSoundOnCompletion
         case launchAtLogin
+        case recordingFeedbackSurface
+        case typingSpeedWordsPerMinute
         case pushToTalkKey
+        case pushToTalkHoldEnabled
+        case pushToTalkToggleEnabled
         case pushToTalkToggleTapCount
         case pushToTalkHoldStartDelaySeconds
         case meetingAudioSource
         case meetingMicGain
         case meetingSystemGain
         case translationPushToTalkKey
+        case translationPushToTalkHoldEnabled
+        case translationPushToTalkToggleEnabled
         case translationPushToTalkToggleTapCount
         case translationPushToTalkHoldStartDelaySeconds
         case handsFreeModeEnabled
@@ -59,8 +108,17 @@ final class SettingsStorage {
         case whisperLanguage
         case whisperPrompt
         case favoriteLanguages
+        case manualSpeechLanguageHints
+        case disabledDetectedSpeechLanguageHints
         case translationLanguageA
         case translationLanguageB
+        case translationLanguagePairs
+        case defaultTranslationLanguagePairID
+        case lastUsedTranslationLanguagePairID
+        case translationTargetLanguages
+        case voiceTranslationTargetLanguage
+        case textTranslationSourceLanguage
+        case textTranslationTargetLanguage
         case translationProvider
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
@@ -71,6 +129,8 @@ final class SettingsStorage {
         case escapeCancelSaveAudio
         case textCleanupEnabled
         case fillerWords
+        case dictationTranslationHistoryRetentionPolicy
+        case meetingHistoryRetentionPolicy
         case whisperModelUnloadPolicy
         case proxyBaseURL
         case remoteConfigURL
@@ -185,6 +245,63 @@ final class SettingsStorage {
         set { LaunchAtLogin.isEnabled = newValue }
     }
 
+    var recordingFeedbackSurface: RecordingFeedbackSurface {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.recordingFeedbackSurface.rawValue),
+                  let surface = RecordingFeedbackSurface(rawValue: rawValue)
+            else {
+                return .notch
+            }
+            return surface
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.recordingFeedbackSurface.rawValue) }
+    }
+
+    var typingSpeedWordsPerMinute: Double {
+        get {
+            let stored = defaults.object(forKey: Key.typingSpeedWordsPerMinute.rawValue) as? Double ?? 40
+            return Self.sanitizedTypingSpeedWordsPerMinute(stored)
+        }
+        set {
+            defaults.set(
+                Self.sanitizedTypingSpeedWordsPerMinute(newValue),
+                forKey: Key.typingSpeedWordsPerMinute.rawValue
+            )
+            NotificationCenter.default.post(name: .typingSpeedSettingsChanged, object: nil)
+        }
+    }
+
+    // MARK: - History Storage
+
+    var dictationTranslationHistoryRetentionPolicy: HistoryRetentionPolicy {
+        get { historyRetentionPolicy(forKey: .dictationTranslationHistoryRetentionPolicy) }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.dictationTranslationHistoryRetentionPolicy.rawValue)
+            NotificationCenter.default.post(name: .historyRetentionSettingsChanged, object: nil)
+        }
+    }
+
+    var meetingHistoryRetentionPolicy: HistoryRetentionPolicy {
+        get { historyRetentionPolicy(forKey: .meetingHistoryRetentionPolicy) }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.meetingHistoryRetentionPolicy.rawValue)
+            NotificationCenter.default.post(name: .historyRetentionSettingsChanged, object: nil)
+        }
+    }
+
+    func historyRetentionPolicy(for type: Recording.RecordingType) -> HistoryRetentionPolicy {
+        type.isMeetingLike ? meetingHistoryRetentionPolicy : dictationTranslationHistoryRetentionPolicy
+    }
+
+    private func historyRetentionPolicy(forKey key: Key) -> HistoryRetentionPolicy {
+        guard let rawValue = defaults.string(forKey: key.rawValue),
+              let policy = HistoryRetentionPolicy(rawValue: rawValue)
+        else {
+            return .forever
+        }
+        return policy
+    }
+
     var textCleanupEnabled: Bool {
         get {
             if defaults.object(forKey: Key.textCleanupEnabled.rawValue) == nil {
@@ -274,6 +391,26 @@ final class SettingsStorage {
         }
     }
 
+    var pushToTalkHoldEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.pushToTalkHoldEnabled.rawValue) != nil {
+                return defaults.bool(forKey: Key.pushToTalkHoldEnabled.rawValue)
+            }
+            return !legacyHandsFreeModeEnabled
+        }
+        set { defaults.set(newValue, forKey: Key.pushToTalkHoldEnabled.rawValue) }
+    }
+
+    var pushToTalkToggleEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.pushToTalkToggleEnabled.rawValue) != nil {
+                return defaults.bool(forKey: Key.pushToTalkToggleEnabled.rawValue)
+            }
+            return legacyHandsFreeModeEnabled
+        }
+        set { defaults.set(newValue, forKey: Key.pushToTalkToggleEnabled.rawValue) }
+    }
+
     /// Number of presses required to toggle dictation via the selected modifier key in hands-free mode.
     var pushToTalkToggleTapCount: Int {
         get {
@@ -353,6 +490,26 @@ final class SettingsStorage {
         }
     }
 
+    var translationPushToTalkHoldEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.translationPushToTalkHoldEnabled.rawValue) != nil {
+                return defaults.bool(forKey: Key.translationPushToTalkHoldEnabled.rawValue)
+            }
+            return translationPushToTalkKey != .none && !legacyHandsFreeModeEnabled
+        }
+        set { defaults.set(newValue, forKey: Key.translationPushToTalkHoldEnabled.rawValue) }
+    }
+
+    var translationPushToTalkToggleEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.translationPushToTalkToggleEnabled.rawValue) != nil {
+                return defaults.bool(forKey: Key.translationPushToTalkToggleEnabled.rawValue)
+            }
+            return translationPushToTalkKey != .none && legacyHandsFreeModeEnabled
+        }
+        set { defaults.set(newValue, forKey: Key.translationPushToTalkToggleEnabled.rawValue) }
+    }
+
     /// Number of presses required to toggle translation via the selected modifier key in hands-free mode.
     var translationPushToTalkToggleTapCount: Int {
         get {
@@ -384,18 +541,15 @@ final class SettingsStorage {
 
     // MARK: - Hands-Free Mode (Multi-Tap Toggle)
 
-    /// When enabled, multi-tap starts/stops recording (toggle mode)
-    /// When disabled, hold-to-record mode is used
+    /// Legacy compatibility surface for the old mutually-exclusive modifier-key mode.
+    /// New code should use the per-flow hold/toggle flags above.
     var handsFreeModeEnabled: Bool {
-        get {
-            // Default to false (push-to-talk hold mode)
-            // Use object check to distinguish "not set" from "set to false"
-            if defaults.object(forKey: Key.handsFreeModeEnabled.rawValue) == nil {
-                return false
-            }
-            return defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue)
+        get { pushToTalkToggleEnabled }
+        set {
+            defaults.set(newValue, forKey: Key.handsFreeModeEnabled.rawValue)
+            pushToTalkToggleEnabled = newValue
+            pushToTalkHoldEnabled = !newValue
         }
-        set { defaults.set(newValue, forKey: Key.handsFreeModeEnabled.rawValue) }
     }
 
     // MARK: - Global Hotkey Press Counts
@@ -472,7 +626,7 @@ final class SettingsStorage {
             guard let rawValue = defaults.string(forKey: Key.transcriptionProvider.rawValue),
                   let provider = TranscriptionProvider(rawValue: rawValue)
             else {
-                return .local
+                return .cloud
             }
             return provider
         }
@@ -543,7 +697,7 @@ final class SettingsStorage {
     var translationRealtimeSocketEnabled: Bool {
         get {
             if defaults.object(forKey: Key.translationRealtimeSocketEnabled.rawValue) == nil {
-                return false
+                return true
             }
             return defaults.bool(forKey: Key.translationRealtimeSocketEnabled.rawValue)
         }
@@ -553,9 +707,13 @@ final class SettingsStorage {
     // MARK: - Transcription Realtime Socket
 
     /// Enables cloud realtime transcription over websocket during voice dictation.
-    /// Disabled by default to keep existing async cloud behavior unless explicitly enabled.
     var transcriptionRealtimeSocketEnabled: Bool {
-        get { defaults.bool(forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) }
+        get {
+            if defaults.object(forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.transcriptionRealtimeSocketEnabled.rawValue)
+        }
         set { defaults.set(newValue, forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) }
     }
 
@@ -635,23 +793,308 @@ final class SettingsStorage {
         set { defaults.set(newValue, forKey: Key.escapeCancelSaveAudio.rawValue) }
     }
 
-    // MARK: - Favorite Languages
+    // MARK: - Speech Languages
 
+    /// Legacy alias. New code should use `speechLanguageHints` for backend hints and
+    /// `manualSpeechLanguageHints` for user-managed languages.
     var favoriteLanguages: [String] {
-        get { defaults.stringArray(forKey: Key.favoriteLanguages.rawValue) ?? ["en", "uk"] }
-        set { defaults.set(newValue, forKey: Key.favoriteLanguages.rawValue) }
+        get {
+            Self.normalizedLanguageCodes(
+                defaults.stringArray(forKey: Key.favoriteLanguages.rawValue) ?? ["en", "uk"],
+                fallback: Self.defaultSpeechLanguageHints
+            )
+        }
+        set {
+            defaults.set(
+                Self.normalizedLanguageCodes(newValue, fallback: Self.defaultSpeechLanguageHints),
+                forKey: Key.favoriteLanguages.rawValue
+            )
+        }
     }
 
-    // MARK: - Translation Language Pair
+    var manualSpeechLanguageHints: [String] {
+        get {
+            if let stored = defaults.stringArray(forKey: Key.manualSpeechLanguageHints.rawValue) {
+                return Self.normalizedLanguageCodes(stored, fallback: [])
+            }
+            return favoriteLanguages
+        }
+        set {
+            defaults.set(
+                Self.normalizedLanguageCodes(newValue, fallback: []),
+                forKey: Key.manualSpeechLanguageHints.rawValue
+            )
+        }
+    }
 
+    var disabledDetectedSpeechLanguageHints: [String] {
+        get {
+            Self.normalizedLanguageCodes(
+                defaults.stringArray(forKey: Key.disabledDetectedSpeechLanguageHints.rawValue) ?? [],
+                fallback: []
+            )
+        }
+        set {
+            defaults.set(
+                Self.normalizedLanguageCodes(newValue, fallback: []),
+                forKey: Key.disabledDetectedSpeechLanguageHints.rawValue
+            )
+        }
+    }
+
+    var detectedSpeechLanguageHints: [String] {
+        KeyboardLanguageDetector.detectedLanguageCodes()
+    }
+
+    var speechLanguageHints: [String] {
+        effectiveSpeechLanguageHints()
+    }
+
+    func effectiveSpeechLanguageHints(detectedCodes: [String]? = nil) -> [String] {
+        let detected = Self.normalizedLanguageCodes(
+            detectedCodes ?? detectedSpeechLanguageHints,
+            fallback: []
+        )
+        let disabled = Set(disabledDetectedSpeechLanguageHints)
+        let enabledDetected = detected.filter { !disabled.contains($0) }
+        let combined = Self.normalizedLanguageCodes(
+            enabledDetected + manualSpeechLanguageHints,
+            fallback: []
+        )
+        return combined.isEmpty ? Self.defaultSpeechLanguageHints : combined
+    }
+
+    func setDetectedSpeechLanguage(_ code: String, enabled: Bool) {
+        guard let normalized = Self.normalizedLanguageCode(code) else { return }
+        var disabled = Set(disabledDetectedSpeechLanguageHints)
+        if enabled {
+            disabled.remove(normalized)
+        } else {
+            disabled.insert(normalized)
+        }
+        disabledDetectedSpeechLanguageHints = Array(disabled).sorted()
+    }
+
+    // MARK: - Translation Languages
+
+    /// Legacy two-way language A. Kept for compatibility with older settings.
     var translationLanguageA: String {
-        get { defaults.string(forKey: Key.translationLanguageA.rawValue) ?? "en" }
-        set { defaults.set(newValue, forKey: Key.translationLanguageA.rawValue) }
+        get { Self.normalizedLanguageCode(defaults.string(forKey: Key.translationLanguageA.rawValue)) ?? "en" }
+        set { defaults.set(Self.normalizedLanguageCode(newValue) ?? "en", forKey: Key.translationLanguageA.rawValue) }
     }
 
+    /// Legacy two-way language B. Kept for compatibility with older settings.
     var translationLanguageB: String {
-        get { defaults.string(forKey: Key.translationLanguageB.rawValue) ?? "uk" }
-        set { defaults.set(newValue, forKey: Key.translationLanguageB.rawValue) }
+        get { Self.normalizedLanguageCode(defaults.string(forKey: Key.translationLanguageB.rawValue)) ?? "uk" }
+        set { defaults.set(Self.normalizedLanguageCode(newValue) ?? "uk", forKey: Key.translationLanguageB.rawValue) }
+    }
+
+    var translationLanguagePairs: [TranslationLanguagePair] {
+        get {
+            if let data = defaults.data(forKey: Key.translationLanguagePairs.rawValue),
+               let decoded = try? JSONDecoder().decode([TranslationLanguagePair].self, from: data) {
+                let sanitized = Self.sanitizedTranslationPairs(decoded)
+                if !sanitized.isEmpty {
+                    return sanitized
+                }
+            }
+            return Self.sanitizedTranslationPairs([
+                TranslationLanguagePair(languageA: translationLanguageA, languageB: translationLanguageB)
+            ])
+        }
+        set {
+            let sanitized = Self.sanitizedTranslationPairs(newValue)
+            let pairsToStore = sanitized.isEmpty ? [Self.defaultTranslationPair] : sanitized
+            if let data = try? JSONEncoder().encode(pairsToStore) {
+                defaults.set(data, forKey: Key.translationLanguagePairs.rawValue)
+            }
+            if !pairsToStore.contains(where: { $0.id == defaultTranslationLanguagePairID }) {
+                defaultTranslationLanguagePairID = pairsToStore[0].id
+            }
+            if let lastID = lastUsedTranslationLanguagePairID,
+               !pairsToStore.contains(where: { $0.id == lastID }) {
+                lastUsedTranslationLanguagePairID = nil
+            }
+        }
+    }
+
+    var defaultTranslationLanguagePairID: String {
+        get {
+            let pairs = translationLanguagePairs
+            let stored = defaults.string(forKey: Key.defaultTranslationLanguagePairID.rawValue)
+            if let stored, pairs.contains(where: { $0.id == stored }) {
+                return stored
+            }
+            return pairs.first?.id ?? Self.defaultTranslationPair.id
+        }
+        set {
+            guard translationLanguagePairs.contains(where: { $0.id == newValue }) else { return }
+            defaults.set(newValue, forKey: Key.defaultTranslationLanguagePairID.rawValue)
+        }
+    }
+
+    var lastUsedTranslationLanguagePairID: String? {
+        get {
+            guard let stored = defaults.string(forKey: Key.lastUsedTranslationLanguagePairID.rawValue),
+                  translationLanguagePairs.contains(where: { $0.id == stored }) else {
+                return nil
+            }
+            return stored
+        }
+        set {
+            if let newValue,
+               translationLanguagePairs.contains(where: { $0.id == newValue }) {
+                defaults.set(newValue, forKey: Key.lastUsedTranslationLanguagePairID.rawValue)
+            } else {
+                defaults.removeObject(forKey: Key.lastUsedTranslationLanguagePairID.rawValue)
+            }
+        }
+    }
+
+    var defaultTranslationLanguagePair: TranslationLanguagePair {
+        translationLanguagePairs.first(where: { $0.id == defaultTranslationLanguagePairID })
+            ?? translationLanguagePairs.first
+            ?? Self.defaultTranslationPair
+    }
+
+    func resolveTranslationLanguagePair(currentKeyboardLanguage: String? = KeyboardLanguageDetector.currentLanguageCode())
+        -> TranslationLanguagePair {
+        let pairs = translationLanguagePairs
+        guard !pairs.isEmpty else { return Self.defaultTranslationPair }
+
+        if let currentKeyboardLanguage = Self.normalizedLanguageCode(currentKeyboardLanguage) {
+            let matching = pairs.filter { $0.contains(currentKeyboardLanguage) }
+            if matching.count == 1 {
+                return matching[0]
+            }
+            if matching.count > 1 {
+                if let defaultPair = matching.first(where: { $0.id == defaultTranslationLanguagePairID }) {
+                    return defaultPair
+                }
+                if let lastID = lastUsedTranslationLanguagePairID,
+                   let lastPair = matching.first(where: { $0.id == lastID }) {
+                    return lastPair
+                }
+                return matching[0]
+            }
+        }
+
+        return defaultTranslationLanguagePair
+    }
+
+    func markTranslationLanguagePairUsed(_ pair: TranslationLanguagePair) {
+        lastUsedTranslationLanguagePairID = pair.id
+    }
+
+    func translationLanguageHints(for pair: TranslationLanguagePair) -> [String] {
+        Self.normalizedLanguageCodes(
+            speechLanguageHints + pair.codes,
+            fallback: pair.codes
+        )
+    }
+
+    var translationTargetLanguages: [String] {
+        get {
+            if let stored = defaults.stringArray(forKey: Key.translationTargetLanguages.rawValue) {
+                let normalized = Self.normalizedLanguageCodes(stored)
+                return normalized.isEmpty ? Self.defaultTranslationTargets : normalized
+            }
+            return Self.normalizedLanguageCodes(
+                translationLanguagePairs.flatMap(\.codes) + manualSpeechLanguageHints
+            )
+        }
+        set {
+            let normalized = Self.normalizedLanguageCodes(newValue)
+            defaults.set(
+                normalized.isEmpty ? Self.defaultTranslationTargets : normalized,
+                forKey: Key.translationTargetLanguages.rawValue
+            )
+        }
+    }
+
+    var voiceTranslationTargetLanguage: String {
+        get {
+            let targets = translationTargetLanguages
+            let stored = defaults.string(forKey: Key.voiceTranslationTargetLanguage.rawValue)
+            if let stored = Self.normalizedLanguageCode(stored), targets.contains(stored) {
+                return stored
+            }
+            return defaultTranslationLanguagePair.languageB
+        }
+        set { setTranslationTargetLanguage(newValue, key: .voiceTranslationTargetLanguage) }
+    }
+
+    var textTranslationSourceLanguage: String {
+        get {
+            let stored = defaults.string(forKey: Key.textTranslationSourceLanguage.rawValue)
+            return Self.normalizedLanguageCode(stored, allowAuto: true) ?? "auto"
+        }
+        set {
+            defaults.set(
+                Self.normalizedLanguageCode(newValue, allowAuto: true) ?? "auto",
+                forKey: Key.textTranslationSourceLanguage.rawValue
+            )
+        }
+    }
+
+    var textTranslationTargetLanguage: String {
+        get {
+            let targets = translationTargetLanguages
+            let stored = defaults.string(forKey: Key.textTranslationTargetLanguage.rawValue)
+            if let stored = Self.normalizedLanguageCode(stored), targets.contains(stored) {
+                return stored
+            }
+            return voiceTranslationTargetLanguage
+        }
+        set { setTranslationTargetLanguage(newValue, key: .textTranslationTargetLanguage) }
+    }
+
+    private func setTranslationTargetLanguage(_ rawValue: String, key: Key) {
+        guard let language = Self.normalizedLanguageCode(rawValue) else { return }
+        if !translationTargetLanguages.contains(language) {
+            translationTargetLanguages = translationTargetLanguages + [language]
+        }
+        defaults.set(language, forKey: key.rawValue)
+    }
+
+    private static let defaultSpeechLanguageHints = ["en", "uk"]
+    private static let defaultTranslationPair = TranslationLanguagePair.defaultPair
+    private static let defaultTranslationTargets = ["uk", "en"]
+
+    static func normalizedLanguageCodes(
+        _ codes: [String],
+        allowAuto: Bool = false,
+        fallback: [String] = defaultTranslationTargets
+    ) -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+
+        for code in codes {
+            guard let normalized = normalizedLanguageCode(code, allowAuto: allowAuto),
+                  seen.insert(normalized).inserted
+            else { continue }
+            result.append(normalized)
+        }
+
+        return result.isEmpty ? fallback : result
+    }
+
+    static func normalizedLanguageCode(_ code: String?, allowAuto: Bool = false) -> String? {
+        SupportedLanguage.normalizedCode(code, allowAuto: allowAuto)
+    }
+
+    private static func sanitizedTranslationPairs(_ pairs: [TranslationLanguagePair]) -> [TranslationLanguagePair] {
+        var result: [TranslationLanguagePair] = []
+        var seen = Set<String>()
+
+        for pair in pairs {
+            guard pair.languageA != pair.languageB else { continue }
+            let key = [pair.languageA, pair.languageB].sorted().joined(separator: "-")
+            guard seen.insert(key).inserted else { continue }
+            result.append(pair)
+        }
+
+        return result
     }
 
     private static func normalizedFillerWords(_ words: [String]) -> [String] {
@@ -679,6 +1122,12 @@ final class SettingsStorage {
         return min(max(value, 0), 2.0)
     }
 
+    static func sanitizedTypingSpeedWordsPerMinute(_ value: Double) -> Double {
+        guard value.isFinite else { return 40 }
+        let clamped = min(max(value, 10), 160)
+        return clamped.rounded()
+    }
+
     private static func sanitizedPressCount(_ value: Int, fallback: Int) -> Int {
         guard value != 0 else { return fallback }
         return min(max(value, 1), 3)
@@ -689,11 +1138,18 @@ final class SettingsStorage {
         return min(max(value, 2), 3)
     }
 
-    private static let defaultHoldStartDelaySeconds: TimeInterval = 0.2
+    private var legacyHandsFreeModeEnabled: Bool {
+        guard defaults.object(forKey: Key.handsFreeModeEnabled.rawValue) != nil else {
+            return false
+        }
+        return defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue)
+    }
+
+    private static let defaultHoldStartDelaySeconds: TimeInterval = 1.2
 
     private static func sanitizedHoldStartDelaySeconds(_ value: TimeInterval) -> TimeInterval {
         guard value.isFinite else { return defaultHoldStartDelaySeconds }
-        let clamped = min(max(value, 0.2), 1.0)
+        let clamped = min(max(value, 0.5), 2.0)
         return (clamped * 10).rounded() / 10
     }
 
@@ -734,5 +1190,7 @@ final class SettingsStorage {
 
 extension Notification.Name {
     static let textCleanupSettingsChanged = Notification.Name("textCleanupSettingsChanged")
+    static let historyRetentionSettingsChanged = Notification.Name("historyRetentionSettingsChanged")
+    static let typingSpeedSettingsChanged = Notification.Name("typingSpeedSettingsChanged")
     static let whisperModelUnloadPolicyChanged = Notification.Name("whisperModelUnloadPolicyChanged")
 }

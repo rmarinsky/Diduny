@@ -52,7 +52,7 @@ struct ProgressDots: View {
         HStack(spacing: 8) {
             ForEach(0..<total, id: \.self) { index in
                 Circle()
-                    .fill(index <= current ? Color.accentColor : Color.gray.opacity(0.3))
+                    .fill(index <= current ? Color("BrandAccentDeep") : Color.gray.opacity(0.3))
                     .frame(width: 8, height: 8)
                     .scaleEffect(index == current ? 1.2 : 1.0)
                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: current)

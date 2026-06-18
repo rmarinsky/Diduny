@@ -230,13 +230,19 @@ final class OnboardingManager {
         guard isFirstLaunch else { return }
 
         SettingsStorage.shared.pushToTalkKey = .rightShift
-        SettingsStorage.shared.handsFreeModeEnabled = false
+        SettingsStorage.shared.pushToTalkHoldEnabled = true
+        SettingsStorage.shared.pushToTalkToggleEnabled = false
+        SettingsStorage.shared.translationPushToTalkHoldEnabled = false
+        SettingsStorage.shared.translationPushToTalkToggleEnabled = false
+        SettingsStorage.shared.pushToTalkHoldStartDelaySeconds = 1.2
+        SettingsStorage.shared.translationPushToTalkHoldStartDelaySeconds = 1.2
         SettingsStorage.shared.pushToTalkToggleTapCount = 3
         SettingsStorage.shared.translationPushToTalkToggleTapCount = 3
-        SettingsStorage.shared.meetingHotkeyPressCount = 1
-        SettingsStorage.shared.meetingTranslationHotkeyPressCount = 1
+        SettingsStorage.shared.meetingHotkeyPressCount = 3
+        SettingsStorage.shared.meetingTranslationHotkeyPressCount = 3
         SettingsStorage.shared.autoPaste = true
         SettingsStorage.shared.playSoundOnCompletion = true
+        SettingsStorage.shared.typingSpeedWordsPerMinute = 40
     }
 }
 
@@ -305,10 +311,6 @@ final class OnboardingWindowController {
         window.isMovableByWindowBackground = false
         window.backgroundColor = .windowBackgroundColor
         window.isOpaque = true
-        // The onboarding UI is designed as a light surface (navy text, white
-        // cards, light-blue panel). Pin the window to the light appearance so
-        // system colors don't resolve dark and tank the left-panel contrast.
-        window.appearance = NSAppearance(named: .aqua)
 
         self.windowDelegate = WindowDelegate(onClose: {
             // Close-via-X: save currentStep but do NOT mark hasCompletedOnboarding.
@@ -326,9 +328,20 @@ final class OnboardingWindowController {
         window.delegate = self.windowDelegate
 
         self.window = window
+        // Activate BEFORE ordering the window front: on macOS 26 a window
+        // ordered while the app is not active (right after the .accessory →
+        // .regular policy switch) can stay behind other apps' windows.
+        NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
+        // Belt-and-braces: the policy switch is asynchronous in the process
+        // manager, so retry activation once it has settled.
+        Task { @MainActor [weak window] in
+            try? await Task.sleep(for: .milliseconds(150))
+            NSApp.activate(ignoringOtherApps: true)
+            window?.makeKeyAndOrderFront(nil)
+            window?.orderFrontRegardless()
+        }
     }
 
     func closeOnboarding() {

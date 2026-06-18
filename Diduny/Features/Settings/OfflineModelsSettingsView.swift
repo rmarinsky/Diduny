@@ -83,7 +83,7 @@ struct OfflineModelsSettingsView: View {
                             .fontWeight(selectedModel == model.name ? .semibold : .regular)
 
                         if selectedModel == model.name {
-                            ModelBadge("Active", color: .blue)
+                            ModelBadge("Active", color: Color("BrandAccentDeep"))
                         } else if modelManager.isModelDownloaded(model) {
                             ModelBadge("Downloaded", color: .green)
                         }
@@ -91,7 +91,7 @@ struct OfflineModelsSettingsView: View {
                         if model.isEnglishOnly {
                             ModelBadge("EN", color: .orange)
                         } else {
-                            ModelBadge("Translate", color: .purple)
+                            ModelBadge("Translate", color: .teal)
                         }
                     }
 

@@ -5,21 +5,52 @@ import Foundation
 actor RealtimeTranslationAccumulator {
     private var finalOriginalText: String = ""
     private var finalTranslatedText: String = ""
+    private var provisionalOriginalText: String = ""
+    private var provisionalTranslatedText: String = ""
 
     func process(tokens: [RealtimeToken]) {
-        let finalTokens = tokens.filter(\.isFinal)
-        guard !finalTokens.isEmpty else { return }
+        var latestProvisionalOriginalText = ""
+        var latestProvisionalTranslatedText = ""
+        var didReceiveFinalOriginalToken = false
+        var didReceiveFinalTranslatedToken = false
 
-        for token in finalTokens {
+        for token in tokens where !token.text.isEmpty {
             let status = token.translationStatus?.lowercased()
             switch status {
             case "translation":
-                finalTranslatedText += token.text
+                if token.isFinal {
+                    finalTranslatedText += token.text
+                    didReceiveFinalTranslatedToken = true
+                } else {
+                    latestProvisionalTranslatedText += token.text
+                }
             case "transcription", "source", "original", "none", nil:
-                finalOriginalText += token.text
+                if token.isFinal {
+                    finalOriginalText += token.text
+                    didReceiveFinalOriginalToken = true
+                } else {
+                    latestProvisionalOriginalText += token.text
+                }
             default:
-                finalOriginalText += token.text
+                if token.isFinal {
+                    finalOriginalText += token.text
+                    didReceiveFinalOriginalToken = true
+                } else {
+                    latestProvisionalOriginalText += token.text
+                }
             }
+        }
+
+        if !latestProvisionalTranslatedText.isEmpty {
+            provisionalTranslatedText = latestProvisionalTranslatedText
+        } else if didReceiveFinalTranslatedToken {
+            provisionalTranslatedText = ""
+        }
+
+        if !latestProvisionalOriginalText.isEmpty {
+            provisionalOriginalText = latestProvisionalOriginalText
+        } else if didReceiveFinalOriginalToken {
+            provisionalOriginalText = ""
         }
     }
 
@@ -27,13 +58,19 @@ actor RealtimeTranslationAccumulator {
         // No-op: pause-based formatting removed
     }
 
-    func bestText() -> String {
-        let translated = finalTranslatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+    func bestText(includeProvisional: Bool = true) -> String {
+        let translatedText = includeProvisional
+            ? finalTranslatedText + provisionalTranslatedText
+            : finalTranslatedText
+        let translated = translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !translated.isEmpty {
             return translated
         }
 
-        return finalOriginalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let originalText = includeProvisional
+            ? finalOriginalText + provisionalOriginalText
+            : finalOriginalText
+        return originalText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -43,6 +80,7 @@ extension AppDelegate {
     @objc func toggleTranslationRecording() {
         let translationRecordingState = appState.translationRecordingState
         Log.app.info("toggleTranslationRecording called, current state: \(translationRecordingState)")
+
         translationPipelineTask?.cancel()
         translationPipelineTask = Task {
             await self.performToggleTranslationRecording()
@@ -75,6 +113,9 @@ extension AppDelegate {
 
         let recordingStartTime = appState.translationRecordingStartTime
         let stopTime = Date()
+        let targetLanguage = activeTranslationTargetLanguage
+            ?? activeTranslationLanguagePair?.languageB
+            ?? SettingsStorage.shared.voiceTranslationTargetLanguage
 
         // Stop audio level piping
         audioLevelCancellable?.cancel()
@@ -95,7 +136,8 @@ extension AppDelegate {
                     audioData: audioData,
                     type: .translation,
                     duration: duration,
-                    sourceDevice: sourceDevice
+                    sourceDevice: sourceDevice,
+                    translationTargetLanguageCode: targetLanguage
                 )
                 Log.app.info("cancelTranslationRecording: audio saved after cancel")
             } catch {
@@ -127,6 +169,8 @@ extension AppDelegate {
             appState.translationRecordingState = .idle
             appState.translationRecordingStartTime = nil
             handleTranslationStateChange(.idle)
+            activeTranslationLanguagePair = nil
+            activeTranslationTargetLanguage = nil
         }
 
         Log.app.info("cancelTranslationRecording: END")
@@ -148,7 +192,7 @@ extension AppDelegate {
         await stopTranslationRecording()
     }
 
-    func startTranslationRecording() async {
+    func startTranslationRecording(languagePair requestedPair: TranslationLanguagePair? = nil) async {
         Log.app.info("startTranslationRecording: BEGIN")
 
         guard canStartRecording(kind: .translation) else {
@@ -156,8 +200,15 @@ extension AppDelegate {
             return
         }
 
+        let pair = requestedPair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+        SettingsStorage.shared.markTranslationLanguagePairUsed(pair)
+        let targetLanguage = pair.languageB
+        activeTranslationLanguagePair = pair
+        activeTranslationTargetLanguage = targetLanguage
+        SettingsStorage.shared.voiceTranslationTargetLanguage = targetLanguage
+
         // Request microphone permission on-demand
-        let micGranted = await PermissionManager.shared.ensureMicrophonePermission()
+        let micGranted = await PermissionManager.shared.ensureMicrophonePermission(context: .translation)
         appState.microphonePermissionGranted = micGranted
 
         guard micGranted else {
@@ -166,6 +217,20 @@ extension AppDelegate {
                 appState.errorMessage = "Microphone access required"
                 appState.translationRecordingState = .error
                 handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
+            }
+            return
+        }
+
+        if SettingsStorage.shared.effectiveTranslationProvider == .local, !pair.contains("en") {
+            Log.app.warning("startTranslationRecording: Local Whisper can translate only to English")
+            await MainActor.run {
+                appState.errorMessage = "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English."
+                appState.translationRecordingState = .error
+                handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
             return
         }
@@ -178,6 +243,8 @@ extension AppDelegate {
                     appState.errorMessage = "No Whisper model downloaded. Please download one in Settings."
                     appState.translationRecordingState = .error
                     handleTranslationStateChange(.error)
+                    activeTranslationLanguagePair = nil
+                    activeTranslationTargetLanguage = nil
                 }
                 return
             }
@@ -187,11 +254,13 @@ extension AppDelegate {
                     appState.errorMessage = WhisperError.modelDoesNotSupportTranslation.localizedDescription
                     appState.translationRecordingState = .error
                     handleTranslationStateChange(.error)
+                    activeTranslationLanguagePair = nil
+                    activeTranslationTargetLanguage = nil
                 }
                 return
             }
         }
-        Log.app.info("startTranslationRecording: Provider ready")
+        Log.app.info("startTranslationRecording: Provider ready, pair=\(pair.displayLabel)")
         translationRealtimeSessionEnabled = false
 
         // Resolve device (nil preference = System Default)
@@ -207,6 +276,8 @@ extension AppDelegate {
                 appState.errorMessage = "No microphone found. Please connect a microphone."
                 appState.translationRecordingState = .error
                 handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
             return
         }
@@ -250,6 +321,8 @@ extension AppDelegate {
                     ProcessInfo.processInfo.endActivity(token)
                     translationActivityToken = nil
                 }
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
                 return
             }
             await MainActor.run {
@@ -257,11 +330,12 @@ extension AppDelegate {
                 appState.translationRecordingStartTime = Date()
                 handleTranslationStateChange(.recording)
 
-                // Pipe audio level to notch
+                // Pipe audio level to the selected recording feedback surface.
+                let feedbackMode: RecordingMode = .translation(targetLanguage: translationPairLabel)
                 audioLevelCancellable = audioRecorder.$audioLevel
-                    .receive(on: DispatchQueue.main)
-                    .sink { level in
-                        NotchManager.shared.audioLevel = level
+                    .removeDuplicates()
+                    .sink { [weak self] level in
+                        self?.updateRecordingFeedbackAudioLevel(level, mode: feedbackMode)
                     }
             }
 
@@ -289,6 +363,8 @@ extension AppDelegate {
                 appState.translationRecordingState = .error
                 appState.translationRecordingStartTime = nil
                 handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
 
             return
@@ -309,6 +385,8 @@ extension AppDelegate {
                 appState.translationRecordingState = .error
                 appState.translationRecordingStartTime = nil
                 handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
             return
         }
@@ -336,6 +414,8 @@ extension AppDelegate {
 
         // Capture recording start time for duration calculation
         let recordingStartTime = appState.translationRecordingStartTime
+        let pair = activeTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+        let targetLanguage = activeTranslationTargetLanguage ?? pair.languageB
 
         // Capture stop time immediately for accurate duration
         let stopTime = Date()
@@ -349,16 +429,18 @@ extension AppDelegate {
         var capturedAudioData: Data?
         let recordingId = UUID()
         let sourceDevice = audioRecorder.currentRecordingDeviceInfo
+        let realtimeStopTask = Task { @MainActor in
+            await self.stopTranslationRealtimeSession(finalize: true)
+        }
 
         do {
             Log.app.info("stopTranslationRecording: Stopping audio recorder")
             let audioData = try await audioRecorder.stopRecording()
             Log.app.info("stopTranslationRecording: Got audio data, size = \(audioData.count) bytes")
 
-            let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
-            capturedAudioData = compressedData
+            capturedAudioData = audioData
 
-            let realtimeResult = await stopTranslationRealtimeSession(finalize: true)
+            let realtimeResult = await realtimeStopTask.value
 
             let rawText: String
             if !realtimeResult.text.isEmpty {
@@ -366,16 +448,31 @@ extension AppDelegate {
                 Log.app.info("stopTranslationRecording: Using realtime translation (\(rawText.count) chars)")
             } else if SettingsStorage.shared.effectiveTranslationProvider == .local {
                 // Local Whisper — no WebSocket, transcribe from audio
-                rawText = try await whisperTranscriptionService.translateAndTranscribe(audioData: audioData)
+                rawText = try await whisperTranscriptionService.translateAndTranscribe(
+                    audioData: audioData,
+                    languagePair: pair
+                )
                 Log.app.info("stopTranslationRecording: Local Whisper translation (\(rawText.count) chars)")
             } else {
-                rawText = try await transcriptionService.translateAndTranscribe(audioData: audioData)
+                rawText = try await transcriptionService.translateAndTranscribe(
+                    audioData: audioData,
+                    languagePair: pair
+                )
                 Log.app.info("stopTranslationRecording: HTTP cloud translation (\(rawText.count) chars)")
             }
-            let cleanedRawText = await TranscriptCleanupService.shared.clean(
-                rawText,
-                fillerWords: SettingsStorage.shared.fillerWords
-            )
+            let cleanedRawText: String
+            if !realtimeResult.text.isEmpty {
+                cleanedRawText = await cleanRealtimeResultText(
+                    rawText,
+                    realtimeResult: realtimeResult,
+                    logPrefix: "Translation"
+                )
+            } else {
+                cleanedRawText = await TranscriptCleanupService.shared.clean(
+                    rawText,
+                    fillerWords: SettingsStorage.shared.fillerWords
+                )
+            }
             let text = ClipboardService.preparedText(cleanedRawText, behavior: .cleaned)
             Log.app.info("stopTranslationRecording: Translation received (\(text.count) chars)")
 
@@ -409,17 +506,22 @@ extension AppDelegate {
                 appState.translationRecordingState = .success
                 appState.translationRecordingStartTime = nil
                 handleTranslationStateChange(.success)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
             Log.app.info("stopTranslationRecording: SUCCESS")
 
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
+            capturedAudioData = compressedData
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
                 audioData: compressedData,
                 type: .translation,
                 duration: duration,
                 transcriptionText: text,
-                sourceDevice: sourceDevice
+                sourceDevice: sourceDevice,
+                translationTargetLanguageCode: targetLanguage
             )
 
             if SettingsStorage.shared.playSoundOnCompletion {
@@ -430,16 +532,18 @@ extension AppDelegate {
             RecoveryStateManager.shared.clearState()
 
         } catch is CancellationError {
-            _ = await stopTranslationRealtimeSession(finalize: false)
+            _ = await realtimeStopTask.value
             Log.app.info("stopTranslationRecording: Cancelled")
             await MainActor.run {
                 appState.translationRecordingState = .idle
                 appState.translationRecordingStartTime = nil
                 handleTranslationStateChange(.idle)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
             return
         } catch {
-            _ = await stopTranslationRealtimeSession(finalize: false)
+            _ = await realtimeStopTask.value
             Log.app.error("stopTranslationRecording: ERROR - \(error.localizedDescription)")
             let isEmptyTranscription: Bool = {
                 guard case .emptyTranscription = error as? TranscriptionError else { return false }
@@ -453,7 +557,8 @@ extension AppDelegate {
                     audioData: audioData,
                     type: .translation,
                     duration: duration,
-                    sourceDevice: sourceDevice
+                    sourceDevice: sourceDevice,
+                    translationTargetLanguageCode: targetLanguage
                 )
                 RecoveryStateManager.shared.clearState()
             }
@@ -472,6 +577,8 @@ extension AppDelegate {
                 appState.translationRecordingState = .error
                 appState.translationRecordingStartTime = nil
                 handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
         }
 
@@ -487,15 +594,15 @@ extension AppDelegate {
     // MARK: - Realtime Translation (WebSocket)
 
     private func setupRealtimeTranslationIfNeeded() {
-        guard SettingsStorage.shared.effectiveTranslationProvider == .cloud,
-              SettingsStorage.shared.translationRealtimeSocketEnabled else {
+        guard SettingsStorage.shared.effectiveTranslationProvider == .cloud else {
             audioRecorder.onRealtimeAudioData = nil
             translationRealtimeSessionEnabled = false
             translationRealtimeAccumulator = nil
             return
         }
 
-        let pair = translationLanguagePair()
+        let pair = activeTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+        let feedbackMode: RecordingMode = .translation(targetLanguage: translationPairLabel)
         let accumulator = RealtimeTranslationAccumulator()
         translationRealtimeAccumulator = accumulator
 
@@ -504,15 +611,22 @@ extension AppDelegate {
             rtService?.sendAudioData(pcmData)
         }
 
-        rtService.onTokensReceived = { [weak accumulator] tokens in
-            guard let accumulator else { return }
-            Task {
-                await accumulator.process(tokens: tokens)
+        rtService.onTokensReceived = { [weak self, weak accumulator] tokens in
+            if let accumulator {
+                Task {
+                    await accumulator.process(tokens: tokens)
+                }
+            }
+            Task { @MainActor in
+                self?.updateRecordingFeedbackTokens(tokens, mode: feedbackMode)
             }
         }
 
-        rtService.onConnectionStatusChanged = { status in
+        rtService.onConnectionStatusChanged = { [weak self] status in
             Log.transcription.info("Translation RT status: \(String(describing: status))")
+            Task { @MainActor in
+                self?.updateRecordingFeedbackConnectionStatus(status, mode: feedbackMode)
+            }
         }
 
         rtService.onSegmentBoundary = { [weak accumulator] _ in
@@ -522,8 +636,11 @@ extension AppDelegate {
             }
         }
 
-        rtService.onError = { error in
+        rtService.onError = { [weak self] error in
             Log.transcription.error("Translation RT error: \(error.localizedDescription)")
+            Task { @MainActor in
+                self?.updateRecordingFeedbackConnectionStatus(.failed(error.localizedDescription), mode: feedbackMode)
+            }
         }
 
         translationRealtimeConnectionError = nil
@@ -531,17 +648,20 @@ extension AppDelegate {
         // Connect WebSocket in background — don't block recording start
         translationRealtimeConnectionTask = Task {
             do {
+                let languageHints = SettingsStorage.shared.translationLanguageHints(for: pair)
                 try await rtService.connect(
-                    languageHints: [pair.languageA, pair.languageB],
-                    strictLanguageHints: true,
+                    languageHints: languageHints,
+                    strictLanguageHints: !languageHints.isEmpty,
                     audioConfig: .defaultPCM16kMono,
                     translationConfig: RealtimeTranslationConfig(
                         mode: .twoWay(languageA: pair.languageA, languageB: pair.languageB)
-                    )
+                    ),
+                    enableSpeakerDiarization: false
                 )
 
                 await MainActor.run {
                     self.translationRealtimeSessionEnabled = true
+                    self.updateRecordingFeedbackConnectionStatus(.connected, mode: feedbackMode)
                 }
                 NSLog("[Transcription] Translation RT connected (%@ <-> %@)", pair.languageA, pair.languageB)
             } catch {
@@ -550,22 +670,25 @@ extension AppDelegate {
                     self.translationRealtimeSessionEnabled = false
                     self.translationRealtimeAccumulator = nil
                     self.translationRealtimeConnectionError = error.localizedDescription
+                    self.updateRecordingFeedbackConnectionStatus(.failed(error.localizedDescription), mode: feedbackMode)
                 }
                 NSLog("[Transcription] Translation RT connection failed: %@", error.localizedDescription)
             }
         }
     }
 
-    private func stopTranslationRealtimeSession(finalize: Bool) async -> (text: String, didReceiveFinalization: Bool) {
+    private func stopTranslationRealtimeSession(finalize: Bool) async -> RealtimeSessionStopResult {
         translationRealtimeConnectionTask?.cancel()
         translationRealtimeConnectionTask = nil
-        audioRecorder.onRealtimeAudioData = nil
+        if !finalize {
+            audioRecorder.onRealtimeAudioData = nil
+        }
 
         let accumulator = translationRealtimeAccumulator
         let wasEnabled = translationRealtimeSessionEnabled
-        var didReceiveFinalization = false
 
         defer {
+            audioRecorder.onRealtimeAudioData = nil
             translationRealtimeSessionEnabled = false
             translationRealtimeAccumulator = nil
             realtimeTranscriptionService.onTokensReceived = nil
@@ -575,22 +698,46 @@ extension AppDelegate {
         }
 
         guard wasEnabled else {
-            return ("", false)
+            return .empty
         }
 
+        let preFinalizeText: String
         if finalize {
-            didReceiveFinalization = await realtimeTranscriptionService.finalize()
+            preFinalizeText = await accumulator?.bestText(includeProvisional: true) ?? ""
+        } else {
+            preFinalizeText = ""
+        }
+        let optimisticCleanupTask = finalize
+            ? startOptimisticRealtimeCleanup(for: preFinalizeText)
+            : nil
+        var finalizeResult: RealtimeFinalizeResult = .skipped
+        if finalize {
+            finalizeResult = await realtimeTranscriptionService.finalize(profile: .dictationFast)
         }
         await realtimeTranscriptionService.disconnect()
 
-        let text = await accumulator?.bestText() ?? ""
-        return (text.trimmingCharacters(in: .whitespacesAndNewlines), didReceiveFinalization)
-    }
+        let text = (await accumulator?.bestText(includeProvisional: true) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let preFinalizeTrimmed = preFinalizeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let textChangedAfterFinalize = text != preFinalizeTrimmed
+        let optimisticCleanedText: String?
 
-    private func translationLanguagePair() -> (languageA: String, languageB: String) {
-        (
-            SettingsStorage.shared.translationLanguageA,
-            SettingsStorage.shared.translationLanguageB
+        if let optimisticCleanupTask, !textChangedAfterFinalize {
+            optimisticCleanedText = await optimisticCleanupTask.value
+        } else {
+            optimisticCleanupTask?.cancel()
+            optimisticCleanedText = nil
+        }
+
+        Log.transcription.info(
+            "Translation RT stop: finalizeProfile=\(finalizeResult.profileName), finished=\(finalizeResult.didReceiveFinishedSignal), timedOut=\(finalizeResult.timedOut), durationMs=\(finalizeResult.durationMs), tokensAfterFinalize=\(finalizeResult.tokensAfterFinalize), charsAfterFinalize=\(finalizeResult.charactersAfterFinalize), textChangedAfterFinalize=\(textChangedAfterFinalize), charsDelta=\(text.count - preFinalizeTrimmed.count), optimisticCleanupReused=\(optimisticCleanedText != nil)"
+        )
+
+        return RealtimeSessionStopResult(
+            text: text,
+            preFinalizeText: preFinalizeTrimmed,
+            optimisticCleanedText: optimisticCleanedText,
+            finalizeResult: finalizeResult
         )
     }
 
@@ -605,9 +752,9 @@ extension AppDelegate {
 
         escapeService.onProgressEscape = { [weak self] pressCount, _ in
             guard let self else { return }
-            NotchManager.shared.showInfoDuringRecording(
+            self.showRecordingInfoDuringActiveRecording(
                 message: SettingsStorage.shared.escapeCancelRepeatHint(afterPressCount: pressCount),
-                mode: .translation(languagePair: translationPairLabel),
+                mode: .translation(targetLanguage: translationPairLabel),
                 duration: 1.5
             )
         }
@@ -615,10 +762,14 @@ extension AppDelegate {
         // On second shortcut press (confirmed cancel): cancel recording
         escapeService.onCancel = { [weak self] in
             Task { @MainActor in
+                guard let self else { return }
                 let shouldSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
-                await self?.cancelTranslationRecording()
+                await self.cancelTranslationRecording()
                 let message = shouldSaveAudio ? "Recording cancelled and saved" : "Recording cancelled"
-                NotchManager.shared.showInfo(message: message)
+                self.showRecordingFeedbackInfo(
+                    message: message,
+                    mode: .translation(targetLanguage: self.translationPairLabel)
+                )
             }
         }
 

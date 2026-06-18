@@ -7,7 +7,7 @@ struct LiveTranscriptView: View {
     @State private var timer: Timer?
 
     private let speakerColors: [Color] = [
-        .blue, .green, .orange, .purple, .pink, .teal, .indigo, .mint
+        Color("BrandAccentDeep"), .green, .orange, .brown, .pink, .teal, .cyan, .mint
     ]
 
     var body: some View {
@@ -18,7 +18,7 @@ struct LiveTranscriptView: View {
             Divider()
             footerBar
         }
-        .frame(minWidth: 350, minHeight: 300)
+        .frame(minWidth: 500, idealWidth: 500, minHeight: 500)
         .onAppear { seedDurationFromRecordingStart(); startTimer() }
         .onDisappear { stopTimer() }
     }
@@ -55,7 +55,7 @@ struct LiveTranscriptView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.bar)
+        .background(Color(.windowBackgroundColor))
     }
 
     @ViewBuilder
@@ -204,7 +204,7 @@ struct LiveTranscriptView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(.bar)
+        .background(Color(.windowBackgroundColor))
     }
 
     // MARK: - Helpers

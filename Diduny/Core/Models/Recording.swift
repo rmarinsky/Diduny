@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 struct RecordingDeviceInfo: Codable, Equatable {
     let uid: String
@@ -31,9 +32,15 @@ struct Recording: Identifiable, Codable, Equatable {
     var processedAt: Date?
     var chapters: [MeetingChapter]?
     let sourceDevice: RecordingDeviceInfo?
-    /// Non-nil when this recording was saved via a recovery path rather than a normal stop.
-    /// Drives the "Recovered" badge in the library and the detail-view notice.
-    /// Set once at recovery-save time; never cleared.
+    /// Marks a recording that originated from a recovery path rather than a normal
+    /// stop; intended to drive the "Recovered" badge in the library and the
+    /// detail-view notice. Once set it is preserved (never cleared), including
+    /// across `RecordingsLibraryStorage.replaceStoredAudioFile`.
+    ///
+    /// NOTE: no production save path sets this yet — `saveRecording(...)` doesn't
+    /// accept it and `recoverRecording(from:)` transcribes then discards without
+    /// creating a library entry. So in practice this is currently always nil.
+    /// TODO: populate it when the recovery-save-to-library flow is implemented.
     var recoverySource: RecoverySource?
 
     /// Nested to avoid conflict with RecoveryState.RecordingType
@@ -41,6 +48,7 @@ struct Recording: Identifiable, Codable, Equatable {
         case voice
         case translation
         case meeting
+        case meetingTranslation
         case fileTranscription
 
         var displayName: String {
@@ -48,6 +56,7 @@ struct Recording: Identifiable, Codable, Equatable {
             case .voice: "Voice"
             case .translation: "Translation"
             case .meeting: "Meeting"
+            case .meetingTranslation: "Meeting Translation"
             case .fileTranscription: "File Transcription"
             }
         }
@@ -57,6 +66,7 @@ struct Recording: Identifiable, Codable, Equatable {
             case .voice: "mic.fill"
             case .translation: "globe"
             case .meeting: "person.3.fill"
+            case .meetingTranslation: "captions.bubble.fill"
             case .fileTranscription: "doc.fill"
             }
         }
@@ -66,6 +76,7 @@ struct Recording: Identifiable, Codable, Equatable {
             case .voice: "Transcribe"
             case .translation: "Translate"
             case .meeting: "Meeting"
+            case .meetingTranslation: "Meeting Translate"
             case .fileTranscription: "File"
             }
         }
@@ -74,8 +85,36 @@ struct Recording: Identifiable, Codable, Equatable {
             switch self {
             case .voice, .translation, .fileTranscription:
                 .cleaned
-            case .meeting:
+            case .meeting, .meetingTranslation:
                 .raw
+            }
+        }
+
+        var brandColor: Color {
+            switch self {
+            case .voice: Color("BrandAccentDeep")
+            case .translation: .teal
+            case .meeting: .orange
+            case .meetingTranslation: .blue
+            case .fileTranscription: .brown
+            }
+        }
+
+        var isMeetingLike: Bool {
+            switch self {
+            case .meeting, .meetingTranslation:
+                true
+            case .voice, .translation, .fileTranscription:
+                false
+            }
+        }
+
+        var usesTranslatedStatusWhenSavedWithText: Bool {
+            switch self {
+            case .translation, .meetingTranslation:
+                true
+            case .voice, .meeting, .fileTranscription:
+                false
             }
         }
     }
