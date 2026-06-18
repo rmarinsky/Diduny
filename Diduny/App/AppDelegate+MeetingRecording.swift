@@ -292,7 +292,7 @@ extension AppDelegate {
 
         // Connect WebSocket (non-blocking — recording works even if this fails)
         do {
-            let languageHints = SettingsStorage.shared.favoriteLanguages
+            let languageHints = SettingsStorage.shared.speechLanguageHints
 
             try await rtService.connect(
                 languageHints: languageHints,
@@ -436,15 +436,14 @@ extension AppDelegate {
                 Log.app.info("Meeting recording size = \(audioData.count) bytes")
 
                 let asyncJobService = AsyncTranscriptionJobService()
-                let hints = SettingsStorage.shared.favoriteLanguages
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
+                let hints = SettingsStorage.shared.speechLanguageHints
                 var config: [String: Any] = [
                     "mode": "transcribe",
                     "enable_speaker_diarization": true
                 ]
                 if !hints.isEmpty {
                     config["language_hints"] = hints
+                    config["language_hints_strict"] = true
                 }
 
                 rawText = try await asyncJobService.transcribeMeetingWithRetry(

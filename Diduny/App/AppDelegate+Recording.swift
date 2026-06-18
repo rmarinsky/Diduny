@@ -263,7 +263,7 @@ extension AppDelegate {
 
                 // Pipe audio level to the selected recording feedback surface.
                 audioLevelCancellable = audioRecorder.$audioLevel
-                    .receive(on: DispatchQueue.main)
+                    .removeDuplicates()
                     .sink { [weak self] level in
                         self?.updateRecordingFeedbackAudioLevel(level, mode: .voice)
                     }
@@ -640,7 +640,7 @@ extension AppDelegate {
         // Connect WebSocket in background — don't block recording start
         Task {
             do {
-                let languageHints = SettingsStorage.shared.favoriteLanguages
+                let languageHints = SettingsStorage.shared.speechLanguageHints
 
                 try await rtService.connect(
                     languageHints: languageHints,

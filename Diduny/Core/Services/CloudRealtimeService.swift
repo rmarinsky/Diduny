@@ -26,6 +26,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private var translationConfig: RealtimeTranslationConfig?
     private var enableSpeakerDiarization = true
     private let finalizeStateLock = NSLock()
+    private let lifecycleLock = NSLock()
     private var awaitingFinalizeResponse = false
     private var didReceiveFinishedSignal = false
     private var lastRealtimeTokenAt: Date?
@@ -93,9 +94,11 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
         urlSession = nil
+        lifecycleLock.lock()
         audioBytesSent = 0
         audioChunkCount = 0
         proxyReady = false
+        lifecycleLock.unlock()
 
         onConnectionStatusChanged?(.connecting)
 
@@ -136,20 +139,13 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         self.webSocketTask = task
         task.resume()
 
-        var config: [String: Any] = [
-            "audio_format": audioConfig.audioFormat,
-            "sample_rate": audioConfig.sampleRate,
-            "num_channels": audioConfig.numChannels,
-            "enable_speaker_diarization": enableSpeakerDiarization
-        ]
-
-        if !languageHints.isEmpty {
-            config["language_hints"] = languageHints
-        }
-
-        if let translationPayload = makeTranslationPayload(from: translationConfig) {
-            config["translation"] = translationPayload
-        }
+        let config = Self.makeConnectionConfig(
+            languageHints: languageHints,
+            strictLanguageHints: strictLanguageHints,
+            audioConfig: audioConfig,
+            translationConfig: translationConfig,
+            enableSpeakerDiarization: enableSpeakerDiarization
+        )
 
         let configData = try JSONSerialization.data(withJSONObject: config)
         let configString = String(data: configData, encoding: .utf8) ?? "{}"
@@ -168,17 +164,27 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         }
         NSLog("[Cloud RT] Config sent successfully, WebSocket connected")
 
+        lifecycleLock.lock()
         isConnected = true
+        lifecycleLock.unlock()
 
         startReceiveLoop()
         startPingLoop()
 
         // Wait for proxy_ready before marking connected
         let deadline = Date().addingTimeInterval(10)
-        while !proxyReady && Date() < deadline {
+        while Date() < deadline {
+            lifecycleLock.lock()
+            let ready = proxyReady
+            lifecycleLock.unlock()
+            if ready { break }
             try? await Task.sleep(for: .milliseconds(50))
         }
-        guard proxyReady else {
+        lifecycleLock.lock()
+        let proxyIsReady = proxyReady
+        lifecycleLock.unlock()
+        guard proxyIsReady else {
+            await disconnect()
             throw RealtimeTranscriptionError.connectionFailed("Proxy did not send ready signal")
         }
 
@@ -191,18 +197,27 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private var audioChunkCount: Int = 0
 
     func sendAudioData(_ data: Data) {
-        guard isConnected, let task = webSocketTask else { return }
         guard !data.isEmpty else { return }
 
+        // Capture task reference under the lock so we don't race with disconnect.
+        // Do NOT hold the lock while calling task.send (may block on internal queues).
+        lifecycleLock.lock()
+        guard isConnected, let task = webSocketTask else {
+            lifecycleLock.unlock()
+            return
+        }
         audioBytesSent += data.count
         audioChunkCount += 1
+        let chunkNum = audioChunkCount
+        let totalBytes = audioBytesSent
+        lifecycleLock.unlock()
 
-        if audioChunkCount <= 5 || audioChunkCount % 100 == 0 {
+        if chunkNum <= 5 || chunkNum % 100 == 0 {
             NSLog(
                 "[Cloud RT] Sending audio chunk #%d, size=%d, total=%d bytes",
-                audioChunkCount,
+                chunkNum,
                 data.count,
-                audioBytesSent
+                totalBytes
             )
         }
 
@@ -318,14 +333,15 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         receiveTask?.cancel()
         receiveTask = nil
 
-        if let task = webSocketTask {
-            task.cancel(with: .normalClosure, reason: nil)
-        }
-
+        lifecycleLock.lock()
+        let task = webSocketTask
         webSocketTask = nil
+        isConnected = false
+        lifecycleLock.unlock()
+
+        task?.cancel(with: .normalClosure, reason: nil)
         urlSession?.invalidateAndCancel()
         urlSession = nil
-        isConnected = false
         onConnectionStatusChanged?(.disconnected)
 
         Log.transcription.info("Cloud RT: Disconnected")
@@ -380,7 +396,9 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         // Handle proxy_ready signal
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            json["type"] as? String == "proxy_ready" {
+            lifecycleLock.lock()
             proxyReady = true
+            lifecycleLock.unlock()
             NSLog("[Cloud RT] Received proxy_ready signal")
             return
         }
@@ -495,8 +513,12 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     /// - `401` from proxy on reconnect: refresh Supabase session silently, retry once.
     ///   Never loop — if the refresh fails the user is prompted to re-login.
     private func handleDisconnect(closeCode: URLSessionWebSocketTask.CloseCode? = nil) {
-        guard isConnected else { return }
+        // Atomic check-and-clear prevents two concurrent callers (receive loop error
+        // + URLSessionWebSocketDelegate) from both passing the guard and double-reconnecting.
+        lifecycleLock.lock()
+        guard isConnected else { lifecycleLock.unlock(); return }
         isConnected = false
+        lifecycleLock.unlock()
 
         // A refused WS upgrade (HTTP 402 usage limit) lands here via the receive
         // loop with no close code. Reconnecting is futile — the server will keep
@@ -576,7 +598,33 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         }
     }
 
-    private func makeTranslationPayload(from config: RealtimeTranslationConfig?) -> [String: Any]? {
+    static func makeConnectionConfig(
+        languageHints: [String],
+        strictLanguageHints: Bool,
+        audioConfig: RealtimeAudioConfig,
+        translationConfig: RealtimeTranslationConfig?,
+        enableSpeakerDiarization: Bool
+    ) -> [String: Any] {
+        var config: [String: Any] = [
+            "audio_format": audioConfig.audioFormat,
+            "sample_rate": audioConfig.sampleRate,
+            "num_channels": audioConfig.numChannels,
+            "enable_speaker_diarization": enableSpeakerDiarization
+        ]
+
+        if !languageHints.isEmpty {
+            config["language_hints"] = languageHints
+            config["language_hints_strict"] = strictLanguageHints || !languageHints.isEmpty
+        }
+
+        if let translationPayload = makeTranslationPayload(from: translationConfig) {
+            config["translation"] = translationPayload
+        }
+
+        return config
+    }
+
+    static func makeTranslationPayload(from config: RealtimeTranslationConfig?) -> [String: Any]? {
         guard let config else { return nil }
         switch config.mode {
         case let .twoWay(languageA, languageB):
@@ -585,10 +633,9 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                 "language_a": languageA,
                 "language_b": languageB
             ]
-        case let .oneWay(sourceLanguage, targetLanguage):
+        case let .oneWay(targetLanguage):
             return [
                 "type": "one_way",
-                "source_language": sourceLanguage,
                 "target_language": targetLanguage
             ]
         }

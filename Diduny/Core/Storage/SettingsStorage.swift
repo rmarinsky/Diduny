@@ -108,8 +108,17 @@ final class SettingsStorage {
         case whisperLanguage
         case whisperPrompt
         case favoriteLanguages
+        case manualSpeechLanguageHints
+        case disabledDetectedSpeechLanguageHints
         case translationLanguageA
         case translationLanguageB
+        case translationLanguagePairs
+        case defaultTranslationLanguagePairID
+        case lastUsedTranslationLanguagePairID
+        case translationTargetLanguages
+        case voiceTranslationTargetLanguage
+        case textTranslationSourceLanguage
+        case textTranslationTargetLanguage
         case translationProvider
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
@@ -784,23 +793,308 @@ final class SettingsStorage {
         set { defaults.set(newValue, forKey: Key.escapeCancelSaveAudio.rawValue) }
     }
 
-    // MARK: - Favorite Languages
+    // MARK: - Speech Languages
 
+    /// Legacy alias. New code should use `speechLanguageHints` for backend hints and
+    /// `manualSpeechLanguageHints` for user-managed languages.
     var favoriteLanguages: [String] {
-        get { defaults.stringArray(forKey: Key.favoriteLanguages.rawValue) ?? ["en", "uk"] }
-        set { defaults.set(newValue, forKey: Key.favoriteLanguages.rawValue) }
+        get {
+            Self.normalizedLanguageCodes(
+                defaults.stringArray(forKey: Key.favoriteLanguages.rawValue) ?? ["en", "uk"],
+                fallback: Self.defaultSpeechLanguageHints
+            )
+        }
+        set {
+            defaults.set(
+                Self.normalizedLanguageCodes(newValue, fallback: Self.defaultSpeechLanguageHints),
+                forKey: Key.favoriteLanguages.rawValue
+            )
+        }
     }
 
-    // MARK: - Translation Language Pair
+    var manualSpeechLanguageHints: [String] {
+        get {
+            if let stored = defaults.stringArray(forKey: Key.manualSpeechLanguageHints.rawValue) {
+                return Self.normalizedLanguageCodes(stored, fallback: [])
+            }
+            return favoriteLanguages
+        }
+        set {
+            defaults.set(
+                Self.normalizedLanguageCodes(newValue, fallback: []),
+                forKey: Key.manualSpeechLanguageHints.rawValue
+            )
+        }
+    }
 
+    var disabledDetectedSpeechLanguageHints: [String] {
+        get {
+            Self.normalizedLanguageCodes(
+                defaults.stringArray(forKey: Key.disabledDetectedSpeechLanguageHints.rawValue) ?? [],
+                fallback: []
+            )
+        }
+        set {
+            defaults.set(
+                Self.normalizedLanguageCodes(newValue, fallback: []),
+                forKey: Key.disabledDetectedSpeechLanguageHints.rawValue
+            )
+        }
+    }
+
+    var detectedSpeechLanguageHints: [String] {
+        KeyboardLanguageDetector.detectedLanguageCodes()
+    }
+
+    var speechLanguageHints: [String] {
+        effectiveSpeechLanguageHints()
+    }
+
+    func effectiveSpeechLanguageHints(detectedCodes: [String]? = nil) -> [String] {
+        let detected = Self.normalizedLanguageCodes(
+            detectedCodes ?? detectedSpeechLanguageHints,
+            fallback: []
+        )
+        let disabled = Set(disabledDetectedSpeechLanguageHints)
+        let enabledDetected = detected.filter { !disabled.contains($0) }
+        let combined = Self.normalizedLanguageCodes(
+            enabledDetected + manualSpeechLanguageHints,
+            fallback: []
+        )
+        return combined.isEmpty ? Self.defaultSpeechLanguageHints : combined
+    }
+
+    func setDetectedSpeechLanguage(_ code: String, enabled: Bool) {
+        guard let normalized = Self.normalizedLanguageCode(code) else { return }
+        var disabled = Set(disabledDetectedSpeechLanguageHints)
+        if enabled {
+            disabled.remove(normalized)
+        } else {
+            disabled.insert(normalized)
+        }
+        disabledDetectedSpeechLanguageHints = Array(disabled).sorted()
+    }
+
+    // MARK: - Translation Languages
+
+    /// Legacy two-way language A. Kept for compatibility with older settings.
     var translationLanguageA: String {
-        get { defaults.string(forKey: Key.translationLanguageA.rawValue) ?? "en" }
-        set { defaults.set(newValue, forKey: Key.translationLanguageA.rawValue) }
+        get { Self.normalizedLanguageCode(defaults.string(forKey: Key.translationLanguageA.rawValue)) ?? "en" }
+        set { defaults.set(Self.normalizedLanguageCode(newValue) ?? "en", forKey: Key.translationLanguageA.rawValue) }
     }
 
+    /// Legacy two-way language B. Kept for compatibility with older settings.
     var translationLanguageB: String {
-        get { defaults.string(forKey: Key.translationLanguageB.rawValue) ?? "uk" }
-        set { defaults.set(newValue, forKey: Key.translationLanguageB.rawValue) }
+        get { Self.normalizedLanguageCode(defaults.string(forKey: Key.translationLanguageB.rawValue)) ?? "uk" }
+        set { defaults.set(Self.normalizedLanguageCode(newValue) ?? "uk", forKey: Key.translationLanguageB.rawValue) }
+    }
+
+    var translationLanguagePairs: [TranslationLanguagePair] {
+        get {
+            if let data = defaults.data(forKey: Key.translationLanguagePairs.rawValue),
+               let decoded = try? JSONDecoder().decode([TranslationLanguagePair].self, from: data) {
+                let sanitized = Self.sanitizedTranslationPairs(decoded)
+                if !sanitized.isEmpty {
+                    return sanitized
+                }
+            }
+            return Self.sanitizedTranslationPairs([
+                TranslationLanguagePair(languageA: translationLanguageA, languageB: translationLanguageB)
+            ])
+        }
+        set {
+            let sanitized = Self.sanitizedTranslationPairs(newValue)
+            let pairsToStore = sanitized.isEmpty ? [Self.defaultTranslationPair] : sanitized
+            if let data = try? JSONEncoder().encode(pairsToStore) {
+                defaults.set(data, forKey: Key.translationLanguagePairs.rawValue)
+            }
+            if !pairsToStore.contains(where: { $0.id == defaultTranslationLanguagePairID }) {
+                defaultTranslationLanguagePairID = pairsToStore[0].id
+            }
+            if let lastID = lastUsedTranslationLanguagePairID,
+               !pairsToStore.contains(where: { $0.id == lastID }) {
+                lastUsedTranslationLanguagePairID = nil
+            }
+        }
+    }
+
+    var defaultTranslationLanguagePairID: String {
+        get {
+            let pairs = translationLanguagePairs
+            let stored = defaults.string(forKey: Key.defaultTranslationLanguagePairID.rawValue)
+            if let stored, pairs.contains(where: { $0.id == stored }) {
+                return stored
+            }
+            return pairs.first?.id ?? Self.defaultTranslationPair.id
+        }
+        set {
+            guard translationLanguagePairs.contains(where: { $0.id == newValue }) else { return }
+            defaults.set(newValue, forKey: Key.defaultTranslationLanguagePairID.rawValue)
+        }
+    }
+
+    var lastUsedTranslationLanguagePairID: String? {
+        get {
+            guard let stored = defaults.string(forKey: Key.lastUsedTranslationLanguagePairID.rawValue),
+                  translationLanguagePairs.contains(where: { $0.id == stored }) else {
+                return nil
+            }
+            return stored
+        }
+        set {
+            if let newValue,
+               translationLanguagePairs.contains(where: { $0.id == newValue }) {
+                defaults.set(newValue, forKey: Key.lastUsedTranslationLanguagePairID.rawValue)
+            } else {
+                defaults.removeObject(forKey: Key.lastUsedTranslationLanguagePairID.rawValue)
+            }
+        }
+    }
+
+    var defaultTranslationLanguagePair: TranslationLanguagePair {
+        translationLanguagePairs.first(where: { $0.id == defaultTranslationLanguagePairID })
+            ?? translationLanguagePairs.first
+            ?? Self.defaultTranslationPair
+    }
+
+    func resolveTranslationLanguagePair(currentKeyboardLanguage: String? = KeyboardLanguageDetector.currentLanguageCode())
+        -> TranslationLanguagePair {
+        let pairs = translationLanguagePairs
+        guard !pairs.isEmpty else { return Self.defaultTranslationPair }
+
+        if let currentKeyboardLanguage = Self.normalizedLanguageCode(currentKeyboardLanguage) {
+            let matching = pairs.filter { $0.contains(currentKeyboardLanguage) }
+            if matching.count == 1 {
+                return matching[0]
+            }
+            if matching.count > 1 {
+                if let defaultPair = matching.first(where: { $0.id == defaultTranslationLanguagePairID }) {
+                    return defaultPair
+                }
+                if let lastID = lastUsedTranslationLanguagePairID,
+                   let lastPair = matching.first(where: { $0.id == lastID }) {
+                    return lastPair
+                }
+                return matching[0]
+            }
+        }
+
+        return defaultTranslationLanguagePair
+    }
+
+    func markTranslationLanguagePairUsed(_ pair: TranslationLanguagePair) {
+        lastUsedTranslationLanguagePairID = pair.id
+    }
+
+    func translationLanguageHints(for pair: TranslationLanguagePair) -> [String] {
+        Self.normalizedLanguageCodes(
+            speechLanguageHints + pair.codes,
+            fallback: pair.codes
+        )
+    }
+
+    var translationTargetLanguages: [String] {
+        get {
+            if let stored = defaults.stringArray(forKey: Key.translationTargetLanguages.rawValue) {
+                let normalized = Self.normalizedLanguageCodes(stored)
+                return normalized.isEmpty ? Self.defaultTranslationTargets : normalized
+            }
+            return Self.normalizedLanguageCodes(
+                translationLanguagePairs.flatMap(\.codes) + manualSpeechLanguageHints
+            )
+        }
+        set {
+            let normalized = Self.normalizedLanguageCodes(newValue)
+            defaults.set(
+                normalized.isEmpty ? Self.defaultTranslationTargets : normalized,
+                forKey: Key.translationTargetLanguages.rawValue
+            )
+        }
+    }
+
+    var voiceTranslationTargetLanguage: String {
+        get {
+            let targets = translationTargetLanguages
+            let stored = defaults.string(forKey: Key.voiceTranslationTargetLanguage.rawValue)
+            if let stored = Self.normalizedLanguageCode(stored), targets.contains(stored) {
+                return stored
+            }
+            return defaultTranslationLanguagePair.languageB
+        }
+        set { setTranslationTargetLanguage(newValue, key: .voiceTranslationTargetLanguage) }
+    }
+
+    var textTranslationSourceLanguage: String {
+        get {
+            let stored = defaults.string(forKey: Key.textTranslationSourceLanguage.rawValue)
+            return Self.normalizedLanguageCode(stored, allowAuto: true) ?? "auto"
+        }
+        set {
+            defaults.set(
+                Self.normalizedLanguageCode(newValue, allowAuto: true) ?? "auto",
+                forKey: Key.textTranslationSourceLanguage.rawValue
+            )
+        }
+    }
+
+    var textTranslationTargetLanguage: String {
+        get {
+            let targets = translationTargetLanguages
+            let stored = defaults.string(forKey: Key.textTranslationTargetLanguage.rawValue)
+            if let stored = Self.normalizedLanguageCode(stored), targets.contains(stored) {
+                return stored
+            }
+            return voiceTranslationTargetLanguage
+        }
+        set { setTranslationTargetLanguage(newValue, key: .textTranslationTargetLanguage) }
+    }
+
+    private func setTranslationTargetLanguage(_ rawValue: String, key: Key) {
+        guard let language = Self.normalizedLanguageCode(rawValue) else { return }
+        if !translationTargetLanguages.contains(language) {
+            translationTargetLanguages = translationTargetLanguages + [language]
+        }
+        defaults.set(language, forKey: key.rawValue)
+    }
+
+    private static let defaultSpeechLanguageHints = ["en", "uk"]
+    private static let defaultTranslationPair = TranslationLanguagePair.defaultPair
+    private static let defaultTranslationTargets = ["uk", "en"]
+
+    static func normalizedLanguageCodes(
+        _ codes: [String],
+        allowAuto: Bool = false,
+        fallback: [String] = defaultTranslationTargets
+    ) -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+
+        for code in codes {
+            guard let normalized = normalizedLanguageCode(code, allowAuto: allowAuto),
+                  seen.insert(normalized).inserted
+            else { continue }
+            result.append(normalized)
+        }
+
+        return result.isEmpty ? fallback : result
+    }
+
+    static func normalizedLanguageCode(_ code: String?, allowAuto: Bool = false) -> String? {
+        SupportedLanguage.normalizedCode(code, allowAuto: allowAuto)
+    }
+
+    private static func sanitizedTranslationPairs(_ pairs: [TranslationLanguagePair]) -> [TranslationLanguagePair] {
+        var result: [TranslationLanguagePair] = []
+        var seen = Set<String>()
+
+        for pair in pairs {
+            guard pair.languageA != pair.languageB else { continue }
+            let key = [pair.languageA, pair.languageB].sorted().joined(separator: "-")
+            guard seen.insert(key).inserted else { continue }
+            result.append(pair)
+        }
+
+        return result
     }
 
     private static func normalizedFillerWords(_ words: [String]) -> [String] {

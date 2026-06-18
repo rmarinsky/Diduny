@@ -160,6 +160,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var translationRealtimeSessionEnabled: Bool = false
     var translationRealtimeConnectionError: String?
     var translationRealtimeConnectionTask: Task<Void, Never>?
+    var activeTranslationLanguagePair: TranslationLanguagePair?
+    var activeMeetingTranslationLanguagePair: TranslationLanguagePair?
+    var activeTranslationTargetLanguage: String?
+    var activeMeetingTranslationTargetLanguage: String?
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
         switch SettingsStorage.shared.effectiveTranscriptionProvider {
@@ -515,7 +519,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if self.appState.translationRecordingState == .recording {
                     self.showRecordingInfoDuringActiveRecording(
                         message: "Microphone disconnected",
-                        mode: .translation(languagePair: self.translationPairLabel),
+                        mode: .translation(targetLanguage: self.translationPairLabel),
                         duration: 2.0
                     )
                 } else if self.appState.recordingState == .recording {
@@ -593,7 +597,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            let translationMode: RecordingMode = .translation(languagePair: translationPairLabel)
+            let translationMode: RecordingMode = .translation(targetLanguage: translationPairLabel)
             if appState.translationRecordingState == .recording {
                 showFeedbackRecording(mode: translationMode)
                 return
@@ -695,7 +699,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .voice:
             .voice
         case .translation:
-            .translation(languagePair: translationPairLabel)
+            .translation(targetLanguage: translationPairLabel)
         case .meeting:
             .meeting
         case .meetingTranslation:
@@ -984,17 +988,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    var translationTargetLanguage: String {
+        activeTranslationLanguagePair?.languageB
+            ?? activeTranslationTargetLanguage
+            ?? SettingsStorage.shared.defaultTranslationLanguagePair.languageB
+    }
+
+    var translationTargetLabel: String {
+        translationTargetLanguage.uppercased()
+    }
+
+    var translationTargetDisplayName: String {
+        SupportedLanguage.language(for: translationTargetLanguage)?.name ?? translationTargetLabel
+    }
+
     var translationPairLabel: String {
-        let firstLanguage = SettingsStorage.shared.translationLanguageA.uppercased()
-        let secondLanguage = SettingsStorage.shared.translationLanguageB.uppercased()
-        return "\(firstLanguage) <-> \(secondLanguage)"
+        (activeTranslationLanguagePair ?? SettingsStorage.shared.defaultTranslationLanguagePair).displayLabel
     }
 
     func handleTranslationStateChange(_ state: RecordingState) {
         translationAutoResetTask?.cancel()
         handleStateChange(
             state,
-            mode: .translation(languagePair: translationPairLabel),
+            mode: .translation(targetLanguage: translationPairLabel),
             currentStateGetter: { self.appState.translationRecordingState },
             stateResetter: { self.appState.translationRecordingState = $0 },
             autoResetTaskSetter: { self.translationAutoResetTask = $0 },

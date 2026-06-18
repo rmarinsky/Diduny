@@ -131,7 +131,9 @@ final class RecordingQueueService {
         }
 
         do {
-            let audioData = try Data(contentsOf: audioURL)
+            let audioData = try await Task.detached(priority: .utility) {
+                try Data(contentsOf: audioURL, options: .mappedIfSafe)
+            }.value
 
             let provider = configuredProvider(for: item)
 
@@ -147,6 +149,7 @@ final class RecordingQueueService {
 
             let text: String
             let status: Recording.ProcessingStatus
+            let translationTargetLanguageCode: String?
             switch item.action {
             case .transcribe:
                 if provider == .cloud {
@@ -158,6 +161,7 @@ final class RecordingQueueService {
                     text = try await service.transcribe(audioData: audioData)
                 }
                 status = .transcribed
+                translationTargetLanguageCode = nil
             case .transcribeDiarize:
                 if provider == .cloud {
                     text = try await transcribeViaJobs(
@@ -168,13 +172,25 @@ final class RecordingQueueService {
                     text = try await service.transcribe(audioData: audioData)
                 }
                 status = .transcribed
+                translationTargetLanguageCode = nil
             case .translate:
-                if let lang = item.targetLanguage {
-                    text = try await service.translateAndTranscribe(audioData: audioData, targetLanguage: lang)
+                let targetLanguage: String
+                if let explicitTargetLanguage = item.targetLanguage {
+                    targetLanguage = explicitTargetLanguage
+                    text = try await service.translateAndTranscribe(
+                        audioData: audioData,
+                        targetLanguage: explicitTargetLanguage
+                    )
                 } else {
-                    text = try await service.translateAndTranscribe(audioData: audioData)
+                    let pair = SettingsStorage.shared.resolveTranslationLanguagePair()
+                    targetLanguage = provider == .local ? "en" : pair.languageB
+                    text = try await service.translateAndTranscribe(
+                        audioData: audioData,
+                        languagePair: pair
+                    )
                 }
                 status = .translated
+                translationTargetLanguageCode = targetLanguage
             }
 
             guard !Task.isCancelled else {
@@ -183,7 +199,13 @@ final class RecordingQueueService {
                 return
             }
 
-            storage.updateRecording(id: item.id, status: status, text: text, error: nil)
+            storage.updateRecording(
+                id: item.id,
+                status: status,
+                text: text,
+                error: nil,
+                translationTargetLanguageCode: translationTargetLanguageCode
+            )
             currentJobStatus = nil
             Log.app.info("Queue processed recording \(item.id): \(status.rawValue)")
         } catch is CancellationError {
@@ -212,9 +234,7 @@ final class RecordingQueueService {
     }
 
     private func buildCloudTranscriptionConfig(enableSpeakerDiarization: Bool) -> [String: Any] {
-        let hints = SettingsStorage.shared.favoriteLanguages
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        let hints = SettingsStorage.shared.speechLanguageHints
 
         var config: [String: Any] = ["mode": "transcribe"]
         if enableSpeakerDiarization {
@@ -222,6 +242,7 @@ final class RecordingQueueService {
         }
         if !hints.isEmpty {
             config["language_hints"] = hints
+            config["language_hints_strict"] = true
         }
         return config
     }
@@ -286,6 +307,14 @@ final class RecordingQueueService {
             }
             return nil
         case .local:
+            if item.action == .translate {
+                let targetLanguage = item.targetLanguage
+                    ?? SettingsStorage.shared.defaultTranslationLanguagePair.languageB
+                if targetLanguage != "en",
+                   item.targetLanguage != nil || !SettingsStorage.shared.defaultTranslationLanguagePair.contains("en") {
+                    return "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English."
+                }
+            }
             let modelName = item.whisperModelOverride ?? SettingsStorage.shared.selectedWhisperModel
             guard let model = WhisperModelManager.availableModels.first(where: { $0.name == modelName }),
                   WhisperModelManager.shared.isModelDownloaded(model)

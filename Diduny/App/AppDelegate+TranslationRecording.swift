@@ -80,6 +80,7 @@ extension AppDelegate {
     @objc func toggleTranslationRecording() {
         let translationRecordingState = appState.translationRecordingState
         Log.app.info("toggleTranslationRecording called, current state: \(translationRecordingState)")
+
         translationPipelineTask?.cancel()
         translationPipelineTask = Task {
             await self.performToggleTranslationRecording()
@@ -112,6 +113,9 @@ extension AppDelegate {
 
         let recordingStartTime = appState.translationRecordingStartTime
         let stopTime = Date()
+        let targetLanguage = activeTranslationTargetLanguage
+            ?? activeTranslationLanguagePair?.languageB
+            ?? SettingsStorage.shared.voiceTranslationTargetLanguage
 
         // Stop audio level piping
         audioLevelCancellable?.cancel()
@@ -132,7 +136,8 @@ extension AppDelegate {
                     audioData: audioData,
                     type: .translation,
                     duration: duration,
-                    sourceDevice: sourceDevice
+                    sourceDevice: sourceDevice,
+                    translationTargetLanguageCode: targetLanguage
                 )
                 Log.app.info("cancelTranslationRecording: audio saved after cancel")
             } catch {
@@ -164,6 +169,8 @@ extension AppDelegate {
             appState.translationRecordingState = .idle
             appState.translationRecordingStartTime = nil
             handleTranslationStateChange(.idle)
+            activeTranslationLanguagePair = nil
+            activeTranslationTargetLanguage = nil
         }
 
         Log.app.info("cancelTranslationRecording: END")
@@ -185,13 +192,20 @@ extension AppDelegate {
         await stopTranslationRecording()
     }
 
-    func startTranslationRecording() async {
+    func startTranslationRecording(languagePair requestedPair: TranslationLanguagePair? = nil) async {
         Log.app.info("startTranslationRecording: BEGIN")
 
         guard canStartRecording(kind: .translation) else {
             Log.app.info("startTranslationRecording: blocked by another active recording mode")
             return
         }
+
+        let pair = requestedPair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+        SettingsStorage.shared.markTranslationLanguagePairUsed(pair)
+        let targetLanguage = pair.languageB
+        activeTranslationLanguagePair = pair
+        activeTranslationTargetLanguage = targetLanguage
+        SettingsStorage.shared.voiceTranslationTargetLanguage = targetLanguage
 
         // Request microphone permission on-demand
         let micGranted = await PermissionManager.shared.ensureMicrophonePermission(context: .translation)
@@ -203,6 +217,20 @@ extension AppDelegate {
                 appState.errorMessage = "Microphone access required"
                 appState.translationRecordingState = .error
                 handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
+            }
+            return
+        }
+
+        if SettingsStorage.shared.effectiveTranslationProvider == .local, !pair.contains("en") {
+            Log.app.warning("startTranslationRecording: Local Whisper can translate only to English")
+            await MainActor.run {
+                appState.errorMessage = "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English."
+                appState.translationRecordingState = .error
+                handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
             return
         }
@@ -215,6 +243,8 @@ extension AppDelegate {
                     appState.errorMessage = "No Whisper model downloaded. Please download one in Settings."
                     appState.translationRecordingState = .error
                     handleTranslationStateChange(.error)
+                    activeTranslationLanguagePair = nil
+                    activeTranslationTargetLanguage = nil
                 }
                 return
             }
@@ -224,11 +254,13 @@ extension AppDelegate {
                     appState.errorMessage = WhisperError.modelDoesNotSupportTranslation.localizedDescription
                     appState.translationRecordingState = .error
                     handleTranslationStateChange(.error)
+                    activeTranslationLanguagePair = nil
+                    activeTranslationTargetLanguage = nil
                 }
                 return
             }
         }
-        Log.app.info("startTranslationRecording: Provider ready")
+        Log.app.info("startTranslationRecording: Provider ready, pair=\(pair.displayLabel)")
         translationRealtimeSessionEnabled = false
 
         // Resolve device (nil preference = System Default)
@@ -244,6 +276,8 @@ extension AppDelegate {
                 appState.errorMessage = "No microphone found. Please connect a microphone."
                 appState.translationRecordingState = .error
                 handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
             return
         }
@@ -287,6 +321,8 @@ extension AppDelegate {
                     ProcessInfo.processInfo.endActivity(token)
                     translationActivityToken = nil
                 }
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
                 return
             }
             await MainActor.run {
@@ -295,9 +331,9 @@ extension AppDelegate {
                 handleTranslationStateChange(.recording)
 
                 // Pipe audio level to the selected recording feedback surface.
-                let feedbackMode: RecordingMode = .translation(languagePair: translationPairLabel)
+                let feedbackMode: RecordingMode = .translation(targetLanguage: translationPairLabel)
                 audioLevelCancellable = audioRecorder.$audioLevel
-                    .receive(on: DispatchQueue.main)
+                    .removeDuplicates()
                     .sink { [weak self] level in
                         self?.updateRecordingFeedbackAudioLevel(level, mode: feedbackMode)
                     }
@@ -327,6 +363,8 @@ extension AppDelegate {
                 appState.translationRecordingState = .error
                 appState.translationRecordingStartTime = nil
                 handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
 
             return
@@ -347,6 +385,8 @@ extension AppDelegate {
                 appState.translationRecordingState = .error
                 appState.translationRecordingStartTime = nil
                 handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
             return
         }
@@ -374,6 +414,8 @@ extension AppDelegate {
 
         // Capture recording start time for duration calculation
         let recordingStartTime = appState.translationRecordingStartTime
+        let pair = activeTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+        let targetLanguage = activeTranslationTargetLanguage ?? pair.languageB
 
         // Capture stop time immediately for accurate duration
         let stopTime = Date()
@@ -406,10 +448,16 @@ extension AppDelegate {
                 Log.app.info("stopTranslationRecording: Using realtime translation (\(rawText.count) chars)")
             } else if SettingsStorage.shared.effectiveTranslationProvider == .local {
                 // Local Whisper — no WebSocket, transcribe from audio
-                rawText = try await whisperTranscriptionService.translateAndTranscribe(audioData: audioData)
+                rawText = try await whisperTranscriptionService.translateAndTranscribe(
+                    audioData: audioData,
+                    languagePair: pair
+                )
                 Log.app.info("stopTranslationRecording: Local Whisper translation (\(rawText.count) chars)")
             } else {
-                rawText = try await transcriptionService.translateAndTranscribe(audioData: audioData)
+                rawText = try await transcriptionService.translateAndTranscribe(
+                    audioData: audioData,
+                    languagePair: pair
+                )
                 Log.app.info("stopTranslationRecording: HTTP cloud translation (\(rawText.count) chars)")
             }
             let cleanedRawText: String
@@ -458,6 +506,8 @@ extension AppDelegate {
                 appState.translationRecordingState = .success
                 appState.translationRecordingStartTime = nil
                 handleTranslationStateChange(.success)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
             Log.app.info("stopTranslationRecording: SUCCESS")
 
@@ -470,7 +520,8 @@ extension AppDelegate {
                 type: .translation,
                 duration: duration,
                 transcriptionText: text,
-                sourceDevice: sourceDevice
+                sourceDevice: sourceDevice,
+                translationTargetLanguageCode: targetLanguage
             )
 
             if SettingsStorage.shared.playSoundOnCompletion {
@@ -487,6 +538,8 @@ extension AppDelegate {
                 appState.translationRecordingState = .idle
                 appState.translationRecordingStartTime = nil
                 handleTranslationStateChange(.idle)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
             return
         } catch {
@@ -504,7 +557,8 @@ extension AppDelegate {
                     audioData: audioData,
                     type: .translation,
                     duration: duration,
-                    sourceDevice: sourceDevice
+                    sourceDevice: sourceDevice,
+                    translationTargetLanguageCode: targetLanguage
                 )
                 RecoveryStateManager.shared.clearState()
             }
@@ -523,6 +577,8 @@ extension AppDelegate {
                 appState.translationRecordingState = .error
                 appState.translationRecordingStartTime = nil
                 handleTranslationStateChange(.error)
+                activeTranslationLanguagePair = nil
+                activeTranslationTargetLanguage = nil
             }
         }
 
@@ -545,8 +601,8 @@ extension AppDelegate {
             return
         }
 
-        let pair = translationLanguagePair()
-        let feedbackMode: RecordingMode = .translation(languagePair: translationPairLabel)
+        let pair = activeTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+        let feedbackMode: RecordingMode = .translation(targetLanguage: translationPairLabel)
         let accumulator = RealtimeTranslationAccumulator()
         translationRealtimeAccumulator = accumulator
 
@@ -592,9 +648,10 @@ extension AppDelegate {
         // Connect WebSocket in background — don't block recording start
         translationRealtimeConnectionTask = Task {
             do {
+                let languageHints = SettingsStorage.shared.translationLanguageHints(for: pair)
                 try await rtService.connect(
-                    languageHints: [pair.languageA, pair.languageB],
-                    strictLanguageHints: true,
+                    languageHints: languageHints,
+                    strictLanguageHints: !languageHints.isEmpty,
                     audioConfig: .defaultPCM16kMono,
                     translationConfig: RealtimeTranslationConfig(
                         mode: .twoWay(languageA: pair.languageA, languageB: pair.languageB)
@@ -684,13 +741,6 @@ extension AppDelegate {
         )
     }
 
-    private func translationLanguagePair() -> (languageA: String, languageB: String) {
-        (
-            SettingsStorage.shared.translationLanguageA,
-            SettingsStorage.shared.translationLanguageB
-        )
-    }
-
     // MARK: - Escape Cancel Handler
 
     private func setupTranslationEscapeCancelHandler() {
@@ -704,7 +754,7 @@ extension AppDelegate {
             guard let self else { return }
             self.showRecordingInfoDuringActiveRecording(
                 message: SettingsStorage.shared.escapeCancelRepeatHint(afterPressCount: pressCount),
-                mode: .translation(languagePair: translationPairLabel),
+                mode: .translation(targetLanguage: translationPairLabel),
                 duration: 1.5
             )
         }
@@ -718,7 +768,7 @@ extension AppDelegate {
                 let message = shouldSaveAudio ? "Recording cancelled and saved" : "Recording cancelled"
                 self.showRecordingFeedbackInfo(
                     message: message,
-                    mode: .translation(languagePair: self.translationPairLabel)
+                    mode: .translation(targetLanguage: self.translationPairLabel)
                 )
             }
         }

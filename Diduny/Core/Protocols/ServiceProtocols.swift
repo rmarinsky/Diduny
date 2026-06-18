@@ -21,6 +21,7 @@ protocol TranscriptionServiceProtocol {
     func transcribe(audioData: Data) async throws -> String
     func translateAndTranscribe(audioData: Data) async throws -> String
     func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String
+    func translateAndTranscribe(audioData: Data, languagePair: TranslationLanguagePair) async throws -> String
 }
 
 // MARK: - Clipboard Service Protocol
