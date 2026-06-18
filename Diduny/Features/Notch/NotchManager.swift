@@ -14,7 +14,7 @@ enum NotchState: Equatable {
 
 enum RecordingMode: Equatable {
     case voice
-    case translation(languagePair: String = "EN <-> UK")
+    case translation(targetLanguage: String = "EN <-> UK")
     case meeting
     case meetingTranslation
     case fileTranscription
