@@ -215,17 +215,24 @@ struct KeyboardLanguageDetector {
     }
 
     static func detectedLanguages() -> [DetectedLanguage] {
-        selectableInputSources().flatMap { source -> [DetectedLanguage] in
-            let id = stringProperty(source, key: kTISPropertyInputSourceID) ?? ""
-            let name = stringProperty(source, key: kTISPropertyLocalizedName) ?? id
-            let languages = stringArrayProperty(source, key: kTISPropertyInputSourceLanguages)
-            return languageCodes(
-                inputSourceLanguages: languages,
-                inputSourceID: id,
-                localizedName: name
-            ).map { DetectedLanguage(code: $0, sourceName: name, sourceID: id) }
+        // Text Input Source APIs (TISCreateInputSourceList) must run on the main
+        // thread. On macOS 26 they assert the dispatch queue and hard-crash when
+        // called off-main, which happens because this is reached from background
+        // transcription Tasks. Hop to main so every caller is safe regardless of
+        // the thread it runs on.
+        runOnMainThread {
+            selectableInputSources().flatMap { source -> [DetectedLanguage] in
+                let id = stringProperty(source, key: kTISPropertyInputSourceID) ?? ""
+                let name = stringProperty(source, key: kTISPropertyLocalizedName) ?? id
+                let languages = stringArrayProperty(source, key: kTISPropertyInputSourceLanguages)
+                return languageCodes(
+                    inputSourceLanguages: languages,
+                    inputSourceID: id,
+                    localizedName: name
+                ).map { DetectedLanguage(code: $0, sourceName: name, sourceID: id) }
+            }
+            .deduplicatedByCode()
         }
-        .deduplicatedByCode()
     }
 
     static func detectedLanguageCodes() -> [String] {
@@ -233,11 +240,23 @@ struct KeyboardLanguageDetector {
     }
 
     static func currentLanguageCode() -> String? {
-        let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
-        let id = stringProperty(source, key: kTISPropertyInputSourceID) ?? ""
-        let name = stringProperty(source, key: kTISPropertyLocalizedName) ?? id
-        let languages = stringArrayProperty(source, key: kTISPropertyInputSourceLanguages)
-        return languageCodes(inputSourceLanguages: languages, inputSourceID: id, localizedName: name).first
+        // See note in detectedLanguages(): TIS APIs are main-thread only.
+        runOnMainThread {
+            let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+            let id = stringProperty(source, key: kTISPropertyInputSourceID) ?? ""
+            let name = stringProperty(source, key: kTISPropertyLocalizedName) ?? id
+            let languages = stringArrayProperty(source, key: kTISPropertyInputSourceLanguages)
+            return languageCodes(inputSourceLanguages: languages, inputSourceID: id, localizedName: name).first
+        }
+    }
+
+    /// Runs `work` on the main thread, blocking the caller until it completes.
+    /// Executes inline when already on the main thread to avoid a deadlock.
+    private static func runOnMainThread<T>(_ work: () -> T) -> T {
+        if Thread.isMainThread {
+            return work()
+        }
+        return DispatchQueue.main.sync(execute: work)
     }
 
     static func languageCodes(
