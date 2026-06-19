@@ -533,6 +533,9 @@ struct ShortcutsSettingsView: View {
             }
             .frame(width: width, height: 18, alignment: .center)
             .contentShape(Rectangle())
+            // The settings window is movable-by-background; without this, dragging
+            // the custom slider drags the whole window instead of the knob.
+            .background(WindowDragBlocker())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
@@ -830,4 +833,20 @@ extension Notification.Name {
 #Preview {
     ShortcutsSettingsView()
         .frame(width: 759, height: 666)
+}
+
+/// Marks its region as non-window-draggable. The settings window uses
+/// `isMovableByWindowBackground = true`, and SwiftUI shapes leave
+/// `mouseDownCanMoveWindow == true`, so dragging a custom control (e.g. the
+/// hold-delay slider) would drag the whole window. Placed as a `.background`,
+/// this reports the region as non-draggable while passing mouse events through
+/// to the SwiftUI gesture above it.
+private struct WindowDragBlocker: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { BlockerView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class BlockerView: NSView {
+        override var mouseDownCanMoveWindow: Bool { false }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
 }
