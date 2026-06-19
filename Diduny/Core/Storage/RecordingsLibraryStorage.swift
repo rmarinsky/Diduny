@@ -337,6 +337,7 @@ final class RecordingsLibraryStorage {
                 processedAt: recording.processedAt,
                 chapters: recording.chapters,
                 sourceDevice: recording.sourceDevice,
+                translationTargetLanguageCode: recording.translationTargetLanguageCode,
                 recoverySource: recording.recoverySource
             )
             saveMetadata()
