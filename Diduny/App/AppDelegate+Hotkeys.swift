@@ -14,6 +14,14 @@ extension AppDelegate {
             self?.toggleTranslationRecording()
         }
 
+        hotkeyService.registerMeetingHotkey { [weak self] in
+            self?.toggleMeetingRecording()
+        }
+
+        hotkeyService.registerMeetingTranslationHotkey { [weak self] in
+            self?.toggleMeetingTranslationRecording()
+        }
+
         hotkeyService.registerHistoryPaletteHotkey {
             HistoryPaletteWindowController.shared.toggle()
         }

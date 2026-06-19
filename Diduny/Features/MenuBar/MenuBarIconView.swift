@@ -4,11 +4,16 @@ struct MenuBarIconView: View {
     @Environment(AppState.self) var appState
 
     var body: some View {
-        Image(systemName: iconName)
-            .font(.system(size: 14, weight: .regular))
+        if let iconName = statusIconName {
+            Image(systemName: iconName)
+                .font(.system(size: 14, weight: .regular))
+        } else {
+            Image("MenuBarIcon")
+                .renderingMode(.original)
+        }
     }
 
-    private var iconName: String {
+    private var statusIconName: String? {
         // Meeting translation takes priority
         if appState.meetingTranslationRecordingState == .recording { return "globe" }
         if appState.meetingTranslationRecordingState == .processing { return "waveform" }
@@ -34,7 +39,7 @@ struct MenuBarIconView: View {
             } else if appState.meetingTranslationRecordingState == .error || appState.meetingRecordingState == .error {
                 return "xmark"
             }
-            return "mic"
+            return nil
         case .recording: return "waveform.badge.mic"
         case .processing: return "waveform"
         case .success: return "checkmark"

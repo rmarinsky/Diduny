@@ -3,9 +3,6 @@ import SwiftUI
 struct LiveTranscriptView: View {
     let store: LiveTranscriptStore
 
-    @State private var recordingDuration: TimeInterval = 0
-    @State private var timer: Timer?
-
     private let speakerColors: [Color] = [
         Color("BrandAccentDeep"), .green, .orange, .brown, .pink, .teal, .cyan, .mint
     ]
@@ -19,8 +16,6 @@ struct LiveTranscriptView: View {
             footerBar
         }
         .frame(minWidth: 500, idealWidth: 500, minHeight: 500)
-        .onAppear { seedDurationFromRecordingStart(); startTimer() }
-        .onDisappear { stopTimer() }
     }
 
     // MARK: - Header
@@ -46,9 +41,7 @@ struct LiveTranscriptView: View {
             Spacer()
 
             if store.isActive {
-                Text(formatDuration(recordingDuration))
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                LiveTranscriptElapsedView(startedAt: store.createdAt)
             }
 
             connectionIndicator
@@ -214,33 +207,6 @@ struct LiveTranscriptView: View {
         return speakerColors[abs(index) % speakerColors.count]
     }
 
-    private func formatDuration(_ duration: TimeInterval) -> String {
-        let hours = Int(duration) / 3600
-        let minutes = (Int(duration) % 3600) / 60
-        let seconds = Int(duration) % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%02d:%02d", minutes, seconds)
-    }
-
-    private func seedDurationFromRecordingStart() {
-        recordingDuration = max(0, Date().timeIntervalSince(store.createdAt))
-    }
-
-    private func startTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            Task { @MainActor in
-                recordingDuration += 1
-            }
-        }
-    }
-
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
-    }
-
     private func saveTranscript() {
         let text = store.finalTranscriptText
         guard !text.isEmpty else { return }
@@ -252,5 +218,29 @@ struct LiveTranscriptView: View {
         if panel.runModal() == .OK, let url = panel.url {
             try? text.write(to: url, atomically: true, encoding: .utf8)
         }
+    }
+}
+
+// Isolated leaf so only this view re-evaluates every second; the parent body is not re-invoked.
+private struct LiveTranscriptElapsedView: View {
+    let startedAt: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: startedAt, by: 1)) { context in
+            Text(formatDuration(context.date.timeIntervalSince(startedAt)))
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let total = Int(max(0, duration))
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let seconds = total % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }

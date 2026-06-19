@@ -164,7 +164,7 @@ struct RealtimeAudioConfig: Equatable {
 struct RealtimeTranslationConfig: Equatable {
     enum Mode: Equatable {
         case twoWay(languageA: String, languageB: String)
-        case oneWay(sourceLanguage: String, targetLanguage: String)
+        case oneWay(targetLanguage: String)
     }
 
     let mode: Mode

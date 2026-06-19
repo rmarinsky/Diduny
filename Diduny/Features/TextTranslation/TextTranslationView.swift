@@ -37,25 +37,27 @@ private struct TranslationResponse: Decodable {
 final class TextTranslationViewModel: ObservableObject {
     @Published var sourceText: String
     @Published var translatedText: String = ""
+    @Published var sourceLanguageCode: String
     @Published var targetLanguageCode: String
     @Published var detectedLanguageName: String = ""
+    @Published var detectedLanguageCode: String?
     @Published var isTranslating: Bool = false
     @Published var errorMessage: String?
     @Published var showCopiedConfirmation: Bool = false
 
     private var translationTask: Task<Void, Never>?
+    private var copiedConfirmationTask: Task<Void, Never>?
 
     deinit {
         translationTask?.cancel()
+        copiedConfirmationTask?.cancel()
     }
 
     init(sourceText: String) {
         self.sourceText = sourceText
-
-        // Detect source language and resolve target
-        let detectedCode = Self.detectLanguageCode(for: sourceText)
-        detectedLanguageName = Self.languageDisplayName(for: detectedCode)
-        targetLanguageCode = Self.resolveTargetLanguage(sourceCode: detectedCode)
+        sourceLanguageCode = SettingsStorage.shared.textTranslationSourceLanguage
+        targetLanguageCode = SettingsStorage.shared.textTranslationTargetLanguage
+        updateDetectedLanguage()
     }
 
     func translate() {
@@ -72,6 +74,7 @@ final class TextTranslationViewModel: ObservableObject {
             do {
                 let result = try await Self.requestTranslation(
                     sourceText: self.sourceText,
+                    sourceLanguage: self.sourceLanguageCode,
                     targetLanguage: self.targetLanguageCode
                 )
                 guard !Task.isCancelled else { return }
@@ -79,15 +82,7 @@ final class TextTranslationViewModel: ObservableObject {
                 self.isTranslating = false
 
                 // Auto-copy to clipboard
-                ClipboardService.shared.copy(text: result)
-                self.showCopiedConfirmation = true
-
-                // Hide confirmation after a delay
-                Task {
-                    try? await Task.sleep(for: .seconds(2))
-                    guard !Task.isCancelled else { return }
-                    self.showCopiedConfirmation = false
-                }
+                self.copyTranslation()
             } catch is CancellationError {
                 self.isTranslating = false
             } catch {
@@ -99,7 +94,55 @@ final class TextTranslationViewModel: ObservableObject {
 
     func updateDetectedLanguage() {
         let detectedCode = Self.detectLanguageCode(for: sourceText)
+        detectedLanguageCode = SettingsStorage.normalizedLanguageCode(detectedCode)
         detectedLanguageName = Self.languageDisplayName(for: detectedCode)
+    }
+
+    func persistSourceLanguage() {
+        SettingsStorage.shared.textTranslationSourceLanguage = sourceLanguageCode
+    }
+
+    func persistTargetLanguage() {
+        SettingsStorage.shared.textTranslationTargetLanguage = targetLanguageCode
+    }
+
+    func copyTranslation() {
+        guard !translatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        ClipboardService.shared.copy(text: translatedText)
+        showCopiedConfirmation = true
+        copiedConfirmationTask?.cancel()
+        copiedConfirmationTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.showCopiedConfirmation = false
+        }
+    }
+
+    var canSwapLanguagesAndText: Bool {
+        effectiveSourceLanguageCode != nil
+            && !translatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func swapLanguagesAndText() {
+        guard let sourceTarget = effectiveSourceLanguageCode else { return }
+
+        let previousSourceText = sourceText
+        sourceText = translatedText
+        translatedText = previousSourceText
+
+        let previousTarget = targetLanguageCode
+        sourceLanguageCode = previousTarget
+        targetLanguageCode = sourceTarget
+        persistSourceLanguage()
+        persistTargetLanguage()
+        updateDetectedLanguage()
+    }
+
+    private var effectiveSourceLanguageCode: String? {
+        if sourceLanguageCode == "auto" {
+            return detectedLanguageCode
+        }
+        return SettingsStorage.normalizedLanguageCode(sourceLanguageCode)
     }
 
     // MARK: - Language Detection
@@ -117,22 +160,13 @@ final class TextTranslationViewModel: ObservableObject {
             ?? code.uppercased()
     }
 
-    private static func resolveTargetLanguage(sourceCode: String?) -> String {
-        let favoriteLanguages = SettingsStorage.shared.favoriteLanguages.filter { !$0.isEmpty }
-
-        switch sourceCode {
-        case "uk":
-            return favoriteLanguages.first(where: { $0 != "uk" }) ?? "en"
-        case "en":
-            return favoriteLanguages.first(where: { $0 != "en" }) ?? "uk"
-        default:
-            return favoriteLanguages.first ?? "uk"
-        }
-    }
-
     // MARK: - Translation API
 
-    private static func requestTranslation(sourceText: String, targetLanguage: String) async throws -> String {
+    private static func requestTranslation(
+        sourceText: String,
+        sourceLanguage: String,
+        targetLanguage: String
+    ) async throws -> String {
         let settings = SettingsStorage.shared
         let proxyBase = settings.proxyBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let translateURL = "\(proxyBase)/api/v1/translations"
@@ -144,7 +178,7 @@ final class TextTranslationViewModel: ObservableObject {
         components.queryItems = [
             URLQueryItem(name: "q", value: sourceText),
             URLQueryItem(name: "tl", value: targetLanguage),
-            URLQueryItem(name: "sl", value: "auto"),
+            URLQueryItem(name: "sl", value: normalizedSourceLanguage(sourceLanguage)),
         ]
 
         guard let url = components.url else {
@@ -181,6 +215,10 @@ final class TextTranslationViewModel: ObservableObject {
         return translatedText
     }
 
+    private static func normalizedSourceLanguage(_ code: String) -> String {
+        if code == "auto" { return "auto" }
+        return SettingsStorage.normalizedLanguageCode(code) ?? "auto"
+    }
 }
 
 // MARK: - View
@@ -190,14 +228,16 @@ struct TextTranslationView: View {
     var onClose: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 14) {
+            languageControls
+
             // Source text
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Source")
                         .font(.headline)
 
-                    if !viewModel.detectedLanguageName.isEmpty {
+                    if viewModel.sourceLanguageCode == "auto", !viewModel.detectedLanguageName.isEmpty {
                         Text(viewModel.detectedLanguageName)
                             .font(.caption)
                             .foregroundColor(Color("BrandAccentDeep"))
@@ -221,32 +261,6 @@ struct TextTranslationView: View {
                     }
             }
 
-            // Target language + Translate button
-            HStack(spacing: 12) {
-                Picker("To:", selection: $viewModel.targetLanguageCode) {
-                    ForEach(SupportedLanguage.allLanguages) { language in
-                        Text(language.name).tag(language.code)
-                    }
-                }
-                .frame(maxWidth: 200)
-
-                Spacer()
-
-                if viewModel.isTranslating {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-
-                Button(action: viewModel.translate) {
-                    Text("Translate")
-                        .frame(minWidth: 80)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Color("BrandAccentDeep"))
-                .keyboardShortcut(.return, modifiers: .command)
-                .disabled(viewModel.isTranslating || viewModel.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-
             // Translation result
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -261,9 +275,16 @@ struct TextTranslationView: View {
                             .foregroundColor(.secondary)
                             .transition(.opacity)
                     }
+
+                    Button {
+                        viewModel.copyTranslation()
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                    .disabled(viewModel.translatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
 
-                TextEditor(text: .constant(viewModel.translatedText))
+                TextEditor(text: $viewModel.translatedText)
                     .font(.body)
                     .frame(minHeight: 80, maxHeight: 120)
                     .scrollContentBackground(.hidden)
@@ -279,7 +300,70 @@ struct TextTranslationView: View {
             }
         }
         .padding(20)
-        .frame(width: 480, height: 400)
+        .frame(width: 540, height: 450)
         .animation(.easeInOut(duration: 0.2), value: viewModel.showCopiedConfirmation)
+    }
+
+    private var languageControls: some View {
+        HStack(spacing: 10) {
+            Picker("From:", selection: $viewModel.sourceLanguageCode) {
+                Text("Auto").tag("auto")
+                ForEach(SupportedLanguage.cloudLanguages) { language in
+                    Text(language.name).tag(language.code)
+                }
+            }
+            .frame(maxWidth: 190)
+            .onChange(of: viewModel.sourceLanguageCode) { _, _ in
+                viewModel.persistSourceLanguage()
+            }
+
+            Button {
+                viewModel.swapLanguagesAndText()
+            } label: {
+                Image(systemName: "arrow.left.arrow.right")
+                    .frame(width: 18, height: 18)
+            }
+            .buttonStyle(.bordered)
+            .help("Swap languages and text")
+            .disabled(!viewModel.canSwapLanguagesAndText)
+
+            Picker("To:", selection: $viewModel.targetLanguageCode) {
+                ForEach(targetLanguages) { language in
+                    Text(language.name).tag(language.code)
+                }
+            }
+            .frame(maxWidth: 190)
+            .onChange(of: viewModel.targetLanguageCode) { _, _ in
+                viewModel.persistTargetLanguage()
+            }
+
+            Spacer(minLength: 0)
+
+            if viewModel.isTranslating {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+            Button(action: viewModel.translate) {
+                Text("Translate")
+                    .frame(minWidth: 80)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color("BrandAccentDeep"))
+            .keyboardShortcut(.return, modifiers: .command)
+            .disabled(viewModel.isTranslating || viewModel.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+
+    private var targetLanguages: [SupportedLanguage] {
+        var languages = SettingsStorage.shared.translationTargetLanguages.compactMap {
+            SupportedLanguage.language(for: $0)
+        }
+        if !languages.contains(where: { $0.code == viewModel.targetLanguageCode }),
+           let selected = SupportedLanguage.language(for: viewModel.targetLanguageCode)
+        {
+            languages.insert(selected, at: 0)
+        }
+        return languages.isEmpty ? SupportedLanguage.cloudLanguages : languages
     }
 }

@@ -7,45 +7,40 @@ struct LiveDictationOverlayView: View {
     private static let transcriptBottomID = "transcript-bottom"
 
     var body: some View {
-        TimelineView(.periodic(from: store.startedAt, by: 1)) { timeline in
-            HStack(spacing: 12) {
-                statusIcon
+        HStack(spacing: 12) {
+            OverlayStatusIcon(store: store, statusColor: statusColor, iconName: iconName)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        Text(store.title)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(store.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
 
-                        Text(store.statusText)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(statusColor)
-                            .lineLimit(1)
+                    Text(store.statusText)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(statusColor)
+                        .lineLimit(1)
 
-                        Spacer(minLength: 8)
+                    Spacer(minLength: 8)
 
-                        Text(elapsedText(at: timeline.date))
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    transcriptView
+                    ElapsedTimeLabel(startedAt: store.startedAt)
                 }
 
-                controls
+                transcriptView
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(width: 560, height: 96)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.08))
-            }
-            .shadow(color: .black.opacity(0.18), radius: 20, y: 8)
+
+            controls
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(width: 560, height: 96)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08))
+        }
+        .shadow(color: .black.opacity(0.18), radius: 20, y: 8)
     }
 
     private var displayText: String {
@@ -89,24 +84,6 @@ struct LiveDictationOverlayView: View {
                 proxy.scrollTo(Self.transcriptBottomID, anchor: .bottom)
             }
         }
-    }
-
-    private var statusIcon: some View {
-        ZStack {
-            Circle()
-                .fill(statusColor.opacity(0.14))
-                .frame(width: 38, height: 38)
-
-            if store.phase == .recording {
-                LiveAudioMeter(level: store.audioLevel, color: statusColor)
-                    .frame(width: 26, height: 18)
-            } else {
-                Image(systemName: iconName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(statusColor)
-            }
-        }
-        .frame(width: 38, height: 38)
     }
 
     private var controls: some View {
@@ -161,12 +138,49 @@ struct LiveDictationOverlayView: View {
             store.mode.icon
         }
     }
+}
+
+// Isolated leaf so only this small view re-evaluates when audioLevel changes (~25/sec).
+private struct OverlayStatusIcon: View {
+    let store: LiveDictationOverlayStore
+    let statusColor: Color
+    let iconName: String
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(statusColor.opacity(0.14))
+                .frame(width: 38, height: 38)
+
+            if store.phase == .recording {
+                LiveAudioMeter(level: store.audioLevel, color: statusColor)
+                    .frame(width: 26, height: 18)
+            } else {
+                Image(systemName: iconName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(statusColor)
+            }
+        }
+        .frame(width: 38, height: 38)
+    }
+}
+
+// Isolated leaf so only this view re-evaluates every second.
+private struct ElapsedTimeLabel: View {
+    let startedAt: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: startedAt, by: 1)) { timeline in
+            Text(elapsedText(at: timeline.date))
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
 
     private func elapsedText(at date: Date) -> String {
-        let elapsed = max(0, Int(date.timeIntervalSince(store.startedAt)))
-        let minutes = elapsed / 60
-        let seconds = elapsed % 60
-        return String(format: "%d:%02d", minutes, seconds)
+        let elapsed = max(0, Int(date.timeIntervalSince(startedAt)))
+        return String(format: "%d:%02d", elapsed / 60, elapsed % 60)
     }
 }
 

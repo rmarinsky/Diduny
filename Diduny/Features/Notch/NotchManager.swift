@@ -22,7 +22,7 @@ enum RecordingMode: Equatable {
     var label: String {
         switch self {
         case .voice: "Recording..."
-        case let .translation(pair): "Recording (\(pair))..."
+        case let .translation(targetLanguage): "Recording -> \(targetLanguage)..."
         case .meeting: "Meeting Recording..."
         case .meetingTranslation: "Meeting Translation..."
         case .fileTranscription: "Transcribing File..."

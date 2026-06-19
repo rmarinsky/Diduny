@@ -11,7 +11,7 @@ struct NotchCompactLeadingView: View {
             case let .recording(mode):
                 HStack(spacing: 6) {
                     RecordingCompactView(mode: mode)
-                    AudioLevelView(level: manager.audioLevel)
+                    NotchAudioMeterView(manager: manager)
                 }
 
             case let .processing(mode):
@@ -137,6 +137,15 @@ private struct PulsingDotView: View {
                     isPulsing = true
                 }
             }
+    }
+}
+
+// Isolated leaf so only this view re-evaluates when audioLevel changes (~25/sec).
+private struct NotchAudioMeterView: View {
+    var manager: NotchManager
+
+    var body: some View {
+        AudioLevelView(level: manager.audioLevel)
     }
 }
 
