@@ -26,6 +26,8 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     private var configurationObserver: NSObjectProtocol?
     private var realtimeAudioStreamer: RealtimeAudioStreamer?
     private var activeRecordingFormat: AVAudioFormat?
+    private nonisolated let _audioLevelBox = OSAllocatedUnfairLock<Float>(initialState: 0)
+    private var audioLevelTimer: DispatchSourceTimer?
     private(set) var currentRecordingDeviceInfo: RecordingDeviceInfo?
 
     /// Timeout for audio hardware operations (in seconds)
@@ -252,6 +254,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         }
 
         isRecording = true
+        startAudioLevelPolling()
         let updatedRecordingState = self.isRecording
         Log.audio.info("startRecording: END, isRecording=\(updatedRecordingState)")
     }
@@ -283,7 +286,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         audioFile = nil
 
         isRecording = false
-        audioLevel = 0
+        stopAudioLevelPolling()
         onDeviceLost = nil
         activeRecordingFormat = nil
 
@@ -327,7 +330,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
         realtimeAudioStreamer = nil
         isRecording = false
-        audioLevel = 0
+        stopAudioLevelPolling()
         currentRecordingDeviceInfo = nil
         onDeviceLost = nil
     }
@@ -376,7 +379,7 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         activeRecordingFormat = nil
         currentRecordingDeviceInfo = nil
         isRecording = false
-        audioLevel = 0
+        stopAudioLevelPolling()
         onDeviceLost = nil
 
         if removeFile, let url = recordingURL {
@@ -416,26 +419,40 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
     private nonisolated func updateAudioLevelFromBuffer(_ buffer: AVAudioPCMBuffer) {
         guard let channelData = buffer.floatChannelData?[0] else { return }
-
         let frameLength = Int(buffer.frameLength)
         guard frameLength > 0 else { return }
 
-        // Calculate RMS (Root Mean Square) for audio level
         var sum: Float = 0
         for i in 0 ..< frameLength {
             let sample = channelData[i]
             sum += sample * sample
         }
         let rms = sqrt(sum / Float(frameLength))
-
-        // Convert to dB and normalize
         let db = 20 * log10(max(rms, 0.0001))
         let minDb: Float = -60
         let normalizedLevel = max(0, min(1, (db - minDb) / -minDb))
 
-        Task { @MainActor [weak self] in
-            self?.audioLevel = normalizedLevel
+        _audioLevelBox.withLock { $0 = normalizedLevel }
+    }
+
+    private func startAudioLevelPolling() {
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: 1.0 / 25.0)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            let latest = self._audioLevelBox.withLock { $0 }
+            if abs(latest - self.audioLevel) > 0.01 {
+                self.audioLevel = latest
+            }
         }
+        timer.resume()
+        audioLevelTimer = timer
+    }
+
+    private func stopAudioLevelPolling() {
+        audioLevelTimer?.cancel()
+        audioLevelTimer = nil
+        audioLevel = 0
     }
 
     // MARK: - Timeout Helper

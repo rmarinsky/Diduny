@@ -4,6 +4,7 @@ import XCTest
 /// Tests for the RLR-M0 data-model additions:
 ///   - `RecoverySource` enum + `Recording.recoverySource` property
 ///   - `Recording.ProcessingStatus.partiallyRecovered` case
+///   - optional `Recording.translationTargetLanguageCode`
 ///
 /// The primary concerns are:
 ///   1. Backward compatibility — JSON written before M0 (no `recoverySource` key,
@@ -56,6 +57,12 @@ final class RecordingModelMigrationTests: XCTestCase {
         let recordings = try iso8601.decode([Recording].self, from: data)
         XCTAssertNil(recordings[0].recoverySource,
                      "recordings from before M0 must have recoverySource == nil")
+    }
+
+    func test_legacyJSON_translationTargetLanguageCodeIsNil() throws {
+        let data = try XCTUnwrap(legacyJSON.data(using: .utf8))
+        let recordings = try iso8601.decode([Recording].self, from: data)
+        XCTAssertNil(recordings[0].translationTargetLanguageCode)
     }
 
     func test_legacyJSON_originalFieldsIntact() throws {
@@ -138,6 +145,7 @@ final class RecordingModelMigrationTests: XCTestCase {
             processedAt: Date(timeIntervalSince1970: 1_700_200_120),
             chapters: nil,
             sourceDevice: nil,
+            translationTargetLanguageCode: "fr",
             recoverySource: nil
         )
 
@@ -145,6 +153,7 @@ final class RecordingModelMigrationTests: XCTestCase {
         let decoded = try iso8601.decode([Recording].self, from: data)[0]
 
         XCTAssertEqual(decoded.type, .meetingTranslation)
+        XCTAssertEqual(decoded.translationTargetLanguageCode, "fr")
         XCTAssertTrue(decoded.type.isMeetingLike)
         XCTAssertEqual(decoded.type.clipboardCopyBehavior, .raw)
         XCTAssertTrue(decoded.type.usesTranslatedStatusWhenSavedWithText)

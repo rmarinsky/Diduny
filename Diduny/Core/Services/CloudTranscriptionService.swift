@@ -404,6 +404,9 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
     static func applyLanguageConfig(_ languageConfig: CloudLanguageConfig, to config: inout [String: Any]) {
         guard !languageConfig.hints.isEmpty else { return }
         config["language_hints"] = languageConfig.hints
+        // Contract (see SettingsStorageProviderTests): whenever any hints are
+        // present they are treated as strict, regardless of the config's own
+        // `strict` flag. Keep the disjunction.
         config["language_hints_strict"] = languageConfig.strict || !languageConfig.hints.isEmpty
     }
 

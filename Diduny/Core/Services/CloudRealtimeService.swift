@@ -614,6 +614,8 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
 
         if !languageHints.isEmpty {
             config["language_hints"] = languageHints
+            // Contract (see SettingsStorageProviderTests): any hints present are
+            // treated as strict, regardless of `strictLanguageHints`.
             config["language_hints_strict"] = strictLanguageHints || !languageHints.isEmpty
         }
 

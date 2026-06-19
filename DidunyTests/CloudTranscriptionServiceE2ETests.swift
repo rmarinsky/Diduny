@@ -343,8 +343,9 @@ final class CloudTranscriptionServiceE2ETests: XCTestCase {
         let targetLanguage = env["DIDUNY_E2E_TARGET_LANGUAGE"] ?? "en"
 
         SettingsStorage.shared.proxyBaseURL = proxyBaseURL
-        SettingsStorage.shared.translationLanguageA = sourceLanguage
-        SettingsStorage.shared.translationLanguageB = targetLanguage
+        SettingsStorage.shared.favoriteLanguages = [sourceLanguage]
+        SettingsStorage.shared.translationTargetLanguages = [targetLanguage]
+        SettingsStorage.shared.voiceTranslationTargetLanguage = targetLanguage
 
         let audioData = try Data(contentsOf: URL(fileURLWithPath: audioPath))
         let text = try await CloudTranscriptionService()

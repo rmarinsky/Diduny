@@ -13,13 +13,8 @@ final class LiveTranscriptStore {
     var connectionStatus: RealtimeConnectionStatus = .disconnected
     private var forceNewSegmentForNextFinalToken = false
 
-    var wordCount: Int {
-        let finalWords = segments.reduce(0) { count, segment in
-            count + segment.text.split(separator: " ").count
-        }
-        let provisionalWords = provisionalText.split(separator: " ").count
-        return finalWords + provisionalWords
-    }
+    private(set) var wordCount: Int = 0
+    private var _provisionalWordCount: Int = 0
 
     var finalTranscriptText: String {
         var result = ""
@@ -44,17 +39,24 @@ final class LiveTranscriptStore {
             appendFinalToken(token)
         }
 
-        // Update provisional text
+        // Update provisional text and word count
         if !nonFinalTokens.isEmpty {
-            provisionalText = nonFinalTokens.map(\.text).joined()
+            let newText = nonFinalTokens.map(\.text).joined()
+            let newCount = newText.split(separator: " ").filter { !$0.isEmpty }.count
+            wordCount += newCount - _provisionalWordCount
+            _provisionalWordCount = newCount
+            provisionalText = newText
             provisionalSpeaker = nonFinalTokens.first?.speaker
         } else if !finalTokens.isEmpty {
+            wordCount -= _provisionalWordCount
+            _provisionalWordCount = 0
             provisionalText = ""
             provisionalSpeaker = nil
         }
     }
 
     private func appendFinalToken(_ token: RealtimeToken) {
+        wordCount += token.text.split(separator: " ").filter { !$0.isEmpty }.count
         if forceNewSegmentForNextFinalToken {
             forceNewSegmentForNextFinalToken = false
             let segment = TranscriptSegment(
@@ -93,6 +95,8 @@ final class LiveTranscriptStore {
         segments = []
         provisionalText = ""
         provisionalSpeaker = nil
+        wordCount = 0
+        _provisionalWordCount = 0
         isActive = false
         connectionStatus = .disconnected
         forceNewSegmentForNextFinalToken = false

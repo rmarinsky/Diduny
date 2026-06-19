@@ -1,4 +1,5 @@
 import AVFoundation
+import Accelerate
 import CoreAudio
 import CoreMedia
 import Foundation
@@ -30,6 +31,9 @@ final class SystemAudioCaptureService: NSObject {
     /// Serial queue for mixer buffer access — both SCStream callbacks and AVAudioEngine tap dispatch here.
     private let mixerQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.mixer")
     private let streamOutputQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.scstream.output")
+    /// Serial queue serializing all lifecycle-state reads/writes (isCapturing, stream, counters).
+    /// SCStream delegate prologues hop here before touching any lifecycle field.
+    private let controlQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.capture.control")
     private let maxSystemRecoveryAttempts = 3
     private let maxMicrophoneRecoveryAttempts = 3
     private let initialRecoveryDelay: TimeInterval = 0.75
@@ -91,6 +95,8 @@ final class SystemAudioCaptureService: NSObject {
 
     private var systemBuffer: [Float] = []
     private var micBuffer: [Float] = []
+    /// Preallocated scratch buffer for mixing — grows as needed, never shrinks.
+    private var mixScratchBuffer: [Float] = []
     /// Maximum single-source frames before flushing without counterpart.
     /// This bounds live-transcription latency when one source temporarily leads
     /// the other, while still giving the mixer a chance to align overlapping audio.
@@ -743,9 +749,13 @@ final class SystemAudioCaptureService: NSObject {
 
 extension SystemAudioCaptureService: SCStreamDelegate {
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        guard let activeStream = self.stream, activeStream === stream, isCapturing, !isStoppingCapture else { return }
-        Log.audio.error("Stream stopped with error: \(error)")
-        scheduleSystemRecovery(after: error)
+        controlQueue.async { [weak self] in
+            guard let self else { return }
+            guard let activeStream = self.stream, activeStream === stream,
+                  self.isCapturing, !self.isStoppingCapture else { return }
+            Log.audio.error("Stream stopped with error: \(error)")
+            self.scheduleSystemRecovery(after: error)
+        }
     }
 }
 
@@ -753,21 +763,36 @@ extension SystemAudioCaptureService: SCStreamDelegate {
 
 extension SystemAudioCaptureService: SCStreamOutput {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard let activeStream = self.stream, activeStream === stream, isCapturing, !isStoppingCapture else { return }
-        delegateCallCount += 1
-        if delegateCallCount <= 5 {
-            NSLog("[AudioCapture] delegate called #%d, type=%d (.screen=0, .audio=1)", delegateCallCount, type.rawValue)
+        // Audio samples must be extracted on the delivery queue before CMSampleBuffer is reclaimed.
+        let audioSamples: [Float]?
+        if type == .audio {
+            let extracted = extractFloatSamples(from: sampleBuffer)
+            guard let extracted, !extracted.isEmpty else { return }
+            audioSamples = extracted
+        } else {
+            audioSamples = nil
         }
-        guard type == .audio else { return }
 
-        let samples = extractFloatSamples(from: sampleBuffer)
-        guard let samples, !samples.isEmpty else { return }
+        controlQueue.async { [weak self] in
+            guard let self else { return }
+            guard let activeStream = self.stream, activeStream === stream,
+                  self.isCapturing, !self.isStoppingCapture else { return }
 
-        sampleCount += 1
+            self.delegateCallCount += 1
+            if self.delegateCallCount <= 5 {
+                NSLog("[AudioCapture] delegate called #%d, type=%d (.screen=0, .audio=1)",
+                      self.delegateCallCount, type.rawValue)
+            }
 
-        // Dispatch system audio to mixer queue
-        mixerQueue.async { [weak self] in
-            self?.handleSystemAudio(samples)
+            guard let samples = audioSamples else { return }
+            self.sampleCount += 1
+            if self.sampleCount <= 3 {
+                NSLog("[AudioCapture] system audio sample #%d, %d frames", self.sampleCount, samples.count)
+            }
+
+            self.mixerQueue.async { [weak self] in
+                self?.handleSystemAudio(samples)
+            }
         }
     }
 
@@ -792,9 +817,15 @@ extension SystemAudioCaptureService: SCStreamOutput {
         }
 
         if captureMicrophone {
-            let appliedSystemGain = systemGain
-            let gained = samples.map { max(-1, min(1, $0 * appliedSystemGain)) }
-            systemBuffer.append(contentsOf: gained)
+            let offset = systemBuffer.count
+            systemBuffer.append(contentsOf: samples)
+            var gain = systemGain
+            var lo: Float = -1.0, hi: Float = 1.0
+            systemBuffer.withUnsafeMutableBufferPointer { ptr in
+                let base = ptr.baseAddress!.advanced(by: offset)
+                vDSP_vsmul(base, 1, &gain, base, 1, vDSP_Length(samples.count))
+                vDSP_vclip(base, 1, &lo, &hi, base, 1, vDSP_Length(samples.count))
+            }
             drainMixedSamples()
             flushStaleBuffer()
         } else {
@@ -823,8 +854,15 @@ extension SystemAudioCaptureService: SCStreamOutput {
             checkSilence(source: .microphone)
         }
 
-        let gained = samples.map { max(-1, min(1, $0 * micGain)) }
-        micBuffer.append(contentsOf: gained)
+        let offset = micBuffer.count
+        micBuffer.append(contentsOf: samples)
+        var gain = micGain
+        var lo: Float = -1.0, hi: Float = 1.0
+        micBuffer.withUnsafeMutableBufferPointer { ptr in
+            let base = ptr.baseAddress!.advanced(by: offset)
+            vDSP_vsmul(base, 1, &gain, base, 1, vDSP_Length(samples.count))
+            vDSP_vclip(base, 1, &lo, &hi, base, 1, vDSP_Length(samples.count))
+        }
         drainMixedSamples()
         flushStaleBuffer()
     }
@@ -835,10 +873,19 @@ extension SystemAudioCaptureService: SCStreamOutput {
         let mixCount = min(systemBuffer.count, micBuffer.count)
         guard mixCount > 0 else { return }
 
-        var mixed = [Float](repeating: 0, count: mixCount)
-        for i in 0 ..< mixCount {
-            mixed[i] = max(-1.0, min(1.0, systemBuffer[i] + micBuffer[i]))
+        if mixScratchBuffer.count < mixCount {
+            mixScratchBuffer = [Float](repeating: 0, count: mixCount)
         }
+        var lo: Float = -1.0, hi: Float = 1.0
+        systemBuffer.withUnsafeBufferPointer { sysPtr in
+            micBuffer.withUnsafeBufferPointer { micPtr in
+                mixScratchBuffer.withUnsafeMutableBufferPointer { mixPtr in
+                    vDSP_vadd(sysPtr.baseAddress!, 1, micPtr.baseAddress!, 1, mixPtr.baseAddress!, 1, vDSP_Length(mixCount))
+                    vDSP_vclip(mixPtr.baseAddress!, 1, &lo, &hi, mixPtr.baseAddress!, 1, vDSP_Length(mixCount))
+                }
+            }
+        }
+        let mixed = Array(mixScratchBuffer.prefix(mixCount))
         systemBuffer.removeFirst(mixCount)
         micBuffer.removeFirst(mixCount)
 
@@ -1024,14 +1071,6 @@ extension SystemAudioCaptureService: SCStreamOutput {
         }
         guard frameCount > 0 else { return nil }
 
-        let currentSampleCount = sampleCount
-        if currentSampleCount <= 3 {
-            Log.audio
-                .info(
-                    "Audio sample \(currentSampleCount): frames=\(frameCount), sampleRate=\(asbd.pointee.mSampleRate), ch=\(channelCount), bits=\(bitsPerChannel), float=\(isFloat)"
-                )
-        }
-
         let rawPointer = UnsafeRawPointer(ptr)
 
         func sample(at offset: Int) -> Float {
@@ -1076,11 +1115,9 @@ extension SystemAudioCaptureService: SCStreamOutput {
 
     private func rms(_ samples: [Float]) -> Float {
         guard !samples.isEmpty else { return 0 }
-        var sum: Float = 0
-        for sample in samples {
-            sum += sample * sample
-        }
-        return sqrt(sum / Float(samples.count))
+        var result: Float = 0
+        vDSP_rmsqv(samples, 1, &result, vDSP_Length(samples.count))
+        return result
     }
 
     private func checkSilence(source: SilenceSource) {
