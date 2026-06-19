@@ -136,5 +136,17 @@
       length="8488584"
       type="application/octet-stream" />
   </item>
+      <item>
+    <title>Version 1.15.3</title>
+    <pubDate>Fri, 19 Jun 2026 08:56:44 +0000</pubDate>
+    <sparkle:version>92</sparkle:version>
+    <sparkle:shortVersionString>1.15.3</sparkle:shortVersionString>
+    <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+    <enclosure
+      url="https://github.com/rmarinsky/Diduny/releases/download/v1.15.3/Diduny-1.15.3.dmg"
+      sparkle:edSignature="20iZtwSGOgLZsnfugyr55/hqN4WetghXq6AnWmSNoaEHMHrGGFlgM2nENvUqExHdrWehUlMfa6KddwEC8tXyAA=="
+      length="8488674"
+      type="application/octet-stream" />
+  </item>
   </channel>
 </rss>
