@@ -250,7 +250,7 @@ final class SettingsStorage {
             guard let rawValue = defaults.string(forKey: Key.recordingFeedbackSurface.rawValue),
                   let surface = RecordingFeedbackSurface(rawValue: rawValue)
             else {
-                return .notch
+                return .compactPanel
             }
             return surface
         }
