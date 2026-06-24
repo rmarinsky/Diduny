@@ -1,0 +1,211 @@
+import SwiftUI
+
+struct LiveDictationOverlayView: View {
+    let store: LiveDictationOverlayStore
+    let onCopy: () -> Void
+    let onStop: () -> Void
+    private static let transcriptBottomID = "transcript-bottom"
+
+    var body: some View {
+        HStack(spacing: 12) {
+            OverlayStatusIcon(store: store, statusColor: statusColor, iconName: iconName)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(store.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Text(store.statusText)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(statusColor)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 8)
+
+                    ElapsedTimeLabel(startedAt: store.startedAt)
+                }
+
+                transcriptView
+            }
+
+            controls
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(width: 560, height: 96)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08))
+        }
+        .shadow(color: .black.opacity(0.18), radius: 20, y: 8)
+    }
+
+    private var displayText: String {
+        store.visibleText.isEmpty ? "Listening..." : store.visibleText
+    }
+
+    private var transcriptView: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(displayText)
+                        .font(.system(size: 14))
+                        .foregroundStyle(store.hasText ? Color.primary : Color.secondary)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentTransition(.opacity)
+
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.transcriptBottomID)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.hidden)
+            .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 38, alignment: .bottomLeading)
+            .onAppear {
+                scrollTranscriptToBottom(proxy)
+            }
+            .onChange(of: store.visibleText) { _, _ in
+                scrollTranscriptToBottom(proxy)
+            }
+            .onChange(of: store.phase) { _, _ in
+                scrollTranscriptToBottom(proxy)
+            }
+        }
+    }
+
+    private func scrollTranscriptToBottom(_ proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            withTransaction(Transaction(animation: nil)) {
+                proxy.scrollTo(Self.transcriptBottomID, anchor: .bottom)
+            }
+        }
+    }
+
+    private var controls: some View {
+        HStack(spacing: 6) {
+            Button(action: onCopy) {
+                Image(systemName: store.copiedAt == nil ? "doc.on.doc" : "checkmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(store.hasText ? Color.primary : Color.secondary.opacity(0.6))
+            .background(Color.primary.opacity(store.hasText ? 0.06 : 0.03), in: Circle())
+            .disabled(!store.hasText)
+            .help("Copy transcript")
+
+            Button(action: onStop) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(store.canStop ? Color.white : Color.secondary.opacity(0.6))
+            .background(store.canStop ? Color.red : Color.primary.opacity(0.05), in: Circle())
+            .disabled(!store.canStop)
+            .help("Stop recording")
+        }
+        .frame(width: 68)
+    }
+
+    private var statusColor: Color {
+        switch store.phase {
+        case .recording:
+            .red
+        case .starting, .finalizing, .processing:
+            .orange
+        case .pasted:
+            .green
+        case .error:
+            .red
+        case .info:
+            .blue
+        }
+    }
+
+    private var iconName: String {
+        switch store.phase {
+        case .pasted:
+            "checkmark"
+        case .error:
+            "exclamationmark"
+        default:
+            store.mode.icon
+        }
+    }
+}
+
+// Isolated leaf so only this small view re-evaluates when audioLevel changes (~25/sec).
+private struct OverlayStatusIcon: View {
+    let store: LiveDictationOverlayStore
+    let statusColor: Color
+    let iconName: String
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(statusColor.opacity(0.14))
+                .frame(width: 38, height: 38)
+
+            if store.phase == .recording {
+                LiveAudioMeter(level: store.audioLevel, color: statusColor)
+                    .frame(width: 26, height: 18)
+            } else {
+                Image(systemName: iconName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(statusColor)
+            }
+        }
+        .frame(width: 38, height: 38)
+    }
+}
+
+// Isolated leaf so only this view re-evaluates every second.
+private struct ElapsedTimeLabel: View {
+    let startedAt: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: startedAt, by: 1)) { timeline in
+            Text(elapsedText(at: timeline.date))
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private func elapsedText(at date: Date) -> String {
+        let elapsed = max(0, Int(date.timeIntervalSince(startedAt)))
+        return String(format: "%d:%02d", elapsed / 60, elapsed % 60)
+    }
+}
+
+private struct LiveAudioMeter: View {
+    let level: Float
+    let color: Color
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 3) {
+            ForEach(0..<5, id: \.self) { index in
+                Capsule()
+                    .fill(color.opacity(opacity(for: index)))
+                    .frame(width: 3, height: height(for: index))
+            }
+        }
+    }
+
+    private func height(for index: Int) -> CGFloat {
+        let baseline: [CGFloat] = [8, 13, 18, 13, 8]
+        let scaled = CGFloat(max(0.08, min(level, 1))) * baseline[index]
+        return max(4, scaled)
+    }
+
+    private func opacity(for index: Int) -> Double {
+        let threshold = Float(index + 1) / 6
+        return level >= threshold ? 1 : 0.35
+    }
+}

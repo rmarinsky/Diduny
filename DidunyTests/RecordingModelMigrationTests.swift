@@ -4,6 +4,7 @@ import XCTest
 /// Tests for the RLR-M0 data-model additions:
 ///   - `RecoverySource` enum + `Recording.recoverySource` property
 ///   - `Recording.ProcessingStatus.partiallyRecovered` case
+///   - optional `Recording.translationTargetLanguageCode`
 ///
 /// The primary concerns are:
 ///   1. Backward compatibility — JSON written before M0 (no `recoverySource` key,
@@ -56,6 +57,12 @@ final class RecordingModelMigrationTests: XCTestCase {
         let recordings = try iso8601.decode([Recording].self, from: data)
         XCTAssertNil(recordings[0].recoverySource,
                      "recordings from before M0 must have recoverySource == nil")
+    }
+
+    func test_legacyJSON_translationTargetLanguageCodeIsNil() throws {
+        let data = try XCTUnwrap(legacyJSON.data(using: .utf8))
+        let recordings = try iso8601.decode([Recording].self, from: data)
+        XCTAssertNil(recordings[0].translationTargetLanguageCode)
     }
 
     func test_legacyJSON_originalFieldsIntact() throws {
@@ -122,6 +129,34 @@ final class RecordingModelMigrationTests: XCTestCase {
 
         XCTAssertEqual(decoded.status, .transcribed)
         XCTAssertNil(decoded.recoverySource)
+    }
+
+    func test_meetingTranslationType_roundTripsAndUsesMeetingBucket() throws {
+        let original = Recording(
+            id: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_700_200_000),
+            type: .meetingTranslation,
+            audioFileName: "meeting-translation.flac",
+            durationSeconds: 120.0,
+            fileSizeBytes: 2048,
+            status: .translated,
+            transcriptionText: "Translated meeting.",
+            errorMessage: nil,
+            processedAt: Date(timeIntervalSince1970: 1_700_200_120),
+            chapters: nil,
+            sourceDevice: nil,
+            translationTargetLanguageCode: "fr",
+            recoverySource: nil
+        )
+
+        let data = try iso8601Encoder.encode([original])
+        let decoded = try iso8601.decode([Recording].self, from: data)[0]
+
+        XCTAssertEqual(decoded.type, .meetingTranslation)
+        XCTAssertEqual(decoded.translationTargetLanguageCode, "fr")
+        XCTAssertTrue(decoded.type.isMeetingLike)
+        XCTAssertEqual(decoded.type.clipboardCopyBehavior, .raw)
+        XCTAssertTrue(decoded.type.usesTranslatedStatusWhenSavedWithText)
     }
 
     // MARK: - 3. Exhaustive switch coverage (compiler-enforced)

@@ -112,36 +112,7 @@ struct PermissionRow: View {
 
     /// Check permission and update the binding if granted
     private func checkAndUpdatePermission() async {
-        let granted: Bool
-
-        switch permissionType {
-        case .microphone:
-            granted = await PermissionManager.shared.requestMicrophonePermission()
-
-        case .accessibility:
-            // First check if already granted
-            if AXIsProcessTrusted() {
-                granted = true
-            } else {
-                // Only show dialog if not yet granted
-                PermissionManager.shared.requestAccessibilityPermission()
-                // Bring our app back to front after System Settings opens
-                try? await Task.sleep(for: .milliseconds(500))
-                await MainActor.run {
-                    NSApp.activate(ignoringOtherApps: true)
-                }
-                // Give time for the user to respond
-                try? await Task.sleep(for: .milliseconds(500))
-                granted = AXIsProcessTrusted()
-            }
-
-        case .screenRecording:
-            granted = await PermissionManager.shared.requestScreenRecordingPermission()
-            // Bring our app back to front if System Settings was opened
-            await MainActor.run {
-                NSApp.activate(ignoringOtherApps: true)
-            }
-        }
+        let granted = await PermissionManager.shared.ensurePermission(permissionType, context: .settings)
 
         await MainActor.run {
             isGranted = granted

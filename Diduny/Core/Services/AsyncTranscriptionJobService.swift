@@ -9,6 +9,7 @@ final class AsyncTranscriptionJobService {
     private let maxJobWaitSeconds: TimeInterval = 7200
     private let maxAudioBytesForSpeechPrecheck = 25 * 1024 * 1024
     private let longRunningSessionBodyThresholdBytes = 10 * 1024 * 1024
+    private let statusPollRetryCount = 3
     private let strictSpeechPrecheck = false
 
     private lazy var longRunningSession: URLSession = {
@@ -143,7 +144,8 @@ final class AsyncTranscriptionJobService {
         let request = URLRequest(url: url)
         let (data, httpResponse) = try await performDataRequest(request)
         guard (200 ... 299).contains(httpResponse.statusCode) else {
-            throw TranscriptionError.apiError("Failed to get job status")
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw TranscriptionError.apiError("Failed to get job status (\(httpResponse.statusCode)): \(errorBody)")
         }
 
         return try JSONDecoder().decode(JobStatusResponse.self, from: data)
@@ -165,6 +167,7 @@ final class AsyncTranscriptionJobService {
         onUpdate: @escaping (JobStatus) -> Void
     ) async throws -> String {
         try Task.checkCancellation()
+        let preferSpeakerDiarization = shouldPreferSpeakerDiarization(config: config)
         let submission = try await submitJob(audioData: audioData, config: config)
 
         var sseFailures = 0
@@ -174,7 +177,7 @@ final class AsyncTranscriptionJobService {
             try Task.checkCancellation()
             do {
                 let result = try await streamJobResult(jobId: submission.jobId, onUpdate: onUpdate)
-                return result.text
+                return result.outputText(preferSpeakerDiarization: preferSpeakerDiarization)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -182,15 +185,16 @@ final class AsyncTranscriptionJobService {
                 Log.transcription.warning("SSE stream failed (attempt \(sseFailures)): \(error)")
 
                 // Check if job finished while disconnected
-                let status = try await getJobStatus(jobId: submission.jobId)
-                if status.status == "completed", let result = status.result {
-                    return result.text
-                }
-                if status.status == "error" {
-                    throw TranscriptionError.apiError(status.error ?? "Transcription failed")
-                }
-                if let parsed = JobStatus(rawValue: status.status) {
-                    onUpdate(parsed)
+                if let status = try await getJobStatusAfterDisconnect(jobId: submission.jobId, sseAttempt: sseFailures) {
+                    if status.status == "completed", let result = status.result {
+                        return result.outputText(preferSpeakerDiarization: preferSpeakerDiarization)
+                    }
+                    if status.status == "error" {
+                        throw TranscriptionError.apiError(status.error ?? "Transcription failed")
+                    }
+                    if let parsed = JobStatus(rawValue: status.status) {
+                        onUpdate(parsed)
+                    }
                 }
 
                 // Still in progress. SSE is best-effort; keep polling/retrying until
@@ -202,6 +206,38 @@ final class AsyncTranscriptionJobService {
         }
 
         throw TranscriptionError.apiError("Timed out waiting for transcription result")
+    }
+
+    private func getJobStatusAfterDisconnect(jobId: String, sseAttempt: Int) async throws -> JobStatusResponse? {
+        var lastError: Error?
+
+        for attempt in 1 ... statusPollRetryCount {
+            try Task.checkCancellation()
+
+            do {
+                return try await getJobStatus(jobId: jobId)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                lastError = error
+                Log.transcription.warning(
+                    "Job status poll failed after SSE disconnect (sseAttempt=\(sseAttempt), pollAttempt=\(attempt)): \(error.localizedDescription)"
+                )
+
+                if attempt < statusPollRetryCount {
+                    let delaySeconds = min(Double(attempt), 3)
+                    try await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+                }
+            }
+        }
+
+        if let lastError {
+            Log.transcription.warning(
+                "Job status temporarily unavailable after \(self.statusPollRetryCount) attempts; keeping async job alive: \(lastError.localizedDescription)"
+            )
+        }
+
+        return nil
     }
 
     // MARK: - Upload Preparation
@@ -414,10 +450,10 @@ final class AsyncTranscriptionJobService {
         if let wrapped = try? JSONDecoder().decode(JobStatusResponse.self, from: jsonData),
            let result = wrapped.result
         {
-            return JobResult(text: result.text)
+            return JobResult(text: result.text, tokens: result.tokens)
         }
         let direct = try JSONDecoder().decode(JobTranscriptionResult.self, from: jsonData)
-        return JobResult(text: direct.text)
+        return JobResult(text: direct.text, tokens: direct.tokens)
     }
 
     private func parseErrorMessage(_ data: String) -> String {
@@ -428,5 +464,24 @@ final class AsyncTranscriptionJobService {
             return message
         }
         return data.trimmingCharacters(in: .whitespaces)
+    }
+
+    private func shouldPreferSpeakerDiarization(config: [String: Any]) -> Bool {
+        let value = config["enable_speaker_diarization"]
+        if let bool = value as? Bool {
+            return bool
+        }
+        if let number = value as? NSNumber {
+            return number.boolValue
+        }
+        if let string = value as? String {
+            switch string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "1", "true", "t", "yes", "y":
+                return true
+            default:
+                return false
+            }
+        }
+        return false
     }
 }

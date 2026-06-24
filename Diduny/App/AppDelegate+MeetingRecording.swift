@@ -117,7 +117,7 @@ extension AppDelegate {
         }
 
         // Request screen capture permission on-demand
-        let hasPermission = await PermissionManager.shared.ensureScreenRecordingPermission()
+        let hasPermission = await PermissionManager.shared.ensureScreenRecordingPermission(context: .meetingRecording)
         appState.screenCapturePermissionGranted = hasPermission
 
         guard hasPermission else {
@@ -292,7 +292,7 @@ extension AppDelegate {
 
         // Connect WebSocket (non-blocking — recording works even if this fails)
         do {
-            let languageHints = SettingsStorage.shared.favoriteLanguages
+            let languageHints = SettingsStorage.shared.speechLanguageHints
 
             try await rtService.connect(
                 languageHints: languageHints,
@@ -348,7 +348,8 @@ extension AppDelegate {
         let hasRealtimeSession = await MainActor.run { appState.liveTranscriptStore != nil }
         var didReceiveRealtimeFinalization = true
         if hasRealtimeSession {
-            didReceiveRealtimeFinalization = await realtimeTranscriptionService.finalize()
+            let finalizeResult = await realtimeTranscriptionService.finalize(profile: .safe)
+            didReceiveRealtimeFinalization = finalizeResult.didReceiveFinishedSignal
             await realtimeTranscriptionService.disconnect()
             meetingRecorderService.onRealtimeAudioData = nil
         }
@@ -435,15 +436,14 @@ extension AppDelegate {
                 Log.app.info("Meeting recording size = \(audioData.count) bytes")
 
                 let asyncJobService = AsyncTranscriptionJobService()
-                let hints = SettingsStorage.shared.favoriteLanguages
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
+                let hints = SettingsStorage.shared.speechLanguageHints
                 var config: [String: Any] = [
                     "mode": "transcribe",
                     "enable_speaker_diarization": true
                 ]
                 if !hints.isEmpty {
                     config["language_hints"] = hints
+                    config["language_hints_strict"] = true
                 }
 
                 rawText = try await asyncJobService.transcribeMeetingWithRetry(

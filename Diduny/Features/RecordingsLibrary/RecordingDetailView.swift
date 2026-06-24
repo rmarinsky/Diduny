@@ -1,14 +1,19 @@
 import SwiftUI
 
 struct RecordingDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+
     let recording: Recording
 
     @State private var playbackService = AudioPlaybackService.shared
     @State private var queueService = RecordingQueueService.shared
     @State private var modelManager = WhisperModelManager.shared
     @State private var selectedWhisperModel: String = SettingsStorage.shared.selectedWhisperModel
+    @State private var storage = RecordingsLibraryStorage.shared
 
-    private let storage = RecordingsLibraryStorage.shared
+    private var currentRecording: Recording {
+        storage.recordings.first(where: { $0.id == recording.id }) ?? recording
+    }
 
     private var downloadedWhisperModels: [WhisperModelManager.WhisperModel] {
         WhisperModelManager.availableModels.filter { modelManager.isModelDownloaded($0) }
@@ -25,7 +30,7 @@ struct RecordingDetailView: View {
     }
 
     private var queueStatusText: String? {
-        guard queueService.currentRecordingId == recording.id,
+        guard queueService.currentRecordingId == currentRecording.id,
               let status = queueService.currentJobStatus
         else { return nil }
 
@@ -44,7 +49,7 @@ struct RecordingDetailView: View {
     }
 
     private var supportsSpeakerLabels: Bool {
-        recording.type == .meeting
+        currentRecording.type.isMeetingLike
     }
 
     var body: some View {
@@ -70,18 +75,21 @@ struct RecordingDetailView: View {
             actionsSection
                 .padding(12)
         }
+        .onExitCommand {
+            dismiss()
+        }
     }
 
     // MARK: - Header
 
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: recording.type.iconName)
+            Image(systemName: currentRecording.type.iconName)
                 .font(.title2)
                 .foregroundColor(iconColor)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(recording.type.displayName)
+                Text(currentRecording.type.displayName)
                     .font(.headline)
 
                 HStack(spacing: 8) {
@@ -98,7 +106,7 @@ struct RecordingDetailView: View {
                         .foregroundColor(.secondary)
                 }
 
-                if let sourceDevice = recording.sourceDevice {
+                if let sourceDevice = currentRecording.sourceDevice {
                     Text(deviceSummary(sourceDevice))
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -107,6 +115,22 @@ struct RecordingDetailView: View {
             }
 
             Spacer()
+
+            HStack(spacing: 8) {
+                Text("Esc")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color(.quaternaryLabelColor).opacity(0.12), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+
+                Button("Close") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                .controlSize(.small)
+                .accessibilityIdentifier("Close recording detail")
+            }
         }
     }
 
@@ -114,9 +138,9 @@ struct RecordingDetailView: View {
 
     private var playbackSection: some View {
         AudioPlaybackControlView(
-            recordingId: recording.id,
-            fileURL: storage.audioFileURL(for: recording),
-            durationHint: recording.durationSeconds
+            recordingId: currentRecording.id,
+            fileURL: storage.audioFileURL(for: currentRecording),
+            durationHint: currentRecording.durationSeconds
         )
     }
 
@@ -125,7 +149,7 @@ struct RecordingDetailView: View {
     private var transcriptionSection: some View {
         ScrollView {
             Group {
-                if recording.status == .processing {
+                if currentRecording.status == .processing {
                     HStack {
                         ProgressView()
                             .controlSize(.small)
@@ -133,11 +157,15 @@ struct RecordingDetailView: View {
                             .foregroundColor(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let text = recording.transcriptionText, !text.isEmpty {
+                } else if let text = currentRecording.transcriptionText, !text.isEmpty {
                     Text(text)
                         .textSelection(.enabled)
                         .font(.body)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                } else if currentRecording.status == .failed {
+                    Text(currentRecording.errorMessage ?? "Transcription failed")
+                        .foregroundColor(.red)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Text("No transcription yet")
                         .foregroundColor(.secondary)
@@ -163,12 +191,12 @@ struct RecordingDetailView: View {
             localActionsSection
 
             // Copy text button
-            if let text = recording.transcriptionText, !text.isEmpty {
+            if let text = currentRecording.transcriptionText, !text.isEmpty {
                 Divider()
                 HStack {
                     Spacer()
                     Button("Copy Text") {
-                        ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
+                        ClipboardService.shared.copy(text: text, behavior: currentRecording.type.clipboardCopyBehavior)
                     }
                 }
             }
@@ -181,27 +209,27 @@ struct RecordingDetailView: View {
         VStack(alignment: .leading, spacing: 6) {
             Label("Cloud", systemImage: "cloud.fill")
                 .font(.caption)
-                .foregroundColor(.blue)
+                .foregroundColor(Color("BrandAccentDeep"))
 
             VStack(alignment: .leading, spacing: 6) {
                 Button("Transcribe") {
                     queueService.enqueue(
-                        [recording.id],
+                        [currentRecording.id],
                         action: .transcribe,
                         providerOverride: .cloud
                     )
                 }
-                .disabled(recording.status == .processing)
+                .disabled(currentRecording.status == .processing)
 
                 if supportsSpeakerLabels {
                     Button("Transcribe with Speakers") {
                         queueService.enqueue(
-                            [recording.id],
+                            [currentRecording.id],
                             action: .transcribeDiarize,
                             providerOverride: .cloud
                         )
                     }
-                    .disabled(recording.status == .processing)
+                    .disabled(currentRecording.status == .processing)
                 }
 
                 HStack(spacing: 6) {
@@ -214,7 +242,7 @@ struct RecordingDetailView: View {
                             ForEach(favoriteLanguages) { lang in
                                 Button(lang.code.uppercased()) {
                                     queueService.enqueue(
-                                        [recording.id],
+                                        [currentRecording.id],
                                         action: .translate,
                                         providerOverride: .cloud,
                                         targetLanguage: lang.code
@@ -222,7 +250,7 @@ struct RecordingDetailView: View {
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
-                                .disabled(recording.status == .processing)
+                                .disabled(currentRecording.status == .processing)
                                 .help(lang.name)
                             }
 
@@ -231,7 +259,7 @@ struct RecordingDetailView: View {
                                     ForEach(otherLanguages) { lang in
                                         Button(lang.name) {
                                             queueService.enqueue(
-                                                [recording.id],
+                                                [currentRecording.id],
                                                 action: .translate,
                                                 providerOverride: .cloud,
                                                 targetLanguage: lang.code
@@ -241,7 +269,7 @@ struct RecordingDetailView: View {
                                 }
                                 .menuStyle(.borderlessButton)
                                 .controlSize(.small)
-                                .disabled(recording.status == .processing)
+                                .disabled(currentRecording.status == .processing)
                             }
                         }
                     }
@@ -272,13 +300,13 @@ struct RecordingDetailView: View {
                         let modelName = selectedWhisperModel.isEmpty ? downloadedWhisperModels.first?
                             .name : selectedWhisperModel
                         queueService.enqueue(
-                            [recording.id],
+                            [currentRecording.id],
                             action: .transcribe,
                             providerOverride: .local,
                             whisperModelOverride: modelName
                         )
                     }
-                    .disabled(recording.status == .processing)
+                    .disabled(currentRecording.status == .processing)
                 }
 
                 Text("Use this when you want offline processing with the selected Whisper model.")
@@ -295,14 +323,7 @@ struct RecordingDetailView: View {
 
     // MARK: - Helpers
 
-    private var iconColor: Color {
-        switch recording.type {
-        case .voice: .blue
-        case .translation: .green
-        case .meeting: .orange
-        case .fileTranscription: .purple
-        }
-    }
+    private var iconColor: Color { currentRecording.type.brandColor }
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -312,17 +333,17 @@ struct RecordingDetailView: View {
     }()
 
     private var formattedDate: String {
-        Self.dateFormatter.string(from: recording.createdAt)
+        Self.dateFormatter.string(from: currentRecording.createdAt)
     }
 
     private var formattedDuration: String {
-        let minutes = Int(recording.durationSeconds) / 60
-        let seconds = Int(recording.durationSeconds) % 60
+        let minutes = Int(currentRecording.durationSeconds) / 60
+        let seconds = Int(currentRecording.durationSeconds) % 60
         return String(format: "%d:%02d", minutes, seconds)
     }
 
     private var formattedSize: String {
-        ByteCountFormatter.string(fromByteCount: recording.fileSizeBytes, countStyle: .file)
+        ByteCountFormatter.string(fromByteCount: currentRecording.fileSizeBytes, countStyle: .file)
     }
 
     private func deviceSummary(_ sourceDevice: RecordingDeviceInfo) -> String {

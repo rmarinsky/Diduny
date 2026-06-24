@@ -50,12 +50,11 @@ extension AppDelegate {
             let text: String
             if SettingsStorage.shared.effectiveTranscriptionProvider == .cloud {
                 let asyncJobService = AsyncTranscriptionJobService()
-                let hints = SettingsStorage.shared.favoriteLanguages
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
+                let hints = SettingsStorage.shared.speechLanguageHints
                 var config: [String: Any] = ["mode": "transcribe"]
                 if !hints.isEmpty {
                     config["language_hints"] = hints
+                    config["language_hints_strict"] = true
                 }
 
                 text = try await asyncJobService.transcribeWithRetry(audioData: audioData, config: config) { status in

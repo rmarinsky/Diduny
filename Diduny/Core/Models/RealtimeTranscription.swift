@@ -81,6 +81,72 @@ enum RealtimeSegmentBoundary {
     case finalize
 }
 
+// MARK: - Realtime Finalize
+
+struct RealtimeFinalizeProfile: Equatable {
+    let name: String
+    let controlMessageDelayMs: Int
+    let timeoutSeconds: TimeInterval
+    let quietWindowSeconds: TimeInterval
+
+    static let safe = RealtimeFinalizeProfile(
+        name: "safe",
+        controlMessageDelayMs: 350,
+        timeoutSeconds: 5.0,
+        quietWindowSeconds: 0.35
+    )
+
+    static let dictationFast = RealtimeFinalizeProfile(
+        name: "dictation_fast",
+        controlMessageDelayMs: 120,
+        timeoutSeconds: 1.2,
+        quietWindowSeconds: 0.18
+    )
+}
+
+struct RealtimeFinalizeResult: Equatable {
+    let profileName: String
+    let didReceiveFinishedSignal: Bool
+    let durationMs: Int
+    let tokensAfterFinalize: Int
+    let charactersAfterFinalize: Int
+    let timedOut: Bool
+    let quietWindowReached: Bool
+
+    static let skipped = RealtimeFinalizeResult(
+        profileName: "skipped",
+        didReceiveFinishedSignal: false,
+        durationMs: 0,
+        tokensAfterFinalize: 0,
+        charactersAfterFinalize: 0,
+        timedOut: false,
+        quietWindowReached: true
+    )
+}
+
+struct RealtimeSessionStopResult: Equatable {
+    let text: String
+    let preFinalizeText: String
+    let optimisticCleanedText: String?
+    let finalizeResult: RealtimeFinalizeResult
+
+    var didReceiveFinalization: Bool {
+        finalizeResult.didReceiveFinishedSignal
+    }
+
+    var textChangedAfterFinalize: Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines) !=
+            preFinalizeText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static let empty = RealtimeSessionStopResult(
+        text: "",
+        preFinalizeText: "",
+        optimisticCleanedText: nil,
+        finalizeResult: .skipped
+    )
+}
+
 // MARK: - Realtime Config
 
 struct RealtimeAudioConfig: Equatable {
@@ -98,7 +164,7 @@ struct RealtimeAudioConfig: Equatable {
 struct RealtimeTranslationConfig: Equatable {
     enum Mode: Equatable {
         case twoWay(languageA: String, languageB: String)
-        case oneWay(sourceLanguage: String, targetLanguage: String)
+        case oneWay(targetLanguage: String)
     }
 
     let mode: Mode

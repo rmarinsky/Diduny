@@ -48,10 +48,17 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
 
     func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String {
         if targetLanguage.lowercased() != "en" {
-            Log.whisper.warning("Whisper can only translate to English, ignoring target language '\(targetLanguage)'")
-            return try await transcribe(audioData: audioData)
+            Log.whisper.warning("Whisper can only translate to English, target language '\(targetLanguage)' rejected")
+            throw WhisperError.unsupportedTranslationTarget(targetLanguage)
         }
         return try await translateAndTranscribe(audioData: audioData)
+    }
+
+    func translateAndTranscribe(audioData: Data, languagePair: TranslationLanguagePair) async throws -> String {
+        guard languagePair.contains("en") else {
+            throw WhisperError.unsupportedTranslationTarget(languagePair.displayLabel)
+        }
+        return try await translateAndTranscribe(audioData: audioData, targetLanguage: "en")
     }
 
     // MARK: - Translation Validation
@@ -81,7 +88,10 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         let settings = SettingsStorage.shared
         let language = settings.whisperLanguage.isEmpty || settings.whisperLanguage == "auto" ? nil : settings
             .whisperLanguage
-        let prompt = settings.whisperPrompt.isEmpty ? nil : settings.whisperPrompt
+        let prompt = ProtectedLexiconPromptBuilder.mergedPrompt(
+            userPrompt: settings.whisperPrompt,
+            language: language
+        )
 
         let text = try await context.transcribe(
             samples: samples,

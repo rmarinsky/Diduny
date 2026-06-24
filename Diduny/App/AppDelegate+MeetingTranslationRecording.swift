@@ -42,6 +42,9 @@ extension AppDelegate {
 
         let recordingStartTime = appState.meetingTranslationRecordingStartTime
         let stopTime = Date()
+        let targetLanguage = activeMeetingTranslationTargetLanguage
+            ?? activeMeetingTranslationLanguagePair?.languageB
+            ?? SettingsStorage.shared.voiceTranslationTargetLanguage
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
@@ -61,8 +64,9 @@ extension AppDelegate {
                     let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                     RecordingsLibraryStorage.shared.saveRecording(
                         audioURL: audioURL,
-                        type: .meeting,
-                        duration: duration
+                        type: .meetingTranslation,
+                        duration: duration,
+                        translationTargetLanguageCode: targetLanguage
                     )
                     // Library has taken ownership — remove the in-progress directory (RLR-M1).
                     if let ipId = cancelInProgressRecordingId {
@@ -107,6 +111,8 @@ extension AppDelegate {
             appState.meetingTranslationRecordingState = .idle
             appState.meetingTranslationRecordingStartTime = nil
             handleMeetingTranslationStateChange(.idle)
+            activeMeetingTranslationLanguagePair = nil
+            activeMeetingTranslationTargetLanguage = nil
         }
 
         Log.app.info("cancelMeetingTranslationRecording: END")
@@ -121,7 +127,7 @@ extension AppDelegate {
         }
 
         // Request screen capture permission on-demand
-        let hasPermission = await PermissionManager.shared.ensureScreenRecordingPermission()
+        let hasPermission = await PermissionManager.shared.ensureScreenRecordingPermission(context: .meetingTranslation)
         appState.screenCapturePermissionGranted = hasPermission
 
         guard hasPermission else {
@@ -130,11 +136,17 @@ extension AppDelegate {
                 appState.errorMessage = "Screen recording permission required for meeting capture"
                 appState.meetingTranslationRecordingState = .error
                 handleMeetingTranslationStateChange(.error)
+                activeMeetingTranslationLanguagePair = nil
+                activeMeetingTranslationTargetLanguage = nil
             }
             return
         }
 
         // Meeting translation uses cloud realtime by default
+        let pair = SettingsStorage.shared.resolveTranslationLanguagePair()
+        SettingsStorage.shared.markTranslationLanguagePairUsed(pair)
+        activeMeetingTranslationLanguagePair = pair
+        activeMeetingTranslationTargetLanguage = pair.languageB
 
         // Prevent App Nap during meeting translation recording
         meetingTranslationActivityToken = ProcessInfo.processInfo.beginActivity(
@@ -198,6 +210,8 @@ extension AppDelegate {
                     ProcessInfo.processInfo.endActivity(token)
                     meetingTranslationActivityToken = nil
                 }
+                activeMeetingTranslationLanguagePair = nil
+                activeMeetingTranslationTargetLanguage = nil
                 return
             }
             await MainActor.run {
@@ -238,6 +252,8 @@ extension AppDelegate {
                 appState.errorMessage = error.localizedDescription
                 appState.meetingTranslationRecordingState = .error
                 handleMeetingTranslationStateChange(.error)
+                activeMeetingTranslationLanguagePair = nil
+                activeMeetingTranslationTargetLanguage = nil
             }
         }
     }
@@ -283,24 +299,15 @@ extension AppDelegate {
 
         // Connect WebSocket (recording continues even if translation socket is unavailable)
         do {
-            let sourceLanguage = SettingsStorage.shared.translationLanguageA
-            let targetLanguage = SettingsStorage.shared.translationLanguageB
-
-            var languageHints = SettingsStorage.shared.favoriteLanguages
-
-            if !languageHints.contains(sourceLanguage) {
-                languageHints.append(sourceLanguage)
-            }
-            if !languageHints.contains(targetLanguage) {
-                languageHints.append(targetLanguage)
-            }
+            let pair = activeMeetingTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+            let languageHints = SettingsStorage.shared.translationLanguageHints(for: pair)
 
             try await rtService.connect(
                 languageHints: languageHints,
                 strictLanguageHints: !languageHints.isEmpty,
                 audioConfig: .defaultPCM16kMono,
                 translationConfig: RealtimeTranslationConfig(
-                    mode: .oneWay(sourceLanguage: sourceLanguage, targetLanguage: targetLanguage)
+                    mode: .twoWay(languageA: pair.languageA, languageB: pair.languageB)
                 )
             )
             await MainActor.run {
@@ -308,7 +315,7 @@ extension AppDelegate {
             }
             Log.transcription
                 .info(
-                    "Meeting real-time translation connected successfully (\(sourceLanguage.uppercased()) -> \(targetLanguage.uppercased()))"
+                    "Meeting real-time translation connected successfully (\(pair.languageA.uppercased()) <-> \(pair.languageB.uppercased()))"
                 )
         } catch {
             Log.transcription.error("Meeting real-time translation FAILED to connect: \(error.localizedDescription)")
@@ -357,7 +364,9 @@ extension AppDelegate {
         }
 
         // Additional fallback: prefer target-language tokens if status exists but format changed.
-        let targetLang = SettingsStorage.shared.translationLanguageB
+        let targetLang = activeMeetingTranslationTargetLanguage
+            ?? activeMeetingTranslationLanguagePair?.languageB
+            ?? SettingsStorage.shared.voiceTranslationTargetLanguage
         let targetLanguageTokens = tokens.filter {
             $0.language?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == targetLang
         }
@@ -378,6 +387,9 @@ extension AppDelegate {
 
         // Capture recording start time for duration calculation
         let recordingStartTime = appState.meetingTranslationRecordingStartTime
+        let pair = activeMeetingTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+        let targetLanguage = activeMeetingTranslationTargetLanguage
+            ?? pair.languageB
 
         await MainActor.run {
             appState.meetingTranslationRecordingState = .processing
@@ -387,7 +399,7 @@ extension AppDelegate {
         // Finalize and disconnect real-time translation (if active)
         let hasRealtimeSession = await MainActor.run { appState.liveTranscriptStore != nil }
         if hasRealtimeSession {
-            _ = await realtimeTranscriptionService.finalize()
+            _ = await realtimeTranscriptionService.finalize(profile: .safe)
             await realtimeTranscriptionService.disconnect()
             meetingRecorderService.onRealtimeAudioData = nil
         }
@@ -444,7 +456,10 @@ extension AppDelegate {
                 let audioData = try await loadAudioData(from: audioURL)
                 Log.app.info("Meeting translation recording size = \(audioData.count) bytes")
 
-                text = try await transcriptionService.translateAndTranscribe(audioData: audioData)
+                text = try await transcriptionService.translateAndTranscribe(
+                    audioData: audioData,
+                    languagePair: pair
+                )
                 Log.app.info("Async meeting translation received (\(text.count) chars)")
             }
 
@@ -480,6 +495,8 @@ extension AppDelegate {
                 appState.meetingTranslationRecordingState = .success
                 appState.meetingTranslationRecordingStartTime = nil
                 handleMeetingTranslationStateChange(.success)
+                activeMeetingTranslationLanguagePair = nil
+                activeMeetingTranslationTargetLanguage = nil
             }
             Log.app.info("stopMeetingTranslationRecording: SUCCESS")
 
@@ -493,9 +510,10 @@ extension AppDelegate {
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
                 audioURL: compressedURL,
-                type: .meeting,
+                type: .meetingTranslation,
                 duration: duration,
-                transcriptionText: text
+                transcriptionText: text,
+                translationTargetLanguageCode: targetLanguage
             )
             // Library has taken ownership — remove the in-progress directory (RLR-M1).
             cleanupInProgressDirectory()
@@ -516,6 +534,8 @@ extension AppDelegate {
                 appState.meetingTranslationRecordingState = .idle
                 appState.meetingTranslationRecordingStartTime = nil
                 handleMeetingTranslationStateChange(.idle)
+                activeMeetingTranslationLanguagePair = nil
+                activeMeetingTranslationTargetLanguage = nil
             }
             return
         } catch {
@@ -531,8 +551,9 @@ extension AppDelegate {
                 RecordingsLibraryStorage.shared.saveRecording(
                     id: recordingId,
                     audioURL: audioURLForLibrarySave,
-                    type: .meeting,
-                    duration: duration
+                    type: .meetingTranslation,
+                    duration: duration,
+                    translationTargetLanguageCode: targetLanguage
                 )
                 // Library has taken ownership — remove the in-progress directory (RLR-M1).
                 cleanupInProgressDirectory()
@@ -560,6 +581,8 @@ extension AppDelegate {
                 appState.meetingTranslationRecordingState = .error
                 appState.meetingTranslationRecordingStartTime = nil
                 handleMeetingTranslationStateChange(.error)
+                activeMeetingTranslationLanguagePair = nil
+                activeMeetingTranslationTargetLanguage = nil
             }
         }
 

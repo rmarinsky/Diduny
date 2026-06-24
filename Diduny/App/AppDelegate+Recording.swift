@@ -4,13 +4,25 @@ import Foundation
 
 actor RealtimeVoiceAccumulator {
     private var finalText: String = ""
+    private var provisionalText: String = ""
 
     func process(tokens: [RealtimeToken]) {
-        let finalTokens = tokens.filter(\.isFinal)
-        guard !finalTokens.isEmpty else { return }
+        var latestProvisionalText = ""
+        var didReceiveFinalToken = false
 
-        for token in finalTokens {
-            finalText += token.text
+        for token in tokens where !token.text.isEmpty {
+            if token.isFinal {
+                finalText += token.text
+                didReceiveFinalToken = true
+            } else {
+                latestProvisionalText += token.text
+            }
+        }
+
+        if !latestProvisionalText.isEmpty {
+            provisionalText = latestProvisionalText
+        } else if didReceiveFinalToken {
+            provisionalText = ""
         }
     }
 
@@ -18,8 +30,9 @@ actor RealtimeVoiceAccumulator {
         // No-op: pause-based formatting removed
     }
 
-    func bestText() -> String {
-        finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+    func bestText(includeProvisional: Bool = true) -> String {
+        let text = includeProvisional ? finalText + provisionalText : finalText
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -144,7 +157,7 @@ extension AppDelegate {
         }
 
         // Request microphone permission on-demand
-        let micGranted = await PermissionManager.shared.ensureMicrophonePermission()
+        let micGranted = await PermissionManager.shared.ensureMicrophonePermission(context: .dictation)
         appState.microphonePermissionGranted = micGranted
 
         guard micGranted else {
@@ -248,11 +261,11 @@ extension AppDelegate {
                 appState.recordingStartTime = Date()
                 handleRecordingStateChange(.recording)
 
-                // Pipe audio level to notch
+                // Pipe audio level to the selected recording feedback surface.
                 audioLevelCancellable = audioRecorder.$audioLevel
-                    .receive(on: DispatchQueue.main)
-                    .sink { level in
-                        NotchManager.shared.audioLevel = level
+                    .removeDuplicates()
+                    .sink { [weak self] level in
+                        self?.updateRecordingFeedbackAudioLevel(level, mode: .voice)
                     }
             }
 
@@ -349,6 +362,9 @@ extension AppDelegate {
         var originalWAVData: Data?
         let recordingId = UUID()
         let sourceDevice = audioRecorder.currentRecordingDeviceInfo
+        let realtimeStopTask = Task { @MainActor in
+            await self.stopVoiceRealtimeSession(finalize: true)
+        }
 
         do {
             Log.app.info("stopRecording: Stopping audio recorder")
@@ -357,12 +373,9 @@ extension AppDelegate {
 
             // Preserve original capture bytes for fallback paths that should avoid any storage-time conversion
             originalWAVData = audioData
+            capturedAudioData = audioData
 
-            // Compress WAV → FLAC for smaller storage (skipped for < 1MB)
-            let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
-            capturedAudioData = compressedData
-
-            let realtimeResult = await stopVoiceRealtimeSession(finalize: true)
+            let realtimeResult = await realtimeStopTask.value
 
             let rawText: String
             if !realtimeResult.text.isEmpty {
@@ -376,10 +389,19 @@ extension AppDelegate {
                 rawText = try await transcriptionService.transcribe(audioData: audioData)
                 Log.app.info("stopRecording: HTTP cloud transcription (\(rawText.count) chars)")
             }
-            let cleanedRawText = await TranscriptCleanupService.shared.clean(
-                rawText,
-                fillerWords: SettingsStorage.shared.fillerWords
-            )
+            let cleanedRawText: String
+            if !realtimeResult.text.isEmpty {
+                cleanedRawText = await cleanRealtimeResultText(
+                    rawText,
+                    realtimeResult: realtimeResult,
+                    logPrefix: "Dictation"
+                )
+            } else {
+                cleanedRawText = await TranscriptCleanupService.shared.clean(
+                    rawText,
+                    fillerWords: SettingsStorage.shared.fillerWords
+                )
+            }
             let text = ClipboardService.preparedText(cleanedRawText, behavior: .cleaned)
             Log.app.info("stopRecording: Transcription received (\(text.count) chars)")
 
@@ -418,6 +440,8 @@ extension AppDelegate {
 
             // Save to recordings library (uses compressed data if available)
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
+            capturedAudioData = compressedData
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
                 audioData: compressedData,
@@ -435,7 +459,7 @@ extension AppDelegate {
             RecoveryStateManager.shared.clearState()
 
         } catch is CancellationError {
-            _ = await stopVoiceRealtimeSession(finalize: false)
+            _ = await realtimeStopTask.value
             Log.app.info("stopRecording: Cancelled")
             await MainActor.run {
                 appState.recordingState = .idle
@@ -445,18 +469,29 @@ extension AppDelegate {
             }
             return
         } catch let limitError as TranscriptionError where limitError.isUsageLimitExceeded {
-            _ = await stopVoiceRealtimeSession(finalize: false)
+            _ = await realtimeStopTask.value
             Log.app.warning("stopRecording: Usage limit exceeded, attempting Whisper fallback")
 
             // Try falling back to local Whisper model using the original capture bytes
             if let wavData = originalWAVData, WhisperModelManager.shared.selectedModel() != nil {
-                NotchManager.shared.showInfo(message: "Cloud limit reached. Switching to local model.", duration: 2.0)
+                showRecordingFeedbackInfo(
+                    message: "Cloud limit reached. Switching to local model.",
+                    mode: .voice,
+                    duration: 2.0
+                )
                 do {
                     let text = try await whisperTranscriptionService.transcribe(audioData: wavData)
                     Log.app.info("stopRecording: Whisper fallback succeeded (\(text.count) chars)")
                     clipboardService.copy(text: text)
                     if SettingsStorage.shared.autoPaste {
-                        try? await clipboardService.paste()
+                        do {
+                            try await clipboardService.paste()
+                        } catch ClipboardError.accessibilityNotGranted {
+                            Log.app.warning("stopRecording: Accessibility permission needed during Whisper fallback")
+                            PermissionManager.shared.showPermissionAlert(for: .accessibility)
+                        } catch {
+                            Log.app.error("stopRecording: Whisper fallback paste failed - \(error.localizedDescription)")
+                        }
                     }
                     guard appState.recordingState == .processing else { return }
                     await MainActor.run {
@@ -510,7 +545,7 @@ extension AppDelegate {
                 }
             }
         } catch {
-            _ = await stopVoiceRealtimeSession(finalize: false)
+            _ = await realtimeStopTask.value
             Log.app.error("stopRecording: ERROR - \(error.localizedDescription)")
             let isEmptyTranscription: Bool = {
                 guard case .emptyTranscription = error as? TranscriptionError else { return false }
@@ -553,8 +588,7 @@ extension AppDelegate {
     // MARK: - Realtime Transcription (WebSocket)
 
     private func setupVoiceRealtimeTranscriptionIfNeeded() {
-        guard SettingsStorage.shared.effectiveTranscriptionProvider == .cloud,
-              SettingsStorage.shared.transcriptionRealtimeSocketEnabled else {
+        guard SettingsStorage.shared.effectiveTranscriptionProvider == .cloud else {
             audioRecorder.onRealtimeAudioData = nil
             voiceRealtimeSessionEnabled = false
             voiceRealtimeAccumulator = nil
@@ -569,15 +603,22 @@ extension AppDelegate {
             rtService?.sendAudioData(pcmData)
         }
 
-        rtService.onTokensReceived = { [weak accumulator] tokens in
-            guard let accumulator else { return }
-            Task {
-                await accumulator.process(tokens: tokens)
+        rtService.onTokensReceived = { [weak self, weak accumulator] tokens in
+            if let accumulator {
+                Task {
+                    await accumulator.process(tokens: tokens)
+                }
+            }
+            Task { @MainActor in
+                self?.updateRecordingFeedbackTokens(tokens, mode: .voice)
             }
         }
 
-        rtService.onConnectionStatusChanged = { status in
+        rtService.onConnectionStatusChanged = { [weak self] status in
             Log.transcription.info("Dictation RT status: \(String(describing: status))")
+            Task { @MainActor in
+                self?.updateRecordingFeedbackConnectionStatus(status, mode: .voice)
+            }
         }
 
         rtService.onSegmentBoundary = { [weak accumulator] _ in
@@ -587,8 +628,11 @@ extension AppDelegate {
             }
         }
 
-        rtService.onError = { error in
+        rtService.onError = { [weak self] error in
             Log.transcription.error("Dictation RT error: \(error.localizedDescription)")
+            Task { @MainActor in
+                self?.updateRecordingFeedbackConnectionStatus(.failed(error.localizedDescription), mode: .voice)
+            }
         }
 
         voiceRealtimeConnectionError = nil
@@ -596,16 +640,18 @@ extension AppDelegate {
         // Connect WebSocket in background — don't block recording start
         Task {
             do {
-                let languageHints = SettingsStorage.shared.favoriteLanguages
+                let languageHints = SettingsStorage.shared.speechLanguageHints
 
                 try await rtService.connect(
                     languageHints: languageHints,
                     strictLanguageHints: !languageHints.isEmpty,
-                    audioConfig: .defaultPCM16kMono
+                    audioConfig: .defaultPCM16kMono,
+                    enableSpeakerDiarization: false
                 )
 
                 await MainActor.run {
                     self.voiceRealtimeSessionEnabled = true
+                    self.updateRecordingFeedbackConnectionStatus(.connected, mode: .voice)
                 }
                 Log.transcription.info("Dictation RT connected")
             } catch {
@@ -614,6 +660,7 @@ extension AppDelegate {
                     self.voiceRealtimeSessionEnabled = false
                     self.voiceRealtimeAccumulator = nil
                     self.voiceRealtimeConnectionError = error.localizedDescription
+                    self.updateRecordingFeedbackConnectionStatus(.failed(error.localizedDescription), mode: .voice)
                 }
                 Log.transcription.warning(
                     "Dictation RT connection failed: \(error.localizedDescription)"
@@ -622,14 +669,16 @@ extension AppDelegate {
         }
     }
 
-    private func stopVoiceRealtimeSession(finalize: Bool) async -> (text: String, didReceiveFinalization: Bool) {
-        audioRecorder.onRealtimeAudioData = nil
+    private func stopVoiceRealtimeSession(finalize: Bool) async -> RealtimeSessionStopResult {
+        if !finalize {
+            audioRecorder.onRealtimeAudioData = nil
+        }
 
         let accumulator = voiceRealtimeAccumulator
         let wasEnabled = voiceRealtimeSessionEnabled
-        var didReceiveFinalization = false
 
         defer {
+            audioRecorder.onRealtimeAudioData = nil
             voiceRealtimeSessionEnabled = false
             voiceRealtimeAccumulator = nil
             realtimeTranscriptionService.onTokensReceived = nil
@@ -639,16 +688,89 @@ extension AppDelegate {
         }
 
         guard wasEnabled else {
-            return ("", false)
+            return .empty
         }
 
+        let preFinalizeText: String
         if finalize {
-            didReceiveFinalization = await realtimeTranscriptionService.finalize()
+            preFinalizeText = await accumulator?.bestText(includeProvisional: true) ?? ""
+        } else {
+            preFinalizeText = ""
+        }
+        let optimisticCleanupTask = finalize
+            ? startOptimisticRealtimeCleanup(for: preFinalizeText)
+            : nil
+        var finalizeResult: RealtimeFinalizeResult = .skipped
+        if finalize {
+            finalizeResult = await realtimeTranscriptionService.finalize(profile: .dictationFast)
         }
         await realtimeTranscriptionService.disconnect()
 
-        let text = await accumulator?.bestText() ?? ""
-        return (text.trimmingCharacters(in: .whitespacesAndNewlines), didReceiveFinalization)
+        let text = (await accumulator?.bestText(includeProvisional: true) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let preFinalizeTrimmed = preFinalizeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let textChangedAfterFinalize = text != preFinalizeTrimmed
+        let optimisticCleanedText: String?
+
+        if let optimisticCleanupTask, !textChangedAfterFinalize {
+            optimisticCleanedText = await optimisticCleanupTask.value
+        } else {
+            optimisticCleanupTask?.cancel()
+            optimisticCleanedText = nil
+        }
+
+        Log.transcription.info(
+            "Dictation RT stop: finalizeProfile=\(finalizeResult.profileName), finished=\(finalizeResult.didReceiveFinishedSignal), timedOut=\(finalizeResult.timedOut), durationMs=\(finalizeResult.durationMs), tokensAfterFinalize=\(finalizeResult.tokensAfterFinalize), charsAfterFinalize=\(finalizeResult.charactersAfterFinalize), textChangedAfterFinalize=\(textChangedAfterFinalize), charsDelta=\(text.count - preFinalizeTrimmed.count), optimisticCleanupReused=\(optimisticCleanedText != nil)"
+        )
+
+        return RealtimeSessionStopResult(
+            text: text,
+            preFinalizeText: preFinalizeTrimmed,
+            optimisticCleanedText: optimisticCleanedText,
+            finalizeResult: finalizeResult
+        )
+    }
+
+    func startOptimisticRealtimeCleanup(
+        for rawText: String,
+        timeoutInterval: TimeInterval = 1.0
+    ) -> Task<String, Never>? {
+        guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        return Task {
+            await TranscriptCleanupService.shared.clean(
+                rawText,
+                fillerWords: SettingsStorage.shared.fillerWords,
+                timeoutInterval: timeoutInterval
+            )
+        }
+    }
+
+    func cleanRealtimeResultText(
+        _ rawText: String,
+        realtimeResult: RealtimeSessionStopResult,
+        logPrefix: String,
+        timeoutInterval: TimeInterval = 1.0
+    ) async -> String {
+        if let optimisticCleanedText = realtimeResult.optimisticCleanedText,
+           !realtimeResult.textChangedAfterFinalize {
+            Log.app.info("[\(logPrefix)] Reusing optimistic cleanup result")
+            return optimisticCleanedText
+        }
+
+        if realtimeResult.textChangedAfterFinalize {
+            Log.app.info(
+                "[\(logPrefix)] Finalize changed text; running one cleanup retry on final transcript"
+            )
+        }
+
+        return await TranscriptCleanupService.shared.clean(
+            rawText,
+            fillerWords: SettingsStorage.shared.fillerWords,
+            timeoutInterval: timeoutInterval
+        )
     }
 
     // MARK: - Escape Cancel Handler
@@ -660,8 +782,8 @@ extension AppDelegate {
             return
         }
 
-        escapeService.onProgressEscape = { pressCount, _ in
-            NotchManager.shared.showInfoDuringRecording(
+        escapeService.onProgressEscape = { [weak self] pressCount, _ in
+            self?.showRecordingInfoDuringActiveRecording(
                 message: SettingsStorage.shared.escapeCancelRepeatHint(afterPressCount: pressCount),
                 mode: .voice,
                 duration: 1.5
@@ -671,10 +793,11 @@ extension AppDelegate {
         // On second shortcut press (confirmed cancel): cancel recording
         escapeService.onCancel = { [weak self] in
             Task { @MainActor in
+                guard let self else { return }
                 let shouldSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
-                await self?.cancelRecording()
+                await self.cancelRecording()
                 let message = shouldSaveAudio ? "Recording cancelled and saved" : "Recording cancelled"
-                NotchManager.shared.showInfo(message: message)
+                self.showRecordingFeedbackInfo(message: message, mode: .voice)
             }
         }
 

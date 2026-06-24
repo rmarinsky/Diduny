@@ -21,6 +21,7 @@ protocol TranscriptionServiceProtocol {
     func transcribe(audioData: Data) async throws -> String
     func translateAndTranscribe(audioData: Data) async throws -> String
     func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String
+    func translateAndTranscribe(audioData: Data, languagePair: TranslationLanguagePair) async throws -> String
 }
 
 // MARK: - Clipboard Service Protocol
@@ -70,6 +71,8 @@ protocol AudioDeviceManagerProtocol: AnyObject {
 
 protocol PushToTalkServiceProtocol: AnyObject {
     var selectedKey: PushToTalkKey { get set }
+    var holdModeEnabled: Bool { get set }
+    var toggleModeEnabled: Bool { get set }
     var toggleTapCount: Int { get set }
     var holdStartDelaySeconds: TimeInterval { get set }
     var onKeyDown: (() -> Void)? { get set }

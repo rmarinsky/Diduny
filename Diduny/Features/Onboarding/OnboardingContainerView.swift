@@ -5,11 +5,11 @@ import SwiftUI
 // MARK: - Style & Typography Tokens
 
 private enum OnboardingStyle {
-    // Colors
-    static let brandBlue = Color(red: 0.15, green: 0.51, blue: 0.95)
-    static let brandBlueDark = Color(red: 0.09, green: 0.41, blue: 0.84)
-    static let panelBlue = Color(red: 0.80, green: 0.88, blue: 0.98)
-    static let titleColor = Color(red: 0.16, green: 0.24, blue: 0.50)
+    // Colors — brand tokens (raspberry rebrand 2026-06)
+    static let brandBlue = Color.accentColor
+    static let brandBlueDark = Color("BrandAccentDeep")
+    static let panelBlue = Color("BrandTintSoft")
+    static let titleColor = Color("BrandAccentDeep")
 
     // Typography tokens (design doc §2)
     static let display   = Font.system(size: 30, weight: .bold)
@@ -649,6 +649,7 @@ struct ScreenRecordingStepView: View {
 
     @State private var screenRecordingGranted = false
     @State private var isRequesting = false
+    @State private var showStaleGrantHint = false
 
     private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -694,6 +695,21 @@ struct ScreenRecordingStepView: View {
                         action: requestScreenRecordingPermission
                     )
                     .padding(.top, 8)
+
+                    if showStaleGrantHint {
+                        // Stale TCC grant: System Settings shows the toggle ON,
+                        // but the recorded code signature no longer matches this
+                        // binary, so macOS silently refuses without re-prompting.
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
+                            Text("Already enabled in System Settings but still not working? Toggle Diduny off and on in Screen & System Audio Recording, then relaunch the app.")
+                                .font(OnboardingStyle.body)
+                                .foregroundColor(OnboardingStyle.titleColor.opacity(0.85))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.top, 4)
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -774,6 +790,14 @@ struct ScreenRecordingStepView: View {
                 isRequesting = false
             }
             await refreshStatus()
+            // If the request came back and TCC still says no, the user is in
+            // the stale-grant dead end (toggle ON in Settings, signature
+            // mismatch) — surface the recovery hint instead of failing silently.
+            await MainActor.run {
+                if !screenRecordingGranted {
+                    showStaleGrantHint = true
+                }
+            }
         }
     }
 }
@@ -914,17 +938,21 @@ struct ShortcutStepView: View {
         }
         .onAppear {
             selectedKey = SettingsStorage.shared.pushToTalkKey == .none ? .rightShift : SettingsStorage.shared.pushToTalkKey
-            selectedMode = SettingsStorage.shared.handsFreeModeEnabled ? .handsFree : .pushToTalk
+            selectedMode = SettingsStorage.shared.pushToTalkToggleEnabled ? .handsFree : .pushToTalk
         }
     }
 
     private func saveSettings() {
         SettingsStorage.shared.pushToTalkKey = selectedKey
-        SettingsStorage.shared.handsFreeModeEnabled = selectedMode == .handsFree
+        SettingsStorage.shared.pushToTalkHoldEnabled = selectedMode == .pushToTalk
+        SettingsStorage.shared.pushToTalkToggleEnabled = selectedMode == .handsFree
         if selectedMode == .handsFree {
             SettingsStorage.shared.pushToTalkToggleTapCount = 3
+        } else {
+            SettingsStorage.shared.pushToTalkHoldStartDelaySeconds = 1.2
         }
         NotificationCenter.default.post(name: .pushToTalkKeyChanged, object: selectedKey)
+        NotificationCenter.default.post(name: .pushToTalkModeChanged, object: nil)
     }
 }
 

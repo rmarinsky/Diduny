@@ -32,24 +32,28 @@ final class TranscriptCleanupService {
     // MARK: - Public API
 
     /// Cleans `rawText` via the backend.  Returns `rawText` unchanged on any failure.
-    func clean(_ rawText: String, fillerWords: [String]) async -> String {
+    func clean(
+        _ rawText: String,
+        fillerWords: [String],
+        timeoutInterval: TimeInterval = 3
+    ) async -> String {
         guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return rawText
         }
         guard AuthService.hasStoredSession else {
             Log.app.info("[Cleanup] No auth session — skipping server cleanup")
-            return rawText
+            return localLexiconPostprocess(rawText)
         }
         guard isReachable else {
             Log.app.info("[Cleanup] No network — skipping server cleanup")
-            return rawText
+            return localLexiconPostprocess(rawText)
         }
 
         let baseURL = SettingsStorage.shared.proxyBaseURL
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: "\(baseURL)/api/v1/transcriptions/clean") else {
             Log.app.warning("[Cleanup] Invalid proxy URL — skipping")
-            return rawText
+            return localLexiconPostprocess(rawText)
         }
 
         var body: [String: Any] = ["text": rawText]
@@ -59,38 +63,49 @@ final class TranscriptCleanupService {
 
         guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
             Log.app.warning("[Cleanup] JSON serialization failed — skipping")
-            return rawText
+            return localLexiconPostprocess(rawText)
         }
 
-        var request = URLRequest(url: url, timeoutInterval: 3)
+        var request = URLRequest(url: url, timeoutInterval: timeoutInterval)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = bodyData
         await AuthService.shared.authenticatedRequest(&request)
 
+        let startedAt = Date()
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
+            let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
 
             guard let http = response as? HTTPURLResponse,
                   (200 ... 299).contains(http.statusCode) else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                Log.app.warning("[Cleanup] Server returned \(code) — using raw text")
-                return rawText
+                Log.app.warning("[Cleanup] Server returned \(code) after \(durationMs)ms — using raw text")
+                return localLexiconPostprocess(rawText)
             }
 
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let cleaned = json["text"] as? String else {
-                Log.app.warning("[Cleanup] Unexpected response shape — using raw text")
-                return rawText
+                Log.app.warning("[Cleanup] Unexpected response shape after \(durationMs)ms — using raw text")
+                return localLexiconPostprocess(rawText)
             }
 
             let applied = json["applied"] as? Bool ?? false
-            Log.app.info("[Cleanup] Server cleanup applied=\(applied), chars \(rawText.count) → \(cleaned.count)")
-            return cleaned
+            Log.app.info(
+                "[Cleanup] Server cleanup applied=\(applied), durationMs=\(durationMs), chars \(rawText.count) → \(cleaned.count)"
+            )
+            return localLexiconPostprocess(cleaned)
 
         } catch {
-            Log.app.warning("[Cleanup] Request failed (\(error.localizedDescription)) — using raw text")
-            return rawText
+            let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+            Log.app.warning(
+                "[Cleanup] Request failed after \(durationMs)ms (\(error.localizedDescription)) — using raw text"
+            )
+            return localLexiconPostprocess(rawText)
         }
+    }
+
+    private func localLexiconPostprocess(_ text: String) -> String {
+        ProtectedLexiconService.shared.postprocessTranscript(text)
     }
 }

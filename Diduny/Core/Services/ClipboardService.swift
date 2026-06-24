@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-enum ClipboardCopyBehavior {
+enum ClipboardCopyBehavior: Equatable {
     case cleaned
     case raw
 }
@@ -28,6 +28,8 @@ enum ClipboardError: LocalizedError {
 
 final class ClipboardService: ClipboardServiceProtocol {
     static let shared = ClipboardService()
+    static let pasteReadinessDelayNanoseconds: UInt64 = 50_000_000
+    static let shortcutKeyHoldMicroseconds: useconds_t = 12_000
 
     private let pasteboard = NSPasteboard.general
 
@@ -72,10 +74,10 @@ final class ClipboardService: ClipboardServiceProtocol {
             throw ClipboardError.accessibilityNotGranted
         }
 
-        // Delay to ensure clipboard is ready and target app is focused
-        try await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+        // Keep only a short focus handoff delay. NSPasteboard writes above are synchronous.
+        try await Task.sleep(nanoseconds: Self.pasteReadinessDelayNanoseconds)
 
-        try postCommandShortcut(keyCode: CGKeyCode(9), error: .pasteEventFailed)
+        try await postCommandShortcut(keyCode: CGKeyCode(9), error: .pasteEventFailed)
 
         Log.app.info("Paste event sent successfully to frontmost app")
     }
@@ -91,7 +93,7 @@ final class ClipboardService: ClipboardServiceProtocol {
         }
 
         let initialChangeCount = pasteboard.changeCount
-        try postCommandShortcut(keyCode: CGKeyCode(8), error: .copyEventFailed)
+        try await postCommandShortcut(keyCode: CGKeyCode(8), error: .copyEventFailed)
 
         let timeout = Date().addingTimeInterval(0.8)
         while Date() < timeout {
@@ -112,7 +114,7 @@ final class ClipboardService: ClipboardServiceProtocol {
         pasteboard.string(forType: .string)
     }
 
-    private func postCommandShortcut(keyCode: CGKeyCode, error: ClipboardError) throws {
+    private func postCommandShortcut(keyCode: CGKeyCode, error: ClipboardError) async throws {
         guard let source = CGEventSource(stateID: .hidSystemState) else {
             Log.app.error("Failed to create event source")
             throw error
@@ -123,16 +125,21 @@ final class ClipboardService: ClipboardServiceProtocol {
             throw error
         }
         keyDown.flags = .maskCommand
-        keyDown.post(tap: .cgAnnotatedSessionEventTap)
 
-        // Keep a tiny delay between key down/up so target apps can process shortcuts reliably.
-        usleep(30_000)
-
+        // Build the key-up up front and post it via defer so it always fires —
+        // even if the hold-interval sleep below is cancelled (e.g. the user
+        // re-triggers recording mid-paste). Otherwise the virtual ⌘ stays
+        // "held" in the target app until the next real key event.
         guard let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
             Log.app.error("Failed to create keyUp event")
             throw error
         }
         keyUp.flags = .maskCommand
-        keyUp.post(tap: .cgAnnotatedSessionEventTap)
+
+        keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        defer { keyUp.post(tap: .cgAnnotatedSessionEventTap) }
+
+        // Suspend rather than park the thread for the key-hold interval.
+        try await Task.sleep(for: .milliseconds(12))
     }
 }

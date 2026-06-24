@@ -14,7 +14,7 @@ enum NotchState: Equatable {
 
 enum RecordingMode: Equatable {
     case voice
-    case translation(languagePair: String = "EN <-> UK")
+    case translation(targetLanguage: String = "EN <-> UK")
     case meeting
     case meetingTranslation
     case fileTranscription
@@ -22,7 +22,7 @@ enum RecordingMode: Equatable {
     var label: String {
         switch self {
         case .voice: "Recording..."
-        case let .translation(pair): "Recording (\(pair))..."
+        case let .translation(targetLanguage): "Recording -> \(targetLanguage)..."
         case .meeting: "Meeting Recording..."
         case .meetingTranslation: "Meeting Translation..."
         case .fileTranscription: "Transcribing File..."
@@ -61,6 +61,7 @@ final class NotchManager {
 
     private var notch: DynamicNotch<NotchExpandedView, NotchCompactLeadingView, NotchCompactTrailingView>?
     private var autoDismissTask: Task<Void, Never>?
+    private var notchTransitionTask: Task<Void, Never>?
     private var onStopRequested: (@MainActor () async -> Void)?
     private var operationSequence: UInt64 = 0
 
@@ -132,9 +133,8 @@ final class NotchManager {
         state = .idle
         operationSequence &+= 1
         let seq = operationSequence
-        Task {
-            guard self.operationSequence == seq else { return }
-            await notch?.hide()
+        runNotchTransition(sequence: seq) {
+            await self.notch?.hide()
         }
     }
 
@@ -181,12 +181,11 @@ final class NotchManager {
 
         operationSequence &+= 1
         let seq = operationSequence
-        Task {
-            guard self.operationSequence == seq else { return }
-            if screenHasNotch(screen) {
-                await notch?.compact(on: screen)
+        runNotchTransition(sequence: seq) {
+            if self.screenHasNotch(screen) {
+                await self.notch?.compact(on: screen)
             } else {
-                await notch?.expand(on: screen)
+                await self.notch?.expand(on: screen)
             }
         }
     }
@@ -196,9 +195,20 @@ final class NotchManager {
         guard let screen = activeScreen() else { return }
         operationSequence &+= 1
         let seq = operationSequence
-        Task {
-            guard self.operationSequence == seq else { return }
-            await notch?.expand(on: screen)
+        runNotchTransition(sequence: seq) {
+            await self.notch?.expand(on: screen)
+        }
+    }
+
+    private func runNotchTransition(
+        sequence: UInt64,
+        operation: @escaping @MainActor () async -> Void
+    ) {
+        let previousTask = notchTransitionTask
+        notchTransitionTask = Task { @MainActor in
+            await previousTask?.value
+            guard self.operationSequence == sequence else { return }
+            await operation()
         }
     }
 

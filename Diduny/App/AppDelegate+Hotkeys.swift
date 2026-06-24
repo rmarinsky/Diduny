@@ -10,16 +10,16 @@ extension AppDelegate {
             self?.toggleRecording()
         }
 
+        hotkeyService.registerTranslationHotkey { [weak self] in
+            self?.toggleTranslationRecording()
+        }
+
         hotkeyService.registerMeetingHotkey { [weak self] in
             self?.toggleMeetingRecording()
         }
 
         hotkeyService.registerMeetingTranslationHotkey { [weak self] in
             self?.toggleMeetingTranslationRecording()
-        }
-
-        hotkeyService.registerTranslationHotkey { [weak self] in
-            self?.toggleTranslationRecording()
         }
 
         hotkeyService.registerHistoryPaletteHotkey {
@@ -43,6 +43,8 @@ extension AppDelegate {
     func setupPushToTalk() {
         let key = SettingsStorage.shared.pushToTalkKey
         pushToTalkService.selectedKey = key
+        pushToTalkService.holdModeEnabled = SettingsStorage.shared.pushToTalkHoldEnabled
+        pushToTalkService.toggleModeEnabled = SettingsStorage.shared.pushToTalkToggleEnabled
         pushToTalkService.toggleTapCount = SettingsStorage.shared.pushToTalkToggleTapCount
         pushToTalkService.holdStartDelaySeconds = SettingsStorage.shared.pushToTalkHoldStartDelaySeconds
 
@@ -68,7 +70,7 @@ extension AppDelegate {
             }
         }
 
-        if key != .none {
+        if shouldMonitorModifierKey(key, hold: pushToTalkService.holdModeEnabled, toggle: pushToTalkService.toggleModeEnabled) {
             pushToTalkService.start()
         }
     }
@@ -79,11 +81,31 @@ extension AppDelegate {
 
         pushToTalkService.stop()
         pushToTalkService.selectedKey = key
+        pushToTalkService.holdModeEnabled = SettingsStorage.shared.pushToTalkHoldEnabled
+        pushToTalkService.toggleModeEnabled = SettingsStorage.shared.pushToTalkToggleEnabled
+        pushToTalkService.toggleTapCount = SettingsStorage.shared.pushToTalkToggleTapCount
         pushToTalkService.holdStartDelaySeconds = SettingsStorage.shared.pushToTalkHoldStartDelaySeconds
 
-        if key != .none {
+        if shouldMonitorModifierKey(key, hold: pushToTalkService.holdModeEnabled, toggle: pushToTalkService.toggleModeEnabled) {
             pushToTalkService.start()
         }
+    }
+
+    @objc func pushToTalkModeChanged(_: Notification) {
+        pushToTalkService.stop()
+        pushToTalkService.holdModeEnabled = SettingsStorage.shared.pushToTalkHoldEnabled
+        pushToTalkService.toggleModeEnabled = SettingsStorage.shared.pushToTalkToggleEnabled
+        pushToTalkService.toggleTapCount = SettingsStorage.shared.pushToTalkToggleTapCount
+        pushToTalkService.resetHandsFreeMode()
+
+        let key = pushToTalkService.selectedKey
+        if shouldMonitorModifierKey(key, hold: pushToTalkService.holdModeEnabled, toggle: pushToTalkService.toggleModeEnabled) {
+            pushToTalkService.start()
+        }
+
+        Log.app.info(
+            "Dictation modifier modes changed: hold=\(self.pushToTalkService.holdModeEnabled, privacy: .public) toggle=\(self.pushToTalkService.toggleModeEnabled, privacy: .public)"
+        )
     }
 
     @objc func pushToTalkTapCountChanged(_ notification: Notification) {
@@ -105,6 +127,8 @@ extension AppDelegate {
     func setupTranslationPushToTalk() {
         let key = SettingsStorage.shared.translationPushToTalkKey
         translationPushToTalkService.selectedKey = key
+        translationPushToTalkService.holdModeEnabled = SettingsStorage.shared.translationPushToTalkHoldEnabled
+        translationPushToTalkService.toggleModeEnabled = SettingsStorage.shared.translationPushToTalkToggleEnabled
         translationPushToTalkService.toggleTapCount = SettingsStorage.shared.translationPushToTalkToggleTapCount
         translationPushToTalkService.holdStartDelaySeconds =
             SettingsStorage.shared.translationPushToTalkHoldStartDelaySeconds
@@ -131,7 +155,11 @@ extension AppDelegate {
             }
         }
 
-        if key != .none {
+        if shouldMonitorModifierKey(
+            key,
+            hold: translationPushToTalkService.holdModeEnabled,
+            toggle: translationPushToTalkService.toggleModeEnabled
+        ) {
             translationPushToTalkService.start()
         }
     }
@@ -142,12 +170,40 @@ extension AppDelegate {
 
         translationPushToTalkService.stop()
         translationPushToTalkService.selectedKey = key
+        translationPushToTalkService.holdModeEnabled = SettingsStorage.shared.translationPushToTalkHoldEnabled
+        translationPushToTalkService.toggleModeEnabled = SettingsStorage.shared.translationPushToTalkToggleEnabled
+        translationPushToTalkService.toggleTapCount = SettingsStorage.shared.translationPushToTalkToggleTapCount
         translationPushToTalkService.holdStartDelaySeconds =
             SettingsStorage.shared.translationPushToTalkHoldStartDelaySeconds
 
-        if key != .none {
+        if shouldMonitorModifierKey(
+            key,
+            hold: translationPushToTalkService.holdModeEnabled,
+            toggle: translationPushToTalkService.toggleModeEnabled
+        ) {
             translationPushToTalkService.start()
         }
+    }
+
+    @objc func translationPushToTalkModeChanged(_: Notification) {
+        translationPushToTalkService.stop()
+        translationPushToTalkService.holdModeEnabled = SettingsStorage.shared.translationPushToTalkHoldEnabled
+        translationPushToTalkService.toggleModeEnabled = SettingsStorage.shared.translationPushToTalkToggleEnabled
+        translationPushToTalkService.toggleTapCount = SettingsStorage.shared.translationPushToTalkToggleTapCount
+        translationPushToTalkService.resetHandsFreeMode()
+
+        let key = translationPushToTalkService.selectedKey
+        if shouldMonitorModifierKey(
+            key,
+            hold: translationPushToTalkService.holdModeEnabled,
+            toggle: translationPushToTalkService.toggleModeEnabled
+        ) {
+            translationPushToTalkService.start()
+        }
+
+        Log.app.info(
+            "Translation modifier modes changed: hold=\(self.translationPushToTalkService.holdModeEnabled, privacy: .public) toggle=\(self.translationPushToTalkService.toggleModeEnabled, privacy: .public)"
+        )
     }
 
     @objc func translationPushToTalkTapCountChanged(_ notification: Notification) {
@@ -162,6 +218,10 @@ extension AppDelegate {
         translationPushToTalkService.holdStartDelaySeconds = delay
         translationPushToTalkService.resetHandsFreeMode()
         Log.app.info("Translation modifier hold delay changed to: \(String(format: "%.1f", delay))s")
+    }
+
+    private func shouldMonitorModifierKey(_ key: PushToTalkKey, hold: Bool, toggle: Bool) -> Bool {
+        key != .none && (hold || toggle)
     }
 
 }

@@ -4,13 +4,13 @@ import SwiftUI
 struct MenuBarContentView: View {
     @Environment(AppState.self) var appState
     var audioDeviceManager: AudioDeviceManager
-    @Environment(\.openSettings) private var openSettings
 
     var onToggleRecording: @MainActor () -> Void
     var onToggleTranslationRecording: @MainActor () -> Void
     var onToggleMeetingRecording: @MainActor () -> Void
     var onToggleMeetingTranslationRecording: @MainActor () -> Void
     var onTranscribeFile: @MainActor () -> Void
+    var onOpenMainWindow: @MainActor (MainSection) -> Void
     var onCheckForUpdates: @MainActor () -> Void
 
     var body: some View {
@@ -26,10 +26,12 @@ struct MenuBarContentView: View {
             Button(meetingButtonTitle, action: onToggleMeetingRecording)
                 .globalKeyboardShortcut(.toggleMeetingRecording)
                 .disabled(isMeetingButtonDisabled)
+                .help("Record meeting audio")
 
             Button(meetingTranslationButtonTitle, action: onToggleMeetingTranslationRecording)
                 .globalKeyboardShortcut(.toggleMeetingTranslation)
                 .disabled(isMeetingTranslationButtonDisabled)
+                .help("Record and translate meeting audio")
 
             Divider()
 
@@ -90,19 +92,25 @@ struct MenuBarContentView: View {
 
             Divider()
 
+            Button("Open Diduny") {
+                onOpenMainWindow(.overview)
+            }
+
             Button("Transcribe File…", action: onTranscribeFile)
                 .disabled(appState.recordingState == .processing)
 
-            Button("Recordings", action: openLibrary)
+            Button("Recordings") {
+                onOpenMainWindow(.recordings)
+            }
+
+            Button("Typing Speed Test…") {
+                onOpenMainWindow(.typingTest)
+            }
 
             Divider()
 
             Button {
-                openSettings()
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(100))
-                    NSApp.activate(ignoringOtherApps: true)
-                }
+                onOpenMainWindow(.general)
             } label: {
                 HStack {
                     Text("Settings")
@@ -155,15 +163,15 @@ struct MenuBarContentView: View {
     private var translateButtonTitle: String {
         switch appState.translationRecordingState {
         case .idle:
-            "Translation"
+            "Translation \(translationTargetLabel)"
         case .recording:
             "Stop Translation"
         case .processing:
             "Processing Translation…"
         case .success:
-            "Translation"
+            "Translation \(translationTargetLabel)"
         case .error:
-            "Translation"
+            "Translation \(translationTargetLabel)"
         }
     }
 
@@ -199,15 +207,15 @@ struct MenuBarContentView: View {
     private var meetingTranslationButtonTitle: String {
         switch appState.meetingTranslationRecordingState {
         case .idle:
-            "Meeting Translation"
+            "Meeting Translation \(translationTargetLabel)"
         case .recording:
             "Stop Meeting Translation"
         case .processing:
             "Processing Meeting Translation…"
         case .success:
-            "Meeting Translation"
+            "Meeting Translation \(translationTargetLabel)"
         case .error:
-            "Meeting Translation"
+            "Meeting Translation \(translationTargetLabel)"
         }
     }
 
@@ -233,6 +241,13 @@ struct MenuBarContentView: View {
         isCloudMode ? "Cloud" : "Local"
     }
 
+    private var translationTargetLabel: String {
+        if SettingsStorage.shared.effectiveTranslationProvider == .local {
+            return "EN"
+        }
+        return SettingsStorage.shared.resolveTranslationLanguagePair().displayLabel
+    }
+
     private var currentMicrophoneLabel: String {
         if let effectiveUID = audioDeviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID),
            let device = audioDeviceManager.device(forUID: effectiveUID)
@@ -242,31 +257,21 @@ struct MenuBarContentView: View {
         return "System Default"
     }
 
-    private func openLibrary() {
-        RecordingsLibraryWindowController.shared.showWindow()
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(100))
-            NSApp.activate(ignoringOtherApps: true)
-        }
-    }
-
     private var isCloudMode: Bool {
         let settings = SettingsStorage.shared
         return settings.effectiveTranscriptionProvider == .cloud
             && settings.effectiveTranslationProvider == .cloud
-            && settings.effectiveMeetingRealtimeTranscriptionEnabled
     }
 
     private func selectCloudMode() {
         guard AuthService.shared.isLoggedIn else {
             NotchManager.shared.showInfo(message: "Log in to use cloud processing", duration: 3.0)
-            appState.settingsTabToOpen = .account
+            onOpenMainWindow(.account)
             return
         }
         let settings = SettingsStorage.shared
         settings.transcriptionProvider = .cloud
         settings.translationProvider = .cloud
-        settings.meetingRealtimeTranscriptionEnabled = true
     }
 
     private func selectLocalMode() {

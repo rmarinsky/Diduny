@@ -21,6 +21,8 @@ final class EscapeCancelService: ObservableObject {
     /// Called on intermediate Escape presses so UI can explain how many are left.
     var onProgressEscape: ((Int, Int) -> Void)?
 
+    private let tinkSound = NSSound(named: .init("Tink"))
+
     private init() {}
 
     /// Activate shortcut monitoring (call when recording starts)
@@ -31,6 +33,7 @@ final class EscapeCancelService: ObservableObject {
 
         // Monitor keyDown events globally.
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53, !event.isARepeat else { return }
             Task { @MainActor in
                 self?.handleKeyDown(event)
             }
@@ -38,6 +41,7 @@ final class EscapeCancelService: ObservableObject {
 
         // Also monitor locally when app is active
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53, !event.isARepeat else { return event }
             Task { @MainActor in
                 self?.handleKeyDown(event)
             }
@@ -94,7 +98,7 @@ final class EscapeCancelService: ObservableObject {
             onCancel?()
         } else {
             Log.app.debug("Escape press \(self.consecutivePressCount)/\(requiredPressCount) - waiting for confirmation")
-            NSSound(named: NSSound.Name("Tink"))?.play()
+            tinkSound?.play()
             onProgressEscape?(self.consecutivePressCount, requiredPressCount)
             timeoutTask?.cancel()
             timeoutTask = Task { [weak self] in
