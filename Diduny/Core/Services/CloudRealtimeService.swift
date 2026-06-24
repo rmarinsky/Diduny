@@ -497,8 +497,11 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         guard (webSocketTask?.response as? HTTPURLResponse)?.statusCode == 402 else {
             return nil
         }
-        let usage = await UsageService.shared.cachedUsage
+        // Refresh first, then read the updated cache so the surfaced quota reflects
+        // the real limit rather than a pre-refresh snapshot.
+        let beforeRefresh = await UsageService.shared.cachedUsage
         await UsageService.shared.refresh()
+        let usage = await UsageService.shared.cachedUsage ?? beforeRefresh
         return .usageLimitExceeded(
             usedHours: usage?.usedHours ?? 0,
             limitHours: usage?.limitHours ?? 5
@@ -527,30 +530,26 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         // the typed usage error with the best numbers we have.
         if (webSocketTask?.response as? HTTPURLResponse)?.statusCode == 402 {
             Log.transcription.warning("Cloud RT: WS upgrade returned 402 — usage limit, not reconnecting")
+            // Tear down the dead socket before returning: the ping loop is already
+            // running and would keep firing on a connection that will never recover.
+            pingTask?.cancel()
+            pingTask = nil
+            receiveTask?.cancel()
+            receiveTask = nil
+            lifecycleLock.lock()
+            let deadTask = webSocketTask
+            webSocketTask = nil
+            lifecycleLock.unlock()
+            deadTask?.cancel(with: .normalClosure, reason: nil)
+            urlSession?.invalidateAndCancel()
+            urlSession = nil
             Task { [weak self] in
                 guard let self else { return }
-                let usage = await UsageService.shared.cachedUsage
+                // Refresh first, then read the updated cache so the surfaced quota
+                // reflects the real limit rather than a pre-refresh snapshot.
+                let beforeRefresh = await UsageService.shared.cachedUsage
                 await UsageService.shared.refresh()
-                self.onError?(RealtimeTranscriptionError.usageLimitExceeded(
-                    usedHours: usage?.usedHours ?? 0,
-                    limitHours: usage?.limitHours ?? 5
-                ))
-                self.onConnectionStatusChanged?(.failed("Cloud usage limit reached"))
-            }
-            return
-        }
-
-        // A refused WS upgrade (HTTP 402 usage limit) lands here via the receive
-        // loop with no close code. Reconnecting is futile — the server will keep
-        // refusing — and would surface a generic "Connection lost" instead of the
-        // real reason. Detect it synchronously to stop the reconnect, then surface
-        // the typed usage error with the best numbers we have.
-        if (webSocketTask?.response as? HTTPURLResponse)?.statusCode == 402 {
-            Log.transcription.warning("Cloud RT: WS upgrade returned 402 — usage limit, not reconnecting")
-            Task { [weak self] in
-                guard let self else { return }
-                let usage = await UsageService.shared.cachedUsage
-                await UsageService.shared.refresh()
+                let usage = await UsageService.shared.cachedUsage ?? beforeRefresh
                 self.onError?(RealtimeTranscriptionError.usageLimitExceeded(
                     usedHours: usage?.usedHours ?? 0,
                     limitHours: usage?.limitHours ?? 5
