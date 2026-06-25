@@ -14,11 +14,23 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private var urlSession: URLSession?
     private var receiveTask: Task<Void, Never>?
     private var pingTask: Task<Void, Never>?
+    /// In-flight reconnect (sleeping during backoff). Held so disconnect() can cancel it —
+    /// otherwise a drop that schedules a reconnect just before disconnect resurrects the
+    /// socket after teardown and loops forever with no audio source. Guarded by lifecycleLock.
+    private var reconnectTask: Task<Void, Never>?
     private var proxyReady = false
 
     private var isConnected = false
     private var reconnectAttempt = 0
     private let maxReconnectAttempts = 3
+
+    // MARK: - Per-session health tracking (reset in connect())
+    /// Total reconnect attempts triggered this session (cumulative; never resets on success).
+    private var sessionReconnectCount = 0
+    /// True once the WS drops at any point in this session.
+    private var sessionWasDisconnected = false
+    /// True when the service transitions to .failed (max attempts or unrecoverable error).
+    private var sessionHardFailed = false
 
     private var languageHints: [String] = []
     private var strictLanguageHints = false
@@ -58,6 +70,18 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         set { finalizeStateLock.lock(); defer { finalizeStateLock.unlock() }; _onSegmentBoundary = newValue }
     }
 
+    /// Returns a snapshot of the current session's health metrics.
+    /// Thread-safe: reads under lifecycleLock.
+    var sessionHealth: RealtimeSessionHealth {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        return RealtimeSessionHealth(
+            reconnectCount: sessionReconnectCount,
+            wasDisconnectedDuringSession: sessionWasDisconnected,
+            hardFailed: sessionHardFailed
+        )
+    }
+
     // MARK: - Connect
 
     func connect(
@@ -73,6 +97,12 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         self.translationConfig = translationConfig
         self.enableSpeakerDiarization = enableSpeakerDiarization
         reconnectAttempt = 0
+        // Reset per-session health for the new session.
+        lifecycleLock.lock()
+        sessionReconnectCount = 0
+        sessionWasDisconnected = false
+        sessionHardFailed = false
+        lifecycleLock.unlock()
         try await connectWebSocket()
     }
 
@@ -337,6 +367,9 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         let task = webSocketTask
         webSocketTask = nil
         isConnected = false
+        // Kill any reconnect scheduled by a drop that raced just before this disconnect.
+        reconnectTask?.cancel()
+        reconnectTask = nil
         lifecycleLock.unlock()
 
         task?.cancel(with: .normalClosure, reason: nil)
@@ -527,6 +560,9 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         // the typed usage error with the best numbers we have.
         if (webSocketTask?.response as? HTTPURLResponse)?.statusCode == 402 {
             Log.transcription.warning("Cloud RT: WS upgrade returned 402 — usage limit, not reconnecting")
+            lifecycleLock.lock()
+            sessionHardFailed = true
+            lifecycleLock.unlock()
             Task { [weak self] in
                 guard let self else { return }
                 let usage = await UsageService.shared.cachedUsage
@@ -551,21 +587,39 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
             return
         }
 
+        // Mark the session as having experienced a disconnect (whether or not we recover).
+        lifecycleLock.lock()
+        sessionWasDisconnected = true
+        lifecycleLock.unlock()
+
         guard reconnectAttempt < maxReconnectAttempts else {
             Log.transcription.error("Cloud RT: Max reconnect attempts reached")
+            lifecycleLock.lock()
+            sessionHardFailed = true
+            lifecycleLock.unlock()
             onConnectionStatusChanged?(.failed("Connection lost after \(maxReconnectAttempts) attempts"))
             return
         }
 
         reconnectAttempt += 1
+        lifecycleLock.lock()
+        sessionReconnectCount += 1
+        lifecycleLock.unlock()
         let delay = pow(2.0, Double(reconnectAttempt)) // 2s, 4s, 8s
 
         Log.transcription.info("Cloud RT: Reconnecting (attempt \(self.reconnectAttempt))...")
         onConnectionStatusChanged?(.reconnecting(attempt: reconnectAttempt))
 
-        Task { [weak self] in
+        lifecycleLock.lock()
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .seconds(delay))
+            // disconnect() cancels this task during the backoff sleep; bail before reconnecting.
+            guard !Task.isCancelled else {
+                Log.transcription.info("Cloud RT: Reconnect cancelled — session ended during backoff")
+                return
+            }
 
             do {
                 try await self.connectWebSocket()
@@ -582,6 +636,9 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                         Log.transcription.info("Cloud RT: Reconnected after token refresh")
                     } catch {
                         Log.transcription.error("Cloud RT: Reconnect after token refresh failed - \(error.localizedDescription)")
+                        self.lifecycleLock.lock()
+                        self.sessionHardFailed = true
+                        self.lifecycleLock.unlock()
                         self.onError?(error)
                         self.onConnectionStatusChanged?(.failed("Session expired — please log in again"))
                     }
@@ -596,6 +653,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                 self.handleDisconnect()
             }
         }
+        lifecycleLock.unlock()
     }
 
     static func makeConnectionConfig(

@@ -442,8 +442,49 @@ extension AppDelegate {
 
             let realtimeResult = await realtimeStopTask.value
 
+            // MARK: Instability-fallback decision (translation)
+            //
+            // Mirror of the dictation path. When the WS session was unstable, prefer the
+            // full-WAV HTTP path over the potentially-holey realtime translation.
+            // Scoped to TRANSLATION DICTATION only (short audio, cloud provider).
+            var usedInstabilityFallback = false
+            let sessionUnstable = realtimeResult.sessionHealth.isUnstable
+            if sessionUnstable,
+               !realtimeResult.text.isEmpty,
+               SettingsStorage.shared.effectiveTranslationProvider == .cloud {
+                Log.app.info(
+                    "stopTranslationRecording: WS session unstable (reconnects=\(realtimeResult.sessionHealth.reconnectCount), hardFailed=\(realtimeResult.sessionHealth.hardFailed)) — attempting lossless HTTP fallback"
+                )
+                showRecordingInfoDuringActiveRecording(
+                    message: "Зʼєднання нестабільне — перевіряємо запис...",
+                    mode: .translation(targetLanguage: translationPairLabel),
+                    duration: 2.0
+                )
+            }
+
+            var httpTextIsServerCleaned = false
+
             let rawText: String
-            if !realtimeResult.text.isEmpty {
+            if sessionUnstable,
+               !realtimeResult.text.isEmpty,
+               SettingsStorage.shared.effectiveTranslationProvider == .cloud {
+                // Lossless HTTP fallback: translate full WAV. fillerWords sent in config.
+                // If this throws, use partial realtime text.
+                do {
+                    rawText = try await transcriptionService.translateAndTranscribe(
+                        audioData: audioData,
+                        languagePair: pair
+                    )
+                    usedInstabilityFallback = true
+                    httpTextIsServerCleaned = true
+                    Log.app.info("stopTranslationRecording: Instability fallback succeeded (\(rawText.count) chars)")
+                } catch {
+                    Log.app.warning(
+                        "stopTranslationRecording: Instability fallback HTTP failed (\(error.localizedDescription)) — using partial realtime text"
+                    )
+                    rawText = realtimeResult.text
+                }
+            } else if !realtimeResult.text.isEmpty {
                 rawText = realtimeResult.text
                 Log.app.info("stopTranslationRecording: Using realtime translation (\(rawText.count) chars)")
             } else if SettingsStorage.shared.effectiveTranslationProvider == .local {
@@ -454,20 +495,34 @@ extension AppDelegate {
                 )
                 Log.app.info("stopTranslationRecording: Local Whisper translation (\(rawText.count) chars)")
             } else {
+                // Normal HTTP cloud path: fillerWords sent in config, text is server-cleaned.
                 rawText = try await transcriptionService.translateAndTranscribe(
                     audioData: audioData,
                     languagePair: pair
                 )
+                httpTextIsServerCleaned = true
                 Log.app.info("stopTranslationRecording: HTTP cloud translation (\(rawText.count) chars)")
             }
+
+            // Clean-path routing (mirrors dictation):
+            //   Realtime path  → cleanRealtimeResultText (tokens are raw, /clean still needed)
+            //   HTTP paths     → lexiconOnly (server already cleaned; skip second /clean)
+            //   Local Whisper  → full TranscriptCleanupService.clean (Whisper output is raw)
             let cleanedRawText: String
-            if !realtimeResult.text.isEmpty {
+            if !usedInstabilityFallback, !realtimeResult.text.isEmpty {
+                // Realtime fast path — unchanged.
                 cleanedRawText = await cleanRealtimeResultText(
                     rawText,
                     realtimeResult: realtimeResult,
                     logPrefix: "Translation"
                 )
+            } else if httpTextIsServerCleaned {
+                // HTTP paths: text is already server-cleaned; apply lexicon substitutions only.
+                cleanedRawText = TranscriptCleanupService.shared.lexiconOnly(rawText)
+                Log.app.info("stopTranslationRecording: Skipped /clean round-trip (server-cleaned HTTP text)")
             } else {
+                // Local Whisper (or instability-fallback fell back to partial realtime text):
+                // run full cleanup pipeline.
                 cleanedRawText = await TranscriptCleanupService.shared.clean(
                     rawText,
                     fillerWords: SettingsStorage.shared.fillerWords
@@ -510,6 +565,16 @@ extension AppDelegate {
                 activeTranslationTargetLanguage = nil
             }
             Log.app.info("stopTranslationRecording: SUCCESS")
+
+            // Post-success informational toast when instability fallback was used.
+            if usedInstabilityFallback {
+                Log.app.info("stopTranslationRecording: Showing instability fallback info toast")
+                showRecordingFeedbackInfo(
+                    message: "Зʼєднання було нестабільним — ми обробили повний запис, нічого не втрачено.",
+                    mode: .translation(targetLanguage: translationPairLabel),
+                    duration: 3.5
+                )
+            }
 
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
@@ -714,6 +779,10 @@ extension AppDelegate {
         if finalize {
             finalizeResult = await realtimeTranscriptionService.finalize(profile: .dictationFast)
         }
+
+        // Capture health snapshot BEFORE disconnect (resets on next connect).
+        let health = realtimeTranscriptionService.sessionHealth
+
         await realtimeTranscriptionService.disconnect()
 
         let text = (await accumulator?.bestText(includeProvisional: true) ?? "")
@@ -730,14 +799,15 @@ extension AppDelegate {
         }
 
         Log.transcription.info(
-            "Translation RT stop: finalizeProfile=\(finalizeResult.profileName), finished=\(finalizeResult.didReceiveFinishedSignal), timedOut=\(finalizeResult.timedOut), durationMs=\(finalizeResult.durationMs), tokensAfterFinalize=\(finalizeResult.tokensAfterFinalize), charsAfterFinalize=\(finalizeResult.charactersAfterFinalize), textChangedAfterFinalize=\(textChangedAfterFinalize), charsDelta=\(text.count - preFinalizeTrimmed.count), optimisticCleanupReused=\(optimisticCleanedText != nil)"
+            "Translation RT stop: finalizeProfile=\(finalizeResult.profileName), finished=\(finalizeResult.didReceiveFinishedSignal), timedOut=\(finalizeResult.timedOut), durationMs=\(finalizeResult.durationMs), tokensAfterFinalize=\(finalizeResult.tokensAfterFinalize), charsAfterFinalize=\(finalizeResult.charactersAfterFinalize), textChangedAfterFinalize=\(textChangedAfterFinalize), charsDelta=\(text.count - preFinalizeTrimmed.count), optimisticCleanupReused=\(optimisticCleanedText != nil), sessionReconnects=\(health.reconnectCount), sessionHardFailed=\(health.hardFailed)"
         )
 
         return RealtimeSessionStopResult(
             text: text,
             preFinalizeText: preFinalizeTrimmed,
             optimisticCleanedText: optimisticCleanedText,
-            finalizeResult: finalizeResult
+            finalizeResult: finalizeResult,
+            sessionHealth: health
         )
     }
 

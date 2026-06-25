@@ -124,11 +124,43 @@ struct RealtimeFinalizeResult: Equatable {
     )
 }
 
+// MARK: - Session Health
+
+/// Tracks per-session instability for the instability-fallback decision.
+/// All fields reset to their zero-state when a new session starts.
+struct RealtimeSessionHealth: Equatable {
+    /// Total number of reconnect attempts triggered during this session.
+    /// A single drop-and-reconnect increments this by 1.
+    let reconnectCount: Int
+
+    /// True if the WS dropped at any point during the session, even if it recovered.
+    let wasDisconnectedDuringSession: Bool
+
+    /// True when the service reached `.failed` status (max reconnect attempts exhausted,
+    /// or an unrecoverable error such as 402 or permanent close).
+    let hardFailed: Bool
+
+    /// Zero-state: healthy session, no instability observed.
+    static let healthy = RealtimeSessionHealth(
+        reconnectCount: 0,
+        wasDisconnectedDuringSession: false,
+        hardFailed: false
+    )
+
+    /// True when any instability signal was observed — the caller should prefer the
+    /// lossless HTTP fallback path over the potentially-holey realtime transcript.
+    var isUnstable: Bool {
+        reconnectCount >= 1 || hardFailed
+    }
+}
+
 struct RealtimeSessionStopResult: Equatable {
     let text: String
     let preFinalizeText: String
     let optimisticCleanedText: String?
     let finalizeResult: RealtimeFinalizeResult
+    /// Health snapshot captured at session stop; `.healthy` when realtime was not used.
+    let sessionHealth: RealtimeSessionHealth
 
     var didReceiveFinalization: Bool {
         finalizeResult.didReceiveFinishedSignal
@@ -143,7 +175,8 @@ struct RealtimeSessionStopResult: Equatable {
         text: "",
         preFinalizeText: "",
         optimisticCleanedText: nil,
-        finalizeResult: .skipped
+        finalizeResult: .skipped,
+        sessionHealth: .healthy
     )
 }
 
