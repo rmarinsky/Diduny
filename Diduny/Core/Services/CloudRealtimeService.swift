@@ -14,6 +14,10 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private var urlSession: URLSession?
     private var receiveTask: Task<Void, Never>?
     private var pingTask: Task<Void, Never>?
+    /// In-flight reconnect (sleeping during backoff). Held so disconnect() can cancel it —
+    /// otherwise a drop that schedules a reconnect just before disconnect resurrects the
+    /// socket after teardown and loops forever with no audio source. Guarded by lifecycleLock.
+    private var reconnectTask: Task<Void, Never>?
     private var proxyReady = false
 
     private var isConnected = false
@@ -337,6 +341,9 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         let task = webSocketTask
         webSocketTask = nil
         isConnected = false
+        // Kill any reconnect scheduled by a drop that raced just before this disconnect.
+        reconnectTask?.cancel()
+        reconnectTask = nil
         lifecycleLock.unlock()
 
         task?.cancel(with: .normalClosure, reason: nil)
@@ -563,9 +570,16 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         Log.transcription.info("Cloud RT: Reconnecting (attempt \(self.reconnectAttempt))...")
         onConnectionStatusChanged?(.reconnecting(attempt: reconnectAttempt))
 
-        Task { [weak self] in
+        lifecycleLock.lock()
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .seconds(delay))
+            // disconnect() cancels this task during the backoff sleep; bail before reconnecting.
+            guard !Task.isCancelled else {
+                Log.transcription.info("Cloud RT: Reconnect cancelled — session ended during backoff")
+                return
+            }
 
             do {
                 try await self.connectWebSocket()
@@ -596,6 +610,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                 self.handleDisconnect()
             }
         }
+        lifecycleLock.unlock()
     }
 
     static func makeConnectionConfig(
