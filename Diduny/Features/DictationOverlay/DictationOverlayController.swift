@@ -115,6 +115,12 @@ final class DictationOverlayController {
     }
 
     func showInfo(message: String, duration: TimeInterval = 1.5) {
+        // Mid-recording toasts must not tear down a minimized live tab via
+        // scheduleAutoHide → dismiss. Use the during-recording path instead.
+        if EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
+            showInfoDuringRecording(message: message, mode: store.mode, duration: duration)
+            return
+        }
         autoHideTask?.cancel()
         store.phase = .info(message)
         store.audioLevel = 0
@@ -151,6 +157,11 @@ final class DictationOverlayController {
     }
 
     func hide() {
+        // Toast auto-hide must not dismiss while the user hid the live panel
+        // to the red-dot tab — recording is still active.
+        if EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
+            return
+        }
         guard usesNotch || store.phase != .pasted || SettingsStorage.shared.autoPaste else { return }
         dismiss()
     }

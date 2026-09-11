@@ -323,6 +323,26 @@ struct EdgeCommandPanelModelTests {
             pointer: outside, panelFrame: panelFrame,
             isDragging: false, isExpanded: false, isShowingLiveFeedback: true
         ))
+        // Minimized live tab (red dot) auto-hides like the idle tab.
+        #expect(EdgeCommandPanelAutoHidePolicy.shouldHide(
+            pointer: outside, panelFrame: panelFrame,
+            isDragging: false, isExpanded: false, isShowingLiveFeedback: false,
+            isLiveFeedbackMinimized: true
+        ))
+        #expect(EdgeCommandPanelAutoHidePolicy.shouldHide(
+            pointer: outside, panelFrame: panelFrame,
+            isDragging: false, isExpanded: false, isShowingLiveFeedback: true,
+            isLiveFeedbackMinimized: true
+        ))
+        #expect(!EdgeCommandPanelAutoHidePolicy.shouldHide(
+            pointer: inside, panelFrame: panelFrame,
+            isDragging: false, isExpanded: false, isShowingLiveFeedback: true,
+            isLiveFeedbackMinimized: true
+        ))
+        #expect(EdgeCommandPanelAutoHidePolicy.shouldSchedule(isLiveFeedbackMinimized: true))
+        #expect(EdgeCommandPanelAutoHidePolicy.shouldSchedule(isLiveFeedbackMinimized: false))
+        #expect(!EdgeCommandPanelMinimizedLivePolicy.shouldAllowHoverExpand(isLiveFeedbackMinimized: true))
+        #expect(EdgeCommandPanelMinimizedLivePolicy.shouldAllowHoverExpand(isLiveFeedbackMinimized: false))
     }
 
     @Test("A hidden tab reveals when the pointer touches the docked screen edge")

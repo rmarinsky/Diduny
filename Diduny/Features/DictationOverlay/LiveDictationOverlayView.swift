@@ -5,6 +5,7 @@ struct LiveDictationOverlayView: View {
     let onCopy: () -> Void
     let onStop: () -> Void
     let onDismiss: () -> Void
+    let onMinimize: () -> Void
     let onDrag: () -> Void
     let onDragEnd: () -> Void
     @State private var autoPaste = SettingsStorage.shared.autoPaste
@@ -65,6 +66,19 @@ struct LiveDictationOverlayView: View {
 
             if store.phase != .pasted {
                 ElapsedTimeLabel(startedAt: store.startedAt)
+
+                Button(action: onMinimize) {
+                    Image(systemName: "minus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 26, height: 26)
+                        .background(
+                            Color.primary.opacity(0.045),
+                            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Hide to edge tab")
+                .accessibilityLabel("Hide recording panel")
             }
         }
         .contentShape(Rectangle())
@@ -132,14 +146,20 @@ struct LiveDictationOverlayView: View {
     private var controls: some View {
         HStack(spacing: 8) {
             Button(action: onCopy) {
-                Label(store.copiedAt == nil ? "Copy" : "Copied", systemImage: store.copiedAt == nil ? "doc.on.doc" : "checkmark")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .frame(maxWidth: .infinity, minHeight: EdgeCommandPanelPlacement.liveControlHitTargetHeight)
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Label(
+                    store.copiedAt == nil ? "Copy" : "Copied",
+                    systemImage: store.copiedAt == nil ? "doc.on.doc" : "checkmark"
+                )
+                .font(.system(size: 12.5, weight: .semibold))
+                .frame(maxWidth: .infinity, minHeight: EdgeCommandPanelPlacement.liveControlHitTargetHeight)
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
             .foregroundStyle(store.hasText ? Color.primary : Color.secondary.opacity(0.55))
-            .background(Color.primary.opacity(store.hasText ? 0.06 : 0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(
+                Color.primary.opacity(store.hasText ? 0.06 : 0.03),
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
             .disabled(!store.hasText)
             .help("Copy transcript")
 
@@ -343,7 +363,7 @@ private struct LiveAudioMeter: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 3) {
-            ForEach(0..<5, id: \.self) { index in
+            ForEach(0 ..< 5, id: \.self) { index in
                 Capsule()
                     .fill(color.opacity(opacity(for: index)))
                     .frame(width: 3, height: height(for: index))

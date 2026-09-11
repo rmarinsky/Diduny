@@ -585,10 +585,10 @@ private struct OnboardingPanelReveal: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             OnboardingProductionPanelPreview(onAction: onAction)
-            .opacity(expanded ? 1 : 0)
-            .scaleEffect(expanded ? 1 : 0.96, anchor: .topTrailing)
-            .allowsHitTesting(expanded)
-            .accessibilityHidden(!expanded)
+                .opacity(expanded ? 1 : 0)
+                .scaleEffect(expanded ? 1 : 0.96, anchor: .topTrailing)
+                .allowsHitTesting(expanded)
+                .accessibilityHidden(!expanded)
 
             if !expanded {
                 Capsule()
@@ -642,6 +642,7 @@ private struct OnboardingProductionPanelPreview: View {
             onCopy: {},
             onStop: {},
             onDismissLive: {},
+            onMinimizeLive: {},
             onStartMeetingSuggestion: { _ in },
             onDismissMeetingSuggestion: { _ in },
             onMeetingSuggestionsEnabled: { _ in },
