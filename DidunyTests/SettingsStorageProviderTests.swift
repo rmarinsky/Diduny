@@ -111,7 +111,7 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertTrue(SettingsStorage.shared.autoPaste)
         XCTAssertEqual(SettingsStorage.shared.transcriptionProvider, .local)
         XCTAssertEqual(SettingsStorage.shared.typingSpeedWordsPerMinute, 85)
-        XCTAssertEqual(SettingsStorage.shared.meetingHotkeyPressCount, 3)
+        XCTAssertEqual(SettingsStorage.shared.meetingHotkeyPressCount, 1)
     }
 
     func test_newUserDefaults_fillMissingCloudCopyOnlyDictationSettings() {

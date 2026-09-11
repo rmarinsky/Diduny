@@ -119,6 +119,12 @@ if [[ "${CODE_SIGNING_ALLOWED:-YES}" != "NO" && -n "${EXPANDED_CODE_SIGN_IDENTIT
         "${TASK_DESTINATION}/deno"
 
     # Fail the build if the signed helpers cannot execute their real runtime paths.
+    # Deno colorizes stdout even with NO_COLOR; strip ANSI before comparing.
     "${TASK_DESTINATION}/yt-dlp_macos" --version >/dev/null
-    [[ "$("${TASK_DESTINATION}/deno" eval 'console.log(6 * 7)')" == "42" ]]
+    deno_probe="$(
+        "${TASK_DESTINATION}/deno" eval 'console.log(6 * 7)' \
+            | /usr/bin/sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g' \
+            | /usr/bin/tr -d '[:space:]'
+    )"
+    [[ "${deno_probe}" == "42" ]]
 fi
