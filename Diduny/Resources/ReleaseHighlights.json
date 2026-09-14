@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "headline": "Meeting recording suggestions",
+  "headline": "Flexible live meeting transcripts",
   "highlights": [
-    "Diduny can locally detect likely meetings and suggest recording.",
-    "Choose Cloud or Local transcription before each suggested recording.",
-    "When Cloud is unavailable, Diduny uses Local without losing the meeting audio."
+    "Minimize a live transcript to a red-dot edge tab and restore it with one click.",
+    "Choose whether the floating transcript opens when recording starts.",
+    "Meeting translations now show advancing speaker timestamps."
   ]
 }
