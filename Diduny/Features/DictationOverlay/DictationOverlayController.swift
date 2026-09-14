@@ -160,7 +160,12 @@ final class DictationOverlayController {
         // Toast auto-hide must not dismiss while the user hid the live panel
         // to the red-dot tab — recording is still active.
         if EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
-            return
+            switch store.phase {
+            case .pasted, .error:
+                break
+            default:
+                return
+            }
         }
         guard usesNotch || store.phase != .pasted || SettingsStorage.shared.autoPaste else { return }
         dismiss()

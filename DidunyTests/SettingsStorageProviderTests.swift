@@ -69,6 +69,7 @@ final class SettingsStorageProviderTests: XCTestCase {
     func test_newUserDefaults_doNotOverwritePersistedSettings() {
         let defaults = UserDefaults.standard
         let onboardingKey = "onboarding.completed"
+        let meetingHotkeyMigrationKey = "didMigrateMeetingHotkeySinglePress"
         let keys = [
             "pushToTalkKey",
             "pushToTalkHoldEnabled",
@@ -89,16 +90,21 @@ final class SettingsStorageProviderTests: XCTestCase {
         ]
         let storedValues = keys.map { defaults.object(forKey: $0) }
         let storedOnboarding = defaults.object(forKey: onboardingKey)
+        let storedMeetingHotkeyMigration = defaults.object(forKey: meetingHotkeyMigrationKey)
         defer {
             zip(keys, storedValues).forEach { restore($0.1, key: $0.0) }
             restore(storedOnboarding, key: onboardingKey)
+            restore(storedMeetingHotkeyMigration, key: meetingHotkeyMigrationKey)
         }
 
         keys.forEach { defaults.removeObject(forKey: $0) }
         defaults.removeObject(forKey: onboardingKey)
+        defaults.removeObject(forKey: meetingHotkeyMigrationKey)
         SettingsStorage.shared.pushToTalkKey = .rightOption
         SettingsStorage.shared.pushToTalkHoldEnabled = false
         SettingsStorage.shared.translationPushToTalkKey = .leftOption
+        SettingsStorage.shared.meetingHotkeyPressCount = 3
+        SettingsStorage.shared.meetingTranslationHotkeyPressCount = 3
         SettingsStorage.shared.autoPaste = true
         SettingsStorage.shared.transcriptionProvider = .local
         SettingsStorage.shared.typingSpeedWordsPerMinute = 85
@@ -111,7 +117,8 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertTrue(SettingsStorage.shared.autoPaste)
         XCTAssertEqual(SettingsStorage.shared.transcriptionProvider, .local)
         XCTAssertEqual(SettingsStorage.shared.typingSpeedWordsPerMinute, 85)
-        XCTAssertEqual(SettingsStorage.shared.meetingHotkeyPressCount, 1)
+        XCTAssertEqual(SettingsStorage.shared.meetingHotkeyPressCount, 3)
+        XCTAssertEqual(SettingsStorage.shared.meetingTranslationHotkeyPressCount, 3)
     }
 
     func test_newUserDefaults_fillMissingCloudCopyOnlyDictationSettings() {

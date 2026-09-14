@@ -157,7 +157,6 @@ final class SettingsStorage {
         migratePreferredDeviceKeyIfNeeded()
         migrateTranscriptionProviderIfNeeded()
         migrateProxyURLIfNeeded()
-        migrateMeetingHotkeySinglePressIfNeeded()
     }
 
     func applyNewUserDefaultsIfMissing() {
@@ -183,22 +182,6 @@ final class SettingsStorage {
         for (key, value) in values where defaults.object(forKey: key.rawValue) == nil {
             defaults.set(value, forKey: key.rawValue)
         }
-        migrateMeetingHotkeySinglePressIfNeeded()
-    }
-
-    /// Older onboarding seeded meeting shortcuts at 3 presses / 0.35s, which
-    /// felt broken for ⌘⌥M. One-time migrate that default to a single press;
-    /// leave intentional 2-press choices alone.
-    private func migrateMeetingHotkeySinglePressIfNeeded() {
-        let flagKey = "didMigrateMeetingHotkeySinglePress"
-        guard !defaults.bool(forKey: flagKey) else { return }
-        if defaults.object(forKey: Key.meetingHotkeyPressCount.rawValue) as? Int == 3 {
-            meetingHotkeyPressCount = 1
-        }
-        if defaults.object(forKey: Key.meetingTranslationHotkeyPressCount.rawValue) as? Int == 3 {
-            meetingTranslationHotkeyPressCount = 1
-        }
-        defaults.set(true, forKey: flagKey)
     }
 
     /// One-time migration from legacy `selectedDeviceID` (AudioDeviceID int) to `selectedDeviceUID` (String).

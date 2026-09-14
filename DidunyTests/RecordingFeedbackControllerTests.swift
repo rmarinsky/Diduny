@@ -66,4 +66,53 @@ struct RecordingFeedbackControllerTests {
         sut.processTokens([RealtimeToken(text: "now notch", isFinal: true)])
         #expect(!sut.store.displayText.contains("now notch"))
     }
+
+    @Test("Successful auto-paste dismisses minimized live feedback")
+    func successfulAutoPasteDismissesMinimizedLiveFeedback() {
+        let settings = SettingsStorage.shared
+        let previousSurface = settings.recordingFeedbackSurface
+        let previousShowLiveTranscriptModal = settings.showLiveTranscriptModal
+        let previousAutoPaste = settings.autoPaste
+        defer {
+            settings.recordingFeedbackSurface = previousSurface
+            settings.showLiveTranscriptModal = previousShowLiveTranscriptModal
+            settings.autoPaste = previousAutoPaste
+            DictationOverlayController.shared.dismiss()
+        }
+
+        settings.recordingFeedbackSurface = .compactPanel
+        settings.showLiveTranscriptModal = false
+        settings.autoPaste = true
+        let sut = DictationOverlayController.shared
+        sut.begin(mode: .voice)
+        #expect(EdgeCommandPanelController.shared.isLiveFeedbackMinimized)
+
+        sut.showSuccess(text: "Done")
+        sut.hide()
+
+        #expect(!EdgeCommandPanelController.shared.isLiveFeedbackMinimized)
+    }
+
+    @Test("Error dismisses minimized live feedback")
+    func errorDismissesMinimizedLiveFeedback() {
+        let settings = SettingsStorage.shared
+        let previousSurface = settings.recordingFeedbackSurface
+        let previousShowLiveTranscriptModal = settings.showLiveTranscriptModal
+        defer {
+            settings.recordingFeedbackSurface = previousSurface
+            settings.showLiveTranscriptModal = previousShowLiveTranscriptModal
+            DictationOverlayController.shared.dismiss()
+        }
+
+        settings.recordingFeedbackSurface = .compactPanel
+        settings.showLiveTranscriptModal = false
+        let sut = DictationOverlayController.shared
+        sut.begin(mode: .voice)
+        #expect(EdgeCommandPanelController.shared.isLiveFeedbackMinimized)
+
+        sut.showError(message: "Failed")
+        sut.hide()
+
+        #expect(!EdgeCommandPanelController.shared.isLiveFeedbackMinimized)
+    }
 }

@@ -123,7 +123,7 @@ if [[ "${CODE_SIGNING_ALLOWED:-YES}" != "NO" && -n "${EXPANDED_CODE_SIGN_IDENTIT
     "${TASK_DESTINATION}/yt-dlp_macos" --version >/dev/null
     deno_probe="$(
         "${TASK_DESTINATION}/deno" eval 'console.log(6 * 7)' \
-            | /usr/bin/sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g' \
+            | /usr/bin/sed -E $'s/\033\\[[0-9;]*[[:alpha:]]//g' \
             | /usr/bin/tr -d '[:space:]'
     )"
     [[ "${deno_probe}" == "42" ]]
