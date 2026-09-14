@@ -156,6 +156,22 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(SettingsStorage.shared.transcriptionProvider, .cloud)
     }
 
+    func test_newUserDefaults_fillMissingMeetingHotkeysWithSinglePress() {
+        let defaults = UserDefaults.standard
+        let keys = ["meetingHotkeyPressCount", "meetingTranslationHotkeyPressCount"]
+        let storedValues = keys.map { defaults.object(forKey: $0) }
+        defer {
+            zip(keys, storedValues).forEach { restore($0.1, key: $0.0) }
+        }
+
+        keys.forEach { defaults.removeObject(forKey: $0) }
+
+        SettingsStorage.shared.applyNewUserDefaultsIfMissing()
+
+        XCTAssertEqual(SettingsStorage.shared.meetingHotkeyPressCount, 1)
+        XCTAssertEqual(SettingsStorage.shared.meetingTranslationHotkeyPressCount, 1)
+    }
+
     override func setUp() {
         super.setUp()
         storedProvider = UserDefaults.standard.object(forKey: transcriptionProviderKey)

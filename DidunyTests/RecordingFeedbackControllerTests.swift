@@ -91,6 +91,11 @@ struct RecordingFeedbackControllerTests {
         sut.hide()
 
         #expect(!EdgeCommandPanelController.shared.isLiveFeedbackMinimized)
+
+        settings.recordingFeedbackSurface = .notch
+        sut.begin(mode: .voice)
+        sut.processTokens([RealtimeToken(text: "hidden", isFinal: true)])
+        #expect(!sut.store.displayText.contains("hidden"))
     }
 
     @Test("Error dismisses minimized live feedback")
@@ -114,5 +119,10 @@ struct RecordingFeedbackControllerTests {
         sut.hide()
 
         #expect(!EdgeCommandPanelController.shared.isLiveFeedbackMinimized)
+
+        settings.recordingFeedbackSurface = .notch
+        sut.begin(mode: .voice)
+        sut.processTokens([RealtimeToken(text: "hidden", isFinal: true)])
+        #expect(!sut.store.displayText.contains("hidden"))
     }
 }
