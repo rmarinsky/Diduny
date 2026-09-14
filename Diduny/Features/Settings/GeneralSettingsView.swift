@@ -6,6 +6,7 @@ struct GeneralSettingsView: View {
     @State private var playSound = SettingsStorage.shared.playSoundOnCompletion
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
+    @State private var showLiveTranscriptModal = SettingsStorage.shared.showLiveTranscriptModal
     @State private var typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
     @State private var screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
     @State private var dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
@@ -48,11 +49,20 @@ struct GeneralSettingsView: View {
                     EdgeCommandPanelController.shared.applySurfacePreference()
                 }
 
+                if recordingFeedbackSurface == .compactPanel {
+                    Toggle("Show transcript window when recording starts", isOn: $showLiveTranscriptModal)
+                        .onChange(of: showLiveTranscriptModal) { _, newValue in
+                            SettingsStorage.shared.showLiveTranscriptModal = newValue
+                        }
+                }
+
             } header: {
                 Text("Behavior")
             } footer: {
                 Text(
-                    "Dynamic Notch shows a compact indicator without the live transcript; Floating modal shows the transcript as you speak."
+                    recordingFeedbackSurface == .compactPanel
+                        ? "Floating modal shows the live transcript. Turn the toggle off to start on the edge tab (red dot); click the tab to open the window. Minus hides it again."
+                        : "Dynamic Notch shows a compact indicator without the live transcript."
                 )
             }
 
@@ -169,6 +179,7 @@ struct GeneralSettingsView: View {
         .onAppear {
             launchAtLogin = LaunchAtLogin.isEnabled
             recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
+            showLiveTranscriptModal = SettingsStorage.shared.showLiveTranscriptModal
             typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
             screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
             dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy

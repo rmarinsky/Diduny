@@ -91,6 +91,7 @@ final class SettingsStorage {
         case playSoundOnCompletion
         case launchAtLogin
         case recordingFeedbackSurface
+        case showLiveTranscriptModal
         case typingSpeedWordsPerMinute
         case pushToTalkKey
         case pushToTalkHoldEnabled
@@ -170,8 +171,8 @@ final class SettingsStorage {
             .translationPushToTalkHoldStartDelaySeconds: 1.2,
             .pushToTalkToggleTapCount: 2,
             .translationPushToTalkToggleTapCount: 2,
-            .meetingHotkeyPressCount: 3,
-            .meetingTranslationHotkeyPressCount: 3,
+            .meetingHotkeyPressCount: 1,
+            .meetingTranslationHotkeyPressCount: 1,
             .autoPaste: false,
             .transcriptionProvider: TranscriptionProvider.cloud.rawValue,
             .playSoundOnCompletion: true,
@@ -345,6 +346,18 @@ final class SettingsStorage {
             return surface
         }
         set { defaults.set(newValue.rawValue, forKey: Key.recordingFeedbackSurface.rawValue) }
+    }
+
+    /// When using the floating modal surface, whether to open the live transcript
+    /// window as soon as recording starts. Off → start on the red-dot edge tab.
+    var showLiveTranscriptModal: Bool {
+        get {
+            if defaults.object(forKey: Key.showLiveTranscriptModal.rawValue) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.showLiveTranscriptModal.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.showLiveTranscriptModal.rawValue) }
     }
 
     var typingSpeedWordsPerMinute: Double {

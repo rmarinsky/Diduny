@@ -33,10 +33,10 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             expected = (
-                "# Meeting recording suggestions\n\n"
-                "- Diduny can locally detect likely meetings and suggest recording.\n"
-                "- Choose Cloud or Local transcription before each suggested recording.\n"
-                "- When Cloud is unavailable, Diduny uses Local without losing the meeting audio.\n"
+                "# Flexible live meeting transcripts\n\n"
+                "- Minimize a live transcript to a red-dot edge tab and restore it with one click.\n"
+                "- Choose whether the floating transcript opens when recording starts.\n"
+                "- Meeting translations now show advancing speaker timestamps.\n"
             )
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 

@@ -260,7 +260,9 @@ enum EdgeCommandPanelHoverPolicy {
 
 /// The collapsed edge tab auto-hides after a few idle seconds (it annoys
 /// people when it sits on the screen edge permanently). It must never hide
-/// under the pointer, mid-drag, or while the panel is doing actual work.
+/// under the pointer, mid-drag, or while the expanded live modal is open.
+/// A minimized live-recording tab (red dot) does auto-hide, then reappears
+/// on edge hover until the user clicks to restore the modal.
 enum EdgeCommandPanelAutoHidePolicy {
     static let delay: TimeInterval = 3
 
@@ -269,9 +271,26 @@ enum EdgeCommandPanelAutoHidePolicy {
         panelFrame: NSRect,
         isDragging: Bool,
         isExpanded: Bool,
-        isShowingLiveFeedback: Bool
+        isShowingLiveFeedback: Bool,
+        isLiveFeedbackMinimized: Bool = false
     ) -> Bool {
-        !isDragging && !isExpanded && !isShowingLiveFeedback && !panelFrame.contains(pointer)
+        let liveModalExpanded = isShowingLiveFeedback && !isLiveFeedbackMinimized
+        return !isDragging
+            && !isExpanded
+            && !liveModalExpanded
+            && !panelFrame.contains(pointer)
+    }
+
+    /// Auto-hide may run for idle tabs and for minimized live tabs.
+    static func shouldSchedule(isLiveFeedbackMinimized _: Bool) -> Bool {
+        true
+    }
+}
+
+enum EdgeCommandPanelMinimizedLivePolicy {
+    /// Hover may open the command menu only when live recording is not minimized.
+    static func shouldAllowHoverExpand(isLiveFeedbackMinimized: Bool) -> Bool {
+        !isLiveFeedbackMinimized
     }
 }
 
@@ -284,6 +303,8 @@ final class EdgeCommandPanelModel {
     var isSignedIn: Bool
     var isExpanded = false
     var isShowingLiveFeedback = false
+    /// Live recording is active but the user collapsed the panel to the edge tab.
+    var isLiveFeedbackMinimized = false
     var meetingSuggestion: MeetingSuggestion?
     var meetingSuggestionsEnabled = SettingsStorage.shared.meetingSuggestionsEnabled
     var dockEdge: EdgeCommandPanelDockEdge = .right
@@ -395,6 +416,9 @@ final class EdgeCommandPanelController: NSObject {
     private var edgeRevealLocalMonitor: Any?
     private var isTabHidden = false
     private var hiddenTabScreenFrame: NSRect?
+    /// After the user click-restores a minimized live panel, keep it open for
+    /// the rest of the session even if "show modal on start" is off.
+    private var liveFeedbackRestoredByUser = false
 
     init(meetingRecordingStarter: ((TranscriptionProvider) -> Void)? = nil) {
         self.meetingRecordingStarter = meetingRecordingStarter
@@ -411,13 +435,20 @@ final class EdgeCommandPanelController: NSObject {
     /// Notch mode nothing of it may be on screen — feedback lives in the
     /// notch. Called at launch and whenever the Settings picker changes.
     func applySurfacePreference() {
+        // Never clobber an active live session (expanded or minimized to the
+        // red-dot tab) or a meeting suggestion — those own the panel until
+        // they dismiss themselves.
+        let isBusy = model?.isShowingLiveFeedback == true
+            || model?.isLiveFeedbackMinimized == true
+            || model?.meetingSuggestion != nil
         if SettingsStorage.shared.recordingFeedbackSurface == .notch {
             // An active live-feedback session finishes on the panel (the
             // router snapshots the surface per session) — hide right after,
             // via dismissLiveFeedback → showCollapsed's notch guard.
-            guard model?.isShowingLiveFeedback != true, model?.meetingSuggestion == nil else { return }
+            guard !isBusy else { return }
             hidePanelForNotchMode()
         } else {
+            guard !isBusy else { return }
             showCollapsed()
         }
     }
@@ -428,6 +459,7 @@ final class EdgeCommandPanelController: NSObject {
         removeEdgeRevealMonitors()
         isTabHidden = false
         model?.isShowingLiveFeedback = false
+        model?.isLiveFeedbackMinimized = false
         model?.isExpanded = false
         concealPanel()
     }
@@ -479,6 +511,12 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     private func showCollapsed() {
+        // Minimized live owns the edge tab until click-restore or recording end.
+        // Idle collapse must not wipe it into the ribbon command tab.
+        if model?.isLiveFeedbackMinimized == true {
+            presentMinimizedLiveTab()
+            return
+        }
         // In notch mode the panel must never surface, whatever path led here.
         guard SettingsStorage.shared.recordingFeedbackSurface != .notch else {
             hidePanelForNotchMode()
@@ -489,34 +527,94 @@ final class EdgeCommandPanelController: NSObject {
         let panel = panel ?? makePanel()
         self.panel = panel
         model?.isShowingLiveFeedback = false
+        model?.isLiveFeedbackMinimized = false
         position(panel, presentation: .collapsed)
+        refreshTabRootView()
         revealPanelIfConcealed()
         panel.orderFrontRegardless()
         scheduleTabAutoHide()
     }
 
     private func showExpanded() {
+        guard EdgeCommandPanelMinimizedLivePolicy.shouldAllowHoverExpand(
+            isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true
+        ) else { return }
         collapseTask?.cancel()
         cancelTabAutoHide()
         refreshModel()
         let panel = panel ?? makePanel()
         self.panel = panel
         model?.isShowingLiveFeedback = false
+        model?.isLiveFeedbackMinimized = false
         position(panel, presentation: commandPresentation)
         revealPanelIfConcealed()
         panel.orderFrontRegardless()
     }
 
     func showLiveFeedback(mode: RecordingMode) {
+        // Phase updates keep calling this while recording. If the user hid the
+        // live panel, leave it collapsed until they restore it intentionally.
+        if model?.isLiveFeedbackMinimized == true {
+            model?.meetingSuggestion = nil
+            return
+        }
+        if shouldStartLiveFeedbackMinimized {
+            model?.meetingSuggestion = nil
+            model?.isShowingLiveFeedback = true
+            model?.isLiveFeedbackMinimized = true
+            presentMinimizedLiveTab()
+            return
+        }
         collapseTask?.cancel()
         cancelTabAutoHide()
         let panel = panel ?? makePanel()
         self.panel = panel
         model?.meetingSuggestion = nil
+        model?.isLiveFeedbackMinimized = false
         model?.isShowingLiveFeedback = true
         position(panel, presentation: .live(mode))
         revealPanelIfConcealed()
         panel.orderFrontRegardless()
+    }
+
+    /// Collapse the live recording panel to the edge tab without stopping capture.
+    /// The red-dot tab auto-hides like the idle tab; edge hover brings it back,
+    /// and only a click restores the transcript modal.
+    func minimizeLiveFeedback() {
+        guard model?.isShowingLiveFeedback == true || model?.isLiveFeedbackMinimized == true else { return }
+        guard SettingsStorage.shared.recordingFeedbackSurface != .notch else { return }
+        model?.isLiveFeedbackMinimized = true
+        presentMinimizedLiveTab()
+    }
+
+    /// Re-assert the red-dot tab without clearing live/minimized flags, then
+    /// schedule the usual edge-tab auto-hide.
+    private func presentMinimizedLiveTab() {
+        collapseTask?.cancel()
+        cancelTabAutoHide()
+        let panel = panel ?? makePanel()
+        self.panel = panel
+        model?.isShowingLiveFeedback = true
+        model?.isLiveFeedbackMinimized = true
+        position(panel, presentation: .collapsed)
+        refreshTabRootView()
+        revealPanelIfConcealed()
+        panel.orderFrontRegardless()
+        scheduleTabAutoHide()
+    }
+
+    private func restoreMinimizedLiveFeedback() {
+        guard model?.isLiveFeedbackMinimized == true else { return }
+        liveFeedbackRestoredByUser = true
+        model?.isLiveFeedbackMinimized = false
+        refreshTabRootView()
+        showLiveFeedback(mode: DictationOverlayController.shared.store.mode)
+    }
+
+    private var shouldStartLiveFeedbackMinimized: Bool {
+        SettingsStorage.shared.recordingFeedbackSurface == .compactPanel
+            && !SettingsStorage.shared.showLiveTranscriptModal
+            && !liveFeedbackRestoredByUser
     }
 
     func showMeetingSuggestion(_ meeting: DetectedMeeting) {
@@ -592,16 +690,24 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     private func scheduleTabAutoHide() {
+        guard EdgeCommandPanelAutoHidePolicy.shouldSchedule(
+            isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true
+        ) else { return }
         tabAutoHideTask?.cancel()
         tabAutoHideTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(EdgeCommandPanelAutoHidePolicy.delay))
             guard !Task.isCancelled, let self, let panel else { return }
+            // Re-check after sleep — minimize may have started while we waited.
+            guard EdgeCommandPanelAutoHidePolicy.shouldSchedule(
+                isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true
+            ) else { return }
             guard EdgeCommandPanelAutoHidePolicy.shouldHide(
                 pointer: NSEvent.mouseLocation,
                 panelFrame: panel.frame,
                 isDragging: dragCursorOffset != nil,
                 isExpanded: model?.isExpanded == true,
-                isShowingLiveFeedback: model?.isShowingLiveFeedback == true
+                isShowingLiveFeedback: model?.isShowingLiveFeedback == true,
+                isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true
             ) else {
                 // Busy or hovered — try again after another idle interval.
                 scheduleTabAutoHide()
@@ -629,6 +735,17 @@ final class EdgeCommandPanelController: NSObject {
             screenFrame: screenFrame,
             edge: dock?.edge ?? .right
         ) else { return }
+        // A minimized live tab must come back as the red-dot tab — never via
+        // showCollapsed(), which would reset it to the idle command tab.
+        if model?.isLiveFeedbackMinimized == true {
+            isTabHidden = false
+            removeEdgeRevealMonitors()
+            refreshTabRootView()
+            revealPanelIfConcealed()
+            panel?.orderFrontRegardless()
+            scheduleTabAutoHide()
+            return
+        }
         showCollapsed()
     }
 
@@ -659,11 +776,24 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     func dismissLiveFeedback() {
-        guard model?.isShowingLiveFeedback == true else { return }
+        guard model?.isShowingLiveFeedback == true || model?.isLiveFeedbackMinimized == true else { return }
+        // Clear minimized first so showCollapsed proceeds to the idle ribbon tab.
+        liveFeedbackRestoredByUser = false
+        model?.isLiveFeedbackMinimized = false
+        model?.isShowingLiveFeedback = false
         showCollapsed()
     }
 
+    /// True while a live recording is hidden to the red-dot edge tab.
+    var isLiveFeedbackMinimized: Bool {
+        model?.isLiveFeedbackMinimized == true
+    }
+
     private func setHovering(_ hovering: Bool) {
+        // Minimized live recording restores only via click — hover must never expand.
+        guard EdgeCommandPanelMinimizedLivePolicy.shouldAllowHoverExpand(
+            isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true
+        ) else { return }
         guard model?.isShowingLiveFeedback != true, model?.meetingSuggestion == nil else { return }
         if hovering {
             collapseTask?.cancel()
@@ -783,13 +913,34 @@ final class EdgeCommandPanelController: NSObject {
         panel.isMovableByWindowBackground = false
         panel.acceptsMouseMovedEvents = true
 
-        let tabView = EdgeCommandTabView(
+        let contentView = EdgeCommandPanelContentView(
+            tabView: makeTabView(),
+            expandedView: makeExpandedView(),
+            onHoverChange: { [weak self] hovering in self?.setHovering(hovering) }
+        )
+        panelContentView = contentView
+        panel.contentView = contentView
+        return panel
+    }
+
+    private func makeTabView() -> EdgeCommandTabView {
+        EdgeCommandTabView(
             model: model!,
-            onExpand: { [weak self] in self?.showExpanded() },
+            onExpand: { [weak self] in
+                guard let self else { return }
+                if model?.isLiveFeedbackMinimized == true {
+                    restoreMinimizedLiveFeedback()
+                } else {
+                    showExpanded()
+                }
+            },
             onDrag: { [weak self] in self?.dragPanel() },
             onDragEnd: { [weak self] in self?.finishDraggingPanel() }
         )
-        let expandedView = EdgeCommandExpandedView(
+    }
+
+    private func makeExpandedView() -> EdgeCommandExpandedView {
+        EdgeCommandExpandedView(
             model: model!,
             liveStore: DictationOverlayController.shared.store,
             onAction: { [weak self] action in self?.perform(action) },
@@ -798,6 +949,7 @@ final class EdgeCommandPanelController: NSObject {
             onCopy: { DictationOverlayController.shared.copyCurrentTranscript() },
             onStop: { DictationOverlayController.shared.requestStop() },
             onDismissLive: { DictationOverlayController.shared.dismiss() },
+            onMinimizeLive: { [weak self] in self?.minimizeLiveFeedback() },
             onStartMeetingSuggestion: { [weak self] id in
                 self?.startMeetingRecording(fromSuggestionID: id)
             },
@@ -811,14 +963,12 @@ final class EdgeCommandPanelController: NSObject {
             onDrag: { [weak self] in self?.dragPanel() },
             onDragEnd: { [weak self] in self?.finishDraggingPanel() }
         )
-        let contentView = EdgeCommandPanelContentView(
-            tabView: tabView,
-            expandedView: expandedView,
-            onHoverChange: { [weak self] hovering in self?.setHovering(hovering) }
-        )
-        panelContentView = contentView
-        panel.contentView = contentView
-        return panel
+    }
+
+    /// Force the tab hosting view to rebuild so red-dot vs ribbon updates immediately.
+    private func refreshTabRootView() {
+        guard model != nil else { return }
+        panelContentView?.updateTabView(makeTabView())
     }
 
     private func position(
@@ -880,6 +1030,10 @@ final class EdgeCommandPanelController: NSObject {
         guard let model else { return .collapsed }
         if model.meetingSuggestion != nil {
             return .meetingSuggestion
+        }
+        // Minimized live recording keeps the edge tab until click-restore.
+        if model.isLiveFeedbackMinimized {
+            return .collapsed
         }
         if model.isShowingLiveFeedback {
             return .live(DictationOverlayController.shared.store.mode)
@@ -970,6 +1124,10 @@ private final class EdgeCommandPanelContentView: NSView {
         expandedHostingView.isHidden = !expanded
     }
 
+    func updateTabView(_ tabView: EdgeCommandTabView) {
+        tabHostingView.rootView = tabView
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let hoverTrackingArea {
@@ -1007,24 +1165,41 @@ private struct EdgeCommandTabView: View {
             ZStack {
                 tabShape
                     .fill(.regularMaterial)
-                Capsule()
-                    .fill(LinearGradient(
-                        colors: [Color("BrandAccentDeep"), Color.pink],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-                    .frame(
-                        width: edge == .left || edge == .right ? 3 : 24,
-                        height: edge == .left || edge == .right ? 24 : 3
-                    )
-                    .shadow(color: Color("BrandAccentDeep").opacity(0.45), radius: 5)
+                if model.isLiveFeedbackMinimized {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
+                        .shadow(color: .red.opacity(0.45), radius: 4)
+                        .accessibilityHidden(true)
+                } else {
+                    Capsule()
+                        .fill(LinearGradient(
+                            colors: [Color("BrandAccentDeep"), Color.pink],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(
+                            width: edge == .left || edge == .right ? 3 : 24,
+                            height: edge == .left || edge == .right ? 24 : 3
+                        )
+                        .shadow(color: Color("BrandAccentDeep").opacity(0.45), radius: 5)
+                }
             }
             .overlay(tabShape.stroke(Color("BrandTintBorder"), lineWidth: 0.5))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .gesture(dragGesture)
-        .accessibilityLabel("Open Diduny quick actions")
+        .accessibilityLabel(
+            model.isLiveFeedbackMinimized
+                ? "Show live recording panel"
+                : "Open Diduny quick actions"
+        )
+        .help(
+            model.isLiveFeedbackMinimized
+                ? "Click to restore live transcript"
+                : "Open Diduny quick actions"
+        )
     }
 
     private var tabShape: UnevenRoundedRectangle {
@@ -1076,6 +1251,7 @@ struct EdgeCommandExpandedView: View {
     let onCopy: () -> Void
     let onStop: () -> Void
     let onDismissLive: () -> Void
+    let onMinimizeLive: () -> Void
     let onStartMeetingSuggestion: (UUID) -> Void
     let onDismissMeetingSuggestion: (UUID) -> Void
     let onMeetingSuggestionsEnabled: (Bool) -> Void
@@ -1102,6 +1278,7 @@ struct EdgeCommandExpandedView: View {
                     onCopy: onCopy,
                     onStop: onStop,
                     onDismiss: onDismissLive,
+                    onMinimize: onMinimizeLive,
                     onDrag: onDrag,
                     onDragEnd: onDragEnd
                 )

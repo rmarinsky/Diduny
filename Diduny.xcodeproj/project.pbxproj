@@ -75,6 +75,7 @@
 		733D324CBB0ADB12B3780BF8 /* WhisperTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6206FCF30AD9AFE3530CB50 /* WhisperTranscriptionService.swift */; };
 		760CD3415170E644BC1DDCBB /* AudioDictationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CAB5C5B84DF4B8F5E37A9FF /* AudioDictationSettingsView.swift */; };
 		78E2E9B4903AA5A8A50AA6FC /* AppDelegate+Hotkeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2CC58C907B4985941DCDA9 /* AppDelegate+Hotkeys.swift */; };
+		78E5980FBD778FAE4E032ABD /* TranslationTimestampBackfillTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C078BA7D295B4041F5488720 /* TranslationTimestampBackfillTests.swift */; };
 		7A7AA8F88FE669AF3F3D3981 /* RealtimeTokenCoalescerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04B570652EBADE0FBAE4F9E5 /* RealtimeTokenCoalescerTests.swift */; };
 		7B1E9F89D38E1B1BA1D7AF7C /* OnboardingManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8525EF6E0AFA546564852F32 /* OnboardingManagerTests.swift */; };
 		7E2725D4B5424D54367BCC82 /* WhisperError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F06909181E0B9AD3B70E57E3 /* WhisperError.swift */; };
@@ -165,6 +166,7 @@
 		F6597F7A3262A493D769B85B /* Errors.swift in Sources */ = {isa = PBXBuildFile; fileRef = BECAEC93BAEBC7FB0CE79126 /* Errors.swift */; };
 		F82648095DB4730684FC8688 /* ReleaseHighlights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CA3466DC76D4C3741A1663 /* ReleaseHighlights.swift */; };
 		F9204E8BCBCCA977B096A3D2 /* AudioPlaybackControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C88AE153FCAA14A227A7E16 /* AudioPlaybackControlView.swift */; };
+		FBFFD88DF4376532FD3365DD /* TranslationTimestampBackfill.swift in Sources */ = {isa = PBXBuildFile; fileRef = E96BFF44E56EF24BD6EC513A /* TranslationTimestampBackfill.swift */; };
 		FFBC1497C42CFFB50037E3EA /* TypingSpeedMeasurementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6E3CC8287108DD5E1CCD081 /* TypingSpeedMeasurementTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -311,6 +313,7 @@
 		BECAEC93BAEBC7FB0CE79126 /* Errors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Errors.swift; sourceTree = "<group>"; };
 		BED4AC73DF15E8FB1B784BE2 /* LiveTranscriptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptStore.swift; sourceTree = "<group>"; };
 		BF436ACD38BA065B33601DBE /* LiveTranscriptStorePerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptStorePerformanceTests.swift; sourceTree = "<group>"; };
+		C078BA7D295B4041F5488720 /* TranslationTimestampBackfillTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationTimestampBackfillTests.swift; sourceTree = "<group>"; };
 		C1AFB9C5F772A874A404885C /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		C46453045F6E830B4B5B48D4 /* EscapeCancelServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscapeCancelServiceTests.swift; sourceTree = "<group>"; };
 		C737BE018A4A18E4479FAD1F /* LiveDictationOverlayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDictationOverlayStore.swift; sourceTree = "<group>"; };
@@ -328,6 +331,7 @@
 		E2133D27EF1A261954A78BEB /* RecoveryStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryStateManager.swift; sourceTree = "<group>"; };
 		E4ECCACC4D64216B39204947 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		E819431AE3C66AA9B422954A /* RecordingQueueService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingQueueService.swift; sourceTree = "<group>"; };
+		E96BFF44E56EF24BD6EC513A /* TranslationTimestampBackfill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationTimestampBackfill.swift; sourceTree = "<group>"; };
 		EA793C0790C4F9F4B19764D7 /* MainWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowController.swift; sourceTree = "<group>"; };
 		EED41A85ABE10582EF485F5D /* HistoryPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPaletteView.swift; sourceTree = "<group>"; };
 		F06909181E0B9AD3B70E57E3 /* WhisperError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperError.swift; sourceTree = "<group>"; };
@@ -439,6 +443,7 @@
 				58445C3A1AF119838326EC9F /* RemoteConfig.swift */,
 				459DCE179DA235DE6208C013 /* SupportedLanguage.swift */,
 				FF5B2157378ABF82C5B80572 /* TranscriptionProvider.swift */,
+				E96BFF44E56EF24BD6EC513A /* TranslationTimestampBackfill.swift */,
 				69FF2EDE31E6D84069F1D5D0 /* TypingSpeedMeasurement.swift */,
 				F06909181E0B9AD3B70E57E3 /* WhisperError.swift */,
 				B14415E4A90B0A80E5B44F3B /* WhisperModelUnloadPolicy.swift */,
@@ -723,6 +728,7 @@
 				DCC34E52E29A97B99C122898 /* TranscriptCleanupServiceTests.swift */,
 				17DDE5421515DDFE13E751C6 /* TranscriptionBatchStorageTests.swift */,
 				650D5A1F7778A1C35AD2F515 /* TranslationPairPickerControllerTests.swift */,
+				C078BA7D295B4041F5488720 /* TranslationTimestampBackfillTests.swift */,
 				D6E3CC8287108DD5E1CCD081 /* TypingSpeedMeasurementTests.swift */,
 				DC466F6949EEF5B6A6DEC8F1 /* Fixtures */,
 			);
@@ -1033,6 +1039,7 @@
 				F293480FBFF36536227A5878 /* TranscriptionProvider.swift in Sources */,
 				1781B9D8B99C71B7C5260D8A /* TranslationPairPickerController.swift in Sources */,
 				168E409F3F1A8B6489AD03AC /* TranslationPairPickerView.swift in Sources */,
+				FBFFD88DF4376532FD3365DD /* TranslationTimestampBackfill.swift in Sources */,
 				4D10D5466C7B83FF47A47945 /* TypingSpeedMeasurement.swift in Sources */,
 				D0BDBD33AD9969711AEF33E1 /* TypingTestView.swift in Sources */,
 				EFC54DB44AD8927CDAE92C5D /* UpdateArrivalState.swift in Sources */,
@@ -1081,6 +1088,7 @@
 				D9A94E2B88149920B8BA2B9E /* TranscriptCleanupServiceTests.swift in Sources */,
 				25EDCFE17C039B0D2ED31505 /* TranscriptionBatchStorageTests.swift in Sources */,
 				D08BBB9F8D641C3D4ADAD992 /* TranslationPairPickerControllerTests.swift in Sources */,
+				78E5980FBD778FAE4E032ABD /* TranslationTimestampBackfillTests.swift in Sources */,
 				FFBC1497C42CFFB50037E3EA /* TypingSpeedMeasurementTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -183,6 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var activeMeetingTranslationLanguagePair: TranslationLanguagePair?
     var activeTranslationTargetLanguage: String?
     var activeMeetingTranslationTargetLanguage: String?
+    var meetingTranslationTimestampBackfill = TranslationTimestampBackfill()
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
         switch SettingsStorage.shared.effectiveTranscriptionProvider {

@@ -178,6 +178,7 @@ extension AppDelegate {
         SettingsStorage.shared.markTranslationLanguagePairUsed(pair)
         activeMeetingTranslationLanguagePair = pair
         activeMeetingTranslationTargetLanguage = pair.languageB
+        meetingTranslationTimestampBackfill.reset()
 
         // Prevent App Nap during meeting translation recording
         meetingTranslationActivityToken = ProcessInfo.processInfo.beginActivity(
@@ -310,10 +311,12 @@ extension AppDelegate {
             rtService?.sendAudioData(pcmData)
         }
 
-        // Wire token callbacks
+        // Wire token callbacks. Annotate the full batch before filtering so
+        // translation tokens inherit timestamps from the interleaved originals.
         rtService.onTokensReceived = { [weak self, weak store] tokens in
             guard let self else { return }
-            let translatedTokens = filterMeetingTranslatedTokens(tokens)
+            let annotated = meetingTranslationTimestampBackfill.annotate(tokens)
+            let translatedTokens = filterMeetingTranslatedTokens(annotated)
             guard !translatedTokens.isEmpty else { return }
             Task { @MainActor in
                 store?.processTokens(translatedTokens)
@@ -341,7 +344,8 @@ extension AppDelegate {
             }
         }
 
-        rtService.onSegmentBoundary = { [weak store] _ in
+        rtService.onSegmentBoundary = { [weak self, weak store] _ in
+            self?.meetingTranslationTimestampBackfill.reset()
             Task { @MainActor in
                 store?.markSegmentBoundary()
             }
