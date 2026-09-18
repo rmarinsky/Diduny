@@ -28,5 +28,6 @@ enum Log {
     static let whisper = Logger(subsystem: subsystem, category: "whisper")
     static let playback = Logger(subsystem: subsystem, category: "playback")
     static let network = Logger(subsystem: subsystem, category: "network")
+    static let tts = Logger(subsystem: subsystem, category: "tts")
 }
 

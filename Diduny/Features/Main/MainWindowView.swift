@@ -78,6 +78,8 @@ struct MainWindowView: View {
             OfflineModelsSettingsView()
         case .shortcuts:
             ShortcutsSettingsView()
+        case .speech:
+            SpeechSettingsView()
         case .account:
             AccountSettingsView()
         }

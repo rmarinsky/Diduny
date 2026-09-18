@@ -138,6 +138,7 @@ struct RecordingDetailView: View {
                 if playbackService.playingRecordingId == currentRecording.id {
                     playbackService.stop()
                 }
+                SixtyDBTTSService.shared.stopSpeaking()
                 if storage.deleteRecording(currentRecording) {
                     onClose()
                 } else {
@@ -417,6 +418,12 @@ struct RecordingDetailView: View {
                 }
                 Spacer()
                 HStack(spacing: 0) {
+                    TranscriptSpeakButton(
+                        versionId: version.id,
+                        text: version.text,
+                        languageCode: version.targetLanguageCode ?? version.sourceLanguageCode
+                    )
+                    .padding(.trailing, 8)
                     Button {
                         ClipboardService.shared.copy(text: text, behavior: .raw)
                     } label: {

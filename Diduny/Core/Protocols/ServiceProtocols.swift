@@ -31,6 +31,21 @@ extension TranscriptionServiceProtocol {
     }
 }
 
+// MARK: - Speech Synthesis Service Protocol
+
+/// Text-to-speech abstraction over providers (60db today, e.g. ElevenLabs later),
+/// mirroring how `TranscriptionServiceProtocol` abstracts cloud/local transcription.
+@MainActor
+protocol SpeechSynthesisServiceProtocol: AnyObject {
+    var speakingVersionId: UUID? { get }
+    var isSpeaking: Bool { get }
+    var isLoading: Bool { get }
+    func toggleSpeak(versionId: UUID, text: String, languageCode: String?) async throws
+    func stopSpeaking()
+    func fetchVoices() async throws -> [TTSVoice]
+    func testConnection() async throws -> Bool
+}
+
 // MARK: - Clipboard Service Protocol
 
 protocol ClipboardServiceProtocol {

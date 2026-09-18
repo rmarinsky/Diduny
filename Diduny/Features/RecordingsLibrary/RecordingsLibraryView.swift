@@ -31,6 +31,7 @@ struct RecordingsLibraryView: View {
     @State private var recordingToRetranscribe: Recording?
     @State private var batchLoadErrorMessage: String?
     @State private var deletionErrorMessage: String?
+    @State private var speechErrorMessage: String?
 
     enum RecordingTypeFilter: String, CaseIterable {
         case all = "All"
@@ -159,6 +160,7 @@ struct RecordingsLibraryView: View {
                     if playbackService.playingRecordingId == recording.id {
                         playbackService.stop()
                     }
+                    SixtyDBTTSService.shared.stopSpeaking()
                     let id = recording.id
                     if storage.deleteRecording(recording) {
                         selectedRecordingIds.remove(id)
@@ -223,6 +225,17 @@ struct RecordingsLibraryView: View {
             Button("OK") { deletionErrorMessage = nil }
         } message: {
             Text(deletionErrorMessage ?? "Unknown error")
+        }
+        .alert(
+            "Speech Failed",
+            isPresented: Binding(
+                get: { speechErrorMessage != nil },
+                set: { if !$0 { speechErrorMessage = nil } }
+            )
+        ) {
+            Button("OK") { speechErrorMessage = nil }
+        } message: {
+            Text(speechErrorMessage ?? "Unknown error")
         }
     }
 
@@ -533,12 +546,32 @@ struct RecordingsLibraryView: View {
             Button("Copy Text") {
                 ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
             }
+            if let primary = recording.resolvedTranscriptHistory.first {
+                Button("Speak Text") {
+                    speakVersion(primary)
+                }
+                .disabled(recording.status == .processing || recording.status.isInProgressCapture)
+            }
         }
 
         Divider()
 
         Button("Delete", role: .destructive) {
             requestDelete(recording)
+        }
+    }
+
+    private func speakVersion(_ version: TranscriptVersion) {
+        Task {
+            do {
+                try await SixtyDBTTSService.shared.toggleSpeak(
+                    versionId: version.id,
+                    text: version.text,
+                    languageCode: version.targetLanguageCode ?? version.sourceLanguageCode
+                )
+            } catch {
+                speechErrorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -605,6 +638,7 @@ struct RecordingsLibraryView: View {
         if let playingId = playbackService.playingRecordingId, ids.contains(playingId) {
             playbackService.stop()
         }
+        SixtyDBTTSService.shared.stopSpeaking()
         if case let .recording(id, _) = inspectorSelection, ids.contains(id) {
             inspectorSelection = nil
         }
