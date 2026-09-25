@@ -4,6 +4,7 @@ import SwiftUI
 struct MeetingSettingsView: View {
     @State private var meetingSuggestionsEnabled = SettingsStorage.shared.meetingSuggestionsEnabled
     @State private var meetingCloudModeEnabled: Bool = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
+    @State private var localLivePreviewEnabled = SettingsStorage.shared.meetingLocalLivePreviewEnabled
     @State private var audioSource = SettingsStorage.shared.meetingAudioSource
     @State private var micGain = SettingsStorage.shared.meetingMicGain
     @State private var systemGain = SettingsStorage.shared.meetingSystemGain
@@ -52,6 +53,16 @@ struct MeetingSettingsView: View {
                 } else {
                     Text(
                         "Local mode transcribes on this Mac after stop when a model is ready. Without one, saved audio stays unprocessed in Recordings."
+                    )
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                    Toggle("Live preview during recording", isOn: $localLivePreviewEnabled)
+                        .onChange(of: localLivePreviewEnabled) { _, newValue in
+                            SettingsStorage.shared.meetingLocalLivePreviewEnabled = newValue
+                        }
+                    Text(
+                        "Runs Whisper every few seconds while you record. Turn off to save battery; transcription still runs after stop."
                     )
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -232,6 +243,7 @@ struct MeetingSettingsView: View {
         .onAppear {
             meetingSuggestionsEnabled = SettingsStorage.shared.meetingSuggestionsEnabled
             meetingCloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
+            localLivePreviewEnabled = SettingsStorage.shared.meetingLocalLivePreviewEnabled
         }
         .onDisappear {
             cleanupTestCapture()

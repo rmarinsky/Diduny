@@ -133,6 +133,7 @@ final class SettingsStorage {
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
         case meetingRealtimeTranscriptionEnabled
+        case meetingLocalLivePreviewEnabled
         case escapeCancelEnabled
         case escapeCancelShortcut
         case escapeCancelPressCount
@@ -854,6 +855,17 @@ final class SettingsStorage {
 
     var effectiveMeetingRealtimeTranscriptionEnabled: Bool {
         meetingRealtimeTranscriptionEnabled && AuthService.hasStoredSession
+    }
+
+    /// Local mode only. The live preview re-runs Whisper on a sliding window every few seconds
+    /// for the whole meeting, which is the main GPU/battery cost of a local recording.
+    /// Turning it off leaves capture-only during the call; transcription still runs after stop.
+    var meetingLocalLivePreviewEnabled: Bool {
+        get {
+            defaults.object(forKey: Key.meetingLocalLivePreviewEnabled.rawValue) == nil
+                || defaults.bool(forKey: Key.meetingLocalLivePreviewEnabled.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.meetingLocalLivePreviewEnabled.rawValue) }
     }
 
     // MARK: - Escape Cancel
