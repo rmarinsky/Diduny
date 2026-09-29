@@ -218,18 +218,6 @@ extension AppDelegate {
             return
         }
 
-        if SettingsStorage.shared.effectiveTranslationProvider == .local, !pair.contains("en") {
-            Log.app.warning("startTranslationRecording: Local Whisper can translate only to English")
-            await MainActor.run {
-                appState.errorMessage = "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English."
-                appState.translationRecordingState = .error
-                handleTranslationStateChange(.error)
-                activeTranslationLanguagePair = nil
-                activeTranslationTargetLanguage = nil
-            }
-            return
-        }
-
         // Provider-specific validation for Local mode
         if SettingsStorage.shared.effectiveTranslationProvider == .local {
             guard let model = WhisperModelManager.shared.selectedModel() else {
@@ -399,7 +387,8 @@ extension AppDelegate {
             let state = RecoveryState(
                 tempFilePath: path,
                 startTime: Date(),
-                recordingType: .translation
+                recordingType: .translation,
+                translationTargetLanguage: targetLanguage
             )
             RecoveryStateManager.shared.saveState(state)
         }
@@ -453,7 +442,7 @@ extension AppDelegate {
                 // Local Whisper — no WebSocket, transcribe from audio
                 rawText = try await whisperTranscriptionService.translateAndTranscribe(
                     audioData: audioData,
-                    languagePair: pair
+                    targetLanguage: targetLanguage
                 )
                 Log.app.info("stopTranslationRecording: Local Whisper translation (\(rawText.count) chars)")
             } else {

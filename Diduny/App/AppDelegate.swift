@@ -559,6 +559,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func recoverRecording(from state: RecoveryState) {
         Task {
+            let translationTarget = state.translationTargetLanguage
+                ?? (SettingsStorage.shared.effectiveTranslationProvider == .local
+                    ? "en" : SettingsStorage.shared.resolveTranslationLanguagePair().languageB)
             var recoveredRecordingID: UUID?
             let processor = RecoveryRecordingProcessor(
                 save: { audioData, state, duration in
@@ -566,6 +569,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         audioData: audioData,
                         type: state.recordingType.libraryType,
                         duration: duration,
+                        translationTargetLanguageCode: state.recordingType == .translation ? translationTarget : nil,
                         createdAt: state.startTime,
                         recoverySource: .orphanedSession,
                         forceSave: true
@@ -604,9 +608,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         let service: TranscriptionServiceProtocol = SettingsStorage.shared
                             .effectiveTranslationProvider == .local
                             ? self.whisperTranscriptionService : self.transcriptionService
-                        let target = SettingsStorage.shared.effectiveTranslationProvider == .local
-                            ? "en" : SettingsStorage.shared.resolveTranslationLanguagePair().languageB
-                        rawText = try await service.translateAndTranscribe(audioData: audioData, targetLanguage: target)
+                        rawText = try await service.translateAndTranscribe(
+                            audioData: audioData,
+                            targetLanguage: translationTarget
+                        )
                     case .meetingTranslation:
                         let service: TranscriptionServiceProtocol = SettingsStorage.shared
                             .effectiveTranslationProvider == .local

@@ -35,6 +35,9 @@ final class TranslationPairPickerController: NSObject, NSWindowDelegate {
         dismiss(returning: nil)
 
         guard !pairs.isEmpty else { return nil }
+        guard SettingsStorage.shared.effectiveTranslationProvider == .cloud else {
+            return preselected ?? pairs.first
+        }
 
         return await withCheckedContinuation { continuation in
             self.continuation = continuation

@@ -216,7 +216,10 @@ struct AudioDictationSettingsView: View {
     private func translationPairsSection(isDisabled: Bool) -> some View {
         Section("Translation Pairs") {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Voice translation uses the second language as its output. Meeting translation works in both directions.")
+                Text(
+                    "Cloud voice translation uses the second language as its output. " +
+                    "Local Whisper outputs English. Cloud meeting translation works in both directions."
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 ForEach(translationPairs) { pair in
@@ -556,7 +559,7 @@ private struct TranslationPairRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Text("Voice → \(languageName(pair.languageB))")
+                Text("Cloud voice → \(languageName(pair.languageB))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
