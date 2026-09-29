@@ -184,6 +184,10 @@ struct TranslationLanguagePair: Identifiable, Codable, Hashable {
         "\(languageA.uppercased()) ⇄ \(languageB.uppercased())"
     }
 
+    var oneWayDisplayLabel: String {
+        "\(languageA.uppercased()) → \(languageB.uppercased())"
+    }
+
     func contains(_ languageCode: String?) -> Bool {
         guard let normalized = SupportedLanguage.normalizedCode(languageCode) else { return false }
         return languageA == normalized || languageB == normalized

@@ -3,55 +3,33 @@ import Combine
 import Foundation
 
 actor RealtimeTranslationAccumulator {
-    private var finalOriginalText: String = ""
+    private let targetLanguage: String
     private var finalTranslatedText: String = ""
-    private var provisionalOriginalText: String = ""
     private var provisionalTranslatedText: String = ""
 
-    func process(tokens: [RealtimeToken]) {
-        var latestProvisionalOriginalText = ""
-        var latestProvisionalTranslatedText = ""
-        var didReceiveFinalOriginalToken = false
-        var didReceiveFinalTranslatedToken = false
+    init(targetLanguage: String) {
+        self.targetLanguage = targetLanguage
+    }
 
+    func process(tokens: [RealtimeToken]) {
+        var latestProvisionalTranslatedText = ""
         for token in tokens where !token.text.isEmpty {
             let status = token.translationStatus?.lowercased()
-            switch status {
-            case "translation":
-                if token.isFinal {
-                    finalTranslatedText += token.text
-                    didReceiveFinalTranslatedToken = true
-                } else {
-                    latestProvisionalTranslatedText += token.text
-                }
-            case "transcription", "source", "original", "none", nil:
-                if token.isFinal {
-                    finalOriginalText += token.text
-                    didReceiveFinalOriginalToken = true
-                } else {
-                    latestProvisionalOriginalText += token.text
-                }
-            default:
-                if token.isFinal {
-                    finalOriginalText += token.text
-                    didReceiveFinalOriginalToken = true
-                } else {
-                    latestProvisionalOriginalText += token.text
-                }
+            // Soniox does not translate speech already in the target language.
+            // Keep those tokens alongside translations, in provider order.
+            guard token.language == nil || token.language == targetLanguage,
+                  status == "translation" || status == "none"
+            else {
+                continue
+            }
+            if token.isFinal {
+                finalTranslatedText += token.text
+            } else {
+                latestProvisionalTranslatedText += token.text
             }
         }
 
-        if !latestProvisionalTranslatedText.isEmpty {
-            provisionalTranslatedText = latestProvisionalTranslatedText
-        } else if didReceiveFinalTranslatedToken {
-            provisionalTranslatedText = ""
-        }
-
-        if !latestProvisionalOriginalText.isEmpty {
-            provisionalOriginalText = latestProvisionalOriginalText
-        } else if didReceiveFinalOriginalToken {
-            provisionalOriginalText = ""
-        }
+        provisionalTranslatedText = latestProvisionalTranslatedText
     }
 
     func markSegmentBoundary() {
@@ -62,15 +40,7 @@ actor RealtimeTranslationAccumulator {
         let translatedText = includeProvisional
             ? finalTranslatedText + provisionalTranslatedText
             : finalTranslatedText
-        let translated = translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !translated.isEmpty {
-            return translated
-        }
-
-        let originalText = includeProvisional
-            ? finalOriginalText + provisionalOriginalText
-            : finalOriginalText
-        return originalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -227,7 +197,7 @@ extension AppDelegate {
 
         let pair = requestedPair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
         SettingsStorage.shared.markTranslationLanguagePairUsed(pair)
-        let targetLanguage = pair.languageB
+        let targetLanguage = SettingsStorage.shared.effectiveTranslationProvider == .local ? "en" : pair.languageB
         activeTranslationLanguagePair = pair
         activeTranslationTargetLanguage = targetLanguage
         SettingsStorage.shared.voiceTranslationTargetLanguage = targetLanguage
@@ -489,7 +459,8 @@ extension AppDelegate {
             } else {
                 rawText = try await transcriptionService.translateAndTranscribe(
                     audioData: audioData,
-                    languagePair: pair
+                    targetLanguage: targetLanguage,
+                    languageHints: SettingsStorage.shared.translationLanguageHints(for: pair)
                 )
                 Log.app.info("stopTranslationRecording: HTTP cloud translation (\(rawText.count) chars)")
             }
@@ -596,7 +567,7 @@ extension AppDelegate {
                 }
                 showRecordingFeedbackInfo(
                     message: "No speech detected. Recording cancelled.",
-                    mode: .translation(targetLanguage: pair.displayLabel),
+                    mode: .translation(targetLanguage: translationPairLabel),
                     duration: 2.5
                 )
                 Log.app.info("stopTranslationRecording: Empty recording cancelled without saving")
@@ -665,7 +636,7 @@ extension AppDelegate {
         }
 
         let pair = activeTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
-        let accumulator = RealtimeTranslationAccumulator()
+        let accumulator = RealtimeTranslationAccumulator(targetLanguage: pair.languageB)
         translationRealtimeAccumulator = accumulator
 
         let rtService = realtimeTranscriptionService
@@ -723,7 +694,7 @@ extension AppDelegate {
                     strictLanguageHints: !languageHints.isEmpty,
                     audioConfig: .defaultPCM16kMono,
                     translationConfig: RealtimeTranslationConfig(
-                        mode: .twoWay(languageA: pair.languageA, languageB: pair.languageB)
+                        mode: .oneWay(targetLanguage: pair.languageB)
                     ),
                     enableSpeakerDiarization: false
                 )
@@ -732,7 +703,7 @@ extension AppDelegate {
                     self.translationRealtimeSessionEnabled = true
                     self.updateRecordingFeedbackConnectionStatus(.connected, mode: feedbackMode)
                 }
-                NSLog("[Transcription] Translation RT connected (%@ <-> %@)", pair.languageA, pair.languageB)
+                NSLog("[Transcription] Translation RT connected (to %@)", pair.languageB)
             } catch {
                 await MainActor.run {
                     self.audioRecorder.onRealtimeAudioData = nil

@@ -600,7 +600,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         } else {
                             rawText = try await self.whisperTranscriptionService.transcribe(audioData: audioData)
                         }
-                    case .translation, .meetingTranslation:
+                    case .translation:
+                        let service: TranscriptionServiceProtocol = SettingsStorage.shared
+                            .effectiveTranslationProvider == .local
+                            ? self.whisperTranscriptionService : self.transcriptionService
+                        let target = SettingsStorage.shared.effectiveTranslationProvider == .local
+                            ? "en" : SettingsStorage.shared.resolveTranslationLanguagePair().languageB
+                        rawText = try await service.translateAndTranscribe(audioData: audioData, targetLanguage: target)
+                    case .meetingTranslation:
                         let service: TranscriptionServiceProtocol = SettingsStorage.shared
                             .effectiveTranslationProvider == .local
                             ? self.whisperTranscriptionService : self.transcriptionService
@@ -1150,9 +1157,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     var translationTargetLanguage: String {
-        activeTranslationLanguagePair?.languageB
-            ?? activeTranslationTargetLanguage
-            ?? SettingsStorage.shared.defaultTranslationLanguagePair.languageB
+        activeTranslationTargetLanguage
+            ?? activeTranslationLanguagePair?.languageB
+            ?? (SettingsStorage.shared.effectiveTranslationProvider == .local
+                ? "en" : SettingsStorage.shared.defaultTranslationLanguagePair.languageB)
     }
 
     var translationTargetLabel: String {
@@ -1164,7 +1172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     var translationPairLabel: String {
-        (activeTranslationLanguagePair ?? SettingsStorage.shared.defaultTranslationLanguagePair).displayLabel
+        "→ \(translationTargetLabel)"
     }
 
     func handleTranslationStateChange(_ state: RecordingState) {

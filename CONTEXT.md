@@ -4,6 +4,14 @@ The language used for bringing recorded media into Diduny and producing reusable
 
 ## Language
 
+**Voice Translation**:
+Spoken input converted to one selected output language. Mixing languages while speaking does not reverse the output direction. Words already in the output language remain part of the result.
+_Avoid_: Two-way voice dictation, automatic output-language switching
+
+**Stop-to-Paste Latency**:
+The elapsed time between the user's Stop action and the completed text appearing in the intended input field. A visible transcription preview is not a completed insertion.
+_Avoid_: Time to first token, transcription preview latency
+
 **Transcription Batch**:
 A persisted snapshot of one grouped transcription run. Items may be added while the run is processing, but normal membership editing ends when processing finishes. Its name and description remain editable. Deleting a recording is an explicit exception that removes its membership and updates the batch.
 _Avoid_: Project, folder, permanent collection

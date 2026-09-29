@@ -73,6 +73,16 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
 
     /// Transcribe speech in any detected source language and translate to a specific target language.
     func translateAndTranscribe(audioData: Data, targetLanguage: String) async throws -> String {
+        try await translateAndTranscribe(
+            audioData: audioData,
+            targetLanguage: targetLanguage,
+            languageHints: SettingsStorage.shared.speechLanguageHints
+        )
+    }
+
+    func translateAndTranscribe(audioData: Data, targetLanguage: String,
+                                languageHints: [String]) async throws -> String
+    {
         let target = SettingsStorage.normalizedLanguageCode(targetLanguage)
             ?? SettingsStorage.shared.voiceTranslationTargetLanguage
 
@@ -83,7 +93,7 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
 
         try await ensureSpeechDetected(audioData, context: "translateAndTranscribe")
 
-        let languageConfig = Self.resolveLanguageConfig()
+        let languageConfig = Self.resolveLanguageConfig(forcedLanguageHints: languageHints)
         let config = Self.makeOneWayTranslationConfig(
             targetLanguage: target,
             languageConfig: languageConfig
@@ -375,7 +385,10 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
                 "target_language": targetLanguage
             ]
         ]
-        applyLanguageConfig(languageConfig, to: &config)
+        let hints = languageConfig.hints.isEmpty ? [] : SettingsStorage.normalizedLanguageCodes(
+            languageConfig.hints + [targetLanguage]
+        )
+        applyLanguageConfig(CloudLanguageConfig(hints: hints, strict: !hints.isEmpty), to: &config)
         return config
     }
 
