@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class AudioPlaybackTrimTests: XCTestCase {
-    func testPlaybackUsesSelectedDurationAndClampsSeek() throws {
+    func testPlaybackUsesSelectedDurationAndClampsSeek() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("playback-trim-\(UUID()).wav")
         defer { AudioPlaybackService.shared.stop(); try? FileManager.default.removeItem(at: url) }
         let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 8000, channels: 1))
@@ -23,5 +23,9 @@ final class AudioPlaybackTrimTests: XCTestCase {
         XCTAssertEqual(playback.currentTime, 0, accuracy: 0.001)
         playback.togglePlayback(recordingId: id, fileURL: url, trimRange: AudioTrimRange(startSeconds: 1, endSeconds: 3))
         XCTAssertEqual(playback.duration, 2, accuracy: 0.001)
+        playback.isSeeking = true
+        playback.seek(to: 2)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertFalse(playback.isPlaying, "Holding the seek control must not bypass the selected end")
     }
 }

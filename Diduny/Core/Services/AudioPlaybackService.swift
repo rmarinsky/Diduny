@@ -78,6 +78,7 @@ final class AudioPlaybackService: NSObject {
         stopTimer()
         playingRecordingId = nil
         isPlaying = false
+        isSeeking = false
         currentTime = 0
         duration = 0
     }
@@ -87,6 +88,7 @@ final class AudioPlaybackService: NSObject {
         let relative = min(duration, max(0, time))
         player?.currentTime = sourceStart + relative
         currentTime = relative
+        if relative >= duration { pause() }
     }
 
     // MARK: - Private
@@ -106,19 +108,21 @@ final class AudioPlaybackService: NSObject {
 
     private func startTimer() {
         stopTimer()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 20.0, repeats: true) { [weak self] _ in
+        let playbackTimer = Timer(timeInterval: 1.0 / 20.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                guard let self, !self.isSeeking else { return }
+                guard let self else { return }
                 guard let player = self.player else { return }
                 if player.currentTime >= self.sourceEnd {
                     self.pause()
                     player.currentTime = self.sourceStart
                     self.currentTime = 0
-                } else {
+                } else if !self.isSeeking {
                     self.currentTime = max(0, player.currentTime - self.sourceStart)
                 }
             }
         }
+        timer = playbackTimer
+        RunLoop.main.add(playbackTimer, forMode: .common)
     }
 
     private func stopTimer() {
