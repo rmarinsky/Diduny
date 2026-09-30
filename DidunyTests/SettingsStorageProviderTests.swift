@@ -43,6 +43,18 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(Bundle.main.bundleIdentifier, "ua.com.rmarinsky.diduny.test")
     }
 
+    func test_meetingLocalLivePreview_defaultsOnAndPersistsOff() {
+        let key = "meetingLocalLivePreviewEnabled"
+        let stored = UserDefaults.standard.object(forKey: key)
+        defer { restore(stored, key: key) }
+
+        UserDefaults.standard.removeObject(forKey: key)
+        XCTAssertTrue(SettingsStorage.shared.meetingLocalLivePreviewEnabled)
+
+        SettingsStorage.shared.meetingLocalLivePreviewEnabled = false
+        XCTAssertFalse(SettingsStorage.shared.meetingLocalLivePreviewEnabled)
+    }
+
     func test_meetingsAreGroupedWithSettingsNavigation() {
         XCTAssertTrue(MainSection.settingsItems.contains(.meetings))
         XCTAssertFalse(MainSection.mainItems.contains(.meetings))

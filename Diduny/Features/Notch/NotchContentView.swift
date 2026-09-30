@@ -122,21 +122,19 @@ private struct ProcessingCompactView: View {
     }
 }
 
+/// Blinks once per second instead of a `repeatForever` pulse: a perpetual SwiftUI animation
+/// re-renders the notch on every display frame for the whole recording, which on an hour-long
+/// meeting costs more CPU than the audio capture itself.
 private struct PulsingDotView: View {
-    @State private var isPulsing = false
-
     var body: some View {
-        Circle()
-            .fill(.red)
-            .frame(width: 8, height: 8)
-            .scaleEffect(isPulsing ? 1.4 : 1.0)
-            .opacity(isPulsing ? 0.6 : 1.0)
-            .frame(width: 14, height: 14)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                    isPulsing = true
-                }
-            }
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let isDimmed = Int(context.date.timeIntervalSinceReferenceDate) % 2 == 1
+            Circle()
+                .fill(.red)
+                .frame(width: 8, height: 8)
+                .opacity(isDimmed ? 0.35 : 1.0)
+                .frame(width: 14, height: 14)
+        }
     }
 }
 
@@ -197,15 +195,10 @@ private struct RecordingTimerView: View {
 
 private struct RecordingExpandedView: View {
     let mode: RecordingMode
-    @State private var isPulsing = false
 
     var body: some View {
         HStack(spacing: 8) {
-            Circle()
-                .fill(.red)
-                .frame(width: 8, height: 8)
-                .scaleEffect(isPulsing ? 1.3 : 1.0)
-                .opacity(isPulsing ? 0.7 : 1.0)
+            PulsingDotView()
 
             Image(systemName: mode.icon)
                 .font(.system(size: 12, weight: .medium))
@@ -218,11 +211,6 @@ private struct RecordingExpandedView: View {
             Spacer()
 
             StopRecordingButton { NotchManager.shared.requestStopActiveRecording() }
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                isPulsing = true
-            }
         }
     }
 }

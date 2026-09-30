@@ -447,6 +447,11 @@ extension AppDelegate {
             return await setupRealtimeTranscription(sessionID: activeMeetingTranscriptionSessionID)
         }
 
+        guard SettingsStorage.shared.meetingLocalLivePreviewEnabled else {
+            Log.app.info("Local meeting mode selected — live preview disabled, recording only")
+            return LiveTranscriptStore()
+        }
+
         Log.app.info("Local meeting mode selected — starting live Whisper preview")
         let store = LiveTranscriptStore()
         store.isActive = true
