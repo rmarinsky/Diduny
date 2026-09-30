@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "headline": "Flexible live meeting transcripts",
+  "headline": "Trim recordings without losing the original",
   "highlights": [
-    "Minimize a live transcript to a red-dot edge tab and restore it with one click.",
-    "Choose whether the floating transcript opens when recording starts.",
-    "Meeting translations now show advancing speaker timestamps."
+    "Choose the part to keep with timeline handles or precise start and end times.",
+    "Undo or redo edits, cancel changes, or restore the original recording range.",
+    "Playback and new transcriptions use the saved selection; your original audio stays safe."
   ]
 }
