@@ -10,6 +10,7 @@ enum MainSection: String, CaseIterable, Hashable {
     case meetings
     case models
     case shortcuts
+    case speech
     case account
 
     static let mainItems = allCases.filter { !$0.isSettingsItem }
@@ -25,6 +26,7 @@ enum MainSection: String, CaseIterable, Hashable {
         case .audioDictation: "Audio & Dictation"
         case .models: "Models"
         case .shortcuts: "Shortcuts"
+        case .speech: "Speech"
         case .account: "Account"
         }
     }
@@ -39,13 +41,14 @@ enum MainSection: String, CaseIterable, Hashable {
         case .audioDictation: "waveform.and.mic"
         case .models: "cpu"
         case .shortcuts: "keyboard"
+        case .speech: "speaker.wave.2"
         case .account: "person.crop.circle"
         }
     }
 
     var isSettingsItem: Bool {
         switch self {
-        case .meetings, .general, .audioDictation, .models, .shortcuts, .account: true
+        case .meetings, .general, .audioDictation, .models, .shortcuts, .speech, .account: true
         default: false
         }
     }

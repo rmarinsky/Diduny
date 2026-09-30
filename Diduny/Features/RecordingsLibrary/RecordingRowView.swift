@@ -191,6 +191,14 @@ struct RecordingRowView: View {
                     label: "Transcribe recording",
                     action: onTranscribe
                 )
+                if let primary = recording.resolvedTranscriptHistory.first {
+                    TranscriptSpeakButton(
+                        versionId: primary.id,
+                        text: primary.text,
+                        languageCode: primary.targetLanguageCode ?? primary.sourceLanguageCode,
+                        compact: true
+                    )
+                }
             }
 
             RecordingActionButton(

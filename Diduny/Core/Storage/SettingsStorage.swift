@@ -151,6 +151,9 @@ final class SettingsStorage {
         case edgePanelDockEdge
         case edgePanelDockOffset
         case remoteMediaRightsAcknowledged
+        case ttsSelectedVoiceID
+        case ttsModelTier
+        case ttsSpeed
     }
 
     private init() {
@@ -177,7 +180,9 @@ final class SettingsStorage {
             .autoPaste: false,
             .transcriptionProvider: TranscriptionProvider.cloud.rawValue,
             .playSoundOnCompletion: true,
-            .typingSpeedWordsPerMinute: 40.0
+            .typingSpeedWordsPerMinute: 40.0,
+            .ttsModelTier: TTSModelTier.quality.rawValue,
+            .ttsSpeed: 1.0
         ]
 
         for (key, value) in values where defaults.object(forKey: key.rawValue) == nil {
@@ -811,6 +816,40 @@ final class SettingsStorage {
 
     var effectiveTranslationProvider: TranscriptionProvider {
         translationProvider == .cloud && !AuthService.hasStoredSession ? .local : translationProvider
+    }
+
+    // MARK: - Text-to-Speech (60db)
+
+    /// Selected 60db voice UUID string. `nil` means the 60db default voice.
+    /// The API key itself lives in the Keychain, never in UserDefaults.
+    var ttsSelectedVoiceID: String? {
+        get {
+            let value = defaults.string(forKey: Key.ttsSelectedVoiceID.rawValue)
+            return (value?.isEmpty == false) ? value : nil
+        }
+        set { defaults.set(newValue, forKey: Key.ttsSelectedVoiceID.rawValue) }
+    }
+
+    var ttsModelTier: TTSModelTier {
+        get {
+            guard let rawValue = defaults.string(forKey: Key.ttsModelTier.rawValue),
+                  let tier = TTSModelTier(rawValue: rawValue)
+            else {
+                return .quality
+            }
+            return tier
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.ttsModelTier.rawValue)
+        }
+    }
+
+    var ttsSpeed: Double {
+        get {
+            let value = defaults.double(forKey: Key.ttsSpeed.rawValue)
+            return value == 0 ? 1.0 : value
+        }
+        set { defaults.set(newValue, forKey: Key.ttsSpeed.rawValue) }
     }
 
     // MARK: - Translation Realtime Socket
