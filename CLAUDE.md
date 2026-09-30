@@ -166,9 +166,11 @@ open Diduny.xcodeproj
 To ship a release:
 
 1. Open a PR into `main`.
-2. Add exactly one label: `release:patch` (bug fix / internal), `release:minor`
-   (new user-facing capability), `release:major` (breaking change), or
-   `release:skip` (no release for this PR).
+2. Every PR must be prepared for a release. Add exactly one label:
+   `release:patch` (bug fix / internal), `release:minor` (new user-facing capability),
+   or `release:major` (breaking change), and update release highlights.
+   Use `release:skip` only if Roman explicitly requests skipping that PR's release.
+   Draft status and lack of merge authorization do not justify `release:skip`.
 3. Merge the PR.
 
 CI does the rest: `prepare-release.yml` computes the next version from the

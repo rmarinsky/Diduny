@@ -33,10 +33,10 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             expected = (
-                "# Flexible live meeting transcripts\n\n"
-                "- Minimize a live transcript to a red-dot edge tab and restore it with one click.\n"
-                "- Choose whether the floating transcript opens when recording starts.\n"
-                "- Meeting translations now show advancing speaker timestamps.\n"
+                "# Trim recordings without losing the original\n\n"
+                "- Choose the part to keep with timeline handles or precise start and end times.\n"
+                "- Undo or redo edits, cancel changes, or restore the original recording range.\n"
+                "- Playback and new transcriptions use the saved selection; your original audio stays safe.\n"
             )
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
