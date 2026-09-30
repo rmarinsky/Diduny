@@ -136,14 +136,19 @@ final class RecordingQueueService {
             return
         }
 
-        let audioURL = await storage.optimizeStoredRecordingIfNeeded(id: item.id) ?? storage
+        let originalAudioURL = await storage.optimizeStoredRecordingIfNeeded(id: item.id) ?? storage
             .audioFileURL(for: recording)
-        guard FileManager.default.fileExists(atPath: audioURL.path) else {
+        guard FileManager.default.fileExists(atPath: originalAudioURL.path) else {
             storage.updateRecording(id: item.id, status: .failed, error: "Audio file not found")
             return
         }
 
         do {
+            let audioURL = try await AudioTrimService.prepareAudio(fileURL: originalAudioURL, range: recording.trimRange)
+            defer {
+                if audioURL != originalAudioURL { try? FileManager.default.removeItem(at: audioURL) }
+            }
+            try Task.checkCancellation()
             let provider = configuredProvider(for: item)
 
             if let error = preflightError(for: item, provider: provider) {
@@ -168,7 +173,7 @@ final class RecordingQueueService {
                         audioFileURL: audioURL,
                         config: buildCloudTranscriptionConfig(enableSpeakerDiarization: false),
                         source: recording.audioFileName,
-                        sourceDurationSeconds: recording.durationSeconds
+                        sourceDurationSeconds: recording.effectiveDurationSeconds
                     )
                 } else {
                     let audioData = try await loadAudioData(from: audioURL)
@@ -184,7 +189,7 @@ final class RecordingQueueService {
                         audioFileURL: audioURL,
                         config: buildCloudTranscriptionConfig(enableSpeakerDiarization: true),
                         source: recording.audioFileName,
-                        sourceDurationSeconds: recording.durationSeconds
+                        sourceDurationSeconds: recording.effectiveDurationSeconds
                     )
                 } else {
                     let audioData = try await loadAudioData(from: audioURL)
@@ -221,7 +226,7 @@ final class RecordingQueueService {
                         audioFileURL: audioURL,
                         config: config,
                         source: recording.audioFileName,
-                        sourceDurationSeconds: recording.durationSeconds
+                        sourceDurationSeconds: recording.effectiveDurationSeconds
                     )
                 } else {
                     let audioData = try await loadAudioData(from: audioURL)

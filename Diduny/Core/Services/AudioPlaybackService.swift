@@ -13,13 +13,18 @@ final class AudioPlaybackService: NSObject {
     var isSeeking: Bool = false
 
     private var player: AVAudioPlayer?
+    private var activeRange: AudioTrimRange?
+    private var activeURL: URL?
+    private var sourceStart: TimeInterval = 0
+    private var sourceEnd: TimeInterval = 0
     private var timer: Timer?
 
     override private init() {
         super.init()
     }
 
-    func togglePlayback(recordingId: UUID, fileURL: URL) {
+    func togglePlayback(recordingId: UUID, fileURL: URL, trimRange: AudioTrimRange? = nil) {
+        if playingRecordingId == recordingId, activeRange != trimRange || activeURL != fileURL { stop() }
         // If tapping a different recording, stop current first
         if let currentId = playingRecordingId, currentId != recordingId {
             stop()
@@ -41,13 +46,19 @@ final class AudioPlaybackService: NSObject {
         do {
             let audioPlayer = try AVAudioPlayer(contentsOf: fileURL)
             audioPlayer.delegate = self
+            guard trimRange == nil || trimRange!.isValid(for: audioPlayer.duration) else { return }
+            sourceStart = trimRange?.startSeconds ?? 0
+            sourceEnd = trimRange?.endSeconds ?? audioPlayer.duration
+            audioPlayer.currentTime = sourceStart
             audioPlayer.prepareToPlay()
             audioPlayer.play()
+            activeRange = trimRange
+            activeURL = fileURL
 
             player = audioPlayer
             playingRecordingId = recordingId
             isPlaying = true
-            duration = audioPlayer.duration
+            duration = sourceEnd - sourceStart
             currentTime = 0
             startTimer()
 
@@ -60,6 +71,10 @@ final class AudioPlaybackService: NSObject {
     func stop() {
         player?.stop()
         player = nil
+        activeRange = nil
+        activeURL = nil
+        sourceStart = 0
+        sourceEnd = 0
         stopTimer()
         playingRecordingId = nil
         isPlaying = false
@@ -68,8 +83,10 @@ final class AudioPlaybackService: NSObject {
     }
 
     func seek(to time: TimeInterval) {
-        player?.currentTime = time
-        currentTime = time
+        guard time.isFinite, player != nil else { return }
+        let relative = min(duration, max(0, time))
+        player?.currentTime = sourceStart + relative
+        currentTime = relative
     }
 
     // MARK: - Private
@@ -81,6 +98,7 @@ final class AudioPlaybackService: NSObject {
     }
 
     private func resume() {
+        if currentTime >= duration { player?.currentTime = sourceStart; currentTime = 0 }
         player?.play()
         isPlaying = true
         startTimer()
@@ -91,7 +109,14 @@ final class AudioPlaybackService: NSObject {
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 20.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, !self.isSeeking else { return }
-                self.currentTime = self.player?.currentTime ?? 0
+                guard let player = self.player else { return }
+                if player.currentTime >= self.sourceEnd {
+                    self.pause()
+                    player.currentTime = self.sourceStart
+                    self.currentTime = 0
+                } else {
+                    self.currentTime = max(0, player.currentTime - self.sourceStart)
+                }
             }
         }
     }
@@ -109,7 +134,7 @@ extension AudioPlaybackService: AVAudioPlayerDelegate {
         Task { @MainActor in
             stopTimer()
             isPlaying = false
-            player?.currentTime = 0
+            player?.currentTime = sourceStart
             currentTime = 0
         }
     }
