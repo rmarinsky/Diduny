@@ -208,9 +208,17 @@ struct OverviewView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .sheet(item: $selectedRecording) { recording in
+        .sheet(item: Binding(
+            get: { selectedRecording },
+            set: { next in
+                guard next?.id != selectedRecording?.id else { return }
+                guard RecordingTrimNavigation.shared.requestLeave() else { return }
+                selectedRecording = next
+            }
+        )) { recording in
             RecordingDetailView(recording: recording, onClose: { selectedRecording = nil })
                 .frame(minWidth: 640, idealWidth: 700, minHeight: 500)
+                .interactiveDismissDisabled(RecordingTrimNavigation.shared.isEditing)
         }
         .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
             typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
@@ -523,7 +531,8 @@ private struct RecentRow: View {
             Button {
                 playbackService.togglePlayback(
                     recordingId: recording.id,
-                    fileURL: RecordingsLibraryStorage.shared.audioFileURL(for: recording)
+                    fileURL: RecordingsLibraryStorage.shared.audioFileURL(for: recording),
+                    trimRange: recording.trimRange
                 )
             } label: {
                 ZStack {
@@ -576,7 +585,7 @@ private struct RecentRow: View {
     }
 
     private var formattedDuration: String {
-        let total = Int(recording.durationSeconds)
+        let total = Int(recording.effectiveDurationSeconds)
         let m = total / 60; let s = total % 60
         return String(format: "%dm %02ds", m, s)
     }

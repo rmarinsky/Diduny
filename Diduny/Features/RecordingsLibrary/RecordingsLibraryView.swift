@@ -23,6 +23,7 @@ struct RecordingsLibraryView: View {
     @State private var searchText = ""
     @State private var filter: RecordingTypeFilter = .all
     @State private var inspectorSelection: RecordingsInspectorSelection?
+    @State private var trimNavigationGuard: (() -> Bool)?
     @State private var showDeleteConfirmation = false
     @State private var showBulkDeleteConfirmation = false
     @State private var recordingToDelete: Recording? = nil
@@ -134,7 +135,7 @@ struct RecordingsLibraryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .inspector(isPresented: Binding(
             get: { inspectorSelection != nil },
-            set: { if !$0 { inspectorSelection = nil } }
+            set: { if !$0 { requestInspectorSelection(nil)} }
         )) {
             inspectorContent
                 .frame(minHeight: 500)
@@ -163,7 +164,7 @@ struct RecordingsLibraryView: View {
                     if storage.deleteRecording(recording) {
                         selectedRecordingIds.remove(id)
                         if case let .recording(selectedId, _) = inspectorSelection, selectedId == id {
-                            inspectorSelection = nil
+                            requestInspectorSelection(nil)
                         }
                     } else {
                         deletionErrorMessage = "The recording and its files were left unchanged."
@@ -234,7 +235,7 @@ struct RecordingsLibraryView: View {
                 .font(.title2.bold())
             Spacer()
             Button {
-                inspectorSelection = .batchComposer
+                requestInspectorSelection(.batchComposer)
             } label: {
                 Label(MainWindowController.batchComposerActionTitle, systemImage: "square.stack.3d.up")
             }
@@ -292,7 +293,7 @@ struct RecordingsLibraryView: View {
         let controller = MainWindowController.shared
         guard controller.requestedBatchComposer else { return }
         controller.requestedBatchComposer = false
-        inspectorSelection = .batchComposer
+        requestInspectorSelection(.batchComposer)
     }
 
     // MARK: - Filter Chips
@@ -356,7 +357,7 @@ struct RecordingsLibraryView: View {
                             if isSelectionMode {
                                 toggleSelection(for: recording)
                             } else {
-                                inspectorSelection = .recording(recording.id, parentBatchID: nil)
+                                requestInspectorSelection(.recording(recording.id, parentBatchID: nil))
                             }
                         },
                         onTranscribe: { transcribe(recording) },
@@ -392,7 +393,7 @@ struct RecordingsLibraryView: View {
             LazyVStack(spacing: 0) {
                 ForEach(Array(filteredBatches.enumerated()), id: \.element.id) { index, batch in
                     Button {
-                        inspectorSelection = .batch(batch.id)
+                        requestInspectorSelection(.batch(batch.id))
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "square.stack.3d.up.fill")
@@ -430,6 +431,13 @@ struct RecordingsLibraryView: View {
         }
     }
 
+    private func requestInspectorSelection(_ next: RecordingsInspectorSelection?) {
+        guard next != inspectorSelection else { return }
+        guard trimNavigationGuard?() ?? true else { return }
+        trimNavigationGuard = nil
+        inspectorSelection = next
+    }
+
     @ViewBuilder
     private var inspectorContent: some View {
         switch inspectorSelection {
@@ -441,10 +449,12 @@ struct RecordingsLibraryView: View {
                         batchStorage.batches.first(where: { $0.id == id })?.name
                     },
                     onBack: parentBatchID == nil ? nil : {
-                        inspectorSelection = inspectorSelection?.backDestination
+                        requestInspectorSelection(inspectorSelection?.backDestination)
                     },
-                    onClose: { inspectorSelection = nil }
+                    onClose: { requestInspectorSelection(nil) },
+                    onNavigationGuardChanged: { trimNavigationGuard = $0 }
                 )
+                .id(recording.id)
                 .inspectorColumnWidth(min: 380, ideal: 430, max: 500)
             }
         case let .batch(id):
@@ -452,9 +462,9 @@ struct RecordingsLibraryView: View {
                 TranscriptionBatchInspectorView(
                     batch: batch,
                     onOpenRecording: { recordingID in
-                        inspectorSelection = .recording(recordingID, parentBatchID: id)
+                        requestInspectorSelection(.recording(recordingID, parentBatchID: id))
                     },
-                    onClose: { inspectorSelection = nil }
+                    onClose: { requestInspectorSelection(nil)}
                 )
                 .inspectorColumnWidth(min: 380, ideal: 430, max: 500)
             }
@@ -462,9 +472,9 @@ struct RecordingsLibraryView: View {
             NewTranscriptionBatchPanel(
                 recordings: storage.recordings,
                 onCreated: { batchID in
-                    inspectorSelection = .batch(batchID)
+                    requestInspectorSelection(.batch(batchID))
                 },
-                onClose: { inspectorSelection = nil }
+                onClose: { requestInspectorSelection(nil)}
             )
             .inspectorColumnWidth(min: 430, ideal: 480, max: 560)
         case nil:
@@ -478,7 +488,7 @@ struct RecordingsLibraryView: View {
               let recording = storage.recordings.first(where: { $0.id == id })
         else { return }
 
-        inspectorSelection = .recording(recording.id, parentBatchID: nil)
+        requestInspectorSelection(.recording(recording.id, parentBatchID: nil))
         controller.requestedRecordingID = nil
     }
 
@@ -543,6 +553,7 @@ struct RecordingsLibraryView: View {
     }
 
     private func transcribe(_ recording: Recording) {
+        guard RecordingTrimNavigation.shared.requestLeave() else { return }
         if recording.remoteSource != nil,
            !(recording.transcriptionText?.isEmpty ?? true)
         {
@@ -553,6 +564,7 @@ struct RecordingsLibraryView: View {
     }
 
     private func requestDelete(_ recording: Recording) {
+        guard RecordingTrimNavigation.shared.requestLeave() else { return }
         recordingToDelete = recording
         showDeleteConfirmation = true
     }
@@ -600,13 +612,14 @@ struct RecordingsLibraryView: View {
     }
 
     private func deleteSelectedRecordings() {
+        guard RecordingTrimNavigation.shared.requestLeave() else { return }
         let ids = selectedRecordingIds
         guard !ids.isEmpty else { return }
         if let playingId = playbackService.playingRecordingId, ids.contains(playingId) {
             playbackService.stop()
         }
         if case let .recording(id, _) = inspectorSelection, ids.contains(id) {
-            inspectorSelection = nil
+            requestInspectorSelection(nil)
         }
         if storage.deleteRecordings(ids) {
             cancelSelection()

@@ -56,7 +56,7 @@ final class MainWindowController {
     }
 
     func closeWindow() {
-        window?.close()
+        window?.performClose(nil)
     }
 
     func refreshActivationPolicy() {
@@ -179,11 +179,16 @@ final class MainWindowController {
     }
 }
 
+@MainActor
 private final class MainWindowDelegate: NSObject, NSWindowDelegate {
     let onClose: () -> Void
 
     init(onClose: @escaping () -> Void) {
         self.onClose = onClose
+    }
+
+    func windowShouldClose(_: NSWindow) -> Bool {
+        RecordingTrimNavigation.shared.requestLeave()
     }
 
     func windowWillClose(_: Notification) {
