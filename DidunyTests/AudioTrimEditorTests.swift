@@ -46,4 +46,54 @@ final class AudioTrimEditorTests: XCTestCase {
         XCTAssertLessThan(editor.range.startSeconds, editor.range.endSeconds)
         XCTAssertEqual(editor.range.endSeconds, 4500)
     }
+    func testIncompleteTimeDraftBlocksSaveAndRemainsDirty() {
+        var editor = AudioTrimEditorState(duration: 28800, savedRange: nil)
+        editor.editTime("01:15:00", isStart: false)
+        editor.editTime("00:12", isStart: false)
+        XCTAssertTrue(editor.hasInvalidTime)
+        XCTAssertTrue(editor.isDirty)
+        XCTAssertFalse(editor.commitTimeFields())
+        editor.editTime("00:01:00", isStart: true)
+        XCTAssertTrue(editor.hasInvalidTime)
+        editor.editTime("01:15:00", isStart: false)
+        XCTAssertFalse(editor.hasInvalidTime)
+        XCTAssertTrue(editor.commitTimeFields())
+        XCTAssertEqual(editor.range.startSeconds, 60)
+        XCTAssertEqual(editor.range.endSeconds, 4500)
+    }
+
+    func testChangingFromFieldToDragPreservesBothUndoSteps() {
+        var editor = AudioTrimEditorState(duration: 28800, savedRange: nil)
+        editor.beginGesture()
+        editor.setEnd(4500)
+        editor.beginGesture()
+        editor.setStart(60)
+        editor.endGesture()
+        editor.undo()
+        XCTAssertEqual(editor.range, AudioTrimRange(startSeconds: 0, endSeconds: 4500))
+        editor.undo()
+        XCTAssertEqual(editor.range, AudioTrimRange(startSeconds: 0, endSeconds: 28800))
+    }
+    func testUndoCommitsAndRevertsAnActiveFieldEdit() {
+        var editor = AudioTrimEditorState(duration: 28800, savedRange: nil)
+        editor.beginGesture()
+        editor.setEnd(4500)
+        XCTAssertTrue(editor.canUndo)
+        editor.undo()
+        XCTAssertEqual(editor.range.endSeconds, 28800)
+        XCTAssertTrue(editor.canRedo)
+    }
+    func testIncompleteFirstTimeEditCanBeUndoneAndRedone() {
+        var editor = AudioTrimEditorState(duration: 28800, savedRange: nil)
+        editor.beginGesture()
+        editor.editTime("00:12", isStart: false)
+        editor.endGesture()
+        XCTAssertTrue(editor.canUndo)
+        editor.undo()
+        XCTAssertEqual(editor.endText, "08:00:00")
+        XCTAssertFalse(editor.hasInvalidTime)
+        editor.redo()
+        XCTAssertEqual(editor.endText, "00:12")
+        XCTAssertTrue(editor.hasInvalidTime)
+    }
 }
