@@ -75,9 +75,17 @@ struct MeetingsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .sheet(item: $selectedRecording) { recording in
+        .sheet(item: Binding(
+            get: { selectedRecording },
+            set: { next in
+                guard next?.id != selectedRecording?.id else { return }
+                guard RecordingTrimNavigation.shared.requestLeave() else { return }
+                selectedRecording = next
+            }
+        )) { recording in
             RecordingDetailView(recording: recording, onClose: { selectedRecording = nil })
                 .frame(minWidth: 640, idealWidth: 700, minHeight: 500)
+                .interactiveDismissDisabled(RecordingTrimNavigation.shared.isEditing)
         }
         .alert("Delete Selected Meetings", isPresented: $showBulkDeleteConfirmation) {
             Button("Delete", role: .destructive) {
@@ -452,7 +460,8 @@ private struct MeetingRow: View {
                 Button {
                     playbackService.togglePlayback(
                         recordingId: recording.id,
-                        fileURL: RecordingsLibraryStorage.shared.audioFileURL(for: recording)
+                        fileURL: RecordingsLibraryStorage.shared.audioFileURL(for: recording),
+                        trimRange: recording.trimRange
                     )
                 } label: {
                     ZStack {
@@ -503,7 +512,7 @@ private struct MeetingRow: View {
     }
 
     private var formattedDuration: String {
-        let total = Int(recording.durationSeconds)
+        let total = Int(recording.effectiveDurationSeconds)
         let h = total / 3600; let m = (total % 3600) / 60; let s = total % 60
         if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
         return String(format: "%d:%02d", m, s)

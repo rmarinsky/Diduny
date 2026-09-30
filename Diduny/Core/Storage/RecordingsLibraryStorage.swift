@@ -386,7 +386,8 @@ final class RecordingsLibraryStorage {
             transcriptSegments: previous.transcriptSegments,
             title: previous.title,
             description: previous.description,
-            transcriptHistory: previous.transcriptHistory
+            transcriptHistory: previous.transcriptHistory,
+            trimRange: previous.trimRange
         )
 
         if forceSave {
@@ -444,7 +445,8 @@ final class RecordingsLibraryStorage {
                 transcriptSegments: previous.transcriptSegments,
                 title: previous.title,
                 description: previous.description,
-                transcriptHistory: previous.transcriptHistory
+                transcriptHistory: previous.transcriptHistory,
+                trimRange: previous.trimRange
             )
         }
         guard saveMetadataSynchronously() else {
@@ -695,6 +697,30 @@ final class RecordingsLibraryStorage {
         return true
     }
 
+    /// Persists only the selection. Failed writes restore the visible metadata.
+    @discardableResult
+    func updateTrimRange(id: UUID, range: AudioTrimRange?) -> Bool {
+        guard allowsLibraryMutation(),
+              let index = recordings.firstIndex(where: { $0.id == id }),
+              recordings[index].canTrimAudio
+        else { return false }
+        let previous = recordings[index]
+        guard range?.isValid(for: previous.durationSeconds) ?? true else { return false }
+        let normalizedRange: AudioTrimRange? = if let range,
+            range.startSeconds == 0 && range.endSeconds == previous.durationSeconds {
+            nil
+        } else { range }
+        if previous.trimRange == normalizedRange { return true }
+        // Materialize a legacy scalar transcript before changing its source selection.
+        recordings[index].transcriptHistory = previous.resolvedTranscriptHistory
+        recordings[index].trimRange = normalizedRange
+        guard saveMetadataSynchronously() else {
+            recordings[index] = previous
+            return false
+        }
+        return true
+    }
+
     func updateRecording(
         id: UUID,
         status: Recording.ProcessingStatus,
@@ -761,7 +787,8 @@ final class RecordingsLibraryStorage {
             targetLanguageCode: translationTargetLanguageCode,
             text: text,
             segments: segments,
-            provenance: generatedTranscriptProvenance
+            provenance: generatedTranscriptProvenance,
+            sourceTrimRange: previous.trimRange
         )
         recordings[index].transcriptHistory = recordings[index].resolvedTranscriptHistory + [version]
         recordings[index].status = status
@@ -1088,7 +1115,8 @@ final class RecordingsLibraryStorage {
                     transcriptSegments: previous.transcriptSegments,
                     title: previous.title,
                     description: previous.description,
-                    transcriptHistory: previous.transcriptHistory
+                    transcriptHistory: previous.transcriptHistory,
+                    trimRange: previous.trimRange
                 )
                 didReset = true
             default:
@@ -1228,7 +1256,8 @@ final class RecordingsLibraryStorage {
                 transcriptSegments: recording.transcriptSegments,
                 title: recording.title,
                 description: recording.description,
-                transcriptHistory: recording.transcriptHistory
+                transcriptHistory: recording.transcriptHistory,
+                trimRange: recording.trimRange
             )
             saveMetadata()
 

@@ -140,6 +140,8 @@ struct BatchTranscriptionItem: Codable, Identifiable, Equatable {
     var remoteArtifactWork: RemoteArtifactWork = .all
     var downloadedAudioURL: URL?
     var cloudJobID: String?
+    /// Selection used by the persisted job; nil denotes the full source.
+    var cloudJobTrimRange: AudioTrimRange?
     var startedAt: Date?
     var finishedAt: Date?
 
@@ -228,6 +230,7 @@ protocol FileTranscriptionBatchRecordingStoring: AnyObject {
         sourceCaptionArtifacts: [TranscriptArtifact]
     ) -> UUID?
     func audioFileURL(recordingID: UUID) -> URL?
+    func storedRecording(recordingID: UUID) -> Recording?
     func markProcessing(recordingID: UUID)
     func markCompleted(
         recordingID: UUID,
@@ -240,6 +243,8 @@ protocol FileTranscriptionBatchRecordingStoring: AnyObject {
 }
 
 extension FileTranscriptionBatchRecordingStoring {
+    func storedRecording(recordingID _: UUID) -> Recording? { nil }
+
     func completedDuplicate(remoteProvider _: String, mediaID _: String) -> BatchTranscriptionDuplicate? {
         nil
     }
@@ -997,6 +1002,7 @@ final class FileTranscriptionBatchService {
         var recordingID = items[initialIndex].recordingID
         var downloadedAudio: RemoteDownloadedAudio?
         var temporaryAudio: ImportedMediaAudioPreparer.PreparedAudio?
+        var selectedAudioURL: URL?
         var captionAttemptFailed = false
 
         defer {
@@ -1006,6 +1012,7 @@ final class FileTranscriptionBatchService {
                 persistWorkItems()
             }
             temporaryAudio?.removeTemporaryFile()
+            if let selectedAudioURL { try? FileManager.default.removeItem(at: selectedAudioURL) }
         }
 
         do {
@@ -1166,10 +1173,12 @@ final class FileTranscriptionBatchService {
                 recordingStore.markProcessing(recordingID: recordingID)
             }
 
-            let audioURL = recordingID.flatMap { recordingStore.audioFileURL(recordingID: $0) }
+            let availableAudioURL = recordingID.flatMap { recordingStore.audioFileURL(recordingID: $0) }
                 ?? temporaryAudio?.fileURL
                 ?? storedAudioURL
-            guard let audioURL else { throw CocoaError(.fileNoSuchFile) }
+            guard let originalAudioURL = availableAudioURL else { throw CocoaError(.fileNoSuchFile) }
+            let audioURL = try await prepareSelectedAudio(fileURL: originalAudioURL, recordingID: recordingID, itemID: itemID)
+            if audioURL != originalAudioURL { selectedAudioURL = audioURL }
 
             update(itemID) {
                 $0.status = settings.provider == .cloud ? .uploading : .processing
@@ -1236,6 +1245,11 @@ final class FileTranscriptionBatchService {
         var recordingID = items[initialIndex].recordingID
         var audioURL: URL?
         var temporaryAudio: ImportedMediaAudioPreparer.PreparedAudio?
+        var selectedAudioURL: URL?
+        defer {
+            temporaryAudio?.removeTemporaryFile()
+            if let selectedAudioURL { try? FileManager.default.removeItem(at: selectedAudioURL) }
+        }
 
         do {
             try Task.checkCancellation()
@@ -1273,9 +1287,11 @@ final class FileTranscriptionBatchService {
                 }
             }
 
-            guard let audioURL else {
+            guard let originalAudioURL = audioURL else {
                 throw CocoaError(.fileNoSuchFile)
             }
+            let audioURL = try await prepareSelectedAudio(fileURL: originalAudioURL, recordingID: recordingID, itemID: itemID)
+            if audioURL != originalAudioURL { selectedAudioURL = audioURL }
 
             update(itemID) { $0.status = settings.provider == .cloud ? .uploading : .processing }
             let transcript = try await transcribeWithPermit(
@@ -1326,7 +1342,6 @@ final class FileTranscriptionBatchService {
             }
         }
 
-        temporaryAudio?.removeTemporaryFile()
     }
 
     private func pauseForAuthorization() {
@@ -1343,6 +1358,13 @@ final class FileTranscriptionBatchService {
         wakeScheduler()
     }
 
+    private func prepareSelectedAudio(fileURL: URL, recordingID: UUID?, itemID: UUID) async throws -> URL {
+        guard let recordingID, let recording = recordingStore.storedRecording(recordingID: recordingID)
+        else { return fileURL }
+        update(itemID) { $0.durationSeconds = recording.effectiveDurationSeconds }
+        return try await AudioTrimService.prepareAudio(fileURL: fileURL, range: recording.trimRange)
+    }
+
     private func transcribeWithPermit(
         audioFileURL: URL,
         settings: FileTranscriptionSettingsSnapshot,
@@ -1357,6 +1379,16 @@ final class FileTranscriptionBatchService {
         try await permits.acquire()
         do {
             try Task.checkCancellation()
+            let currentRange = item(withID: itemID)?.recordingID.flatMap {
+                recordingStore.storedRecording(recordingID: $0)?.trimRange
+            }
+            if item(withID: itemID)?.cloudJobTrimRange != currentRange {
+                update(itemID) {
+                    $0.cloudJobID = nil
+                    $0.cloudJobTrimRange = nil
+                }
+                persistWorkItems()
+            }
             let result = try await transcriber.transcribe(
                 audioFileURL: audioFileURL,
                 settings: settings,
@@ -1364,7 +1396,10 @@ final class FileTranscriptionBatchService {
                 sourceDurationSeconds: sourceDurationSeconds,
                 resumeJobID: item(withID: itemID)?.cloudJobID,
                 onJobSubmitted: { [weak self] jobID in
-                    self?.update(itemID) { $0.cloudJobID = jobID }
+                    self?.update(itemID) {
+                        $0.cloudJobID = jobID
+                        $0.cloudJobTrimRange = currentRange
+                    }
                     self?.persistWorkItems()
                 },
                 onUpdate: onUpdate
@@ -1544,13 +1579,22 @@ private final class LiveFileTranscriptionBatchTranscriber: FileTranscriptionBatc
 }
 
 @MainActor
-private final class LiveFileTranscriptionBatchRecordingStore: FileTranscriptionBatchRecordingStoring {
-    private let storage = RecordingsLibraryStorage.shared
+final class LiveFileTranscriptionBatchRecordingStore: FileTranscriptionBatchRecordingStoring {
+    private let storage: RecordingsLibraryStorage
+
+    init(storage: RecordingsLibraryStorage? = nil) {
+        self.storage = storage ?? .shared
+    }
+
+    func storedRecording(recordingID: UUID) -> Recording? {
+        storage.recordings.first { $0.id == recordingID }
+    }
 
     func completedDuplicate(sourceIdentity: ImportedMediaIdentity) -> BatchTranscriptionDuplicate? {
         guard let sourceFileSizeBytes = sourceIdentity.fileSizeBytes else { return nil }
         guard let recording = storage.recordings.first(where: {
             $0.type == .fileTranscription
+                && representsFullSource($0)
                 && ($0.status == .transcribed || $0.status == .translated)
                 && $0.sourceFileName?.localizedCaseInsensitiveCompare(sourceIdentity.fileName) == .orderedSame
                 && $0.sourceFileSizeBytes == sourceFileSizeBytes
@@ -1570,7 +1614,8 @@ private final class LiveFileTranscriptionBatchRecordingStore: FileTranscriptionB
         mediaID: String
     ) -> BatchTranscriptionDuplicate? {
         guard let recording = storage.recordings.first(where: {
-            $0.remoteSource?.provider == remoteProvider
+            representsFullSource($0)
+                && $0.remoteSource?.provider == remoteProvider
                 && $0.remoteSource?.mediaID == mediaID
                 && hasReusableArtifact($0)
         }) else { return nil }
@@ -1582,7 +1627,7 @@ private final class LiveFileTranscriptionBatchRecordingStore: FileTranscriptionB
         durationSeconds: TimeInterval
     ) -> BatchTranscriptionDuplicate? {
         guard let recording = storage.recordings.first(where: {
-            RemoteRecordingDuplicateMatcher.matches(
+            representsFullSource($0) && RemoteRecordingDuplicateMatcher.matches(
                 $0,
                 metadata: remoteMetadata,
                 durationSeconds: durationSeconds
@@ -1663,6 +1708,10 @@ private final class LiveFileTranscriptionBatchRecordingStore: FileTranscriptionB
 
     func updateSourceCaptionArtifacts(recordingID: UUID, artifacts: [TranscriptArtifact]) {
         storage.updateRemoteArtifacts(id: recordingID, sourceCaptionArtifacts: artifacts)
+    }
+
+    private func representsFullSource(_ recording: Recording) -> Bool {
+        recording.trimRange == nil && recording.resolvedTranscriptHistory.last?.sourceTrimRange == nil
     }
 
     private func hasReusableArtifact(_ recording: Recording) -> Bool {

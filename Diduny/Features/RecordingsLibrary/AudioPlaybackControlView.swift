@@ -4,6 +4,7 @@ struct AudioPlaybackControlView: View {
     let recordingId: UUID
     let fileURL: URL
     var durationHint: TimeInterval = 0
+    var trimRange: AudioTrimRange? = nil
 
     @State private var playbackService = AudioPlaybackService.shared
 
@@ -26,7 +27,7 @@ struct AudioPlaybackControlView: View {
         HStack(spacing: 8) {
             // Play/Pause button
             Button {
-                playbackService.togglePlayback(recordingId: recordingId, fileURL: fileURL)
+                playbackService.togglePlayback(recordingId: recordingId, fileURL: fileURL, trimRange: trimRange)
             } label: {
                 Image(systemName: isActiveRecording && playbackService.isPlaying ? "pause.fill" : "play.fill")
                     .font(.body)

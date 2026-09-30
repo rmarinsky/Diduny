@@ -106,7 +106,8 @@ struct RecordingRowView: View {
             guard canPlay else { return }
             playbackService.togglePlayback(
                 recordingId: recording.id,
-                fileURL: RecordingsLibraryStorage.shared.audioFileURL(for: recording)
+                fileURL: RecordingsLibraryStorage.shared.audioFileURL(for: recording),
+                trimRange: recording.trimRange
             )
         } label: {
             Label {
@@ -259,7 +260,7 @@ struct RecordingRowView: View {
     }
 
     private var formattedDuration: String {
-        let total = Int(recording.durationSeconds)
+        let total = Int(recording.effectiveDurationSeconds)
         let h = total / 3600
         let m = (total % 3600) / 60
         let s = total % 60

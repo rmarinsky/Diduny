@@ -1,3 +1,4 @@
+import AVFoundation
 @testable import Diduny
 import XCTest
 
@@ -1156,6 +1157,83 @@ final class FileTranscriptionBatchServiceTests: XCTestCase {
         XCTAssertEqual(service.items.map(\.sourceURL.lastPathComponent), ["first.m4a"])
     }
 
+    func test_resumedTrimmedBatchTranscribesSelectedSamplesAndCleansTemporaryAudio() async throws {
+        for remote in [false, true] {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let audioURL = directory.appendingPathComponent("original.wav")
+            let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 8000, channels: 1))
+            do {
+                let file = try AVAudioFile(forWriting: audioURL, settings: format.settings)
+                let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16000))
+                buffer.frameLength = 16000
+                for index in 0..<16000 { buffer.floatChannelData![0][index] = 0.25 }
+                try file.write(from: buffer)
+            }
+            let originalBytes = try Data(contentsOf: audioURL)
+            let recordingID = UUID()
+            var recording = Recording(id: recordingID, createdAt: Date(), type: .fileTranscription,
+                audioFileName: "original.wav", durationSeconds: 2, fileSizeBytes: Int64(originalBytes.count),
+                status: .failed, sourceDevice: nil)
+            recording.trimRange = AudioTrimRange(startSeconds: 0.5, endSeconds: 1.25)
+            var item = remote
+                ? BatchTranscriptionItem(remoteSource: try YouTubeRemoteMediaSource.normalize("https://youtu.be/dQw4w9WgXcQ"))
+                : BatchTranscriptionItem(sourceURL: audioURL)
+            item.recordingID = recordingID
+            item.status = .failed
+            item.cloudJobID = "whole-job"
+            let batch = TranscriptionBatch(name: "Retry selected audio", isProcessingClosed: true,
+                recordingIDs: [recordingID], workItems: [item])
+            let transcriber = BatchTestTranscriber()
+            let service = FileTranscriptionBatchService(
+                preparer: BatchTestPreparer(), transcriber: transcriber,
+                recordingStore: BatchTestRecordingStore(existingRecordingID: recordingID,
+                    audioFileURL: audioURL, savedRecording: recording),
+                remoteExtractor: BatchTestRemoteExtractor(),
+                chromeProfile: { ChromeProfile(id: "Default", name: "Roman") },
+                batchPersistence: BatchTestPersistence(), settingsSnapshot: { .testValue },
+                playCompletionSound: {})
+            service.resume(batch: batch)
+            try await waitUntil { !service.isProcessing }
+            XCTAssertEqual(transcriber.receivedResumeJobIDs, [nil])
+            XCTAssertEqual(transcriber.receivedFrameCounts.first ?? nil, 6000)
+            XCTAssertEqual(transcriber.receivedDurations.first ?? nil, 0.75)
+            let sentURL = try XCTUnwrap(transcriber.receivedAudioURLs.first)
+            XCTAssertNotEqual(sentURL, audioURL)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: sentURL.path))
+            XCTAssertEqual(try Data(contentsOf: audioURL), originalBytes)
+        }
+    }
+
+    func test_fullImportDoesNotReuseTrimmedOrPreviouslyTrimmedTranscript() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storage = RecordingsLibraryStorage(baseDirectory: directory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let original = directory.appendingPathComponent("whole-source.wav")
+        try Data([1, 2, 3, 4]).write(to: original)
+        let identity = ImportedMediaIdentity(sourceURL: original)
+        let remote = RemoteMediaSourceMetadata(provider: "youtube", mediaID: "trim-test",
+            canonicalURL: URL(string: "https://youtube.com/watch?v=trim-test")!, title: "Whole", channelName: nil)
+        let id = try XCTUnwrap(storage.saveRecording(audioData: Data([1, 2, 3, 4]), type: .fileTranscription,
+            duration: 100, transcriptionText: "Whole transcript", sourceFileName: identity.fileName,
+            sourceFileSizeBytes: identity.fileSizeBytes, remoteSource: remote, forceSave: true))
+        let store = LiveFileTranscriptionBatchRecordingStore(storage: storage)
+        XCTAssertNotNil(store.completedDuplicate(sourceIdentity: identity))
+        XCTAssertNotNil(store.completedDuplicate(remoteProvider: remote.provider, mediaID: remote.mediaID))
+        let selection = AudioTrimRange(startSeconds: 10, endSeconds: 40)
+        XCTAssertTrue(storage.updateTrimRange(id: id, range: selection))
+        XCTAssertNil(store.completedDuplicate(sourceIdentity: identity))
+        XCTAssertNil(store.completedDuplicate(remoteProvider: remote.provider, mediaID: remote.mediaID))
+        XCTAssertNil(store.completedDuplicate(remoteMetadata: remote, durationSeconds: 100))
+        storage.completeTranscription(id: id, status: .transcribed, text: "Selected transcript", segments: nil, kind: .local)
+        XCTAssertTrue(storage.updateTrimRange(id: id, range: nil))
+        XCTAssertNil(store.completedDuplicate(sourceIdentity: identity))
+        XCTAssertNil(store.completedDuplicate(remoteProvider: remote.provider, mediaID: remote.mediaID))
+        XCTAssertNil(store.completedDuplicate(remoteMetadata: remote, durationSeconds: 100))
+    }
+
     func test_resumedLocalBatchMarksTranscriptAsLocal() async throws {
         let recordingID = UUID()
         var item = BatchTranscriptionItem(sourceURL: URL(fileURLWithPath: "/tmp/source.m4a"))
@@ -1750,6 +1828,9 @@ private final class BatchTestRemoteExtractor: RemoteMediaExtracting {
 private final class BatchTestTranscriber: FileTranscriptionBatchTranscribing {
     private(set) var transcribedFileNames: [String] = []
     private(set) var receivedSettings: [FileTranscriptionSettingsSnapshot] = []
+    private(set) var receivedAudioURLs: [URL] = []
+    private(set) var receivedDurations: [TimeInterval?] = []
+    private(set) var receivedFrameCounts: [AVAudioFramePosition?] = []
     private(set) var maximumConcurrentCount = 0
     private(set) var receivedResumeJobIDs: [String?] = []
     private var concurrentCount = 0
@@ -1785,11 +1866,14 @@ private final class BatchTestTranscriber: FileTranscriptionBatchTranscribing {
         audioFileURL: URL,
         settings: FileTranscriptionSettingsSnapshot,
         source _: String,
-        sourceDurationSeconds _: TimeInterval?,
+        sourceDurationSeconds: TimeInterval?,
         resumeJobID: String?,
         onJobSubmitted: @escaping (String) -> Void,
         onUpdate: @escaping (JobProgressUpdate) -> Void
     ) async throws -> GeneratedTranscript {
+        receivedAudioURLs.append(audioFileURL)
+        receivedDurations.append(sourceDurationSeconds)
+        receivedFrameCounts.append((try? AVAudioFile(forReading: audioFileURL))?.length)
         receivedResumeJobIDs.append(resumeJobID)
         if resumeJobID == nil { onJobSubmitted("test-job") }
         transcribedFileNames.append(audioFileURL.lastPathComponent)
@@ -1824,6 +1908,7 @@ private final class BatchTestTranscriber: FileTranscriptionBatchTranscribing {
 
 @MainActor
 private final class BatchTestRecordingStore: FileTranscriptionBatchRecordingStoring {
+    private let savedRecording: Recording?
     private let duplicate: BatchTranscriptionDuplicate?
     private let matchingSourceIdentity: ImportedMediaIdentity?
     private let remoteDuplicate: BatchTranscriptionDuplicate?
@@ -1841,8 +1926,10 @@ private final class BatchTestRecordingStore: FileTranscriptionBatchRecordingStor
         matchingRemoteMediaID: String? = nil,
         storesRemoteAudio: Bool = false,
         existingRecordingID: UUID? = nil,
-        audioFileURL: URL? = nil
+        audioFileURL: URL? = nil,
+        savedRecording: Recording? = nil
     ) {
+        self.savedRecording = savedRecording
         self.duplicate = duplicate
         self.matchingSourceIdentity = matchingSourceIdentity
         self.remoteDuplicate = remoteDuplicate
@@ -1890,6 +1977,10 @@ private final class BatchTestRecordingStore: FileTranscriptionBatchRecordingStor
 
     func audioFileURL(recordingID: UUID) -> URL? {
         storedAudioURLs[recordingID]
+    }
+
+    func storedRecording(recordingID: UUID) -> Recording? {
+        savedRecording?.id == recordingID ? savedRecording : nil
     }
 
     func updateSourceCaptionArtifacts(recordingID _: UUID, artifacts: [TranscriptArtifact]) {

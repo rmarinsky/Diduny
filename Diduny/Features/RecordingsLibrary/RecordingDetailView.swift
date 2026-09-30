@@ -7,6 +7,8 @@ struct RecordingDetailView: View {
     let parentBatchName: String?
     let onBack: (() -> Void)?
     let onClose: () -> Void
+    let onNavigationGuardChanged: (((() -> Bool)?) -> Void)?
+    @State private var trimEditor: AudioTrimEditorState?
 
     @State private var playbackService = AudioPlaybackService.shared
     @State private var queueService = RecordingQueueService.shared
@@ -25,12 +27,14 @@ struct RecordingDetailView: View {
         recording: Recording,
         parentBatchName: String? = nil,
         onBack: (() -> Void)? = nil,
-        onClose: @escaping () -> Void
+        onClose: @escaping () -> Void,
+        onNavigationGuardChanged: (((() -> Bool)?) -> Void)? = nil
     ) {
         self.recording = recording
         self.parentBatchName = parentBatchName
         self.onBack = onBack
         self.onClose = onClose
+        self.onNavigationGuardChanged = onNavigationGuardChanged
         _title = State(initialValue: recording.title ?? recording.displayTitle)
         _description = State(initialValue: recording.description ?? recording.remoteSource?.description ?? "")
     }
@@ -120,8 +124,9 @@ struct RecordingDetailView: View {
                 }
             }
         }
+        .onDisappear { if trimEditor != nil { finishTrimming() } }
         .onExitCommand {
-            onClose()
+            if canLeaveTrimEditor() { onClose() }
         }
         .alert("Transcribe Again?", isPresented: $showRetranscriptionConfirmation) {
             Button("Transcribe Again") {
@@ -139,6 +144,7 @@ struct RecordingDetailView: View {
                     playbackService.stop()
                 }
                 if storage.deleteRecording(currentRecording) {
+                    finishTrimming()
                     onClose()
                 } else {
                     operationErrorMessage = "The recording and its files were left unchanged."
@@ -163,12 +169,46 @@ struct RecordingDetailView: View {
         }
     }
 
+    private func finishTrimming() {
+        playbackService.stop()
+        trimEditor = nil
+        onNavigationGuardChanged?(nil)
+        RecordingTrimNavigation.shared.canLeave = nil
+    }
+
+    @discardableResult
+    private func saveTrim() -> Bool {
+        guard var editor = trimEditor, editor.commitTimeFields() else { return false }
+        guard storage.updateTrimRange(id: currentRecording.id, range: editor.rangeToSave) else {
+            operationErrorMessage = "The audio range could not be saved. The recording was left unchanged."
+            return false
+        }
+        finishTrimming()
+        return true
+    }
+
+    private func canLeaveTrimEditor() -> Bool {
+        guard let editor = trimEditor else { return true }
+        guard editor.isDirty else { finishTrimming(); return true }
+        let alert = NSAlert()
+        alert.messageText = "Save changes?"
+        alert.informativeText = "You changed the recording range."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: "Keep editing")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return saveTrim()
+        case .alertSecondButtonReturn: finishTrimming(); return true
+        default: return false
+        }
+    }
+
     // MARK: - Header
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let onBack {
-                Button(action: onBack) {
+                Button { if canLeaveTrimEditor() { onBack() } } label: {
                     Label("Back to Batch", systemImage: "chevron.left")
                 }
                 .buttonStyle(.plain)
@@ -202,7 +242,7 @@ struct RecordingDetailView: View {
                 Spacer(minLength: 8)
 
                 Button {
-                    onClose()
+                    if canLeaveTrimEditor() { onClose() }
                 } label: {
                     Image(systemName: "xmark")
                 }
@@ -272,7 +312,8 @@ struct RecordingDetailView: View {
         AudioPlaybackControlView(
             recordingId: currentRecording.id,
             fileURL: storage.audioFileURL(for: currentRecording),
-            durationHint: currentRecording.durationSeconds
+            durationHint: currentRecording.effectiveDurationSeconds,
+            trimRange: currentRecording.trimRange
         )
         .disabled(!hasPlayableAudio)
     }
@@ -283,9 +324,32 @@ struct RecordingDetailView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            playbackSection
+            if trimEditor != nil {
+                RecordingTrimEditorView(
+                    editor: Binding(get: { trimEditor! }, set: { trimEditor = $0 }),
+                    recordingID: currentRecording.id,
+                    fileURL: storage.audioFileURL(for: currentRecording),
+                    onCancel: { finishTrimming() },
+                    onSave: { _ = saveTrim() }
+                )
+            } else {
+                playbackSection
                 .padding(12)
                 .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                if currentRecording.canTrimAudio && hasPlayableAudio {
+                    HStack {
+                        Spacer()
+                        Button("Trim…") {
+                            playbackService.stop()
+                            trimEditor = AudioTrimEditorState(duration: currentRecording.durationSeconds, savedRange: currentRecording.trimRange)
+                            onNavigationGuardChanged?(canLeaveTrimEditor)
+                            RecordingTrimNavigation.shared.canLeave = canLeaveTrimEditor
+                        }
+                        .controlSize(.small)
+                        .accessibilityIdentifier("Trim recording")
+                    }
+                }
+            }
 
             if isInProgressCapture {
                 Text(
@@ -298,8 +362,10 @@ struct RecordingDetailView: View {
             } else {
                 HStack(spacing: 8) {
                     localTranscriptionButton
+                        .disabled(trimEditor != nil)
                     if !currentRecording.requiresLocalTranscription {
                         cloudTranscriptionButton
+                            .disabled(trimEditor != nil)
                     }
                 }
 
@@ -310,6 +376,7 @@ struct RecordingDetailView: View {
                 }
 
                 translationMenu
+                    .disabled(trimEditor != nil)
             }
         }
     }
@@ -438,6 +505,10 @@ struct RecordingDetailView: View {
                     .accessibilityLabel("Transcript export options")
                 }
                 .controlSize(.small)
+            }
+            if version.sourceTrimRange != currentRecording.trimRange {
+                Text("This transcript was created for a different audio range. Its timestamps refer to that version.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             ScrollView {
                 Text(text)
@@ -583,7 +654,7 @@ struct RecordingDetailView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             Button("Delete Recording…", role: .destructive) {
-                showDeleteConfirmation = true
+                if canLeaveTrimEditor() { showDeleteConfirmation = true }
             }
         }
     }
@@ -660,7 +731,7 @@ struct RecordingDetailView: View {
     private var formattedDuration: String {
         let totalSeconds: Int
         if currentRecording.durationSeconds > 0 {
-            totalSeconds = Int(currentRecording.durationSeconds)
+            totalSeconds = Int(currentRecording.effectiveDurationSeconds)
         } else if let ended = currentRecording.resolvedEndedAt {
             totalSeconds = max(0, Int(ended.timeIntervalSince(currentRecording.createdAt)))
         } else {

@@ -18,7 +18,10 @@ struct MainWindowView: View {
     var body: some View {
         HStack(spacing: 0) {
             SidebarView(
-                selectedSection: $selectedSection,
+                selectedSection: Binding(
+                    get: { selectedSection },
+                    set: { requestSection($0) }
+                ),
                 topInset: MainWindowLayout.sidebarTopInset
             )
             .frame(width: MainWindowLayout.sidebarWidth)
@@ -45,16 +48,22 @@ struct MainWindowView: View {
         }
         .onChange(of: appState.shouldOpenSettings) { _, shouldOpen in
             if shouldOpen {
-                selectedSection = .general
+                requestSection(.general)
                 appState.shouldOpenSettings = false
             }
         }
         .onChange(of: MainWindowController.shared.requestedSection) { _, section in
             if let section {
-                selectedSection = section
+                requestSection(section)
                 MainWindowController.shared.requestedSection = nil
             }
         }
+    }
+
+    private func requestSection(_ section: MainSection) {
+        guard section != selectedSection else { return }
+        guard RecordingTrimNavigation.shared.requestLeave() else { return }
+        selectedSection = section
     }
 
     @ViewBuilder

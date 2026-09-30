@@ -736,7 +736,7 @@ final class TranscriptionBatchStorageTests: XCTestCase {
         try FileManager.default.createDirectory(at: recordingsDirectory, withIntermediateDirectories: true)
         let recovered = Recording(
             id: UUID(),
-            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            createdAt: Date(),
             type: .meeting,
             audioFileName: "recovered.m4a",
             durationSeconds: 1,

@@ -97,6 +97,7 @@ struct TranscriptVersion: Identifiable, Codable, Equatable {
     let text: String
     let segments: [TimedTranscriptSegment]?
     let provenance: GeneratedTranscriptProvenance?
+    var sourceTrimRange: AudioTrimRange? = nil
 
     init(
         id: UUID = UUID(),
@@ -108,7 +109,8 @@ struct TranscriptVersion: Identifiable, Codable, Equatable {
         targetLanguageCode: String? = nil,
         text: String,
         segments: [TimedTranscriptSegment]? = nil,
-        provenance: GeneratedTranscriptProvenance? = nil
+        provenance: GeneratedTranscriptProvenance? = nil,
+        sourceTrimRange: AudioTrimRange? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -120,6 +122,7 @@ struct TranscriptVersion: Identifiable, Codable, Equatable {
         self.text = text
         self.segments = segments
         self.provenance = provenance
+        self.sourceTrimRange = sourceTrimRange
     }
 
     /// Transcript exactly as shown in the UI: timestamps and speaker labels when the
@@ -173,6 +176,18 @@ struct Recording: Identifiable, Codable, Equatable {
     var title: String? = nil
     var description: String? = nil
     var transcriptHistory: [TranscriptVersion]? = nil
+    /// Non-destructive selection; duration and audio file always describe the original.
+    var trimRange: AudioTrimRange? = nil
+
+    var effectiveDurationSeconds: TimeInterval {
+        guard let trimRange, trimRange.isValid(for: durationSeconds) else { return durationSeconds }
+        return trimRange.durationSeconds
+    }
+
+    var canTrimAudio: Bool {
+        hasAttachedAudio && durationSeconds.isFinite && durationSeconds > 0
+            && !status.isInProgressCapture && status != .processing
+    }
 
     var isYouTubeVideo: Bool {
         remoteSource?.provider == YouTubeRemoteMediaSource.provider
