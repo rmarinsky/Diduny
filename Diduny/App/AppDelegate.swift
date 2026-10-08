@@ -559,6 +559,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func recoverRecording(from state: RecoveryState) {
         Task {
+            let translationTarget = state.translationTargetLanguage
+                ?? (SettingsStorage.shared.effectiveTranslationProvider == .local
+                    ? "en" : SettingsStorage.shared.resolveTranslationLanguagePair().languageB)
             var recoveredRecordingID: UUID?
             let processor = RecoveryRecordingProcessor(
                 save: { audioData, state, duration in
@@ -566,6 +569,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         audioData: audioData,
                         type: state.recordingType.libraryType,
                         duration: duration,
+                        translationTargetLanguageCode: state.recordingType == .translation ? translationTarget : nil,
                         createdAt: state.startTime,
                         recoverySource: .orphanedSession,
                         forceSave: true
@@ -600,7 +604,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         } else {
                             rawText = try await self.whisperTranscriptionService.transcribe(audioData: audioData)
                         }
-                    case .translation, .meetingTranslation:
+                    case .translation:
+                        if SettingsStorage.shared.effectiveTranslationProvider == .local {
+                            rawText = try await self.whisperTranscriptionService.translateAndTranscribe(
+                                audioData: audioData,
+                                targetLanguage: translationTarget
+                            )
+                        } else {
+                            rawText = try await self.transcriptionService.translateAndTranscribe(
+                                audioData: audioData,
+                                targetLanguage: translationTarget,
+                                languageHints: state.translationLanguageHints ?? []
+                            )
+                        }
+                    case .meetingTranslation:
                         let service: TranscriptionServiceProtocol = SettingsStorage.shared
                             .effectiveTranslationProvider == .local
                             ? self.whisperTranscriptionService : self.transcriptionService
@@ -1150,9 +1167,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     var translationTargetLanguage: String {
-        activeTranslationLanguagePair?.languageB
-            ?? activeTranslationTargetLanguage
-            ?? SettingsStorage.shared.defaultTranslationLanguagePair.languageB
+        activeTranslationTargetLanguage
+            ?? activeTranslationLanguagePair?.languageB
+            ?? (SettingsStorage.shared.effectiveTranslationProvider == .local
+                ? "en" : SettingsStorage.shared.defaultTranslationLanguagePair.languageB)
     }
 
     var translationTargetLabel: String {
@@ -1164,7 +1182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     var translationPairLabel: String {
-        (activeTranslationLanguagePair ?? SettingsStorage.shared.defaultTranslationLanguagePair).displayLabel
+        "→ \(translationTargetLabel)"
     }
 
     func handleTranslationStateChange(_ state: RecordingState) {

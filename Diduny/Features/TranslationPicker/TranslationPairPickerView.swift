@@ -37,7 +37,7 @@ struct TranslationPairPickerPanelView: View {
                     .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
                     .frame(width: 14)
 
-                Text(pair.displayLabel)
+                Text(pair.oneWayDisplayLabel)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .white : .primary)
 

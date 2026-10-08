@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "headline": "Trim recordings without losing the original",
+  "headline": "Translate voice in one direction",
   "highlights": [
-    "Choose the part to keep with timeline handles or precise start and end times.",
-    "Undo or redo edits, cancel changes, or restore the original recording range.",
-    "Playback and new transcriptions use the saved selection; your original audio stays safe."
+    "Voice translation always uses your selected output language, including mixed-language speech.",
+    "Keep words already spoken in the output language without reversing translation.",
+    "Recovered voice recordings retain their output language and source-language hints."
   ]
 }

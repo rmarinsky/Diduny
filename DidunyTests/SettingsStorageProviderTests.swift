@@ -496,6 +496,25 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(translation?["language_b"] as? String, "uk")
     }
 
+    func test_oneWayTranslationAllowsTargetLanguageSpeechWithStrictSourceHints() {
+        let config = CloudTranscriptionService.makeOneWayTranslationConfig(
+            targetLanguage: "en",
+            languageConfig: CloudLanguageConfig(hints: ["uk"], strict: true)
+        )
+        XCTAssertEqual(config["language_hints"] as? [String], ["uk", "en"])
+        XCTAssertEqual(config["language_hints_strict"] as? Bool, true)
+        XCTAssertEqual(config["translation"] as? [String: String], ["type": "one_way", "target_language": "en"])
+    }
+
+    func test_oneWayTranslationPreservesAutomaticSourceLanguageDetection() {
+        let config = CloudTranscriptionService.makeOneWayTranslationConfig(
+            targetLanguage: "en",
+            languageConfig: CloudLanguageConfig(hints: [], strict: false)
+        )
+        XCTAssertNil(config["language_hints"])
+        XCTAssertNil(config["language_hints_strict"])
+    }
+
     func test_resolveLanguageConfig_trimsForcedHintsAndTreatsThemAsStrict() {
         let config = CloudTranscriptionService.resolveLanguageConfig(forcedLanguageHints: [" pl ", "", "en"])
 

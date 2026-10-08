@@ -179,6 +179,30 @@ final class InProgressRecordingStoreTests: XCTestCase {
         XCTAssertEqual(state.inProgressMeetingRecordingID, id)
     }
 
+    func test_voiceRecoveryRetainsOutputLanguageAndSourceHintsAcrossPersistence() throws {
+        let legacy = RecoveryState(tempFilePath: "/recording.wav", startTime: Date(), recordingType: .translation)
+        var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(legacy)) as? [String: Any])
+        payload["translationTargetLanguage"] = "fr"
+        payload["translationLanguageHints"] = ["en", "uk", "fr"]
+        let state = try JSONDecoder().decode(RecoveryState.self, from: JSONSerialization.data(withJSONObject: payload))
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("recovery-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let manager = RecoveryStateManager(fileURL: fileURL)
+        XCTAssertTrue(manager.saveState(state))
+        let restored = try XCTUnwrap(manager.loadState())
+        let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(restored)) as? [String: Any])
+        XCTAssertEqual(encoded["translationTargetLanguage"] as? String, "fr")
+        XCTAssertEqual(encoded["translationLanguageHints"] as? [String], ["en", "uk", "fr"])
+    }
+
+    func test_voiceRecoveryDecodesLegacyStateWithoutOutputLanguage() throws {
+        let data = Data(#"{"tempFilePath":"/recording.wav","startTime":0,"recordingType":"translation"}"#.utf8)
+        let state = try JSONDecoder().decode(RecoveryState.self, from: data)
+        XCTAssertEqual(state.recordingType, .translation)
+        XCTAssertNil(state.translationTargetLanguage)
+        XCTAssertNil(state.translationLanguageHints)
+    }
+
     func test_legacyRecoveryStateIsNotManagedInProgressMeeting() {
         let state = RecoveryState(
             tempFilePath: "/Application Support/Diduny/RecoveryAudio/recording.wav",
