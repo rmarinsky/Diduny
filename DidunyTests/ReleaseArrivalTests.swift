@@ -45,13 +45,13 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Meeting recording suggestions")
+        XCTAssertEqual(highlights.headline, "Translate voice in one direction")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Diduny can locally detect likely meetings and suggest recording.",
-                "Choose Cloud or Local transcription before each suggested recording.",
-                "When Cloud is unavailable, Diduny uses Local without losing the meeting audio.",
+                "Voice translation always uses your selected output language, including mixed-language speech.",
+                "Keep words already spoken in the output language without reversing translation.",
+                "Recovered voice recordings retain their output language and source-language hints.",
             ]
         )
     }

@@ -33,10 +33,10 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             expected = (
-                "# Trim recordings without losing the original\n\n"
-                "- Choose the part to keep with timeline handles or precise start and end times.\n"
-                "- Undo or redo edits, cancel changes, or restore the original recording range.\n"
-                "- Playback and new transcriptions use the saved selection; your original audio stays safe.\n"
+                "# Translate voice in one direction\n\n"
+                "- Voice translation always uses your selected output language, including mixed-language speech.\n"
+                "- Keep words already spoken in the output language without reversing translation.\n"
+                "- Recovered voice recordings retain their output language and source-language hints.\n"
             )
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
