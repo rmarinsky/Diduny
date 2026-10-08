@@ -165,6 +165,7 @@ struct RecoveryState: Codable {
     let startTime: Date
     let recordingType: RecordingType
     var translationTargetLanguage: String? = nil
+    var translationLanguageHints: [String]? = nil
 
     /// The session UUID when this state points at the chunk store used by the
     /// library recovery flow. Legacy recovery states return `nil`.

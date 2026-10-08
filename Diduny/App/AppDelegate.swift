@@ -605,13 +605,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             rawText = try await self.whisperTranscriptionService.transcribe(audioData: audioData)
                         }
                     case .translation:
-                        let service: TranscriptionServiceProtocol = SettingsStorage.shared
-                            .effectiveTranslationProvider == .local
-                            ? self.whisperTranscriptionService : self.transcriptionService
-                        rawText = try await service.translateAndTranscribe(
-                            audioData: audioData,
-                            targetLanguage: translationTarget
-                        )
+                        if SettingsStorage.shared.effectiveTranslationProvider == .local {
+                            rawText = try await self.whisperTranscriptionService.translateAndTranscribe(
+                                audioData: audioData,
+                                targetLanguage: translationTarget
+                            )
+                        } else {
+                            rawText = try await self.transcriptionService.translateAndTranscribe(
+                                audioData: audioData,
+                                targetLanguage: translationTarget,
+                                languageHints: state.translationLanguageHints ?? []
+                            )
+                        }
                     case .meetingTranslation:
                         let service: TranscriptionServiceProtocol = SettingsStorage.shared
                             .effectiveTranslationProvider == .local

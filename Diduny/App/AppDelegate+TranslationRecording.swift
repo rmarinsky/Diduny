@@ -388,7 +388,8 @@ extension AppDelegate {
                 tempFilePath: path,
                 startTime: Date(),
                 recordingType: .translation,
-                translationTargetLanguage: targetLanguage
+                translationTargetLanguage: targetLanguage,
+                translationLanguageHints: SettingsStorage.shared.translationLanguageHints(for: pair)
             )
             RecoveryStateManager.shared.saveState(state)
         }
