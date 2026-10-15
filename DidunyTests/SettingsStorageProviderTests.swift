@@ -39,6 +39,21 @@ final class SettingsStorageProviderTests: XCTestCase {
     private var storedTextTranslationSourceLanguage: Any?
     private var storedTextTranslationTargetLanguage: Any?
 
+    func test_messageModeDefaultsToNormalAndControlsPreparedDeliveryText() {
+        let key = "messageFormattingMode"
+        let stored = UserDefaults.standard.object(forKey: key)
+        defer { restore(stored, key: key) }
+        UserDefaults.standard.removeObject(forKey: key)
+        XCTAssertEqual(SettingsStorage.shared.messageFormattingMode, .normal)
+        XCTAssertEqual(ClipboardService.preparedMessageText("Так."), "Так.")
+        SettingsStorage.shared.messageFormattingMode = .chat
+        XCTAssertEqual(UserDefaults.standard.string(forKey: key), "chat")
+        XCTAssertEqual(ClipboardService.preparedMessageText("Так."), "так")
+        XCTAssertEqual(ClipboardService.preparedText("Так."), "Так.")
+        UserDefaults.standard.set("unknown", forKey: key)
+        XCTAssertEqual(SettingsStorage.shared.messageFormattingMode, .normal)
+    }
+
     func test_unitTestsUseIsolatedPreferencesDomain() {
         XCTAssertEqual(Bundle.main.bundleIdentifier, "ua.com.rmarinsky.diduny.test")
     }

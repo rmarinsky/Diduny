@@ -88,6 +88,7 @@ final class SettingsStorage {
         case preferredDeviceUID
         case microphoneSelectionStrategy
         case autoPaste
+        case messageFormattingMode
         case playSoundOnCompletion
         case launchAtLogin
         case recordingFeedbackSurface
@@ -270,6 +271,14 @@ final class SettingsStorage {
     }
 
     // MARK: - Behavior
+
+    var messageFormattingMode: MessageFormattingMode {
+        get {
+            defaults.string(forKey: Key.messageFormattingMode.rawValue)
+                .flatMap(MessageFormattingMode.init(rawValue:)) ?? .normal
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.messageFormattingMode.rawValue) }
+    }
 
     var autoPaste: Bool {
         get { defaults.object(forKey: Key.autoPaste.rawValue) as? Bool ?? true }

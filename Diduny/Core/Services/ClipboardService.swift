@@ -1,6 +1,37 @@
 import AppKit
 import ApplicationServices
 
+/// Chat styling is a user-selected, language-independent casing rule.
+/// It intentionally lowercases the first word, including names and acronyms.
+enum MessageFormattingMode: String, CaseIterable, Identifiable {
+    case normal
+    case chat
+
+    var id: String { rawValue }
+    var displayName: String { self == .normal ? "Normal" : "For chat" }
+
+    func format(_ text: String) -> String {
+        var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard self == .chat, result.count <= 280,
+              !result.contains(where: { $0.isNewline }),
+              result.split(whereSeparator: { $0.isWhitespace }).count <= 50 else { return result }
+
+        let fullStops: Set<Character> = [".", "。", "．", "۔"]
+        if let last = result.last, fullStops.contains(last),
+           result.dropLast().last != last {
+            result.removeLast()
+        }
+
+        // Skip opening quotes and punctuation; Unicode casing also supports non-Latin scripts.
+        if let start = result.firstIndex(where: { $0.isLetter }) {
+            let word = result[start...].prefix(while: { $0.isLetter || $0 == "’" || $0 == "'" })
+            let end = result.index(start, offsetBy: word.count)
+            result.replaceSubrange(start..<end, with: word.lowercased())
+        }
+        return result
+    }
+}
+
 enum ClipboardCopyBehavior: Equatable {
     case cleaned
     case raw
@@ -38,6 +69,20 @@ final class ClipboardService: ClipboardServiceProtocol {
         case .cleaned:
             text.trimmingCharacters(in: .whitespacesAndNewlines)
         case .raw:
+            text
+        }
+    }
+
+    /// Final message delivery only; generic clipboard and meeting transcripts keep their formatting.
+    static func preparedMessageText(
+        _ text: String,
+        recordingType: Recording.RecordingType = .voice,
+        mode: MessageFormattingMode = SettingsStorage.shared.messageFormattingMode
+    ) -> String {
+        switch recordingType {
+        case .voice, .translation:
+            mode.format(preparedText(text, behavior: .cleaned))
+        case .meeting, .meetingTranslation, .fileTranscription:
             text
         }
     }

@@ -33,10 +33,10 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             expected = (
-                "# Translate voice in one direction\n\n"
-                "- Voice translation always uses your selected output language, including mixed-language speech.\n"
-                "- Keep words already spoken in the output language without reversing translation.\n"
-                "- Recovered voice recordings retain their output language and source-language hints.\n"
+                "# Choose how your dictated messages look\n\n"
+                "- Switch between Normal and For chat in General settings.\n"
+                "- For chat lowercases the first word and removes the final period in short dictated or translated messages.\n"
+                "- Your selected style also applies when retrying or recovering voice recordings.\n"
             )
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 

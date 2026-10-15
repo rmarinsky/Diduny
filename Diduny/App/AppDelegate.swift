@@ -624,10 +624,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         rawText = try await service.translateAndTranscribe(audioData: audioData)
                     }
 
-                    return await TranscriptCleanupService.shared.clean(
+                    let cleanedText = await TranscriptCleanupService.shared.clean(
                         rawText,
                         fillerWords: SettingsStorage.shared.fillerWords
                     )
+                    switch recordingType {
+                    case .voice, .translation:
+                        return ClipboardService.preparedMessageText(cleanedText)
+                    case .meeting, .meetingTranslation:
+                        return cleanedText
+                    }
                 }
 
                 let copyBehavior: ClipboardCopyBehavior = switch state.recordingType {

@@ -467,7 +467,7 @@ extension AppDelegate {
                     fillerWords: SettingsStorage.shared.fillerWords
                 )
             }
-            let text = ClipboardService.preparedText(cleanedRawText, behavior: .cleaned)
+            let text = ClipboardService.preparedMessageText(cleanedRawText)
             Log.app.info("stopTranslationRecording: Translation received (\(text.count) chars)")
 
             let processingState = appState.translationRecordingState

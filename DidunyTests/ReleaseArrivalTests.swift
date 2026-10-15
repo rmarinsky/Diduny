@@ -45,13 +45,13 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Translate voice in one direction")
+        XCTAssertEqual(highlights.headline, "Choose how your dictated messages look")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Voice translation always uses your selected output language, including mixed-language speech.",
-                "Keep words already spoken in the output language without reversing translation.",
-                "Recovered voice recordings retain their output language and source-language hints.",
+                "Switch between Normal and For chat in General settings.",
+                "For chat lowercases the first word and removes the final period in short dictated or translated messages.",
+                "Your selected style also applies when retrying or recovering voice recordings.",
             ]
         )
     }

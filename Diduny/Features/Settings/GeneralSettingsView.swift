@@ -2,6 +2,7 @@ import LaunchAtLogin
 import SwiftUI
 
 struct GeneralSettingsView: View {
+    @State private var messageFormattingMode = SettingsStorage.shared.messageFormattingMode
     @State private var autoPaste = SettingsStorage.shared.autoPaste
     @State private var playSound = SettingsStorage.shared.playSoundOnCompletion
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
@@ -64,6 +65,22 @@ struct GeneralSettingsView: View {
                         ? "Floating modal shows the live transcript. Turn the toggle off to start on the edge tab (red dot); click the tab to open the window. Minus hides it again."
                         : "Dynamic Notch shows a compact indicator without the live transcript."
                 )
+            }
+
+            Section {
+                Picker("Message style", selection: $messageFormattingMode) {
+                    ForEach(MessageFormattingMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: messageFormattingMode) { _, newValue in
+                    SettingsStorage.shared.messageFormattingMode = newValue
+                }
+            } header: {
+                Text("Message Formatting")
+            } footer: {
+                Text("For chat applies to dictation and translated messages up to 280 characters and 50 words on one line. It always lowercases the first word, including names and acronyms, and omits the final period. Internal punctuation, question marks, exclamation marks and ellipses are preserved. Meeting transcripts are unchanged.")
             }
 
             Section {
