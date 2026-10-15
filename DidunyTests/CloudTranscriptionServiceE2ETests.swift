@@ -375,6 +375,29 @@ final class RealtimeStopContractTests: XCTestCase {
     }
 
     @MainActor
+    func testStopDoesNotReconnectWhenCloseArrivesWithoutFinished() async throws {
+        let server = try StopContractServer(sendFinished: false)
+        let port = try await server.start()
+        defer { server.stop() }
+        let service = CloudRealtimeService(
+            proxyBaseURL: { "http://127.0.0.1:\(port)" },
+            accessToken: { nil },
+            cachedUsage: { nil }
+        )
+        addTeardownBlock { await service.disconnect() }
+        service.onConnectionStatusChanged = { status in
+            if case .reconnecting = status {
+                XCTFail("A stopped stream must not reconnect before finished is processed")
+            }
+        }
+        try await service.connect()
+        let result = await service.finalize(profile: .dictationFast)
+        await service.disconnect()
+        XCTAssertFalse(result.didReceiveFinishedSignal)
+        XCTAssertTrue(result.timedOut)
+    }
+
+    @MainActor
     private func verifyStop(
         profile: RealtimeFinalizeProfile,
         translation: RealtimeTranslationConfig?,
@@ -383,12 +406,19 @@ final class RealtimeStopContractTests: XCTestCase {
         let server = try StopContractServer()
         let port = try await server.start()
         defer { server.stop() }
-        let oldURL = SettingsStorage.shared.proxyBaseURL
-        SettingsStorage.shared.proxyBaseURL = "http://127.0.0.1:\(port)"
-        defer { SettingsStorage.shared.proxyBaseURL = oldURL }
-        let service = CloudRealtimeService()
+        let service = CloudRealtimeService(
+            proxyBaseURL: { "http://127.0.0.1:\(port)" },
+            accessToken: { nil },
+            cachedUsage: { nil }
+        )
         addTeardownBlock { await service.disconnect() }
+        service.onConnectionStatusChanged = { status in
+            if case .reconnecting = status {
+                XCTFail("A normally completed stream must not reconnect")
+            }
+        }
         let finalWords = expectation(description: "Final words delivered before completion")
+        finalWords.assertForOverFulfill = true
         service.onTokensReceived = { tokens in
             XCTAssertEqual(tokens.map(\.text).joined(), "last words")
             XCTAssertTrue(tokens.allSatisfy(\.isFinal))
@@ -415,7 +445,10 @@ private final class StopContractServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "diduny.stop-contract")
     private var connections: [NWConnection] = []
 
-    init() throws {
+    private let sendFinished: Bool
+
+    init(sendFinished: Bool = true) throws {
+        self.sendFinished = sendFinished
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
         parameters.defaultProtocolStack.applicationProtocols.insert(NWProtocolWebSocket.Options(), at: 0)
@@ -451,9 +484,20 @@ private final class StopContractServer: @unchecked Sendable {
             if metadata?.opcode == .text {
                 let text = String(data: data ?? Data(), encoding: .utf8) ?? ""
                 if text.isEmpty {
-                    send(#"{"tokens":[],"finished":true}"#, on: connection)
-                } else if text.contains("finalize") {
                     send(#"{"tokens":[{"text":"last words","is_final":true,"language":"en","translation_status":"translation"}]}"#, on: connection)
+                    let closeConnection = {
+                        let metadata = NWProtocolWebSocket.Metadata(opcode: .close)
+                        metadata.closeCode = .protocolCode(.normalClosure)
+                        let close = NWConnection.ContentContext(identifier: "close", metadata: [metadata])
+                        connection.send(content: nil, contentContext: close, isComplete: true, completion: .contentProcessed { _ in })
+                    }
+                    if sendFinished {
+                        send(#"{"tokens":[],"finished":true}"#, on: connection, completion: closeConnection)
+                    } else {
+                        closeConnection()
+                    }
+                } else if text.contains("finalize") {
+                    send(#"{"tokens":[{"text":"<fin>","is_final":true}]}"#, on: connection)
                 } else {
                     send(#"{"type":"proxy_ready"}"#, on: connection)
                 }
@@ -463,9 +507,9 @@ private final class StopContractServer: @unchecked Sendable {
         }
     }
 
-    private func send(_ text: String, on connection: NWConnection) {
+    private func send(_ text: String, on connection: NWConnection, completion: (() -> Void)? = nil) {
         let context = NWConnection.ContentContext(identifier: "response", metadata: [NWProtocolWebSocket.Metadata(opcode: .text)])
-        connection.send(content: Data(text.utf8), contentContext: context, isComplete: true, completion: .contentProcessed { _ in })
+        connection.send(content: Data(text.utf8), contentContext: context, isComplete: true, completion: .contentProcessed { _ in completion?() })
     }
 
     func stop() {
