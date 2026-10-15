@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Run the existing message-formatting cases against ClipboardService using CLT.
+"""Run the existing message-formatting cases against ClipboardService using the selected Apple toolchain.
 
 Only unrelated logging/protocol/settings dependencies are stubbed. This does not
 replace app-hosted persistence, UI, or end-to-end transcription tests.
 """
-import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -44,16 +43,17 @@ harness = '@main struct Checks {\n' + cases + '''
     }
 }
 '''
-env = dict(os.environ, DEVELOPER_DIR='/Library/Developer/CommandLineTools')
+swiftc = subprocess.check_output(['xcrun', '--find', 'swiftc'], text=True).strip()
+sdk = subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-path'], text=True).strip()
 with tempfile.TemporaryDirectory(prefix='diduny-message-check-') as directory:
     work = Path(directory)
     (work / 'Stubs.swift').write_text(stubs)
     (work / 'Checks.swift').write_text(harness)
     subprocess.run([
-        '/Library/Developer/CommandLineTools/usr/bin/swiftc',
-        '-sdk', '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk',
+        swiftc,
+        '-sdk', sdk,
         '-module-cache-path', '/tmp/diduny-swift-module-cache',
         str(root / 'Diduny/Core/Services/ClipboardService.swift'),
         str(work / 'Stubs.swift'), str(work / 'Checks.swift'), '-o', str(work / 'checks')
-    ], env=env, check=True)
+    ], check=True)
     subprocess.run([str(work / 'checks')], check=True)
