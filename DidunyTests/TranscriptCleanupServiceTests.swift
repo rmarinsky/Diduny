@@ -28,6 +28,12 @@ struct TranscriptCleanupServiceTests {
         #expect(ClipboardService.preparedMessageText("Так...", mode: .chat) == "так...")
         #expect(ClipboardService.preparedMessageText("Так.", mode: .normal) == "Так.")
         #expect(ClipboardService.preparedMessageText("Так.\n\nДобре.", mode: .chat) == "Так.\n\nДобре.")
+        for type in [Recording.RecordingType.voice, .translation] {
+            #expect(ClipboardService.preparedMessageText("Так.", recordingType: type, mode: .chat) == "так")
+        }
+        for type in [Recording.RecordingType.meeting, .meetingTranslation, .fileTranscription] {
+            #expect(ClipboardService.preparedMessageText("Так.", recordingType: type, mode: .chat) == "Так.")
+        }
         let long = "Так, " + String(repeating: "довге повідомлення ", count: 20) + "готове."
         #expect(ClipboardService.preparedMessageText(long, mode: .chat) == long)
     }

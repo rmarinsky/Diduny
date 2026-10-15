@@ -18,6 +18,9 @@ cases = cases.replace('#expect(', 'precondition(')
 stubs = '''
 import Foundation
 protocol ClipboardServiceProtocol {}
+struct Recording {
+    enum RecordingType { case voice, translation, meeting, meetingTranslation, fileTranscription }
+}
 struct TestLogger {
     func info(_ text: String) {}
     func warning(_ text: String) {}

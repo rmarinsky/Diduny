@@ -86,9 +86,15 @@ final class ClipboardService: ClipboardServiceProtocol {
     /// Final message delivery only; generic clipboard and meeting transcripts keep their formatting.
     static func preparedMessageText(
         _ text: String,
+        recordingType: Recording.RecordingType = .voice,
         mode: MessageFormattingMode = SettingsStorage.shared.messageFormattingMode
     ) -> String {
-        mode.format(preparedText(text, behavior: .cleaned))
+        switch recordingType {
+        case .voice, .translation:
+            mode.format(preparedText(text, behavior: .cleaned))
+        case .meeting, .meetingTranslation, .fileTranscription:
+            text
+        }
     }
 
     func copy(text: String) {

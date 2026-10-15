@@ -266,7 +266,7 @@ final class RecordingQueueService {
             storage.completeTranscription(
                 id: item.id,
                 status: status,
-                text: transcript.text,
+                text: ClipboardService.preparedMessageText(transcript.text, recordingType: recording.type),
                 segments: status == .transcribed && !transcript.segments.isEmpty
                     ? transcript.segments
                     : nil,
