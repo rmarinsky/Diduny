@@ -1,0 +1,153 @@
+import Foundation
+
+nonisolated enum BillingInterval: String, Codable, CaseIterable, Identifiable {
+    case monthly, yearly
+    var id: String {
+        rawValue
+    }
+}
+
+nonisolated struct BillingPlan: Decodable, Identifiable {
+    let billingInterval: BillingInterval
+    let amount: Decimal
+    let currency: String
+    let productName: String
+    var id: BillingInterval {
+        billingInterval
+    }
+
+    var formattedPrice: String {
+        amount.formatted(.currency(code: currency))
+    }
+}
+
+nonisolated struct BillingState: Decodable {
+    let plan: String
+    let status: String
+    let billingInterval: BillingInterval?
+    let activeUntil: String?
+    let renewsAt: String?
+    let cancelAtPeriodEnd: Bool
+    let plans: [BillingPlan]
+    let pendingOrderReference: String?
+    let pendingBillingInterval: BillingInterval?
+}
+
+@Observable
+@MainActor
+final class BillingService {
+    typealias Transport = @MainActor (URLRequest) async throws -> (Data, HTTPURLResponse)
+    private let transport: Transport
+    private let baseURL: @MainActor () -> String
+    private(set) var state: BillingState?
+    private(set) var isLoading = false
+    private(set) var errorMessage: String?
+    private var generation = 0
+
+    init(baseURL: @escaping @MainActor () -> String = { SettingsStorage.shared.proxyBaseURL },
+         transport: @escaping Transport = { try await AuthService.shared.performWithAuth($0) })
+    {
+        self.baseURL = baseURL
+        self.transport = transport
+    }
+
+    func reset() {
+        generation += 1
+        isLoading = false
+        state = nil
+        errorMessage = nil
+    }
+
+    func refresh(sync: Bool = false) async {
+        guard !isLoading else { return }
+        isLoading = true
+        let current = generation
+        defer { if current == generation { isLoading = false } }
+        do {
+            let data = try await request(sync ? "sync" : "me", method: sync ? "POST" : "GET")
+            let fetched = try JSONDecoder().decode(BillingState.self, from: data)
+            guard current == generation else { return }
+            state = fetched
+            errorMessage = nil
+        } catch { if current == generation { errorMessage = error.localizedDescription } }
+    }
+
+    func checkout(_ interval: BillingInterval) async -> URL? {
+        guard !isLoading else { return nil }
+        isLoading = true
+        let current = generation
+        defer { if current == generation { isLoading = false } }
+        do {
+            let data = try await request("checkout", method: "POST", interval: interval)
+            let checkout = try JSONDecoder().decode(BillingCheckout.self, from: data)
+            let url = try validatedPaymentURL(checkout.paymentUrl)
+            guard current == generation else { return nil }
+            errorMessage = nil
+            return url
+        } catch { if current == generation { errorMessage = error.localizedDescription }; return nil }
+    }
+
+    @discardableResult
+    func setRenewal(enabled: Bool) async -> URL? {
+        guard !isLoading else { return nil }
+        isLoading = true
+        let current = generation
+        defer { if current == generation { isLoading = false } }
+        do {
+            let data = try await request(enabled ? "resume" : "cancel", method: "POST")
+            if enabled, let checkout = try? JSONDecoder().decode(BillingCheckout.self, from: data) {
+                let url = try validatedPaymentURL(checkout.paymentUrl)
+                guard current == generation else { return nil }
+                errorMessage = nil
+                return url
+            }
+            let fetched = try JSONDecoder().decode(BillingState.self, from: data)
+            guard current == generation else { return nil }
+            state = fetched
+            errorMessage = nil
+        } catch { if current == generation { errorMessage = error.localizedDescription } }
+        return nil
+    }
+
+    private func request(_ path: String, method: String, interval: BillingInterval? = nil) async throws -> Data {
+        let base = baseURL().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: "\(base)/api/v1/billing/\(path)") else { throw BillingError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 20
+        if method == "POST" {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(interval.map { ["billingInterval": $0.rawValue] } ?? [:])
+        }
+        let (data, response) = try await transport(request)
+        guard (200 ... 299).contains(response.statusCode) else {
+            struct Failure: Decodable { let error: String }
+            let message = (try? JSONDecoder().decode(Failure.self, from: data))?.error
+            throw BillingError.server(message ?? "Subscription is unavailable. Please try again.")
+        }
+        return data
+    }
+
+    private func validatedPaymentURL(_ value: String) throws -> URL {
+        guard let url = URL(string: value), let base = URL(string: baseURL()),
+              url.host == base.host, url.port == base.port, url.user == nil, url.password == nil,
+              url.scheme == base.scheme,
+              url.scheme == "https" || (url.scheme == "http" && ["localhost", "127.0.0.1"].contains(url.host ?? "")),
+              url.path.hasPrefix("/billing/checkout/") else { throw BillingError.invalidURL }
+        return url
+    }
+}
+
+private enum BillingError: LocalizedError {
+    case invalidURL, server(String)
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL: "The payment link could not be verified. Please refresh and try again."
+        case let .server(message): message
+        }
+    }
+}
+
+private struct BillingCheckout: Decodable {
+    let paymentUrl: String
+}
