@@ -12,6 +12,26 @@ import Testing
 @Suite("TranscriptCleanupService guard clauses")
 struct TranscriptCleanupServiceTests {
 
+    @Test("Chat messages preserve sentence punctuation and names")
+    func chatMessageFormatting() {
+        #expect(ClipboardService.preparedMessageText(" Так, добре. Зараз перевірю. ", mode: .chat) == "так, добре. Зараз перевірю")
+        #expect(ClipboardService.preparedMessageText("Роман перевірить.", mode: .chat) == "Роман перевірить")
+        #expect(ClipboardService.preparedMessageText("API готовий.", mode: .chat) == "API готовий")
+        #expect(ClipboardService.preparedMessageText("ТАК.", mode: .chat) == "ТАК")
+        #expect(ClipboardService.preparedMessageText("Так?", mode: .chat) == "так?")
+        #expect(ClipboardService.preparedMessageText("Так!", mode: .chat) == "так!")
+        #expect(ClipboardService.preparedMessageText("Це я.", mode: .chat) == "це я")
+        #expect(ClipboardService.preparedMessageText("Буду о 5.", mode: .chat) == "буду о 5")
+        #expect(ClipboardService.preparedMessageText("Підпис Р.", mode: .chat) == "Підпис Р.")
+        #expect(ClipboardService.preparedMessageText("https://example.com", mode: .chat) == "https://example.com")
+        #expect(ClipboardService.preparedMessageText("`Hello.world.`", mode: .chat) == "`Hello.world.`")
+        #expect(ClipboardService.preparedMessageText("Так...", mode: .chat) == "так...")
+        #expect(ClipboardService.preparedMessageText("Так.", mode: .normal) == "Так.")
+        #expect(ClipboardService.preparedMessageText("Так.\n\nДобре.", mode: .chat) == "Так.\n\nДобре.")
+        let long = "Так, " + String(repeating: "довге повідомлення ", count: 20) + "готове."
+        #expect(ClipboardService.preparedMessageText(long, mode: .chat) == long)
+    }
+
     // MARK: - Empty input
 
     @Test("Empty string is returned unchanged without hitting the network")

@@ -1,6 +1,47 @@
 import AppKit
 import ApplicationServices
 
+/// Chat styling is deliberately conservative: unknown capitalized words retain their spelling.
+/// Broaden the starter vocabulary only with language-specific regression examples.
+enum MessageFormattingMode: String, CaseIterable, Identifiable {
+    case normal
+    case chat
+
+    var id: String { rawValue }
+    var displayName: String { self == .normal ? "Normal" : "For chat" }
+
+    func format(_ text: String) -> String {
+        var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard self == .chat, result.count <= 280,
+              !result.contains(where: { $0.isNewline }),
+              result.split(whereSeparator: { $0.isWhitespace }).count <= 50 else { return result }
+
+        // Only sentence-ending periods are omitted. Keep ellipses and abbreviation endings.
+        if result.hasSuffix("."), !result.hasSuffix(".."),
+           let lastWord = result.split(whereSeparator: { $0.isWhitespace }).last,
+           !lastWord.dropLast().contains("."),
+           !(lastWord.dropLast().count == 1 && lastWord.first?.isUppercase == true),
+           !["etc.", "dr.", "mr.", "mrs.", "ms.", "prof.", "р.", "ст.", "ім.", "вул."]
+            .contains(lastWord.lowercased()) {
+            result.removeLast()
+        }
+
+        let word = String(result.prefix(while: { $0.isLetter || $0 == "’" || $0 == "'" }))
+        let starters: Set<String> = [
+            "так", "ні", "ну", "добре", "гаразд", "дякую", "привіт", "зараз", "давай", "давайте",
+            "буду", "перевір", "перевірю", "можеш", "можна", "будь", "будьмо", "це", "тут", "там", "я",
+            "ми", "ти", "ви", "мені", "тобі", "нам", "вам", "ще", "вже", "тоді", "як", "чому",
+            "yes", "no", "okay", "thanks", "thank", "hello", "hi", "please", "sure", "let", "can",
+            "could", "would", "this", "that", "we", "you", "just", "now"
+        ]
+        if starters.contains(word.lowercased()), word != word.uppercased() || word == "Я" {
+            result.replaceSubrange(result.startIndex..<result.index(result.startIndex, offsetBy: word.count),
+                                   with: word.lowercased())
+        }
+        return result
+    }
+}
+
 enum ClipboardCopyBehavior: Equatable {
     case cleaned
     case raw
@@ -40,6 +81,14 @@ final class ClipboardService: ClipboardServiceProtocol {
         case .raw:
             text
         }
+    }
+
+    /// Final message delivery only; generic clipboard and meeting transcripts keep their formatting.
+    static func preparedMessageText(
+        _ text: String,
+        mode: MessageFormattingMode = SettingsStorage.shared.messageFormattingMode
+    ) -> String {
+        mode.format(preparedText(text, behavior: .cleaned))
     }
 
     func copy(text: String) {

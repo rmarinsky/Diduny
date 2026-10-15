@@ -473,7 +473,7 @@ extension AppDelegate {
                 )
             }
             let text = try requireNonemptyVoiceDictation(
-                ClipboardService.preparedText(cleanedRawText, behavior: .cleaned)
+                ClipboardService.preparedMessageText(cleanedRawText)
             )
             Log.app.info("stopRecording: Transcription received (\(text.count) chars)")
 
@@ -590,7 +590,7 @@ extension AppDelegate {
                 )
                 do {
                     let transcript = try await whisperTranscriptionService.transcribeDetailed(audioData: wavData)
-                    let text = transcript.text
+                    let text = try requireNonemptyVoiceDictation(ClipboardService.preparedMessageText(transcript.text))
                     Log.app.info("stopRecording: Whisper fallback succeeded (\(text.count) chars)")
                     clipboardService.copy(text: text)
                     if SettingsStorage.shared.autoPaste {
