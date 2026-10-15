@@ -2,9 +2,23 @@ import Foundation
 import os
 
 final class CloudRealtimeService: NSObject, @unchecked Sendable {
+    private let loadProxyBaseURL: () -> String
+    private let loadAccessToken: () async -> String?
+    private let loadUsage: () async -> UsageResponse?
+
+    init(
+        proxyBaseURL: @escaping () -> String = { SettingsStorage.shared.proxyBaseURL },
+        accessToken: @escaping () async -> String? = { await AuthService.shared.getAccessToken() },
+        cachedUsage: @escaping () async -> UsageResponse? = { await UsageService.shared.cachedUsage }
+    ) {
+        loadProxyBaseURL = proxyBaseURL
+        loadAccessToken = accessToken
+        loadUsage = cachedUsage
+        super.init()
+    }
+
     private var wsURL: String {
-        let settings = SettingsStorage.shared
-        let proxyBase = settings.proxyBaseURL
+        let proxyBase = loadProxyBaseURL()
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             .replacingOccurrences(of: "https://", with: "wss://")
             .replacingOccurrences(of: "http://", with: "ws://")
@@ -47,6 +61,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private var currentConnectMetrics: ConnectMetrics?
 
     private var isConnected = false
+    private var isSessionEnding = false
     private var reconnectAttempt = 0
     private let maxReconnectAttempts = 3
 
@@ -134,7 +149,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
 
     private func connectWebSocket() async throws {
         // Pre-check cached usage to avoid unnecessary connection attempt
-        if let usage = await UsageService.shared.cachedUsage, !usage.isWhitelisted,
+        if let usage = await loadUsage(), !usage.isWhitelisted,
            let remaining = usage.remainingMs, remaining <= 0 {
             throw RealtimeTranscriptionError.usageLimitExceeded(
                 usedHours: usage.usedHours, limitHours: usage.limitHours ?? 5
@@ -153,6 +168,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         lifecycleLock.lock()
         audioBytesSent = 0
         audioChunkCount = 0
+        isSessionEnding = false
         proxyReady = false
         lifecycleLock.unlock()
 
@@ -172,7 +188,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
 
         // Pass auth token as query param (WebSocket headers are limited)
         metrics.begin(.tokenFetch)
-        let accessToken = await AuthService.shared.getAccessToken()
+        let accessToken = await loadAccessToken()
         metrics.end(.tokenFetch)
         if let accessToken {
             let separator = wsURLString.contains("?") ? "&" : "?"
@@ -415,6 +431,11 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
             )
         }
 
+        // Record Stop before any suspension: close may precede finished processing.
+        lifecycleLock.lock()
+        isSessionEnding = true
+        lifecycleLock.unlock()
+
         let startedAt = Date()
         setFinalizeState(awaiting: true, finished: false)
 
@@ -428,8 +449,8 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                 }
             }
 
-            // Empty frame ends the stream and flushes pending final tokens.
-            try await task.send(.data(Data()))
+            // Soniox ends a stream only on empty text; empty binary is audio.
+            try await task.send(.string(""))
             Log.transcription.info("Cloud RT: Empty frame sent (finalize)")
 
             // Wait for explicit finished signal and a short quiet window for final tokens.
@@ -760,6 +781,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         lifecycleLock.lock()
         guard isConnected else { lifecycleLock.unlock(); return }
         isConnected = false
+        let endingSession = isSessionEnding
         lifecycleLock.unlock()
 
         // A refused WS upgrade (HTTP 402 usage limit) lands here via the receive
@@ -771,6 +793,13 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         resumeProxyReady(with: .failure(
             RealtimeTranscriptionError.connectionFailed("Connection lost while connecting")
         ))
+
+        // A stopped or completed session must not restart, regardless of callback order.
+        if endingSession {
+            endBufferingSession()
+            onConnectionStatusChanged?(.disconnected)
+            return
+        }
 
         if (webSocketTask?.response as? HTTPURLResponse)?.statusCode == 402 {
             Log.transcription.warning("Cloud RT: WS upgrade returned 402 — usage limit, not reconnecting")
@@ -937,6 +966,9 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     }
 
     private func markFinishedSignalReceived() {
+        lifecycleLock.lock()
+        isSessionEnding = true
+        lifecycleLock.unlock()
         finalizeStateLock.lock()
         if awaitingFinalizeResponse {
             didReceiveFinishedSignal = true
