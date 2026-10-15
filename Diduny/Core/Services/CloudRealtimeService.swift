@@ -428,8 +428,8 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                 }
             }
 
-            // Empty frame ends the stream and flushes pending final tokens.
-            try await task.send(.data(Data()))
+            // Soniox ends a stream only on empty text; empty binary is audio.
+            try await task.send(.string(""))
             Log.transcription.info("Cloud RT: Empty frame sent (finalize)")
 
             // Wait for explicit finished signal and a short quiet window for final tokens.

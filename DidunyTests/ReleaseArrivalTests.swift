@@ -45,13 +45,13 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Choose how your dictated messages look")
+        XCTAssertEqual(highlights.headline, "Finish cloud recordings without the extra wait")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Switch between Normal and For chat in General settings.",
-                "For chat lowercases the first word and removes the final period in short dictated or translated messages.",
-                "Your selected style also applies when retrying or recovering voice recordings.",
+                "Dictation and voice translation now send the correct end-of-recording signal.",
+                "Meeting transcripts no longer wait for a timeout when the service has finished.",
+                "Existing safeguards for delayed final words remain in place.",
             ]
         )
     }

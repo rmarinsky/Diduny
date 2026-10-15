@@ -33,10 +33,10 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             expected = (
-                "# Choose how your dictated messages look\n\n"
-                "- Switch between Normal and For chat in General settings.\n"
-                "- For chat lowercases the first word and removes the final period in short dictated or translated messages.\n"
-                "- Your selected style also applies when retrying or recovering voice recordings.\n"
+                "# Finish cloud recordings without the extra wait\n\n"
+                "- Dictation and voice translation now send the correct end-of-recording signal.\n"
+                "- Meeting transcripts no longer wait for a timeout when the service has finished.\n"
+                "- Existing safeguards for delayed final words remain in place.\n"
             )
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 

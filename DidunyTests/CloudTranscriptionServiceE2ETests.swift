@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import XCTest
 @testable import Diduny
 
@@ -352,5 +353,125 @@ final class CloudTranscriptionServiceE2ETests: XCTestCase {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         XCTAssertEqual(text, expectedText)
+    }
+}
+
+// Real native WebSocket transport against Soniox's documented Stop contract.
+// This does not call Soniox or measure the destination application's paste UI.
+final class RealtimeStopContractTests: XCTestCase {
+    @MainActor
+    func testDictationFinishesWithoutWaitingForTimeout() async throws {
+        try await verifyStop(profile: .dictationFast, translation: nil, diarization: false)
+    }
+
+    @MainActor
+    func testTranslationFinishesWithoutWaitingForTimeout() async throws {
+        try await verifyStop(profile: .dictationFast, translation: RealtimeTranslationConfig(mode: .oneWay(targetLanguage: "en")), diarization: false)
+    }
+
+    @MainActor
+    func testMeetingFinishesWithoutWaitingForTimeout() async throws {
+        try await verifyStop(profile: .safe, translation: nil, diarization: true)
+    }
+
+    @MainActor
+    private func verifyStop(
+        profile: RealtimeFinalizeProfile,
+        translation: RealtimeTranslationConfig?,
+        diarization: Bool
+    ) async throws {
+        let server = try StopContractServer()
+        let port = try await server.start()
+        defer { server.stop() }
+        let oldURL = SettingsStorage.shared.proxyBaseURL
+        SettingsStorage.shared.proxyBaseURL = "http://127.0.0.1:\(port)"
+        defer { SettingsStorage.shared.proxyBaseURL = oldURL }
+        let service = CloudRealtimeService()
+        addTeardownBlock { await service.disconnect() }
+        let finalWords = expectation(description: "Final words delivered before completion")
+        service.onTokensReceived = { tokens in
+            XCTAssertEqual(tokens.map(\.text).joined(), "last words")
+            XCTAssertTrue(tokens.allSatisfy(\.isFinal))
+            finalWords.fulfill()
+        }
+        try await service.connect(
+            translationConfig: translation,
+            enableSpeakerDiarization: diarization
+        )
+        service.sendAudioData(Data([0, 0]))
+        let result = await service.finalize(profile: profile)
+        await service.disconnect()
+        await fulfillment(of: [finalWords], timeout: 1)
+        XCTAssertTrue(result.didReceiveFinishedSignal)
+        XCTAssertFalse(result.timedOut)
+        XCTAssertEqual(result.charactersAfterFinalize, "last words".count)
+        XCTAssertLessThan(result.durationMs, 1_000, "Stop should not consume the fallback timeout")
+        print("STOP_CONTRACT mode=\(translation != nil ? "translation" : diarization ? "meeting" : "dictation") durationMs=\(result.durationMs) finished=\(result.didReceiveFinishedSignal)")
+    }
+}
+
+private final class StopContractServer: @unchecked Sendable {
+    private let listener: NWListener
+    private let queue = DispatchQueue(label: "diduny.stop-contract")
+    private var connections: [NWConnection] = []
+
+    init() throws {
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+        parameters.defaultProtocolStack.applicationProtocols.insert(NWProtocolWebSocket.Options(), at: 0)
+        listener = try NWListener(using: parameters)
+    }
+
+    func start() async throws -> UInt16 {
+        try await withCheckedThrowingContinuation { continuation in
+            listener.stateUpdateHandler = { [self] state in
+                switch state {
+                case .ready:
+                    listener.stateUpdateHandler = nil
+                    continuation.resume(returning: listener.port!.rawValue)
+                case let .failed(error):
+                    listener.stateUpdateHandler = nil
+                    continuation.resume(throwing: error)
+                default: break
+                }
+            }
+            listener.newConnectionHandler = { [self] connection in
+                connections.append(connection)
+                connection.start(queue: queue)
+                receive(connection)
+            }
+            listener.start(queue: queue)
+        }
+    }
+
+    private func receive(_ connection: NWConnection) {
+        connection.receiveMessage { [self] data, context, _, error in
+            guard error == nil else { return }
+            let metadata = context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata
+            if metadata?.opcode == .text {
+                let text = String(data: data ?? Data(), encoding: .utf8) ?? ""
+                if text.isEmpty {
+                    send(#"{"tokens":[],"finished":true}"#, on: connection)
+                } else if text.contains("finalize") {
+                    send(#"{"tokens":[{"text":"last words","is_final":true,"language":"en","translation_status":"translation"}]}"#, on: connection)
+                } else {
+                    send(#"{"type":"proxy_ready"}"#, on: connection)
+                }
+            }
+            // Empty binary frames are audio, not end-of-stream.
+            if metadata?.opcode != .close { receive(connection) }
+        }
+    }
+
+    private func send(_ text: String, on connection: NWConnection) {
+        let context = NWConnection.ContentContext(identifier: "response", metadata: [NWProtocolWebSocket.Metadata(opcode: .text)])
+        connection.send(content: Data(text.utf8), contentContext: context, isComplete: true, completion: .contentProcessed { _ in })
+    }
+
+    func stop() {
+        queue.sync {
+            listener.cancel()
+            connections.forEach { $0.cancel() }
+        }
     }
 }
