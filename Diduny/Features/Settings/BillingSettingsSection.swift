@@ -21,6 +21,8 @@ struct BillingSettingsSection: View {
             )
             .font(.callout)
             .foregroundStyle(.secondary)
+            Link("Subscription terms, refunds and privacy", destination: BillingService.publicPolicyURL)
+                .font(.callout)
             if isLoggedIn {
                 if let state = billing.state {
                     if state.plan == "pro" {

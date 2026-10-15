@@ -71,4 +71,13 @@ struct BillingServiceTests {
         #expect(service.errorMessage == nil)
     }
 
+    @Test("Subscription policies open the public terms, refunds and privacy page")
+    func publicPolicyDestination() {
+        let url = BillingService.publicPolicyURL
+        #expect(url.scheme == "https")
+        #expect(url.host == "rmarinsky.com.ua")
+        #expect(url.absoluteString == "https://rmarinsky.com.ua/en/legal/#diduny-offer")
+        #expect(url.fragment == "diduny-offer")
+    }
+
 }

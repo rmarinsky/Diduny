@@ -36,6 +36,8 @@ nonisolated struct BillingState: Decodable {
 @Observable
 @MainActor
 final class BillingService {
+    nonisolated static let publicPolicyURL = URL(string: "https://rmarinsky.com.ua/en/legal/#diduny-offer")!
+
     typealias Transport = @MainActor (URLRequest) async throws -> (Data, HTTPURLResponse)
     private let transport: Transport
     private let baseURL: @MainActor () -> String
