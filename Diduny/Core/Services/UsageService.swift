@@ -5,6 +5,7 @@ import os
 @MainActor
 final class UsageService {
     static let shared = UsageService()
+    nonisolated static let freeCloudLimitHours: Double = 2
 
     private(set) var cachedUsage: UsageResponse?
     private(set) var isLoading = false
@@ -17,7 +18,7 @@ final class UsageService {
         usage: UsageResponse?
     ) -> Bool {
         guard hasStoredSession, let usage else { return false }
-        return usage.isWhitelisted || (usage.remainingMs ?? 0) > 0
+        return usage.hasUnlimitedAccess || (usage.remainingMs ?? 0) > 0
     }
 
     nonisolated static func canOfferCloudTranscription(
@@ -29,13 +30,13 @@ final class UsageService {
 
     var formattedRemaining: String {
         guard let usage = cachedUsage else { return "—" }
-        if usage.isWhitelisted { return "Unlimited" }
+        if usage.hasUnlimitedAccess { return "Unlimited" }
         guard let remaining = usage.remainingHours else { return "—" }
         return String(format: "%.1fh remaining", remaining)
     }
 
     var usagePercent: Double {
-        guard let usage = cachedUsage, !usage.isWhitelisted,
+        guard let usage = cachedUsage, !usage.hasUnlimitedAccess,
               let limitMs = usage.limitMs, limitMs > 0
         else { return 0 }
         return Double(usage.usedMs) / Double(limitMs)
@@ -72,6 +73,19 @@ final class UsageService {
 
 struct UsageResponse: Decodable {
     let isWhitelisted: Bool
+    let isUnlimited: Bool?
+    var hasUnlimitedAccess: Bool { isUnlimited == true || isWhitelisted }
+
+    init(isWhitelisted: Bool, usedHours: Double, limitHours: Double?, remainingHours: Double?, usedMs: Int, limitMs: Int?, remainingMs: Int?, isUnlimited: Bool? = nil) {
+        self.isWhitelisted = isWhitelisted
+        self.isUnlimited = isUnlimited
+        self.usedHours = usedHours
+        self.limitHours = limitHours
+        self.remainingHours = remainingHours
+        self.usedMs = usedMs
+        self.limitMs = limitMs
+        self.remainingMs = remainingMs
+    }
     let usedHours: Double
     let limitHours: Double?
     let remainingHours: Double?

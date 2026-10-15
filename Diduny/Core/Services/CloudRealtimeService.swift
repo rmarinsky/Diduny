@@ -149,10 +149,10 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
 
     private func connectWebSocket() async throws {
         // Pre-check cached usage to avoid unnecessary connection attempt
-        if let usage = await loadUsage(), !usage.isWhitelisted,
+        if let usage = await loadUsage(), !usage.hasUnlimitedAccess,
            let remaining = usage.remainingMs, remaining <= 0 {
             throw RealtimeTranscriptionError.usageLimitExceeded(
-                usedHours: usage.usedHours, limitHours: usage.limitHours ?? 5
+                usedHours: usage.usedHours, limitHours: usage.limitHours ?? UsageService.freeCloudLimitHours
             )
         }
 
@@ -741,7 +741,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         await UsageService.shared.refresh()
         return .usageLimitExceeded(
             usedHours: usage?.usedHours ?? 0,
-            limitHours: usage?.limitHours ?? 5
+            limitHours: usage?.limitHours ?? UsageService.freeCloudLimitHours
         )
     }
 
@@ -761,7 +761,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
             let usage = await loadCachedUsage()
             handlers.onError?(RealtimeTranscriptionError.usageLimitExceeded(
                 usedHours: usage?.usedHours ?? 0,
-                limitHours: usage?.limitHours ?? 5
+                limitHours: usage?.limitHours ?? UsageService.freeCloudLimitHours
             ))
             handlers.onConnectionStatusChanged?(.failed("Cloud usage limit reached"))
             await refreshUsage()
