@@ -80,7 +80,7 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("Message Formatting")
             } footer: {
-                Text("For chat applies to dictation and translated messages up to 280 characters and 50 words on one line. It lowercases common opening words and omits the final period. Unknown capitalized words, abbreviations, question marks and exclamation marks are preserved. Meeting transcripts are unchanged.")
+                Text("For chat applies to dictation and translated messages up to 280 characters and 50 words on one line. It always lowercases the first word, including names and acronyms, and omits the final period. Internal punctuation, question marks, exclamation marks and ellipses are preserved. Meeting transcripts are unchanged.")
             }
 
             Section {

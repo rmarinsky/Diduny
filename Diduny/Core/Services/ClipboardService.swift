@@ -1,8 +1,8 @@
 import AppKit
 import ApplicationServices
 
-/// Chat styling is deliberately conservative: unknown capitalized words retain their spelling.
-/// Broaden the starter vocabulary only with language-specific regression examples.
+/// Chat styling is a user-selected, language-independent casing rule.
+/// It intentionally lowercases the first word, including names and acronyms.
 enum MessageFormattingMode: String, CaseIterable, Identifiable {
     case normal
     case chat
@@ -16,27 +16,17 @@ enum MessageFormattingMode: String, CaseIterable, Identifiable {
               !result.contains(where: { $0.isNewline }),
               result.split(whereSeparator: { $0.isWhitespace }).count <= 50 else { return result }
 
-        // Only sentence-ending periods are omitted. Keep ellipses and abbreviation endings.
-        if result.hasSuffix("."), !result.hasSuffix(".."),
-           let lastWord = result.split(whereSeparator: { $0.isWhitespace }).last,
-           !lastWord.dropLast().contains("."),
-           !(lastWord.dropLast().count == 1 && lastWord.first?.isUppercase == true),
-           !["etc.", "dr.", "mr.", "mrs.", "ms.", "prof.", "р.", "ст.", "ім.", "вул."]
-            .contains(lastWord.lowercased()) {
+        let fullStops: Set<Character> = [".", "。", "．", "۔"]
+        if let last = result.last, fullStops.contains(last),
+           result.dropLast().last != last {
             result.removeLast()
         }
 
-        let word = String(result.prefix(while: { $0.isLetter || $0 == "’" || $0 == "'" }))
-        let starters: Set<String> = [
-            "так", "ні", "ну", "добре", "гаразд", "дякую", "привіт", "зараз", "давай", "давайте",
-            "буду", "перевір", "перевірю", "можеш", "можна", "будь", "будьмо", "це", "тут", "там", "я",
-            "ми", "ти", "ви", "мені", "тобі", "нам", "вам", "ще", "вже", "тоді", "як", "чому",
-            "yes", "no", "okay", "thanks", "thank", "hello", "hi", "please", "sure", "let", "can",
-            "could", "would", "this", "that", "we", "you", "just", "now"
-        ]
-        if starters.contains(word.lowercased()), word != word.uppercased() || word == "Я" {
-            result.replaceSubrange(result.startIndex..<result.index(result.startIndex, offsetBy: word.count),
-                                   with: word.lowercased())
+        // Skip opening quotes and punctuation; Unicode casing also supports non-Latin scripts.
+        if let start = result.firstIndex(where: { $0.isLetter }) {
+            let word = result[start...].prefix(while: { $0.isLetter || $0 == "’" || $0 == "'" })
+            let end = result.index(start, offsetBy: word.count)
+            result.replaceSubrange(start..<end, with: word.lowercased())
         }
         return result
     }

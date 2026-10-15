@@ -12,19 +12,19 @@ import Testing
 @Suite("TranscriptCleanupService guard clauses")
 struct TranscriptCleanupServiceTests {
 
-    @Test("Chat messages preserve sentence punctuation and names")
+    @Test("Chat messages lowercase the first word across languages and preserve inner punctuation")
     func chatMessageFormatting() {
         #expect(ClipboardService.preparedMessageText(" Так, добре. Зараз перевірю. ", mode: .chat) == "так, добре. Зараз перевірю")
-        #expect(ClipboardService.preparedMessageText("Роман перевірить.", mode: .chat) == "Роман перевірить")
-        #expect(ClipboardService.preparedMessageText("API готовий.", mode: .chat) == "API готовий")
-        #expect(ClipboardService.preparedMessageText("ТАК.", mode: .chat) == "ТАК")
+        #expect(ClipboardService.preparedMessageText("Роман перевірить.", mode: .chat) == "роман перевірить")
+        #expect(ClipboardService.preparedMessageText("API готовий.", mode: .chat) == "api готовий")
+        #expect(ClipboardService.preparedMessageText("ТАК.", mode: .chat) == "так")
         #expect(ClipboardService.preparedMessageText("Так?", mode: .chat) == "так?")
         #expect(ClipboardService.preparedMessageText("Так!", mode: .chat) == "так!")
         #expect(ClipboardService.preparedMessageText("Це я.", mode: .chat) == "це я")
         #expect(ClipboardService.preparedMessageText("Буду о 5.", mode: .chat) == "буду о 5")
-        #expect(ClipboardService.preparedMessageText("Підпис Р.", mode: .chat) == "Підпис Р.")
+        #expect(ClipboardService.preparedMessageText("Підпис Р.", mode: .chat) == "підпис Р")
         #expect(ClipboardService.preparedMessageText("https://example.com", mode: .chat) == "https://example.com")
-        #expect(ClipboardService.preparedMessageText("`Hello.world.`", mode: .chat) == "`Hello.world.`")
+        #expect(ClipboardService.preparedMessageText("`Hello.world.`", mode: .chat) == "`hello.world.`")
         #expect(ClipboardService.preparedMessageText("Так...", mode: .chat) == "так...")
         #expect(ClipboardService.preparedMessageText("Так.", mode: .normal) == "Так.")
         #expect(ClipboardService.preparedMessageText("Так.\n\nДобре.", mode: .chat) == "Так.\n\nДобре.")
@@ -34,6 +34,16 @@ struct TranscriptCleanupServiceTests {
         for type in [Recording.RecordingType.meeting, .meetingTranslation, .fileTranscription] {
             #expect(ClipboardService.preparedMessageText("Так.", recordingType: type, mode: .chat) == "Так.")
         }
+        #expect(ClipboardService.preparedMessageText("Dr.", mode: .chat) == "dr")
+        #expect(ClipboardService.preparedMessageText("Bonjour Marie.", mode: .chat) == "bonjour Marie")
+        #expect(ClipboardService.preparedMessageText("Übermorgen geht es los.", mode: .chat) == "übermorgen geht es los")
+        #expect(ClipboardService.preparedMessageText("«Роман перевірить?»", mode: .chat) == "«роман перевірить?»")
+        #expect(ClipboardService.preparedMessageText("你好。", mode: .chat) == "你好")
+        #expect(ClipboardService.preparedMessageText("こんにちは．", mode: .chat) == "こんにちは")
+        #expect(ClipboardService.preparedMessageText("شکریہ۔", mode: .chat) == "شکریہ")
+        #expect(ClipboardService.preparedMessageText("你好？！", mode: .chat) == "你好？！")
+        #expect(ClipboardService.preparedMessageText("Так…", mode: .chat) == "так…")
+        #expect(ClipboardService.preparedMessageText("", mode: .chat) == "")
         let long = "Так, " + String(repeating: "довге повідомлення ", count: 20) + "готове."
         #expect(ClipboardService.preparedMessageText(long, mode: .chat) == long)
     }
