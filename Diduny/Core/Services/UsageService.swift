@@ -30,9 +30,9 @@ final class UsageService {
 
     var formattedRemaining: String {
         guard let usage = cachedUsage else { return "—" }
-        if usage.hasUnlimitedAccess { return "Unlimited" }
+        if usage.hasUnlimitedAccess { return String(localized: "Unlimited") }
         guard let remaining = usage.remainingHours else { return "—" }
-        return String(format: "%.1fh remaining", remaining)
+        return String(format: String(localized: "%.1fh remaining"), locale: Locale.current, remaining)
     }
 
     var usagePercent: Double {
@@ -74,9 +74,20 @@ final class UsageService {
 struct UsageResponse: Decodable {
     let isWhitelisted: Bool
     let isUnlimited: Bool?
-    var hasUnlimitedAccess: Bool { isUnlimited == true || isWhitelisted }
+    var hasUnlimitedAccess: Bool {
+        isUnlimited == true || isWhitelisted
+    }
 
-    init(isWhitelisted: Bool, usedHours: Double, limitHours: Double?, remainingHours: Double?, usedMs: Int, limitMs: Int?, remainingMs: Int?, isUnlimited: Bool? = nil) {
+    init(
+        isWhitelisted: Bool,
+        usedHours: Double,
+        limitHours: Double?,
+        remainingHours: Double?,
+        usedMs: Int,
+        limitMs: Int?,
+        remainingMs: Int?,
+        isUnlimited: Bool? = nil
+    ) {
         self.isWhitelisted = isWhitelisted
         self.isUnlimited = isUnlimited
         self.usedHours = usedHours
@@ -86,6 +97,7 @@ struct UsageResponse: Decodable {
         self.limitMs = limitMs
         self.remainingMs = remainingMs
     }
+
     let usedHours: Double
     let limitHours: Double?
     let remainingHours: Double?
@@ -117,8 +129,10 @@ final class AnalyticsService {
     private let transport: BillingService.Transport
 
     init(baseURL: @escaping @MainActor () -> String = { SettingsStorage.shared.proxyBaseURL },
-         account: @escaping @MainActor () -> String? = { AuthService.shared.isLoggedIn ? AuthService.shared.userEmail : nil },
-         transport: @escaping BillingService.Transport = { try await AuthService.shared.performWithAuth($0) }) {
+         account: @escaping @MainActor ()
+             -> String? = { AuthService.shared.isLoggedIn ? AuthService.shared.userEmail : nil },
+         transport: @escaping BillingService.Transport = { try await AuthService.shared.performWithAuth($0) })
+    {
         self.baseURL = baseURL
         self.account = account
         self.transport = transport
@@ -134,8 +148,13 @@ final class AnalyticsService {
         errorMessage = nil
     }
 
-    func refresh() async { await update(choice: nil) }
-    func setEnabled(_ value: Bool) async { await update(choice: value) }
+    func refresh() async {
+        await update(choice: nil)
+    }
+
+    func setEnabled(_ value: Bool) async {
+        await update(choice: value)
+    }
 
     private func update(choice: Bool?) async {
         guard let currentAccount = account() else { reset(); return }
@@ -165,7 +184,8 @@ final class AnalyticsService {
                 isLoading = false
                 operationID = nil
                 if current != generation, owner == currentAccount, account() == currentAccount,
-                   UserDefaults.standard.bool(forKey: withdrawalKey) {
+                   UserDefaults.standard.bool(forKey: withdrawalKey)
+                {
                     Task { await self.setEnabled(false) }
                 }
             }
@@ -186,8 +206,11 @@ final class AnalyticsService {
         } catch {
             guard current == generation, account() == currentAccount else { return }
             errorMessage = choice == false
-                ? "Statistics are off on this device. Connect to the internet and turn off sharing again to update your account."
-                : "Could not update statistics sharing. Try again when online."
+                ?
+                String(
+                    localized: "Statistics are off on this device. Connect to the internet and turn off sharing again to update your account."
+                )
+                : String(localized: "Could not update statistics sharing. Try again when online.")
         }
     }
 
@@ -198,10 +221,18 @@ final class AnalyticsService {
               ["dictation", "meeting", "file", "translation"].contains(scenario) else { return }
         let current = generation
         do {
-            struct Event: Encodable { let id: UUID; let revision: String; let durationMs: Int; let mode: String; let scenario: String }
+            struct Event: Encodable {
+                let id: UUID; let revision: String; let durationMs: Int; let mode: String; let scenario: String
+            }
             var request = try request(path: "events")
             request.httpMethod = "POST"
-            request.httpBody = try JSONEncoder().encode(Event(id: UUID(), revision: revision, durationMs: max(1, Int(duration * 1000)), mode: mode, scenario: scenario))
+            request.httpBody = try JSONEncoder().encode(Event(
+                id: UUID(),
+                revision: revision,
+                durationMs: max(1, Int(duration * 1000)),
+                mode: mode,
+                scenario: scenario
+            ))
             let (_, response) = try await transport(request)
             if current == generation, response.statusCode == 403 { enabled = false; self.revision = nil }
         } catch {
@@ -210,7 +241,9 @@ final class AnalyticsService {
     }
 
     private func request(path: String) throws -> URLRequest {
-        guard let url = URL(string: baseURL().trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/v1/analytics/" + path) else { throw URLError(.badURL) }
+        guard let url = URL(string: baseURL()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/v1/analytics/" + path)
+        else { throw URLError(.badURL) }
         var request = URLRequest(url: url)
         request.timeoutInterval = 10
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

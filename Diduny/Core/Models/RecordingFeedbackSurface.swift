@@ -11,9 +11,9 @@ enum RecordingFeedbackSurface: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .notch:
-            "Dynamic Notch"
+            String(localized: "Dynamic Notch")
         case .compactPanel:
-            "Floating modal"
+            String(localized: "Floating modal")
         }
     }
 }

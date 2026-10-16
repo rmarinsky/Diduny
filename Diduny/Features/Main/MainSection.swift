@@ -17,15 +17,15 @@ enum MainSection: String, CaseIterable, Hashable {
 
     var label: String {
         switch self {
-        case .overview: "Overview"
-        case .recordings: "Recordings"
-        case .typingTest: "Typing Test"
-        case .meetings: "Meetings"
-        case .general: "General"
-        case .audioDictation: "Audio & Dictation"
-        case .models: "Models"
-        case .shortcuts: "Shortcuts"
-        case .account: "Account"
+        case .overview: String(localized: "Overview")
+        case .recordings: String(localized: "Recordings")
+        case .typingTest: String(localized: "Typing Test")
+        case .meetings: String(localized: "Meetings")
+        case .general: String(localized: "General")
+        case .audioDictation: String(localized: "Audio & Dictation")
+        case .models: String(localized: "Models")
+        case .shortcuts: String(localized: "Shortcuts")
+        case .account: String(localized: "Account")
         }
     }
 

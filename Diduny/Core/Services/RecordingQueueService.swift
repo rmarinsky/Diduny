@@ -142,12 +142,15 @@ final class RecordingQueueService {
         let originalAudioURL = await storage.optimizeStoredRecordingIfNeeded(id: item.id) ?? storage
             .audioFileURL(for: recording)
         guard FileManager.default.fileExists(atPath: originalAudioURL.path) else {
-            storage.updateRecording(id: item.id, status: .failed, error: "Audio file not found")
+            storage.updateRecording(id: item.id, status: .failed, error: String(localized: "Audio file not found"))
             return
         }
 
         do {
-            let audioURL = try await AudioTrimService.prepareAudio(fileURL: originalAudioURL, range: recording.trimRange)
+            let audioURL = try await AudioTrimService.prepareAudio(
+                fileURL: originalAudioURL,
+                range: recording.trimRange
+            )
             defer {
                 if audioURL != originalAudioURL { try? FileManager.default.removeItem(at: audioURL) }
             }
@@ -399,7 +402,7 @@ final class RecordingQueueService {
     }
 
     private func preflightError(for item: QueueItem, provider: TranscriptionProvider) -> String? {
-        guard hasCloudCredentials else { return "Sign in to use Diduny transcription." }
+        guard hasCloudCredentials else { return String(localized: "Sign in to use Diduny transcription.") }
         switch provider {
         case .cloud:
             return nil
@@ -410,12 +413,14 @@ final class RecordingQueueService {
                 if targetLanguage != "en",
                    item.targetLanguage != nil || !SettingsStorage.shared.defaultTranslationLanguagePair.contains("en")
                 {
-                    return "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English."
+                    return String(
+                        localized: "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English."
+                    )
                 }
             }
             let modelName = item.whisperModelOverride ?? SettingsStorage.shared.selectedWhisperModel
             guard localModelIsAvailable(modelName) else {
-                return "Download a local Whisper model in Settings."
+                return String(localized: "Download a local Whisper model in Settings.")
             }
             return nil
         }

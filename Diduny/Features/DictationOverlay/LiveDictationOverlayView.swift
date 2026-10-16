@@ -217,13 +217,13 @@ struct LiveDictationOverlayView: View {
     private var stopButtonTitle: String {
         switch store.phase {
         case .finalizing:
-            "Finishing…"
+            String(localized: "Finishing…")
         case .processing:
-            "Processing…"
+            String(localized: "Processing…")
         case .pasted:
-            "Close"
+            String(localized: "Close")
         default:
-            "Stop"
+            String(localized: "Stop")
         }
     }
 
@@ -243,7 +243,7 @@ struct LiveDictationOverlayView: View {
             return "Close"
         }
 
-        var parts = ["Stop and process recording"]
+        var parts = [String(localized: "Stop and process recording")]
         if let stopShortcut = store.stopShortcutHint {
             parts.append("\(stopShortcut) also stops")
         }

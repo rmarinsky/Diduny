@@ -18,7 +18,10 @@ enum AudioCompressionService {
             try await runAfconvert(input: wavURL, output: flacURL)
             let flacSize = (try? FileManager.default.attributesOfItem(atPath: flacURL.path)[.size] as? Int) ?? 0
             let ratio = fileSize > 0 ? Double(flacSize) / Double(fileSize) : 1.0
-            Log.audio.info("FLAC compression: \(fileSize) → \(flacSize) bytes (ratio \(String(format: "%.1f%%", ratio * 100)))")
+            Log.audio
+                .info(
+                    "FLAC compression: \(fileSize) → \(flacSize) bytes (ratio \(String(format: "%.1f%%", ratio * 100)))"
+                )
             return flacURL
         } catch {
             Log.audio.warning("FLAC compression failed, using original WAV: \(error.localizedDescription)")
@@ -49,7 +52,10 @@ enum AudioCompressionService {
             try await runAfconvert(input: wavURL, output: flacURL)
             let flacData = try Data(contentsOf: flacURL)
             let ratio = audioData.count > 0 ? Double(flacData.count) / Double(audioData.count) : 1.0
-            Log.audio.info("FLAC compression: \(audioData.count) → \(flacData.count) bytes (ratio \(String(format: "%.1f%%", ratio * 100)))")
+            Log.audio
+                .info(
+                    "FLAC compression: \(audioData.count) → \(flacData.count) bytes (ratio \(String(format: "%.1f%%", ratio * 100)))"
+                )
             return flacData
         } catch {
             Log.audio.warning("FLAC compression failed, using original WAV: \(error.localizedDescription)")
@@ -90,8 +96,8 @@ enum AudioCompressionService {
 
         var errorDescription: String? {
             switch self {
-            case .afconvertFailed(let message):
-                "afconvert failed: \(message)"
+            case let .afconvertFailed(message):
+                String(localized: "afconvert failed: \(message)")
             }
         }
     }

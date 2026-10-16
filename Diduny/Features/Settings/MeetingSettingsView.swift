@@ -14,7 +14,7 @@ struct MeetingSettingsView: View {
     @State private var isTestPlaying = false
     @State private var testCaptureURL: URL?
     @State private var testAudioPlayer: AVAudioPlayer?
-    @State private var testStatusMessage = ""
+    @State private var testStatusMessage = String(localized: "")
     @State private var captureService: SystemAudioCaptureService?
 
     var body: some View {
@@ -258,7 +258,10 @@ struct MeetingSettingsView: View {
         let hasPermission = await SystemAudioCaptureService.checkPermission()
         if !hasPermission {
             await MainActor.run {
-                testStatusMessage = "Screen Recording permission required. Please enable in System Settings > Privacy & Security."
+                testStatusMessage =
+                    String(
+                        localized: "Screen Recording permission required. Please enable in System Settings > Privacy & Security."
+                    )
             }
             return
         }
@@ -273,7 +276,7 @@ struct MeetingSettingsView: View {
             captureService = SystemAudioCaptureService()
             captureService?.onError = { error in
                 DispatchQueue.main.async {
-                    testStatusMessage = "Error: \(error.localizedDescription)"
+                    testStatusMessage = String(localized: "Error: \(error.localizedDescription)")
                     isTestCapturing = false
                 }
             }
@@ -283,11 +286,11 @@ struct MeetingSettingsView: View {
             try await captureService?.startCapture(to: url)
             await MainActor.run {
                 isTestCapturing = true
-                testStatusMessage = "Capturing... Play some audio on your Mac, then press Stop."
+                testStatusMessage = String(localized: "Capturing... Play some audio on your Mac, then press Stop.")
             }
         } catch {
             await MainActor.run {
-                testStatusMessage = "Error starting capture: \(error.localizedDescription)"
+                testStatusMessage = String(localized: "Error starting capture: \(error.localizedDescription)")
             }
         }
     }
@@ -297,19 +300,19 @@ struct MeetingSettingsView: View {
             _ = try await captureService?.stopCapture()
             await MainActor.run {
                 isTestCapturing = false
-                testStatusMessage = "Capture saved. Press Play to listen."
+                testStatusMessage = String(localized: "Capture saved. Press Play to listen.")
             }
         } catch {
             await MainActor.run {
                 isTestCapturing = false
-                testStatusMessage = "Error stopping capture: \(error.localizedDescription)"
+                testStatusMessage = String(localized: "Error stopping capture: \(error.localizedDescription)")
             }
         }
     }
 
     private func playTestCapture() {
         guard let url = testCaptureURL else {
-            testStatusMessage = "No capture available"
+            testStatusMessage = String(localized: "No capture available")
             return
         }
 
@@ -319,14 +322,14 @@ struct MeetingSettingsView: View {
             SystemAudioPlayerDelegate.shared.onFinish = {
                 DispatchQueue.main.async {
                     isTestPlaying = false
-                    testStatusMessage = "Playback finished"
+                    testStatusMessage = String(localized: "Playback finished")
                 }
             }
             testAudioPlayer?.play()
             isTestPlaying = true
-            testStatusMessage = "Playing captured audio..."
+            testStatusMessage = String(localized: "Playing captured audio...")
         } catch {
-            testStatusMessage = "Playback error: \(error.localizedDescription)"
+            testStatusMessage = String(localized: "Playback error: \(error.localizedDescription)")
         }
     }
 
@@ -334,7 +337,7 @@ struct MeetingSettingsView: View {
         testAudioPlayer?.stop()
         testAudioPlayer = nil
         isTestPlaying = false
-        testStatusMessage = ""
+        testStatusMessage = String(localized: "")
     }
 
     private func cleanupTestCapture() {

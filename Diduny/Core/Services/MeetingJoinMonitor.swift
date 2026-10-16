@@ -15,12 +15,12 @@ enum MeetingClient: String, CaseIterable, Equatable {
 
     var displayName: String {
         switch self {
-        case .zoom: "Zoom"
-        case .teams: "Microsoft Teams"
-        case .googleMeet: "Google Meet"
-        case .webex: "Webex"
-        case .slackHuddle: "Slack Huddle"
-        case .faceTime: "FaceTime"
+        case .zoom: String(localized: "Zoom")
+        case .teams: String(localized: "Microsoft Teams")
+        case .googleMeet: String(localized: "Google Meet")
+        case .webex: String(localized: "Webex")
+        case .slackHuddle: String(localized: "Slack Huddle")
+        case .faceTime: String(localized: "FaceTime")
         }
     }
 }

@@ -13,30 +13,32 @@ enum PushToTalkKey: String, Codable, CaseIterable, Identifiable {
     case rightCommand
     case rightControl
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var displayName: String {
         switch self {
         case .none:
-            "Disabled"
+            String(localized: "Disabled")
         case .capsLock:
-            "Caps Lock"
+            String(localized: "Caps Lock")
         case .leftShift:
-            "Left Shift"
+            String(localized: "Left Shift")
         case .leftOption:
-            "Left Option"
+            String(localized: "Left Option")
         case .leftCommand:
-            "Left Command"
+            String(localized: "Left Command")
         case .leftControl:
-            "Left Control"
+            String(localized: "Left Control")
         case .rightShift:
-            "Right Shift"
+            String(localized: "Right Shift")
         case .rightOption:
-            "Right Option"
+            String(localized: "Right Option")
         case .rightCommand:
-            "Right Command"
+            String(localized: "Right Command")
         case .rightControl:
-            "Right Control"
+            String(localized: "Right Control")
         }
     }
 
@@ -152,28 +154,28 @@ struct RecordingCancelShortcut: Codable, Equatable {
 
     private static func defaultLabel(for keyCode: UInt16) -> String {
         switch keyCode {
-        case 36: return "Return"
-        case 48: return "Tab"
-        case 49: return "Space"
-        case 51: return "Delete"
-        case 53: return "Esc"
-        case 122: return "F1"
-        case 120: return "F2"
-        case 99: return "F3"
-        case 118: return "F4"
-        case 96: return "F5"
-        case 97: return "F6"
-        case 98: return "F7"
-        case 100: return "F8"
-        case 101: return "F9"
-        case 109: return "F10"
-        case 103: return "F11"
-        case 111: return "F12"
-        case 123: return "Left Arrow"
-        case 124: return "Right Arrow"
-        case 125: return "Down Arrow"
-        case 126: return "Up Arrow"
-        default: return "Key \(keyCode)"
+        case 36: "Return"
+        case 48: "Tab"
+        case 49: "Space"
+        case 51: "Delete"
+        case 53: "Esc"
+        case 122: "F1"
+        case 120: "F2"
+        case 99: "F3"
+        case 118: "F4"
+        case 96: "F5"
+        case 97: "F6"
+        case 98: "F7"
+        case 100: "F8"
+        case 101: "F9"
+        case 109: "F10"
+        case 103: "F11"
+        case 111: "F12"
+        case 123: "Left Arrow"
+        case 124: "Right Arrow"
+        case 125: "Down Arrow"
+        case 126: "Up Arrow"
+        default: "Key \(keyCode)"
         }
     }
 

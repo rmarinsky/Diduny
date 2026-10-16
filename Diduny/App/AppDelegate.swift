@@ -12,10 +12,10 @@ enum RecordingKind {
 
     var displayName: String {
         switch self {
-        case .voice: "dictation"
-        case .translation: "translation"
-        case .meeting: "meeting recording"
-        case .meetingTranslation: "meeting translation"
+        case .voice: String(localized: "dictation")
+        case .translation: String(localized: "translation")
+        case .meeting: String(localized: "meeting recording")
+        case .meetingTranslation: String(localized: "meeting translation")
         }
     }
 }
@@ -541,11 +541,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showRecoveryAlert(for state: RecoveryState) {
         let alert = NSAlert()
-        alert.messageText = "Recover Previous Recording?"
-        alert.informativeText = "An incomplete \(state.recordingType.displayName) recording was found from \(formatDate(state.startTime)). Would you like to process it now?"
+        alert.messageText = String(localized: "Recover Previous Recording?")
+        alert
+            .informativeText =
+            String(
+                localized: "An incomplete \(state.recordingType.displayName) recording was found from \(formatDate(state.startTime)). Would you like to process it now?"
+            )
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Process")
-        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: String(localized: "Process"))
+        alert.addButton(withTitle: String(localized: "Discard"))
 
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {

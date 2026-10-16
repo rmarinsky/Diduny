@@ -26,8 +26,13 @@ final class AuthService {
     private(set) var showsMigrationNotice = false
     private(set) var pendingOtpEmail: String?
 
-    var isLoggedIn: Bool { authState == .loggedIn }
-    var userEmail: String? { tokenStore.read(key: Keys.userEmail) }
+    var isLoggedIn: Bool {
+        authState == .loggedIn
+    }
+
+    var userEmail: String? {
+        tokenStore.read(key: Keys.userEmail)
+    }
 
     private enum Keys {
         static let accessToken = "auth_access_token"
@@ -38,9 +43,9 @@ final class AuthService {
         static let migrationNotice = "_diduny_auth_requires_relogin"
     }
 
-    nonisolated private let session: URLSession
-    nonisolated private let tokenStore: any AuthTokenStore
-    nonisolated private let now: @Sendable () -> Date
+    private nonisolated let session: URLSession
+    private nonisolated let tokenStore: any AuthTokenStore
+    private nonisolated let now: @Sendable () -> Date
     private let baseURLOverride: String?
     private var refreshTask: Task<Void, Error>?
     private var otpFlowGeneration = 0
@@ -74,7 +79,8 @@ final class AuthService {
         UserDefaults.standard.set(authState == .loggedIn, forKey: Keys.sessionPresent)
 
         if migrateLegacySession,
-           UserDefaults.standard.bool(forKey: "_diduny_supabase_session_present") {
+           UserDefaults.standard.bool(forKey: "_diduny_supabase_session_present")
+        {
             UserDefaults.standard.removeObject(forKey: "_diduny_supabase_session_present")
             KeychainManager.shared.delete(
                 serviceName: "supabase.gotrue.swift",
@@ -91,7 +97,7 @@ final class AuthService {
         guard Self.isValidEmail(email) else { throw AuthError.invalidEmail }
         let generation = otpFlowGeneration
         let request = try jsonRequest(path: "/api/v1/auth/send-otp", body: ["email": email])
-        _ = try await perform(request, errorPrefix: "Failed to send OTP")
+        _ = try await perform(request, errorPrefix: String(localized: "Failed to send OTP"))
         guard generation == otpFlowGeneration else { return }
         pendingOtpEmail = email
         authState = .otpSent
@@ -117,7 +123,7 @@ final class AuthService {
             path: "/api/v1/auth/verify-otp",
             body: ["email": email, "otp": code]
         )
-        let data = try await perform(request, errorPrefix: "Verification failed")
+        let data = try await perform(request, errorPrefix: String(localized: "Verification failed"))
         guard generation == otpFlowGeneration else { return }
         let response = try JSONDecoder().decode(TokenResponse.self, from: data)
         try store(response, email: response.user?.email ?? email)
@@ -164,9 +170,9 @@ final class AuthService {
 
         guard let accessToken = tokenStore.read(key: Keys.accessToken) else { return nil }
         let expiresAt = tokenStore.read(key: Keys.accessTokenExpiresAt).flatMap(Int64.init)
-        let nowMilliseconds = Int64(now().timeIntervalSince1970 * 1_000)
+        let nowMilliseconds = Int64(now().timeIntervalSince1970 * 1000)
 
-        guard let expiresAt, expiresAt - nowMilliseconds > 60_000 else {
+        guard let expiresAt, expiresAt - nowMilliseconds > 60000 else {
             do {
                 try await refreshTokens()
                 return tokenStore.read(key: Keys.accessToken)
@@ -246,7 +252,7 @@ final class AuthService {
         )
 
         do {
-            let data = try await perform(request, errorPrefix: "Token refresh failed")
+            let data = try await perform(request, errorPrefix: String(localized: "Token refresh failed"))
             let response: TokenResponse
             do {
                 response = try JSONDecoder().decode(TokenResponse.self, from: data)
@@ -280,7 +286,7 @@ final class AuthService {
         return data
     }
 
-    nonisolated private static func data(
+    private nonisolated static func data(
         for sourceRequest: URLRequest,
         session: URLSession
     ) async throws -> (Data, HTTPURLResponse) {
@@ -345,11 +351,11 @@ enum AuthError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidEmail: "Enter a valid email address"
-        case .invalidOtp: "Enter the six-digit code"
-        case .invalidURL: "Invalid auth URL"
-        case .invalidResponse: "Invalid server response"
-        case .notAuthenticated: "Not authenticated — please log in"
+        case .invalidEmail: String(localized: "Enter a valid email address")
+        case .invalidOtp: String(localized: "Enter the six-digit code")
+        case .invalidURL: String(localized: "Invalid auth URL")
+        case .invalidResponse: String(localized: "Invalid server response")
+        case .notAuthenticated: String(localized: "Not authenticated — please log in")
         case let .serverError(message): message
         }
     }

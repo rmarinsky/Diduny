@@ -98,7 +98,10 @@ struct BillingSettingsSection: View {
             .font(.callout).foregroundStyle(.secondary)
             Link("Contact support", destination: URL(string: "mailto:roman@rmarinsky.com.ua")!)
         }
-        LabeledContent("Subscription", value: state.billingInterval == .yearly ? "Annual" : "Monthly")
+        LabeledContent(
+            "Subscription",
+            value: state.billingInterval == .yearly ? String(localized: "Annual") : String(localized: "Monthly")
+        )
         if let date = displayDate(state.activeUntil) { LabeledContent(
             state.status == "past_due" ? "Last paid period ended" : "Access until",
             value: date
@@ -250,7 +253,7 @@ struct BillingOfferView: View {
                             .contentShape(RoundedRectangle(cornerRadius: 10))
                         }.buttonStyle(.plain)
                             .accessibilityLabel(
-                                "\(plan.billingInterval == .yearly ? "Annual" : "Monthly"), \(plan.formattedPrice), \(plan.billingInterval == .yearly ? "per year" : "per month")"
+                                "\(plan.billingInterval == .yearly ? String(localized: "Annual") : String(localized: "Monthly")), \(plan.formattedPrice), \(plan.billingInterval == .yearly ? String(localized: "per year") : String(localized: "per month"))"
                             )
                             .accessibilityAddTraits(paymentMode == .recurring && interval == plan
                                 .billingInterval ? .isSelected : [])
@@ -288,7 +291,11 @@ struct BillingOfferView: View {
             if showsPlans || pending {
                 if let selected {
                     if reviewing || pending {
-                        LabeledContent("Payment period", value: effectiveInterval == .yearly ? "12 months" : "1 month")
+                        LabeledContent(
+                            "Payment period",
+                            value: effectiveInterval == .yearly ? String(localized: "12 months") :
+                                String(localized: "1 month")
+                        )
                         if !pending || state.pendingPlan != nil {
                             LabeledContent("Total payment", value: selected.formattedPrice).font(.headline)
                         }
@@ -305,7 +312,7 @@ struct BillingOfferView: View {
                         .font(.callout).foregroundStyle(.secondary)
                     } else {
                         Text(
-                            "\(selected.formattedPrice) charged \(effectiveInterval == .yearly ? "once a year" : "each month"). Renews automatically. Cancel renewal at any time in Account; access stays available until the paid period ends."
+                            "\(selected.formattedPrice) charged \(effectiveInterval == .yearly ? String(localized: "once a year") : String(localized: "each month")). Renews automatically. Cancel renewal at any time in Account; access stays available until the paid period ends."
                         )
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
@@ -318,7 +325,7 @@ struct BillingOfferView: View {
                     if checkoutAvailable {
                         HStack(spacing: 12) {
                             Button(reviewing || pending ? "Continue to WayForPay" :
-                                "Review \(interval == .yearly ? "annual" : "monthly") plan")
+                                (interval == .yearly ? "Review annual plan" : "Review monthly plan"))
                             {
                                 if reviewing || pending { checkout(effectiveInterval, effectiveMode) }
                                 else { reviewing = true }
@@ -347,7 +354,7 @@ struct BillingOfferView: View {
         .onChange(of: interval) { _, _ in reviewing = false }
     }
 
-    private func benefit(_ title: String, _ detail: String, icon: String) -> some View {
+    private func benefit(_ title: LocalizedStringKey, _ detail: LocalizedStringKey, icon: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon).font(.title3).foregroundStyle(Color.accentColor).frame(width: 25)
             VStack(alignment: .leading, spacing: 4) {

@@ -19,7 +19,7 @@ import os
 enum MeetingChunkStitcher {
     // MARK: - Types
 
-    struct Result: Sendable {
+    struct Result {
         /// The stitched output file. Matches the URL passed to `stitch`.
         let outputURL: URL
         /// Total audio duration written (seconds, derived from frames / sampleRate).
@@ -38,9 +38,11 @@ enum MeetingChunkStitcher {
 
         var errorDescription: String? {
             switch self {
-            case .noChunks: "No chunks were provided for stitching."
-            case .allChunksUnreadable: "None of the recorded chunks could be read."
-            case let .writerSetupFailed(error): "Failed to open output audio file: \(error.localizedDescription)"
+            case .noChunks: String(localized: "No chunks were provided for stitching.")
+            case .allChunksUnreadable: String(localized: "None of the recorded chunks could be read.")
+            case let .writerSetupFailed(error): String(
+                    localized: "Failed to open output audio file: \(error.localizedDescription)"
+                )
             }
         }
     }

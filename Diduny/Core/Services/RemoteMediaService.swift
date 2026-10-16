@@ -93,13 +93,13 @@ struct YouTubeRemoteMediaSource: Codable, Equatable, Hashable {
         var errorDescription: String? {
             switch self {
             case .malformedURL:
-                "Enter a valid HTTPS YouTube URL."
+                String(localized: "Enter a valid HTTPS YouTube URL.")
             case .unsupportedProvider:
-                "Only YouTube URLs are supported."
+                String(localized: "Only YouTube URLs are supported.")
             case .playlist:
-                "YouTube playlists are not supported. Add individual video URLs instead."
+                String(localized: "YouTube playlists are not supported. Add individual video URLs instead.")
             case .missingVideoID:
-                "This YouTube URL does not identify a supported video."
+                String(localized: "This YouTube URL does not identify a supported video.")
             }
         }
     }
@@ -251,25 +251,25 @@ enum RemoteMediaExtractorError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .runtimeUnavailable:
-            "Remote media support is unavailable in this Diduny build. Update Diduny and try again."
+            String(localized: "Remote media support is unavailable in this Diduny build. Update Diduny and try again.")
         case .malformedMetadata, .sourceIdentityMismatch:
-            "Diduny could not verify this YouTube video."
+            String(localized: "Diduny could not verify this YouTube video.")
         case .unsupportedLiveStream:
-            "Active YouTube livestreams are not supported."
+            String(localized: "Active YouTube livestreams are not supported.")
         case .unsupportedDRM:
-            "This rental or DRM-protected video is not supported."
+            String(localized: "This rental or DRM-protected video is not supported.")
         case .noAudioOnlyStream:
-            "Unsupported — no audio-only stream available."
+            String(localized: "Unsupported — no audio-only stream available.")
         case .authorizationRequired:
-            "Sign in to YouTube in the selected browser session, then retry authorization."
+            String(localized: "Sign in to YouTube in the selected browser session, then retry authorization.")
         case .sourceUnavailable:
-            "This YouTube video is unavailable to the selected browser session."
+            String(localized: "This YouTube video is unavailable to the selected browser session.")
         case .extractorOutdated:
-            "YouTube compatibility requires a Diduny update."
+            String(localized: "YouTube compatibility requires a Diduny update.")
         case .insufficientDiskSpace:
-            "There is not enough free disk space to prepare this audio."
+            String(localized: "There is not enough free disk space to prepare this audio.")
         case .acquisitionFailed:
-            "Diduny could not retrieve audio from this video."
+            String(localized: "Diduny could not retrieve audio from this video.")
         }
     }
 }
@@ -465,12 +465,12 @@ enum BrowserKind: String, Codable, CaseIterable, Hashable {
 
     var displayName: String {
         switch self {
-        case .brave: "Brave"
-        case .chrome: "Google Chrome"
-        case .edge: "Microsoft Edge"
-        case .firefox: "Firefox"
-        case .safari: "Safari"
-        case .zen: "Zen"
+        case .brave: String(localized: "Brave")
+        case .chrome: String(localized: "Google Chrome")
+        case .edge: String(localized: "Microsoft Edge")
+        case .firefox: String(localized: "Firefox")
+        case .safari: String(localized: "Safari")
+        case .zen: String(localized: "Zen")
         }
     }
 
@@ -506,12 +506,22 @@ struct BrowserSession: Codable, Equatable, Hashable, Identifiable {
     let profileID: String?
     let profileName: String?
 
-    var id: String { profileID ?? browser.rawValue }
-    var selectionID: String { "\(browser.rawValue)|\(profileID ?? "")" }
-    var name: String { profileName ?? browser.displayName }
+    var id: String {
+        profileID ?? browser.rawValue
+    }
+
+    var selectionID: String {
+        "\(browser.rawValue)|\(profileID ?? "")"
+    }
+
+    var name: String {
+        profileName ?? browser.displayName
+    }
+
     var displayName: String {
         profileName.map { "\(browser.displayName) — \($0)" } ?? browser.displayName
     }
+
     var cookieArgument: String {
         profileID.map { "\(browser.cookieSource):\($0)" } ?? browser.cookieSource
     }

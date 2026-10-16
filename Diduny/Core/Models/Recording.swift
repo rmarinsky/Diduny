@@ -275,11 +275,11 @@ struct Recording: Identifiable, Codable, Equatable {
 
         var displayName: String {
             switch self {
-            case .voice: "Voice"
-            case .translation: "Translation"
-            case .meeting: "Meeting"
-            case .meetingTranslation: "Meeting Translation"
-            case .fileTranscription: "File Transcription"
+            case .voice: String(localized: "Voice")
+            case .translation: String(localized: "Translation")
+            case .meeting: String(localized: "Meeting")
+            case .meetingTranslation: String(localized: "Meeting Translation")
+            case .fileTranscription: String(localized: "File Transcription")
             }
         }
 
@@ -357,14 +357,14 @@ struct Recording: Identifiable, Codable, Equatable {
 
         var displayName: String {
             switch self {
-            case .unprocessed: "Unprocessed"
-            case .processing: "Processing"
-            case .transcribed: "Transcribed"
-            case .translated: "Translated"
-            case .failed: "Failed"
-            case .partiallyRecovered: "Partially Recovered"
-            case .recording: "Recording"
-            case .needsRecovery: "Needs Processing"
+            case .unprocessed: String(localized: "Unprocessed")
+            case .processing: String(localized: "Processing")
+            case .transcribed: String(localized: "Transcribed")
+            case .translated: String(localized: "Translated")
+            case .failed: String(localized: "Failed")
+            case .partiallyRecovered: String(localized: "Partially Recovered")
+            case .recording: String(localized: "Recording")
+            case .needsRecovery: String(localized: "Needs Processing")
             }
         }
 

@@ -11,7 +11,7 @@ final class PermissionManager {
 
     // MARK: - Permission Status
 
-    struct PermissionStatus: Sendable {
+    struct PermissionStatus {
         var microphone: Bool = false
         var screenRecording: Bool = false
         var accessibility: Bool = false
@@ -203,11 +203,11 @@ final class PermissionManager {
     func ensurePermission(_ type: PermissionType, context: PermissionRequestContext = .general) async -> Bool {
         switch type {
         case .microphone:
-            return await ensureMicrophonePermission(context: context)
+            await ensureMicrophonePermission(context: context)
         case .accessibility:
-            return await ensureAccessibilityPermission(context: context)
+            await ensureAccessibilityPermission(context: context)
         case .screenRecording:
-            return await ensureScreenRecordingPermission(context: context)
+            await ensureScreenRecordingPermission(context: context)
         }
     }
 
@@ -228,12 +228,11 @@ final class PermissionManager {
     /// Show individual permission alert
     func showPermissionAlert(for type: PermissionType) {
         Task {
-            let context: PermissionRequestContext
-            switch type {
+            let context: PermissionRequestContext = switch type {
             case .accessibility:
-                context = .autoPaste
+                .autoPaste
             case .microphone, .screenRecording:
-                context = .general
+                .general
             }
             _ = await ensurePermission(type, context: context)
         }
@@ -246,14 +245,14 @@ final class PermissionManager {
         context: PermissionRequestContext
     ) -> Bool {
         let alert = NSAlert()
-        alert.messageText = "\(type.displayName) Access Needed"
+        alert.messageText = String(localized: "\(type.displayName) Access Needed")
         alert.informativeText = type.explanation(for: context, mode: mode)
         alert.alertStyle = .informational
         if let icon = NSImage(systemSymbolName: type.symbolName, accessibilityDescription: type.displayName) {
             alert.icon = icon
         }
         alert.addButton(withTitle: mode.primaryButtonTitle)
-        alert.addButton(withTitle: "Not Now")
+        alert.addButton(withTitle: String(localized: "Not Now"))
 
         NSApp.activate(ignoringOtherApps: true)
         return alert.runModal() == .alertFirstButtonReturn
@@ -266,15 +265,13 @@ final class PermissionManager {
     }
 
     func openSystemSettingsForPermission(_ type: PermissionType) {
-        var urlString: String?
-
-        switch type {
+        var urlString: String? = switch type {
         case .microphone:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
         case .accessibility:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         case .screenRecording:
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         }
 
         if let urlString, let url = URL(string: urlString) {
@@ -292,9 +289,9 @@ enum PermissionType: Equatable {
 
     var displayName: String {
         switch self {
-        case .microphone: "Microphone"
-        case .accessibility: "Accessibility"
-        case .screenRecording: "Screen Recording"
+        case .microphone: String(localized: "Microphone")
+        case .accessibility: String(localized: "Accessibility")
+        case .screenRecording: String(localized: "Screen Recording")
         }
     }
 
@@ -319,18 +316,18 @@ enum PermissionType: Equatable {
         switch mode {
         case .request:
             return """
-                Diduny can't \(action) because \(displayName) access is missing.
+            Diduny can't \(action) because \(displayName) access is missing.
 
-                \(reason)
+            \(reason)
 
-                Do you want to grant access now?
-                """
+            Do you want to grant access now?
+            """
         case .settings:
             return """
-                Diduny still can't \(action) because \(displayName) access is not enabled.
+            Diduny still can't \(action) because \(displayName) access is not enabled.
 
-                Enable it in \(settingsPath), then return to Diduny.
-                """
+            Enable it in \(settingsPath), then return to Diduny.
+            """
         }
     }
 
@@ -346,7 +343,7 @@ enum PermissionType: Equatable {
     }
 }
 
-enum PermissionRequestContext: Sendable {
+enum PermissionRequestContext {
     case dictation
     case translation
     case meetingRecording
@@ -358,25 +355,25 @@ enum PermissionRequestContext: Sendable {
     func blockedAction(for type: PermissionType) -> String {
         switch self {
         case .dictation:
-            return "start dictation"
+            "start dictation"
         case .translation:
-            return "start voice translation"
+            "start voice translation"
         case .meetingRecording:
-            return "record meeting audio"
+            "record meeting audio"
         case .meetingTranslation:
-            return "translate meeting audio"
+            "translate meeting audio"
         case .autoPaste:
-            return "paste the transcript automatically"
+            "paste the transcript automatically"
         case .settings:
-            return "enable this permission"
+            "enable this permission"
         case .general:
             switch type {
             case .microphone:
-                return "record audio"
+                "record audio"
             case .accessibility:
-                return "control paste actions"
+                "control paste actions"
             case .screenRecording:
-                return "capture meeting audio"
+                "capture meeting audio"
             }
         }
     }

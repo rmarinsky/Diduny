@@ -70,7 +70,7 @@ final class TranslationPairPickerController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        panel.title = "Translate to"
+        panel.title = String(localized: "Translate to")
         panel.contentView = hostingView
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
@@ -89,10 +89,10 @@ final class TranslationPairPickerController: NSObject, NSWindowDelegate {
 
             switch event.keyCode {
             case 53: // Escape
-                self.dismiss(returning: nil)
+                dismiss(returning: nil)
                 return nil
             case 36, 76: // Return / keypad Enter
-                self.dismiss(returning: model.selectedPair)
+                dismiss(returning: model.selectedPair)
                 return nil
             case 126: // Up
                 model.moveSelection(by: -1)
@@ -103,8 +103,9 @@ final class TranslationPairPickerController: NSObject, NSWindowDelegate {
             default:
                 if let characters = event.charactersIgnoringModifiers,
                    let digit = Int(characters), (1 ... 9).contains(digit),
-                   digit <= model.pairs.count {
-                    self.dismiss(returning: model.pairs[digit - 1])
+                   digit <= model.pairs.count
+                {
+                    dismiss(returning: model.pairs[digit - 1])
                     return nil
                 }
                 return event
@@ -114,7 +115,7 @@ final class TranslationPairPickerController: NSObject, NSWindowDelegate {
 
     /// Resolves the pending pick exactly once and tears the panel down.
     private func dismiss(returning pair: TranslationLanguagePair?) {
-        let continuation = self.continuation
+        let continuation = continuation
         self.continuation = nil
         model = nil
         if let monitor = eventMonitor {

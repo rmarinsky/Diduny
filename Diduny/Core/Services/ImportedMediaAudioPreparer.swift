@@ -24,13 +24,13 @@ final class ImportedMediaAudioPreparer {
         var errorDescription: String? {
             switch self {
             case .noAudioTrack:
-                "The selected file does not contain an audio track."
+                String(localized: "The selected file does not contain an audio track.")
             case .invalidDuration:
-                "The selected file has an invalid duration."
+                String(localized: "The selected file has an invalid duration.")
             case let .durationLimitExceeded(maximumMinutes):
-                "The selected file is longer than the \(maximumMinutes)-minute transcription limit."
+                String(localized: "The selected file is longer than the \(maximumMinutes)-minute transcription limit.")
             case let .extractionFailed(message):
-                "Could not extract audio: \(message)"
+                String(localized: "Could not extract audio: \(message)")
             }
         }
     }

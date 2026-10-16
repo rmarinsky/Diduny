@@ -2,6 +2,43 @@ import CoreAudio
 import Foundation
 import LaunchAtLogin
 
+/// App-scoped native language preference. Bundle resolves it on the next launch.
+/// Removing this key restores the system language order, without changing macOS settings.
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system, ukrainian, english
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .system: String(localized: "Use system language")
+        case .ukrainian: "Українська"
+        case .english: "English"
+        }
+    }
+
+    static func preference(in defaults: UserDefaults = .standard,
+                           domain: String = Bundle.main.bundleIdentifier ?? "") -> AppLanguage
+    {
+        // Read only this app's domain: inherited global AppleLanguages is not an override.
+        let languages = defaults.persistentDomain(forName: domain)?["AppleLanguages"] as? [String]
+        switch languages?.first?.split(separator: "-").first {
+        case "uk": return .ukrainian
+        case "en": return .english
+        default: return .system
+        }
+    }
+
+    func save(to defaults: UserDefaults = .standard) {
+        switch self {
+        case .system: defaults.removeObject(forKey: "AppleLanguages")
+        case .ukrainian: defaults.set(["uk", "en"], forKey: "AppleLanguages")
+        case .english: defaults.set(["en"], forKey: "AppleLanguages")
+        }
+    }
+}
+
 enum HistoryRetentionPolicy: String, CaseIterable, Identifiable {
     case never
     case days7
@@ -16,12 +53,12 @@ enum HistoryRetentionPolicy: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .never: "Never"
-        case .days7: "7 days"
-        case .days30: "30 days"
-        case .days90: "90 days"
-        case .year1: "1 year"
-        case .forever: "Forever"
+        case .never: String(localized: "Never")
+        case .days7: String(localized: "7 days")
+        case .days30: String(localized: "30 days")
+        case .days90: String(localized: "90 days")
+        case .year1: String(localized: "1 year")
+        case .forever: String(localized: "Forever")
         }
     }
 

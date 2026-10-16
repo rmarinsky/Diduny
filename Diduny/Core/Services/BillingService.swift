@@ -53,7 +53,10 @@ nonisolated struct BillingState: Decodable {
 @Observable
 @MainActor
 final class BillingService {
-    nonisolated static let publicPolicyURL = URL(string: "https://rmarinsky.com.ua/en/legal/#diduny-offer")!
+    nonisolated static var publicPolicyURL: URL {
+        let path = Bundle.main.preferredLocalizations.first == "uk" ? "legal" : "en/legal"
+        return URL(string: "https://rmarinsky.com.ua/\(path)/#diduny-offer")!
+    }
 
     typealias Transport = @MainActor (URLRequest) async throws -> (Data, HTTPURLResponse)
     private let transport: Transport
@@ -183,9 +186,18 @@ private enum BillingError: LocalizedError {
     case invalidURL, unavailable, server(String)
     var errorDescription: String? {
         switch self {
-        case .unavailable: "Payments are temporarily unavailable. Your free access is unchanged. Please try again later."
-        case .invalidURL: "The payment link could not be verified. Please refresh and try again."
-        case let .server(message): message
+        case .unavailable: String(
+                localized: "Payments are temporarily unavailable. Your free access is unchanged. Please try again later."
+            )
+        case .invalidURL: String(localized: "The payment link could not be verified. Please refresh and try again.")
+        case let .server(message):
+            Bundle.main.localizedString(
+                forKey: message,
+                value: String(
+                    localized: "Could not update your subscription. Check payment status or contact support."
+                ),
+                table: nil
+            )
         }
     }
 }

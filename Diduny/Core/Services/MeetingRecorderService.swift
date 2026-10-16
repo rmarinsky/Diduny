@@ -346,7 +346,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
     /// are logged but do not abort the recording.
     private func handleChunkRotated(
         closedIndex: Int,
-        closedURL: URL,
+        closedURL _: URL,
         closedAt: Date,
         byteCount: Int64,
         durationSeconds: Double,
@@ -418,11 +418,11 @@ enum MeetingRecorderError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .fileCreationFailed:
-            "Failed to create recording file"
+            String(localized: "Failed to create recording file")
         case .permissionDenied:
-            "Screen recording permission required for meeting capture"
+            String(localized: "Screen recording permission required for meeting capture")
         case .recordingFailed:
-            "Failed to start recording"
+            String(localized: "Failed to start recording")
         }
     }
 }

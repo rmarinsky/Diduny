@@ -163,9 +163,9 @@ final class TranscriptionBatchStorage {
 
         var errorDescription: String? {
             switch self {
-            case .batchNotFound: "Batch not found."
-            case .membershipClosed: "Completed batch membership cannot be changed."
-            case .unreadableMetadata: "Batch data could not be loaded, so it was left unchanged."
+            case .batchNotFound: String(localized: "Batch not found.")
+            case .membershipClosed: String(localized: "Completed batch membership cannot be changed.")
+            case .unreadableMetadata: String(localized: "Batch data could not be loaded, so it was left unchanged.")
             }
         }
     }

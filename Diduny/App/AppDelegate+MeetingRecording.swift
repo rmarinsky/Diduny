@@ -252,7 +252,7 @@ extension AppDelegate {
         guard hasPermission else {
             Log.app.warning("Screen capture permission not granted")
             await MainActor.run {
-                appState.errorMessage = "Screen recording permission required for meeting capture"
+                appState.errorMessage = String(localized: "Screen recording permission required for meeting capture")
                 appState.meetingRecordingState = .error
                 handleMeetingStateChange(.error)
             }
@@ -946,7 +946,6 @@ extension AppDelegate {
                     appState.meetingRecordingStartTime = nil
                     handleMeetingStateChange(.success)
                 }
-
             }
             Log.app.info("stopMeetingRecording: SUCCESS")
 
@@ -981,7 +980,9 @@ extension AppDelegate {
                     }
                     if !cloudModeEnabled, !didEnqueue {
                         DictationOverlayController.shared.showInfo(
-                            message: String(localized: "Recording saved. Download a local model in Settings to transcribe it."),
+                            message: String(
+                                localized: "Recording saved. Download a local model in Settings to transcribe it."
+                            ),
                             duration: 3.0
                         )
                     }
@@ -1044,9 +1045,8 @@ extension AppDelegate {
             } else if let audioURL = capturedAudioURL {
                 let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                 let hasLiveRow = RecordingsLibraryStorage.shared.recordings.contains { $0.id == recordingId }
-                let saved: Bool
-                if hasLiveRow {
-                    saved = RecordingsLibraryStorage.shared.finalizeInProgressRecording(
+                let saved: Bool = if hasLiveRow {
+                    RecordingsLibraryStorage.shared.finalizeInProgressRecording(
                         id: recordingId,
                         audioURL: audioURL,
                         duration: duration,
@@ -1055,7 +1055,7 @@ extension AppDelegate {
                         forceSave: true
                     )
                 } else {
-                    saved = RecordingsLibraryStorage.shared.saveRecording(
+                    RecordingsLibraryStorage.shared.saveRecording(
                         id: recordingId,
                         audioURL: audioURL,
                         type: .meeting,

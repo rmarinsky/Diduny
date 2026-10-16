@@ -11,11 +11,11 @@ private enum TranslationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidRequest:
-            "Failed to prepare translation request"
+            String(localized: "Failed to prepare translation request")
         case let .requestFailed(message):
-            "Translation failed: \(message)"
+            String(localized: "Translation failed: \(message)")
         case .emptyResult:
-            "Translation returned an empty result"
+            String(localized: "Translation returned an empty result")
         }
     }
 }
@@ -73,21 +73,21 @@ final class TextTranslationViewModel: ObservableObject {
             guard let self else { return }
             do {
                 let result = try await Self.requestTranslation(
-                    sourceText: self.sourceText,
-                    sourceLanguage: self.sourceLanguageCode,
-                    targetLanguage: self.targetLanguageCode
+                    sourceText: sourceText,
+                    sourceLanguage: sourceLanguageCode,
+                    targetLanguage: targetLanguageCode
                 )
                 guard !Task.isCancelled else { return }
-                self.translatedText = result
-                self.isTranslating = false
+                translatedText = result
+                isTranslating = false
 
                 // Auto-copy to clipboard
-                self.copyTranslation()
+                copyTranslation()
             } catch is CancellationError {
-                self.isTranslating = false
+                isTranslating = false
             } catch {
-                self.errorMessage = error.localizedDescription
-                self.isTranslating = false
+                errorMessage = error.localizedDescription
+                isTranslating = false
             }
         }
     }
@@ -178,7 +178,7 @@ final class TextTranslationViewModel: ObservableObject {
         components.queryItems = [
             URLQueryItem(name: "q", value: sourceText),
             URLQueryItem(name: "tl", value: targetLanguage),
-            URLQueryItem(name: "sl", value: normalizedSourceLanguage(sourceLanguage)),
+            URLQueryItem(name: "sl", value: normalizedSourceLanguage(sourceLanguage))
         ]
 
         guard let url = components.url else {
@@ -351,7 +351,8 @@ struct TextTranslationView: View {
             .buttonStyle(.borderedProminent)
             .tint(Color("BrandAccentDeep"))
             .keyboardShortcut(.return, modifiers: .command)
-            .disabled(viewModel.isTranslating || viewModel.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(viewModel.isTranslating || viewModel.sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty)
         }
     }
 
