@@ -33,10 +33,10 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             expected = (
-                "# Choose monthly or annual Diduny Pro\n\n"
-                "- Annual Pro gives you twelve months for the price of ten, with the full yearly payment shown before checkout.\n"
-                "- Manage automatic renewal in Account. Cancelling keeps access until the end of your paid period.\n"
-                "- Get two free cloud hours each month, or use local models for free without an hourly limit.\n"
+                "# Your meetings, connected to Diduny\n\n"
+                "- Connect calendars already configured in macOS. Your selection and consent are remembered, with background refresh while Diduny runs.\n"
+                "- See upcoming meetings in the menu bar and choose a pop-up or full-screen reminder. Join through your default app, or record an in-person meeting.\n"
+                "- Calendar recordings use local transcription by default and keep a link to the event. Browser calendar reading is available separately with a saved browser and profile.\n"
             )
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 

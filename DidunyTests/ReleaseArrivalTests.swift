@@ -45,13 +45,13 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Finish cloud recordings without the extra wait")
+        XCTAssertEqual(highlights.headline, "Your meetings, connected to Diduny")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Dictation and voice translation now send the correct end-of-recording signal.",
-                "Meeting transcripts no longer wait for a timeout when the service has finished.",
-                "Existing safeguards for delayed final words remain in place.",
+                "Connect calendars already configured in macOS. Your selection and consent are remembered, with background refresh while Diduny runs.",
+                "See upcoming meetings in the menu bar and choose a pop-up or full-screen reminder. Join through your default app, or record an in-person meeting.",
+                "Calendar recordings use local transcription by default and keep a link to the event. Browser calendar reading is available separately with a saved browser and profile.",
             ]
         )
     }
