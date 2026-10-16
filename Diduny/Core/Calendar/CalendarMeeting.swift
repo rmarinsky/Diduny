@@ -35,3 +35,18 @@ struct CalendarReminderLedger: Codable, Equatable {
         }
     }
 }
+
+extension CalendarMeeting {
+    static func joinURL(in text: String) -> URL? {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
+        return detector.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap(\.url).first(where: isJoinURL)
+    }
+
+    static func isJoinURL(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https", url.user == nil, url.password == nil,
+              url.port == nil || url.port == 443, let host = url.host?.lowercased() else { return false }
+        return ["meet.google.com", "teams.microsoft.com", "teams.live.com", "teams.cloud.microsoft", "zoom.us", "webex.com", "meet.jit.si"].contains {
+            host == $0 || (($0 == "zoom.us" || $0 == "webex.com") && host.hasSuffix("." + $0))
+        }
+    }
+}
