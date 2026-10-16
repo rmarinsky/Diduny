@@ -198,6 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_: Notification) {
+        Task { if AuthService.shared.isLoggedIn { await AnalyticsService.shared.refresh() } }
         launchedAtLogin = LaunchAtLogin.wasLaunchedAtLogin
         NSLog("[Diduny] applicationDidFinishLaunching: launchedAtLogin=%d", launchedAtLogin ? 1 : 0)
 
@@ -898,6 +899,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func canStartRecording(kind: RecordingKind) -> Bool {
+        guard AuthService.shared.isLoggedIn else {
+            openSettings(tab: .account)
+            return false
+        }
         var blockers: [RecordingKind] = []
 
         if kind != .voice, isStateInProgress(appState.recordingState) {

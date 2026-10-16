@@ -864,6 +864,16 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertTrue(storage.hasPlayableAudio(for: saved))
     }
 
+    func test_signedOutLocalQueueRequiresLoginAndPreservesAudio() throws {
+        let id = try XCTUnwrap(storage.saveRecording(audioData: Data("RIFF....WAVEfmt ".utf8), type: .meeting, duration: 42, forceSave: true))
+        let queue = RecordingQueueService(storage: storage, startsAutomatically: false, localModelIsAvailable: { _ in true }, hasSession: { false })
+        queue.enqueue([id], action: .transcribe, providerOverride: .local)
+        XCTAssertEqual(queue.queueCount, 0)
+        let recording = try XCTUnwrap(storage.recordings.first { $0.id == id })
+        XCTAssertEqual(recording.status, .failed)
+        XCTAssertTrue(storage.hasPlayableAudio(for: recording))
+    }
+
     func test_localQueue_marksRecordingProcessingWithoutLosingAudio() throws {
         let id = try XCTUnwrap(storage.saveRecording(
             audioData: Data("RIFF....WAVEfmt ".utf8),
@@ -874,7 +884,8 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         let queue = RecordingQueueService(
             storage: storage,
             startsAutomatically: false,
-            localModelIsAvailable: { _ in true }
+            localModelIsAvailable: { _ in true },
+            hasSession: { true }
         )
 
         queue.enqueue([id], action: .transcribe, providerOverride: .local)

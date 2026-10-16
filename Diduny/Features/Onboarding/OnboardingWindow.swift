@@ -91,9 +91,9 @@ private final class OnboardingWindowDelegate: NSObject, NSWindowDelegate {
 
 private enum OnboardingScreen: Int, CaseIterable {
     case welcome
+    case signIn
     case capturePanel
     case permissions
-    case signIn
     case practice
     case ready
 }
@@ -279,7 +279,7 @@ private struct OnboardingFlowView: View {
         VStack(alignment: .leading, spacing: 22) {
             OnboardingHeading(
                 title: "Sign in",
-                subtitle: "Enter your email. We will send a six-digit code so you can use cloud dictation."
+                subtitle: "Enter your email. We will send a six-digit code to sign in. An account is required for local and cloud features. Local models remain free."
             )
             AccountSignInView()
                 .padding(18)
@@ -393,10 +393,10 @@ private struct OnboardingFlowView: View {
 
     private func continueFlow() {
         switch screen {
-        case .welcome: move(to: .capturePanel)
+        case .welcome: move(to: .signIn)
         case .capturePanel: move(to: .permissions)
-        case .permissions: move(to: .signIn)
-        case .signIn: move(to: .practice)
+        case .permissions: move(to: .practice)
+        case .signIn: move(to: .capturePanel)
         case .practice: startPractice()
         case .ready: onDismiss()
         }

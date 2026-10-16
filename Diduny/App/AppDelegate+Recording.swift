@@ -505,6 +505,7 @@ extension AppDelegate {
             let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
             capturedAudioData = compressedData
             let provider = voiceTranscriptionProvider
+            Task { await AnalyticsService.shared.record(duration: duration, mode: provider.rawValue, scenario: "dictation") }
             let shouldCompleteSetup = !OnboardingManager.shared.hasCompletedOnboarding
                 && provider == .cloud
                 && AuthService.shared.isLoggedIn

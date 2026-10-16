@@ -14,7 +14,6 @@ final class AuthService {
 
     nonisolated static var hasStoredSession: Bool {
         UserDefaults.standard.bool(forKey: Keys.sessionPresent)
-            || UserDefaults.standard.bool(forKey: "_diduny_supabase_session_present")
     }
 
     enum AuthState: Equatable {
@@ -112,7 +111,7 @@ final class AuthService {
     }
 
     func verifyOtp(email: String, code: String) async throws {
-        guard code.count == 6, code.allSatisfy(\.isNumber) else { throw AuthError.invalidOtp }
+        guard code.count == 6, code.allSatisfy({ $0.isASCII && $0.isNumber }) else { throw AuthError.invalidOtp }
         let generation = otpFlowGeneration
         let request = try jsonRequest(
             path: "/api/v1/auth/verify-otp",
@@ -313,6 +312,7 @@ final class AuthService {
     }
 
     private func clearTokens() {
+        AnalyticsService.shared.reset()
         otpFlowGeneration &+= 1
         tokenStore.delete(key: Keys.accessToken)
         tokenStore.delete(key: Keys.refreshToken)

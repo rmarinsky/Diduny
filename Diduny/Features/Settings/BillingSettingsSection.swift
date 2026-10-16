@@ -311,7 +311,7 @@ struct BillingOfferView: View {
                     }
                     if reviewing {
                         Text(
-                            "Payment opens in your browser. Pro activates after payment is confirmed. Return here to check the status."
+                            "By continuing, you accept the Diduny Pro terms for this plan and acknowledge the Privacy Policy. Optional usage statistics stay off unless you separately enable them in Account. Payment opens in your browser. Return here after payment to check your access."
                         )
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }

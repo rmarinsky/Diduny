@@ -504,6 +504,8 @@ extension AppDelegate {
                 activeTranslationTargetLanguage = nil
             }
             Log.app.info("stopTranslationRecording: SUCCESS")
+            let analyticsDuration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            Task { await AnalyticsService.shared.record(duration: analyticsDuration, mode: SettingsStorage.shared.effectiveTranslationProvider.rawValue, scenario: "translation") }
 
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)

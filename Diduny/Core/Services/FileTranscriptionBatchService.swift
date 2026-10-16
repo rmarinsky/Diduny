@@ -1520,6 +1520,7 @@ final class FileTranscriptionBatchService {
 
 private final class LiveFileTranscriptionBatchTranscriber: FileTranscriptionBatchTranscribing {
     func preflightError(for settings: FileTranscriptionSettingsSnapshot) -> String? {
+        guard AuthService.hasStoredSession else { return "Sign in to use Diduny transcription." }
         switch settings.provider {
         case .cloud:
             return AuthService.hasStoredSession ? nil : "Log in to use Cloud transcription."

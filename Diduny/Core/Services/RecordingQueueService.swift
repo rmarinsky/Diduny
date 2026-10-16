@@ -29,15 +29,18 @@ final class RecordingQueueService {
     private var currentItem: QueueItem?
     private let storage: RecordingsLibraryStorage
     private let startsAutomatically: Bool
+    private let hasSession: () -> Bool
     private let localModelIsAvailable: (String) -> Bool
 
     init(
         storage: RecordingsLibraryStorage? = nil,
         startsAutomatically: Bool = true,
-        localModelIsAvailable: ((String) -> Bool)? = nil
+        localModelIsAvailable: ((String) -> Bool)? = nil,
+        hasSession: @escaping () -> Bool = { AuthService.hasStoredSession }
     ) {
         self.storage = storage ?? .shared
         self.startsAutomatically = startsAutomatically
+        self.hasSession = hasSession
         self.localModelIsAvailable = localModelIsAvailable ?? { modelName in
             guard let model = WhisperModelManager.availableModels.first(where: { $0.name == modelName }) else {
                 return false
@@ -396,11 +399,9 @@ final class RecordingQueueService {
     }
 
     private func preflightError(for item: QueueItem, provider: TranscriptionProvider) -> String? {
+        guard hasCloudCredentials else { return "Sign in to use Diduny transcription." }
         switch provider {
         case .cloud:
-            guard hasCloudCredentials else {
-                return "Log in to use Cloud transcription."
-            }
             return nil
         case .local:
             if item.action == .translate {
@@ -428,7 +429,7 @@ final class RecordingQueueService {
                 return true
             }
         #endif
-        return AuthService.hasStoredSession
+        return hasSession()
     }
 
     private func refreshQueueState() {

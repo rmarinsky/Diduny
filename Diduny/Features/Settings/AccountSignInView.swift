@@ -15,8 +15,8 @@ struct AccountSignInView: View {
     private let authService: AuthService
 
     @MainActor
-    init() {
-        authService = .shared
+    init(authService: AuthService = .shared) {
+        self.authService = authService
     }
 
     var body: some View {
@@ -25,7 +25,7 @@ struct AccountSignInView: View {
         case .loggedOut:
             if authService.showsMigrationNotice {
                 Label(
-                    "Diduny's account system changed. Sign in again to continue using Cloud features.",
+                    "Diduny's account system changed. Sign in again to continue using Diduny.",
                     systemImage: "person.crop.circle.badge.exclamationmark"
                 )
                 .font(.caption)
@@ -46,6 +46,10 @@ struct AccountSignInView: View {
             }
 
         case .otpSent:
+            Text("Enter the code sent to \(authService.pendingOtpEmail ?? email).")
+                .font(.callout)
+            Text("Check your inbox and spam folder. You can paste the code or use a macOS code suggestion when available.")
+                .font(.caption).foregroundStyle(.secondary)
             HStack {
                 TextField("Enter 6-digit code", text: $otpCode)
                     .textFieldStyle(.roundedBorder)
@@ -63,7 +67,7 @@ struct AccountSignInView: View {
                     .buttonStyle(.bordered)
                     .disabled(isLoading)
 
-                Button("Cancel", action: cancelOtp)
+                Button("Change email", action: cancelOtp)
                     .buttonStyle(.bordered)
             }
 
@@ -102,12 +106,13 @@ struct AccountSignInView: View {
             focusCurrentField()
         }
         .onChange(of: otpCode) { _, value in
-            let digits = String(value.filter(\.isNumber).prefix(6))
+            let digits = String(value.filter { $0.isASCII && $0.isNumber }.prefix(6))
             if digits != value { otpCode = digits }
         }
     }
 
     private func sendOtp() {
+        guard !isLoading, AuthService.isValidEmail(email) else { return }
         isLoading = true
         errorMessage = nil
 
@@ -124,6 +129,7 @@ struct AccountSignInView: View {
     }
 
     private func verifyOtp() {
+        guard !isLoading, otpCode.count == 6 else { return }
         isLoading = true
         errorMessage = nil
 
@@ -135,6 +141,7 @@ struct AccountSignInView: View {
                 try await authService.verifyOtp(email: destination, code: otpCode)
                 otpCode = ""
                 email = ""
+                if authService === AuthService.shared { await AnalyticsService.shared.refresh() }
             } catch {
                 errorMessage = "That code couldn't be verified. Send a new one and try again."
             }
@@ -149,6 +156,7 @@ struct AccountSignInView: View {
     }
 
     private func resendOtp() {
+        guard !isLoading else { return }
         otpCode = ""
         isLoading = true
         errorMessage = nil
@@ -165,5 +173,24 @@ struct AccountSignInView: View {
 
     private func focusCurrentField() {
         focusedField = authService.authState == .otpSent ? .otp : .email
+    }
+}
+
+
+@MainActor
+struct AnalyticsSettingsSection: View {
+    var analytics: AnalyticsService = .shared
+    var body: some View {
+        Section("Privacy") {
+            Toggle("Share usage statistics", isOn: Binding(get: { analytics.enabled }, set: { value in
+                Task { await analytics.setEnabled(value) }
+            }))
+            .disabled(analytics.isLoading && !analytics.enabled)
+            Text("Optional on Free and Pro. Shares duration, local/cloud mode and feature category linked to your account. No audio, text or file names. Cloud limits, payments and necessary security records are handled separately.")
+                .font(.caption).foregroundStyle(.secondary)
+            if let error = analytics.errorMessage { Text(error).font(.caption).foregroundStyle(.red) }
+            Button("Refresh sharing preference") { Task { await analytics.refresh() } }
+                .disabled(analytics.isLoading)
+        }
     }
 }

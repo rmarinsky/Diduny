@@ -59,11 +59,16 @@ struct AccountSettingsView: View {
 
             BillingSettingsSection(isLoggedIn: authService.isLoggedIn)
 
+            if authService.isLoggedIn { AnalyticsSettingsSection() }
             cloudUsageSection
 
             usageSection
         }
         .formStyle(.grouped)
+        .task(id: authService.userEmail) {
+            if authService.isLoggedIn { await AnalyticsService.shared.refresh() }
+            else { AnalyticsService.shared.reset() }
+        }
         .onAppear {
             proxyBaseURL = SettingsStorage.shared.proxyBaseURL
             if authService.isLoggedIn {

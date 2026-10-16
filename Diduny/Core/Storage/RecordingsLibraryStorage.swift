@@ -814,6 +814,11 @@ final class RecordingsLibraryStorage {
         recordings[index].generatedTranscriptProvenance = generatedTranscriptProvenance
         if !saveMetadataSynchronously() {
             recordings[index] = previous
+            return
+        }
+        if self === RecordingsLibraryStorage.shared, let provider, ["local", "cloud"].contains(provider) {
+            let scenario = kind == .translation ? "translation" : previous.type == .meeting ? "meeting" : previous.type == .fileTranscription ? "file" : "dictation"
+            Task { await AnalyticsService.shared.record(duration: previous.effectiveDurationSeconds, mode: provider, scenario: scenario) }
         }
     }
 
