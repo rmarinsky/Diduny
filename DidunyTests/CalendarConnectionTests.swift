@@ -5,25 +5,51 @@ import XCTest
     func testConsentSelectionAndReminderHistoryRestoreButEventsRemainInMemory() async throws {
         let defaults = UserDefaults(suiteName: "CalendarConnectionTests-\(UUID())")!
         let snapshot = ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Account")], meetings: [])
-        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { snapshot })
+        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in snapshot })
         XCTAssertFalse(connection.configuration.connected)
         await connection.connect()
         XCTAssertTrue(connection.configuration.connected)
         XCTAssertEqual(connection.configuration.selected, ["work"])
         connection.selectCalendar("work", selected: false)
-        let restored = CalendarConnection(defaults: defaults, authorize: { XCTFail("Must not ask on restore"); return false }, read: { snapshot })
+        let restored = CalendarConnection(defaults: defaults, authorize: { XCTFail("Must not ask on restore"); return false }, read: { _ in snapshot })
         XCTAssertTrue(restored.configuration.connected)
         XCTAssertTrue(restored.configuration.selected.isEmpty)
         XCTAssertTrue(restored.meetings.isEmpty)
         restored.disconnect()
-        let disconnected = CalendarConnection(defaults: defaults, authorize: { true }, read: { snapshot })
+        let disconnected = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in snapshot })
         XCTAssertFalse(disconnected.configuration.connected)
+    }
+
+    func testNoLinkEventCanRecordAndDeselectedEventsCannotActOrRemainInMemory() async {
+        let defaults = UserDefaults(suiteName: "CalendarSelection-\(UUID())")!
+        let event = CalendarMeeting(id: "local", calendarID: "work", title: "In person", start: Date(), end: Date().addingTimeInterval(600))
+        let snapshot = ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Account")], meetings: [event])
+        var scopes: [Set<String>?] = []
+        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { selected in scopes.append(selected); return snapshot })
+        await connection.connect()
+        var actions = 0
+        connection.onJoin = { received, record, local in
+            XCTAssertEqual(received, event); XCTAssertTrue(record); XCTAssertTrue(local); actions += 1
+        }
+        connection.join(event, record: false)
+        XCTAssertEqual(actions, 0)
+        connection.join(event, record: true)
+        XCTAssertEqual(actions, 1)
+        connection.selectCalendar("work", selected: false)
+        XCTAssertTrue(connection.meetings.isEmpty)
+        await connection.refresh()
+        XCTAssertTrue(connection.meetings.isEmpty)
+        connection.join(event, record: true)
+        XCTAssertEqual(actions, 1)
+        XCTAssertNil(scopes.first!)
+        XCTAssertEqual(scopes.last!, Set<String>())
+        connection.disconnect()
     }
 
     func testDisconnectRejectsLateReadAndDoesNotRestoreClearedConsent() async {
         let defaults = UserDefaults(suiteName: "CalendarLateReadTests-\(UUID())")!
         let gate = CalendarReadGate()
-        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { await gate.read() })
+        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in await gate.read() })
         let task = Task { await connection.connect() }
         while !(await gate.waiting) { await Task.yield() }
         connection.disconnect()

@@ -19,6 +19,7 @@ struct MeetingSettingsView: View {
 
     var body: some View {
         Form {
+            CalendarSettingsSection()
             Section {
                 Toggle("Suggest recording when a meeting starts", isOn: $meetingSuggestionsEnabled)
                     .onChange(of: meetingSuggestionsEnabled) { _, newValue in

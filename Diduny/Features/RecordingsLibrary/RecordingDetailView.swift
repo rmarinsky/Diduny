@@ -104,6 +104,24 @@ struct RecordingDetailView: View {
                     detailsSection
                         .padding(16)
 
+                    if let meeting = currentRecording.calendarMeeting {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Calendar meeting", systemImage: "calendar").font(.headline)
+                            Text(meeting.title)
+                            Text(meeting.start.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary)
+                            if let url = meeting.meetingURL, CalendarMeeting.isJoinURL(url) {
+                                Text(url.absoluteString).font(.caption).textSelection(.enabled)
+                                Button("Open meeting link") { NSWorkspace.shared.open(url) }
+                            }
+                            Button("Unlink calendar event") {
+                                if !storage.linkCalendarMeeting(id: currentRecording.id, meeting: nil) {
+                                    operationErrorMessage = String(localized: "The calendar link could not be removed.")
+                                }
+                            }
+                        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
                     if currentRecording.remoteSource != nil {
                         Divider()
                         youtubeSourceSection

@@ -178,6 +178,8 @@ struct Recording: Identifiable, Codable, Equatable {
     var transcriptHistory: [TranscriptVersion]? = nil
     /// Non-destructive selection; duration and audio file always describe the original.
     var trimRange: AudioTrimRange? = nil
+    /// Optional local calendar context. Older recordings decode without it.
+    var calendarMeeting: CalendarMeeting? = nil
 
     var effectiveDurationSeconds: TimeInterval {
         guard let trimRange, trimRange.isValid(for: durationSeconds) else { return durationSeconds }

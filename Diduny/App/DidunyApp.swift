@@ -18,8 +18,10 @@ struct DidunyApp: App {
             )
             .environment(appDelegate.appState)
         } label: {
-            MenuBarIconView()
-                .environment(appDelegate.appState)
+            HStack(spacing: 5) {
+                MenuBarIconView().environment(appDelegate.appState)
+                CalendarMenuLabel()
+            }
         }
         .menuBarExtraStyle(.menu)
         .commands {

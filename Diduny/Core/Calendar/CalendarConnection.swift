@@ -30,18 +30,20 @@ struct CalendarConfiguration: Codable, Equatable {
     private(set) var calendars: [CalendarChoice] = []
     private(set) var meetings: [CalendarMeeting] = []
     private(set) var fetchedAt: Date?
+    private(set) var menuClock = Date()
     private(set) var busy = false
     private(set) var error: String?
+    var onJoin: ((CalendarMeeting, Bool, Bool) -> Void)?
     var onReminder: (([CalendarMeeting]) -> Void)?
     private let defaults: UserDefaults
     private let authorize: () async throws -> Bool
-    private let read: () async throws -> ScheduledCalendarSnapshot
+    private let read: (Set<String>?) async throws -> ScheduledCalendarSnapshot
     private var generation = UUID()
     private var polling: Task<Void, Never>?
     private static let key = "calendar.connection.v1"
 
     init(defaults: UserDefaults, authorize: @escaping () async throws -> Bool,
-         read: @escaping () async throws -> ScheduledCalendarSnapshot) {
+         read: @escaping (Set<String>?) async throws -> ScheduledCalendarSnapshot) {
         self.defaults = defaults; self.authorize = authorize; self.read = read
         if let data = defaults.data(forKey: Self.key) {
             if let saved = try? JSONDecoder().decode(CalendarConfiguration.self, from: data), saved.version == 1 {
@@ -79,7 +81,9 @@ struct CalendarConfiguration: Codable, Equatable {
     func selectCalendar(_ id: String, selected: Bool) {
         guard calendars.contains(where: { $0.id == id }) else { return }
         if selected { configuration.selected.insert(id) } else { configuration.selected.remove(id) }
+        meetings.removeAll { !configuration.selected.contains($0.calendarID) }
         persist()
+        Task { await refresh() }
     }
 
     func updatePreferences(_ update: (inout CalendarConfiguration) -> Void) {
@@ -94,14 +98,14 @@ struct CalendarConfiguration: Codable, Equatable {
         let request = generation
         busy = true
         do {
-            let snapshot = try await read()
+            let snapshot = try await read(selectInitialCalendars ? nil : configuration.selected)
             guard request == generation, configuration.connected else { return }
             calendars = snapshot.calendars
-            meetings = snapshot.meetings
             fetchedAt = Date(); error = nil; busy = false
             if selectInitialCalendars {
                 configuration.selected = Set(calendars.map(\.id)); persist()
             }
+            meetings = snapshot.meetings.filter { configuration.selected.contains($0.calendarID) }
             deliverReminders()
         } catch {
             guard request == generation else { return }
@@ -111,9 +115,16 @@ struct CalendarConfiguration: Codable, Equatable {
     }
 
     var currentMeetings: [CalendarMeeting] {
-        guard configuration.connected, let fetchedAt, Date().timeIntervalSince(fetchedAt) <= 300 else { return [] }
+        guard configuration.connected, let fetchedAt, Date().timeIntervalSince(fetchedAt) >= 0, Date().timeIntervalSince(fetchedAt) <= 300 else { return [] }
         return meetings.filter { configuration.selected.contains($0.calendarID) && $0.canRemind && $0.end > Date() }
             .sorted { $0.start < $1.start }
+    }
+
+    func join(_ meeting: CalendarMeeting, record: Bool) {
+        guard let current = currentMeetings.first(where: { $0.id == meeting.id }),
+              current.start == meeting.start, current.meetingURL == meeting.meetingURL,
+              current.meetingURL.map(CalendarMeeting.isJoinURL) ?? record else { return }
+        onJoin?(current, record, configuration.localRecording)
     }
 
     func start() {
@@ -121,6 +132,7 @@ struct CalendarConfiguration: Codable, Equatable {
         polling = Task { [weak self] in
             while !Task.isCancelled {
                 if let self {
+                    self.menuClock = Date()
                     if self.fetchedAt == nil || Date().timeIntervalSince(self.fetchedAt!) >= 60 { await self.refresh() }
                     self.deliverReminders()
                 }

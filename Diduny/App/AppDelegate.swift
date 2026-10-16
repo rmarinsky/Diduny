@@ -169,6 +169,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var translationPushToTalkService = PushToTalkService()
     lazy var meetingRecorderService = MeetingRecorderService()
     lazy var meetingJoinMonitor = MeetingJoinMonitor()
+    let calendarReminderController = CalendarReminderController()
+    var calendarStoreObserver: NSObjectProtocol?
+    var calendarWakeObserver: NSObjectProtocol?
     lazy var realtimeTranscriptionService = CloudRealtimeService()
     var localVoiceStreamingService: LocalWhisperStreamingService?
     var localMeetingStreamingService: LocalWhisperStreamingService?
@@ -336,6 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         updateMeetingJoinMonitoring()
+        setupCalendarIntegration()
 
     }
 
@@ -687,6 +691,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_: Notification) {
+        CalendarConnection.shared.stop()
+        BrowserCalendarConnection.shared.stop()
+        calendarReminderController.dismiss()
+        if let calendarStoreObserver { NotificationCenter.default.removeObserver(calendarStoreObserver) }
+        if let calendarWakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(calendarWakeObserver) }
         meetingJoinMonitor.stop()
         hotkeyService.unregisterAll()
         pushToTalkService.stop()

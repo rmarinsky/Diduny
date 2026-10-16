@@ -13,6 +13,7 @@ extension AppDelegate {
 
     func toggleMeetingRecording(
         provider: TranscriptionProvider,
+        calendarMeeting: CalendarMeeting? = nil,
         cancelPipeline: (() async -> Void)? = nil
     ) {
         let meetingRecordingState = appState.meetingRecordingState
@@ -35,7 +36,7 @@ extension AppDelegate {
             appState.meetingRecordingState = .processing
             handleMeetingStateChange(.processing)
             meetingPipelineTask = Task {
-                await self.startMeetingRecording(provider: provider)
+                await self.startMeetingRecording(provider: provider, calendarMeeting: calendarMeeting)
             }
         case .recording:
             meetingPipelineTask = Task {
@@ -208,6 +209,7 @@ extension AppDelegate {
 
     func startMeetingRecording(
         provider requestedProvider: TranscriptionProvider,
+        calendarMeeting: CalendarMeeting? = nil,
         ensureScreenRecordingPermission: @escaping () async -> Bool = {
             await PermissionManager.shared.ensureScreenRecordingPermission(context: .meetingRecording)
         },
@@ -384,6 +386,11 @@ extension AppDelegate {
                     createdAt: startTime,
                     sourceDevice: deviceInfo
                 )
+                if let calendarMeeting,
+                   !RecordingsLibraryStorage.shared.linkCalendarMeeting(id: recordingId, meeting: calendarMeeting) {
+                    DictationOverlayController.shared.showInfoDuringRecording(
+                        message: String(localized: "Recording started, but the calendar link could not be saved."), mode: .meeting, duration: 4)
+                }
             }
 
             startMetrics.finish(outcome: "ok")

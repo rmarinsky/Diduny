@@ -20,6 +20,26 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         try await super.tearDown()
     }
 
+    func testCalendarAssociationSurvivesFinalizationRecoveryAndReload() throws {
+        let id = UUID()
+        let event = CalendarMeeting(id: "event/occurrence", calendarID: "work", title: "Design review",
+                                    start: Date(timeIntervalSince1970: 1_800_000_000),
+                                    end: Date(timeIntervalSince1970: 1_800_003_600),
+                                    meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))
+        XCTAssertNotNil(storage.beginMeetingRecording(id: id, type: .meeting))
+        XCTAssertTrue(storage.linkCalendarMeeting(id: id, meeting: event))
+        let wav = directory.appendingPathComponent("calendar.wav")
+        try Data("RIFF....WAVEfmt ".utf8).write(to: wav)
+        XCTAssertTrue(storage.finalizeInProgressRecording(id: id, audioURL: wav, duration: 30,
+                      endedAt: Date(), status: .unprocessed, forceSave: true))
+        XCTAssertTrue(storage.markNeedsRecovery(id: id, durationSeconds: 31))
+        let restored = RecordingsLibraryStorage(baseDirectory: directory,
+                                                batchStorage: try TranscriptionBatchStorage(baseDirectory: directory))
+        XCTAssertEqual(restored.recordings.first(where: { $0.id == id })?.calendarMeeting, event)
+        XCTAssertTrue(restored.linkCalendarMeeting(id: id, meeting: nil))
+        XCTAssertNil(restored.recordings.first(where: { $0.id == id })?.calendarMeeting)
+    }
+
     func test_beginMeetingRecording_createsRecordingStatusRowWithoutAudio() throws {
         let id = UUID()
         let started = Date(timeIntervalSince1970: 1_700_000_000)

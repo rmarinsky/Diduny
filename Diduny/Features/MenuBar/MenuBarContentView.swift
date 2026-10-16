@@ -37,6 +37,7 @@ struct MenuBarContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            CalendarMenuItems()
             Button(recordingButtonTitle, action: onToggleRecording)
                 .globalKeyboardShortcut(.toggleRecording)
                 .disabled(isDictationButtonDisabled)

@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 struct CalendarMeeting: Identifiable, Codable, Equatable, Sendable {
     let id: String
@@ -45,8 +46,42 @@ extension CalendarMeeting {
     static func isJoinURL(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == "https", url.user == nil, url.password == nil,
               url.port == nil || url.port == 443, let host = url.host?.lowercased() else { return false }
-        return ["meet.google.com", "teams.microsoft.com", "teams.live.com", "teams.cloud.microsoft", "zoom.us", "webex.com", "meet.jit.si"].contains {
-            host == $0 || (($0 == "zoom.us" || $0 == "webex.com") && host.hasSuffix("." + $0))
+        let path = url.path
+        if host == "meet.google.com" { return path.range(of: "^/[a-z]{3}-[a-z]{4}-[a-z]{3}$", options: .regularExpression) != nil }
+        if ["teams.microsoft.com", "teams.live.com", "teams.cloud.microsoft"].contains(host) {
+            return path.hasPrefix("/l/meetup-join/") || path.hasPrefix("/meet/")
         }
+        if host == "zoom.us" || host.hasSuffix(".zoom.us") {
+            return path.range(of: "^/(j|my|wc/join)/[^/]+", options: .regularExpression) != nil
+        }
+        if host == "webex.com" || host.hasSuffix(".webex.com") {
+            return path.hasPrefix("/meet/") || path.contains("/j.php") || path.contains("/join/")
+        }
+        return host == "meet.jit.si" && path.count > 1
+
+    }
+}
+
+enum CalendarJoinDecision: Equatable {
+    case joinOnly, startRecording, linkExisting, recordingUnavailable, openFailed
+    static func resolve(record: Bool, openingSucceeded: Bool, alreadyRecording: Bool, busy: Bool) -> Self {
+        guard openingSucceeded else { return .openFailed }
+        guard record else { return .joinOnly }
+        if alreadyRecording { return .linkExisting }
+        return busy ? .recordingUnavailable : .startRecording
+    }
+}
+
+extension CalendarMeeting {
+    static func pendingReminders(existing: [Self], incoming: [Self], current: [Self]) -> [Self] {
+        let keys = Set((existing + incoming).map(\.reminderKey))
+        return current.filter { keys.contains($0.reminderKey) }.sorted { $0.start < $1.start }
+    }
+}
+
+@MainActor @Observable final class CalendarReminderPresentation {
+    var record = false
+    func prepare(defaultRecord: Bool, replacingVisible: Bool) {
+        if !replacingVisible { record = defaultRecord }
     }
 }
