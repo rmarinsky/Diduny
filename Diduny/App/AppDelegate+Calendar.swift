@@ -35,8 +35,10 @@ extension AppDelegate {
             appState.recordingState == .recording || appState.recordingState == .processing ||
             appState.translationRecordingState == .recording || appState.translationRecordingState == .processing ||
             appState.meetingTranslationRecordingState == .recording || appState.meetingTranslationRecordingState == .processing
-        switch CalendarJoinDecision.resolve(record: record, openingSucceeded: opened, alreadyRecording: alreadyRecording, busy: busy) {
+        switch CalendarJoinDecision.resolve(record: record, openingSucceeded: opened, alreadyRecording: alreadyRecording, busy: busy, isSignedIn: AuthService.shared.isLoggedIn) {
         case .joinOnly: break
+        case .signInRequired:
+            openSettings(tab: .account)
         case .openFailed:
             DictationOverlayController.shared.showInfo(message: String(localized: "The meeting link could not be opened. Recording has not started."))
         case .recordingUnavailable:

@@ -5,7 +5,7 @@ import SwiftUI
     @Published var connected = false
     @Published var busy = false
     @Published var result: BrowserReadResult?
-    @Published var message = "Оберіть браузер і профіль календаря."
+    @Published var message = String(localized: "Choose a browser and calendar profile.")
     @Published var reveal = true
     @Published var lastAttempt: Date?
     @Published var successes = 0
@@ -25,9 +25,9 @@ import SwiftUI
             saved = try store.load()
             if let saved {
                 connected = true; connectionKey = saved.windowName; session.connect(source: saved.windowName)
-                message = "Підключення збережене. Шукаємо погоджене вікно календаря…"
+                message = String(localized: "Connection restored. Looking for the approved calendar window…")
             }
-        } catch { message = "Не вдалося відновити підключення. Нові дані не читаємо: \(error.localizedDescription)" }
+        } catch { message = String(localized: "Could not restore the connection. Reading is paused: \(error.localizedDescription)") }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.read() }
         }
@@ -43,7 +43,7 @@ import SwiftUI
         connectionKey = key; session.connect(source: key)
         guard let request = session.begin(source: key, now: ProcessInfo.processInfo.systemUptime, force: true) else { return }
         let readAccess = ReadAccess(); access = readAccess; busy = true; lastAttempt = Date()
-        message = "Перевіряємо профіль і позначаємо вікно календаря…"
+        message = String(localized: "Checking the profile and naming the calendar window…")
         Task {
             let outcome = await Task.detached(priority: .userInitiated) {
                 Result { () -> (BrowserReadResult, SavedConnection) in
@@ -64,17 +64,17 @@ import SwiftUI
                     connectionKey = connection.windowName; session.connect(source: connection.windowName)
                     // Start the 60-second interval from this successful connect, without another read.
                     if let token = session.begin(source: connection.windowName, now: ProcessInfo.processInfo.systemUptime) { _ = session.finish(token, now: ProcessInfo.processInfo.systemUptime) }
-                    message = "Підключення збережене · оновлення щохвилини, навіть із закритим вікном Reader"
-                } catch { session.disconnect(); message = "Не вдалося зберегти підключення. Читання не запущено: \(error.localizedDescription)" }
-            case .failure(let error): session.disconnect(); message = "Підключення не створено. \(error.localizedDescription) Виберіть календарний вигляд без відкритих деталей події."
+                    message = String(localized: "Connection saved · refreshes every minute while Diduny is running")
+                } catch { session.disconnect(); message = String(localized: "Could not save the connection. Reading has not started: \(error.localizedDescription)") }
+            case .failure(let error): session.disconnect(); message = String(localized: "Connection was not created. \(error.localizedDescription) Select a calendar view with no event details open.")
             }
         }
     }
     func disconnect() {
         access?.cancel(); access = nil; session.disconnect(); connected = false; busy = false; connectionKey = nil
         target = nil; result = nil; lastAttempt = nil; successes = 0
-        do { try store.clear(); saved = nil; message = "Від’єднано. Збережену згоду видалено, читання припинено, дані очищено." }
-        catch { message = "Читання зупинено, але збережену згоду не вдалося видалити. Після перезапуску вона може відновитися. Повторіть від’єднання: \(error.localizedDescription)" }
+        do { try store.clear(); saved = nil; message = String(localized: "Disconnected. Saved consent was removed, reading stopped and in-memory calendar data cleared.") }
+        catch { message = String(localized: "Reading stopped, but saved consent could not be removed. It may return after restart. Retry disconnecting: \(error.localizedDescription)") }
     }
     func read(force: Bool = false) {
         guard connected, let saved, let key = connectionKey,
@@ -88,8 +88,8 @@ import SwiftUI
             guard session.finish(request, now: ProcessInfo.processInfo.systemUptime) else { return }
             busy = false; access = nil
             switch outcome {
-            case .success(let value): target = value.target; result = value; successes += 1; message = "Фонове читання працює · наступна перевірка через хвилину"
-            case .failure(let error): target = nil; message = "Чекаємо погоджене вікно. \(error.localizedDescription) Збережена згода залишається чинною."
+            case .success(let value): target = value.target; result = value; successes += 1; message = String(localized: "Background reading is active · next check in one minute")
+            case .failure(let error): target = nil; message = String(localized: "Waiting for the approved window. \(error.localizedDescription) Saved consent remains active.")
             }
         }
     }
@@ -114,7 +114,7 @@ import SwiftUI
                 try outcome.get()
                 try operationAccess.check()
                 try browser.openCalendar(url, profile: profileID.hasPrefix("menu:") ? "" : profileID)
-                message = "Календар відкривається у вибраному профілі. Підключіть його вікно після завантаження."
+                message = String(localized: "Opening the calendar in the selected profile. Connect its window after loading.")
             } catch { message = error.localizedDescription }
         }
     }

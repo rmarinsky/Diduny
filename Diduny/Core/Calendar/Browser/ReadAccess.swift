@@ -14,5 +14,5 @@ public final class ReadAccess: @unchecked Sendable {
     public func cancel() { lock.lock(); revoked = true; lock.unlock() }
 }
 private struct ReadTimeout: LocalizedError {
-    var errorDescription: String? { "Читання зайняло понад 12 секунд. Спробуйте ще раз, коли сторінка завантажиться." }
+    var errorDescription: String? { String(localized: "Reading took more than 12 seconds. Retry when the page has loaded.") }
 }

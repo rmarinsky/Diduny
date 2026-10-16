@@ -24,10 +24,10 @@ final class BrowserReader {
         case permission, closed, noPage, changed
         var errorDescription: String? {
             switch self {
-            case .permission: return "Надайте цьому прототипу доступ Accessibility у System Settings. Після цього повторіть читання."
-            case .closed: return "Відкрийте вибраний браузер і зробіть вкладку календаря активною."
-            case .noPage: return "Не вдалося прочитати активну сторінку. Відкрийте календар у вибраному браузері."
-            case .changed: return "Вікно або адреса календаря змінилися. Читання зупинено. Поверніть вкладку або від’єднайте джерело й підключіть знову."
+            case .permission: return String(localized: "Allow Diduny Accessibility access in System Settings, then retry reading.")
+            case .closed: return String(localized: "Open the selected browser and select its calendar tab.")
+            case .noPage: return String(localized: "Could not read the active page. Open the calendar in the selected browser.")
+            case .changed: return String(localized: "The calendar window or address changed. Reading stopped. Restore the tab or disconnect and reconnect the source.")
             }
         }
     }

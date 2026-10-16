@@ -10,9 +10,9 @@ final class NativeProfiles {
         case naming(String)
         var errorDescription: String? {
             switch self {
-            case .unavailable: return "Профілі недоступні. Відкрийте браузер, перевірте Accessibility і оновіть список."
-            case .mismatch: return "Не вдалося підтвердити вибраний профіль. Відкрийте потрібне вікно браузера й повторіть дію."
-            case .naming(let stage): return "Браузер не підтвердив назву вікна (\(stage)). Збережене підключення не створено."
+            case .unavailable: return String(localized: "Profiles are unavailable. Open the browser, check Accessibility access and refresh the list.")
+            case .mismatch: return String(localized: "Could not confirm the selected profile. Open its browser window and retry.")
+            case .naming(let stage): return String(localized: "The browser did not confirm the window name (\(stage)). No saved connection was created.")
             }
         }
     }
@@ -87,7 +87,7 @@ final class NativeProfiles {
         let root = try root(bundleID)
         guard let focused = element(root, kAXFocusedWindowAttribute), CFEqual(focused, window) else { throw Failure.mismatch }
         guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
-              app.activate(options: []) else { throw Failure.naming("активація") }
+              app.activate(options: []) else { throw Failure.naming("activation") }
         // Activation is asynchronous. Dispatching a menu command before it completes
         // can report AX success without opening the browser's sheet.
         for _ in 0..<30 {
@@ -98,34 +98,34 @@ final class NativeProfiles {
         guard app.isActive, let activeWindow = element(root, kAXFocusedWindowAttribute),
               CFEqual(activeWindow, window) else { throw Failure.mismatch }
         let commands = menuItems(root).filter { ["name window...", "назвати вікно..."].contains(label($0).lowercased().replacingOccurrences(of: "…", with: "...")) }
-        guard commands.count == 1 else { throw Failure.naming("команда: \(commands.count)") }
+        guard commands.count == 1 else { throw Failure.naming("command: \(commands.count)") }
         try access.check()
-        guard AXUIElementPerformAction(commands[0], kAXPressAction as CFString) == .success else { throw Failure.naming("дія") }
+        guard AXUIElementPerformAction(commands[0], kAXPressAction as CFString) == .success else { throw Failure.naming("action") }
         for _ in 0..<30 {
             try access.check()
             let attachedSheets = value(window, "AXSheets") as? [AXUIElement] ?? []
             let candidates = nodes(window) + attachedSheets.filter { sheet in !nodes(window).contains { CFEqual($0, sheet) } }
             // The sheet must belong to the approved window, not another window in the app.
             let sheets = candidates.filter { text($0, kAXRoleAttribute) == kAXSheetRole && ["Name this window", "Назвати це вікно"].contains(label($0)) }
-            guard sheets.count < 2 else { throw Failure.naming("дія") }
+            guard sheets.count < 2 else { throw Failure.naming("action") }
             if let sheet = sheets.first {
                 let controls = nodes(sheet)
                 let fields = controls.filter { text($0, kAXRoleAttribute) == kAXTextFieldRole }
                 let buttons = controls.filter { text($0, kAXRoleAttribute) == kAXButtonRole && label($0) == "OK" }
-                guard fields.count == 1, buttons.count == 1 else { throw Failure.naming("дія") }
+                guard fields.count == 1, buttons.count == 1 else { throw Failure.naming("action") }
                 try access.check()
-                guard AXUIElementSetAttributeValue(fields[0], kAXValueAttribute as CFString, name as CFString) == .success else { throw Failure.naming("дія") }
+                guard AXUIElementSetAttributeValue(fields[0], kAXValueAttribute as CFString, name as CFString) == .success else { throw Failure.naming("action") }
                 try access.check()
-                guard AXUIElementPerformAction(buttons[0], kAXPressAction as CFString) == .success else { throw Failure.naming("дія") }
+                guard AXUIElementPerformAction(buttons[0], kAXPressAction as CFString) == .success else { throw Failure.naming("action") }
                 for _ in 0..<20 {
                     try access.check()
                     if SavedConnection.matchesWindowTitle(text(window, kAXTitleAttribute), name: name) { return }
                     Thread.sleep(forTimeInterval: 0.05)
                 }
-                throw Failure.naming("назву не підтверджено")
+                throw Failure.naming("window name not confirmed")
             }
             Thread.sleep(forTimeInterval: 0.05)
         }
-        throw Failure.naming("назву не підтверджено")
+        throw Failure.naming("window name not confirmed")
     }
 }

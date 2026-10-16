@@ -35,8 +35,10 @@ extension AppDelegate {
             meetingPipelineTask?.cancel()
             appState.meetingRecordingState = .processing
             handleMeetingStateChange(.processing)
+            let generation = meetingPipelineGeneration
             meetingPipelineTask = Task {
-                await self.startMeetingRecording(provider: provider, calendarMeeting: calendarMeeting)
+                await self.startMeetingRecording(provider: provider, calendarMeeting: calendarMeeting,
+                                                 pipelineGeneration: generation)
             }
         case .recording:
             meetingPipelineTask = Task {
@@ -210,6 +212,8 @@ extension AppDelegate {
     func startMeetingRecording(
         provider requestedProvider: TranscriptionProvider,
         calendarMeeting: CalendarMeeting? = nil,
+        pipelineGeneration: UInt64? = nil,
+        canStart: (() -> Bool)? = nil,
         ensureScreenRecordingPermission: @escaping () async -> Bool = {
             await PermissionManager.shared.ensureScreenRecordingPermission(context: .meetingRecording)
         },
@@ -217,8 +221,16 @@ extension AppDelegate {
     ) async {
         Log.app.info("startMeetingRecording: BEGIN")
 
-        guard !Task.isCancelled, canStartRecording(kind: .meeting) else {
-            Log.app.info("startMeetingRecording: blocked by another active recording mode")
+        let generation = pipelineGeneration ?? meetingPipelineGeneration
+        guard generation == meetingPipelineGeneration, !Task.isCancelled else { return }
+        guard canStart?() ?? canStartRecording(kind: .meeting) else {
+            if generation == meetingPipelineGeneration,
+               appState.meetingRecordingState == .processing,
+               activeMeetingTranscriptionSessionID == nil {
+                appState.meetingRecordingState = .idle
+                handleMeetingStateChange(.idle)
+            }
+            Log.app.info("startMeetingRecording: startup rejected")
             return
         }
 

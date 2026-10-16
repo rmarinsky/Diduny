@@ -45,13 +45,13 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Your meetings, connected to Diduny")
+        XCTAssertEqual(highlights.headline, "Connected meetings, clearer choices")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Connect calendars already configured in macOS. Your selection and consent are remembered, with background refresh while Diduny runs.",
-                "See upcoming meetings in the menu bar and choose a pop-up or full-screen reminder. Join through your default app, or record an in-person meeting.",
-                "Calendar recordings use local transcription by default and keep a link to the event. Browser calendar reading is available separately with a saved browser and profile.",
+                "Connect macOS calendars, see upcoming meetings and reminders, and link locally transcribed recordings to their events.",
+                "Use Ukrainian or English and sign in with an email code. Local models stay free; cloud includes two free hours each month.",
+                "Compare Pro plans, review payment and renewal terms, or buy one year without renewal. Usage statistics require a separate choice on every plan.",
             ]
         )
     }

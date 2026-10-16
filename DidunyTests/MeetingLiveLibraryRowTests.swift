@@ -68,6 +68,25 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertEqual(storage.recordings.first(where: { $0.id == id }), existing)
     }
 
+    func test_rejectedMeetingStartClearsOnlyItsOwnedPendingState() async {
+        let delegate = AppDelegate()
+        delegate.meetingPipelineGeneration = 4
+        delegate.appState.meetingRecordingState = .processing
+        var requestedPermission = false
+        await delegate.startMeetingRecording(provider: .local, pipelineGeneration: 4,
+            canStart: { false }, ensureScreenRecordingPermission: { requestedPermission = true; return true })
+        XCTAssertFalse(requestedPermission)
+        XCTAssertEqual(delegate.appState.meetingRecordingState, .idle)
+
+        delegate.meetingPipelineGeneration = 5
+        delegate.appState.meetingRecordingState = .processing
+        await delegate.startMeetingRecording(provider: .local, pipelineGeneration: 4,
+            canStart: { false }, ensureScreenRecordingPermission: { requestedPermission = true; return true })
+        XCTAssertEqual(delegate.appState.meetingRecordingState, .processing)
+        XCTAssertFalse(requestedPermission)
+        delegate.appState.meetingRecordingState = .idle
+    }
+
     func test_finalizeInProgressRecording_attachesAudioAndEndedAt() throws {
         let id = UUID()
         _ = storage.beginMeetingRecording(id: id, type: .meeting)
@@ -642,6 +661,7 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         let firstStart = Task {
             await delegate.startMeetingRecording(
                 provider: .local,
+                canStart: { true },
                 ensureScreenRecordingPermission: { true },
                 startRecorder: {
                     await withCheckedContinuation { continuation in
@@ -688,6 +708,7 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         let firstStart = Task {
             await delegate.startMeetingRecording(
                 provider: .local,
+                canStart: { true },
                 ensureScreenRecordingPermission: { true },
                 startRecorder: {
                     await withCheckedContinuation { continuation in
@@ -720,6 +741,7 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         let restartedStart = Task {
             await delegate.startMeetingRecording(
                 provider: .local,
+                canStart: { true },
                 ensureScreenRecordingPermission: {
                     await withCheckedContinuation { continuation in
                         resumeRestartPermission = continuation
@@ -768,6 +790,7 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         let start = Task {
             await delegate.startMeetingRecording(
                 provider: .local,
+                canStart: { true },
                 ensureScreenRecordingPermission: {
                     await withCheckedContinuation { continuation in
                         resumePermission = continuation

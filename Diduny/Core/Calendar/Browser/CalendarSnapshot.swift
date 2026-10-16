@@ -25,8 +25,8 @@ public enum CalendarReadError: Error, LocalizedError {
     case consentRequired, wrongPage
     public var errorDescription: String? {
         switch self {
-        case .consentRequired: return "Approve this read before accessing the calendar."
-        case .wrongPage: return "Select a Google Calendar or Outlook Calendar tab in the chosen browser, then retry."
+        case .consentRequired: return String(localized: "Approve this read before accessing the calendar.")
+        case .wrongPage: return String(localized: "Select a Google Calendar or Outlook Calendar tab in the chosen browser, then retry.")
         }
     }
 }

@@ -73,6 +73,13 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertTrue(fresh.due([event], selected: ["work"], now: now, fetchedAt: now, leadMinutes: 0).isEmpty)
     }
 
+    func testCalendarRecordingKeepsSignInAsTheDestinationWhenSignedOut() {
+        XCTAssertEqual(CalendarJoinDecision.resolve(record: true, openingSucceeded: true,
+                       alreadyRecording: false, busy: false, isSignedIn: false), .signInRequired)
+        XCTAssertEqual(CalendarJoinDecision.resolve(record: false, openingSucceeded: true,
+                       alreadyRecording: false, busy: false, isSignedIn: false), .joinOnly)
+    }
+
     func testJoinDoesNotToggleAnActiveRecordingAndNeverRecordsIfOpeningFails() {
         XCTAssertEqual(CalendarJoinDecision.resolve(record: false, openingSucceeded: true,
                         alreadyRecording: false, busy: false), .joinOnly)

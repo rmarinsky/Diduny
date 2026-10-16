@@ -33,10 +33,10 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             expected = (
-                "# Your meetings, connected to Diduny\n\n"
-                "- Connect calendars already configured in macOS. Your selection and consent are remembered, with background refresh while Diduny runs.\n"
-                "- See upcoming meetings in the menu bar and choose a pop-up or full-screen reminder. Join through your default app, or record an in-person meeting.\n"
-                "- Calendar recordings use local transcription by default and keep a link to the event. Browser calendar reading is available separately with a saved browser and profile.\n"
+                "# Connected meetings, clearer choices\n\n"
+                "- Connect macOS calendars, see upcoming meetings and reminders, and link locally transcribed recordings to their events.\n"
+                "- Use Ukrainian or English and sign in with an email code. Local models stay free; cloud includes two free hours each month.\n"
+                "- Compare Pro plans, review payment and renewal terms, or buy one year without renewal. Usage statistics require a separate choice on every plan.\n"
             )
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 

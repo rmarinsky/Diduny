@@ -48,7 +48,7 @@ struct CalendarConfiguration: Codable, Equatable {
         if let data = defaults.data(forKey: Self.key) {
             if let saved = try? JSONDecoder().decode(CalendarConfiguration.self, from: data), saved.version == 1 {
                 configuration = saved
-            } else { error = "The saved calendar connection could not be restored. Connect again." }
+            } else { error = String(localized: "The saved calendar connection could not be restored. Connect again.") }
         }
     }
 
@@ -58,7 +58,7 @@ struct CalendarConfiguration: Codable, Equatable {
         busy = true; error = nil
         do {
             guard try await authorize() else {
-                if request == generation { busy = false; error = "Calendar access was not granted. You can change it in System Settings." }
+                if request == generation { busy = false; error = String(localized: "Calendar access was not granted. You can change it in System Settings.") }
                 return
             }
             guard request == generation else { return }

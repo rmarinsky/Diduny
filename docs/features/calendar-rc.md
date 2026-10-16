@@ -48,3 +48,22 @@ The user explicitly requested continuing without desktop access while the Mac wa
 Events remain in memory; selected IDs, consent and reminder occurrence keys persist locally. A recorded meeting's title/time/link is stored with its local recording. The app does not write calendar events. Provider synchronization latency and calendar/browser permission revocation remain external conditions; errors disable stale scheduling/actions. Calendar browser access does not extract credentials or bypass account policy.
 
 No PR, CI run, merge, tag, appcast update or public release was created.
+
+## PR #76 integration follow-up (2026-10-16)
+
+The existing draft PR now combines this calendar work with staged Pro purchase review,
+one-time annual access, mandatory email-code sign-in, optional analytics consent, and
+Ukrainian/English app localization. It preserves the original calendar occurrence metadata,
+calendar sources and resource declarations. Updated release copy covers the combined scope.
+
+Independent integration reviews identified and resolved two auth transitions: calendar
+Join+Record now keeps Account visible for a signed-out user, and meeting startup rejection
+clears only the pending state for its own pipeline generation. The existing cancellation
+fixtures explicitly provide their signed-in precondition. Calendar browser error/status
+messages now follow the app language; AX matching strings and persisted identifiers remain
+unchanged. New failing tests and the full integrated validation are recorded in the PR.
+
+No new native visual evidence was captured. The earlier candidate archive, signatures,
+checksums and manual verification limits above belong to their stated source revision;
+they do not describe a rebuilt combined candidate. Backend and website changes remain in
+separate repositories. Publishing this draft PR does not deploy them or release the app.
