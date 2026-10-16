@@ -31,6 +31,15 @@ nonisolated struct BillingState: Decodable {
     let plans: [BillingPlan]
     let pendingOrderReference: String?
     let pendingBillingInterval: BillingInterval?
+    let checkoutAvailable: Bool?
+    let pendingPlan: BillingPlan?
+
+    var hasTwoMonthsFree: Bool {
+        guard let monthly = plans.first(where: { $0.billingInterval == .monthly }),
+              let annual = plans.first(where: { $0.billingInterval == .yearly }),
+              monthly.amount > 0, monthly.currency == annual.currency else { return false }
+        return annual.amount == monthly.amount * 10
+    }
 }
 
 @Observable
@@ -45,6 +54,10 @@ final class BillingService {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     private var generation = 0
+    private var checkoutBlocked = false
+    var checkoutAvailable: Bool {
+        state?.checkoutAvailable != false && !checkoutBlocked
+    }
 
     init(baseURL: @escaping @MainActor () -> String = { SettingsStorage.shared.proxyBaseURL },
          transport: @escaping Transport = { try await AuthService.shared.performWithAuth($0) })
@@ -55,6 +68,7 @@ final class BillingService {
 
     func reset() {
         generation += 1
+        checkoutBlocked = false
         isLoading = false
         state = nil
         errorMessage = nil
@@ -70,8 +84,9 @@ final class BillingService {
             let fetched = try JSONDecoder().decode(BillingState.self, from: data)
             guard current == generation else { return }
             state = fetched
+            checkoutBlocked = false
             errorMessage = nil
-        } catch { if current == generation { errorMessage = error.localizedDescription } }
+        } catch { if current == generation { record(error) } }
     }
 
     func checkout(_ interval: BillingInterval) async -> URL? {
@@ -86,7 +101,7 @@ final class BillingService {
             guard current == generation else { return nil }
             errorMessage = nil
             return url
-        } catch { if current == generation { errorMessage = error.localizedDescription }; return nil }
+        } catch { if current == generation { record(error) }; return nil }
     }
 
     @discardableResult
@@ -106,9 +121,15 @@ final class BillingService {
             let fetched = try JSONDecoder().decode(BillingState.self, from: data)
             guard current == generation else { return nil }
             state = fetched
+            checkoutBlocked = false
             errorMessage = nil
-        } catch { if current == generation { errorMessage = error.localizedDescription } }
+        } catch { if current == generation { record(error) } }
         return nil
+    }
+
+    private func record(_ error: Error) {
+        if case BillingError.unavailable = error { checkoutBlocked = true }
+        errorMessage = error.localizedDescription
     }
 
     private func request(_ path: String, method: String, interval: BillingInterval? = nil) async throws -> Data {
@@ -125,6 +146,9 @@ final class BillingService {
         guard (200 ... 299).contains(response.statusCode) else {
             struct Failure: Decodable { let error: String }
             let message = (try? JSONDecoder().decode(Failure.self, from: data))?.error
+            if response.statusCode == 503, message == "Billing is not enabled" {
+                throw BillingError.unavailable
+            }
             throw BillingError.server(message ?? "Subscription is unavailable. Please try again.")
         }
         return data
@@ -141,9 +165,10 @@ final class BillingService {
 }
 
 private enum BillingError: LocalizedError {
-    case invalidURL, server(String)
+    case invalidURL, unavailable, server(String)
     var errorDescription: String? {
         switch self {
+        case .unavailable: "Payments are temporarily unavailable. Your free access is unchanged. Please try again later."
         case .invalidURL: "The payment link could not be verified. Please refresh and try again."
         case let .server(message): message
         }
