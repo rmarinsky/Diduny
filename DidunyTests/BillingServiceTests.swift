@@ -4,6 +4,18 @@ import Testing
 
 @MainActor
 struct BillingServiceTests {
+    @Test("One-time annual checkout explicitly opts out of renewal")
+    func oneTimeCheckout() async {
+        let service = BillingService(baseURL: { "https://proxy.example" }) { request in
+            let body = try JSONDecoder().decode([String: String].self, from: request.httpBody ?? Data())
+            #expect(body["billingInterval"] == "yearly")
+            #expect(body["paymentMode"] == "one_time")
+            return (Data(#"{"paymentUrl":"https://proxy.example/billing/checkout/once"}"#.utf8),
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        #expect(await service.checkout(.yearly, paymentMode: .oneTime) != nil)
+    }
+
     @Test("Annual checkout sends the yearly interval and uses the server payment URL")
     func annualCheckout() async {
         let service = BillingService(baseURL: { "https://proxy.example" }) { request in

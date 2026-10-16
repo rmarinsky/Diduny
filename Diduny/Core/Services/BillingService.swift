@@ -1,5 +1,10 @@
 import Foundation
 
+nonisolated enum BillingPaymentMode: String, Codable {
+    case recurring
+    case oneTime = "one_time"
+}
+
 nonisolated enum BillingInterval: String, Codable, CaseIterable, Identifiable {
     case monthly, yearly
     var id: String {
@@ -12,6 +17,7 @@ nonisolated struct BillingPlan: Decodable, Identifiable {
     let amount: Decimal
     let currency: String
     let productName: String
+    var paymentMode: BillingPaymentMode? = nil
     var id: BillingInterval {
         billingInterval
     }
@@ -33,6 +39,8 @@ nonisolated struct BillingState: Decodable {
     let pendingBillingInterval: BillingInterval?
     let checkoutAvailable: Bool?
     let pendingPlan: BillingPlan?
+    var paymentMode: BillingPaymentMode? = nil
+    var oneTimeAnnualPlan: BillingPlan? = nil
 
     var hasTwoMonthsFree: Bool {
         guard let monthly = plans.first(where: { $0.billingInterval == .monthly }),
@@ -89,13 +97,13 @@ final class BillingService {
         } catch { if current == generation { record(error) } }
     }
 
-    func checkout(_ interval: BillingInterval) async -> URL? {
+    func checkout(_ interval: BillingInterval, paymentMode: BillingPaymentMode = .recurring) async -> URL? {
         guard !isLoading else { return nil }
         isLoading = true
         let current = generation
         defer { if current == generation { isLoading = false } }
         do {
-            let data = try await request("checkout", method: "POST", interval: interval)
+            let data = try await request("checkout", method: "POST", interval: interval, paymentMode: paymentMode)
             let checkout = try JSONDecoder().decode(BillingCheckout.self, from: data)
             let url = try validatedPaymentURL(checkout.paymentUrl)
             guard current == generation else { return nil }
@@ -132,7 +140,12 @@ final class BillingService {
         errorMessage = error.localizedDescription
     }
 
-    private func request(_ path: String, method: String, interval: BillingInterval? = nil) async throws -> Data {
+    private func request(
+        _ path: String,
+        method: String,
+        interval: BillingInterval? = nil,
+        paymentMode: BillingPaymentMode = .recurring
+    ) async throws -> Data {
         let base = baseURL().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: "\(base)/api/v1/billing/\(path)") else { throw BillingError.invalidURL }
         var request = URLRequest(url: url)
@@ -140,7 +153,9 @@ final class BillingService {
         request.timeoutInterval = 20
         if method == "POST" {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(interval.map { ["billingInterval": $0.rawValue] } ?? [:])
+            var body = interval.map { ["billingInterval": $0.rawValue] } ?? [:]
+            if paymentMode == .oneTime { body["paymentMode"] = paymentMode.rawValue }
+            request.httpBody = try JSONEncoder().encode(body)
         }
         let (data, response) = try await transport(request)
         guard (200 ... 299).contains(response.statusCode) else {

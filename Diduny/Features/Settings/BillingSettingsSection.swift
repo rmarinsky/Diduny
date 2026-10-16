@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import WebKit
 
 @MainActor
 struct BillingSettingsSection: View {
@@ -7,6 +8,7 @@ struct BillingSettingsSection: View {
     @State private var billing = BillingService()
     @State private var interval: BillingInterval = .yearly
     @State private var confirmsCancellation = false
+    @State private var showsPolicies = false
     @Environment(\.openURL) private var openURL
 
     init(isLoggedIn: Bool, billing: BillingService? = nil) {
@@ -24,9 +26,9 @@ struct BillingSettingsSection: View {
                         BillingOfferView(state: state, interval: $interval,
                                          checkoutAvailable: billing.checkoutAvailable,
                                          isLoading: billing.isLoading)
-                        { chosen in
+                        { chosen, mode in
                             Task {
-                                if let url = await billing.checkout(chosen) {
+                                if let url = await billing.checkout(chosen, paymentMode: mode) {
                                     openURL(url)
                                     await billing.refresh()
                                 }
@@ -53,7 +55,8 @@ struct BillingSettingsSection: View {
                 )
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 HStack {
-                    Link("Terms, refunds & privacy", destination: BillingService.publicPolicyURL)
+                    Button("Terms, refunds & privacy") { showsPolicies = true }
+                        .buttonStyle(.link)
                     Spacer()
                     if isLoggedIn {
                         if billing.isLoading { ProgressView().controlSize(.small) }
@@ -63,6 +66,7 @@ struct BillingSettingsSection: View {
                 }.font(.callout)
             }.padding(.vertical, 8)
         }
+        .sheet(isPresented: $showsPolicies) { BillingPolicySheet() }
         .onChange(of: billing.state?.pendingBillingInterval) { _, pending in
             if let pending { interval = pending }
         }
@@ -99,7 +103,10 @@ struct BillingSettingsSection: View {
             state.status == "past_due" ? "Last paid period ended" : "Access until",
             value: date
         ) }
-        if state.cancelAtPeriodEnd {
+        if state.paymentMode == .oneTime {
+            Text("One-time purchase. No automatic renewal or further subscription charges.")
+                .font(.callout).foregroundStyle(.secondary)
+        } else if state.cancelAtPeriodEnd {
             Text("Automatic renewal is off. Your paid access stays available until the date above.")
                 .font(.callout).foregroundStyle(.secondary)
             Button("Resume automatic renewal") {
@@ -138,12 +145,20 @@ struct BillingOfferView: View {
     @Binding var interval: BillingInterval
     let checkoutAvailable: Bool
     let isLoading: Bool
-    let checkout: (BillingInterval) -> Void
+    let checkout: (BillingInterval, BillingPaymentMode) -> Void
     @State private var reviewing = false
+    @State private var showsPlans = false
+    @State private var paymentMode: BillingPaymentMode = .recurring
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var selected: BillingPlan? {
         if pending, let plan = state.pendingPlan { return plan }
+        if paymentMode == .oneTime { return state.oneTimeAnnualPlan }
         return state.plans.first { $0.billingInterval == effectiveInterval }
+    }
+
+    private var effectiveMode: BillingPaymentMode {
+        pending ? state.pendingPlan?.paymentMode ?? .recurring : paymentMode
     }
 
     private var effectiveInterval: BillingInterval {
@@ -157,7 +172,7 @@ struct BillingOfferView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(reviewing ? "Review your subscription" : pending ? "Finish your payment" :
+                Text(reviewing ? "Review your purchase" : pending ? "Finish your payment" :
                     "More room for your voice")
                     .font(.title2.weight(.semibold))
                 Text(pending ? "Your payment has not been confirmed. Continue the original checkout or check its status below."
@@ -166,17 +181,50 @@ struct BillingOfferView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if !reviewing, !pending {
+            if !showsPlans, !pending {
+                VStack(alignment: .leading, spacing: 18) {
+                    Image(systemName: "waveform.circle.fill")
+                        .font(.system(size: 52)).foregroundStyle(Color.accentColor.gradient)
+                        .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
+                        .accessibilityHidden(true)
+                    benefit(
+                        "Keep your train of thought",
+                        "Dictate longer without the free cloud allowance interrupting you.",
+                        icon: "text.cursor"
+                    )
+                    benefit(
+                        "Make conversations useful",
+                        "Turn meeting recordings and audio files into text with cloud transcription.",
+                        icon: "text.bubble"
+                    )
+                    benefit(
+                        "Choose the way you work",
+                        "Pro removes the cloud time limit. Local models remain free and unlimited.",
+                        icon: "cloud"
+                    )
+                    Text(
+                        "Occasional use? Your 2 free cloud hours each month may be enough. Choose Pro when you need more."
+                    )
+                    .font(.callout).foregroundStyle(.secondary)
+                    Button("Explore Pro plans") { showsPlans = true }
+                        .buttonStyle(.borderedProminent).controlSize(.large)
+                        .accessibilityIdentifier("billing.explore")
+                }
+                .transition(.opacity.combined(with: .move(edge: .trailing)))
+            }
+            if showsPlans, !reviewing, !pending {
+                Button("Back to benefits") { showsPlans = false }.buttonStyle(.link)
                 HStack(alignment: .top, spacing: 12) {
                     ForEach(state.plans) { plan in
-                        Button { interval = plan.billingInterval } label: {
+                        Button { paymentMode = .recurring; interval = plan.billingInterval } label: {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
                                     Text(plan.billingInterval == .yearly ? "Annual" : "Monthly").font(.headline)
                                     Spacer(minLength: 4)
-                                    Image(systemName: interval == plan
+                                    Image(systemName: paymentMode == .recurring && interval == plan
                                         .billingInterval ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(interval == plan.billingInterval ? Color
+                                        .foregroundStyle(paymentMode == .recurring && interval == plan
+                                            .billingInterval ? Color
                                             .accentColor : .secondary)
                                 }
                                 Text(plan.formattedPrice).font(.title2.weight(.semibold))
@@ -189,72 +237,220 @@ struct BillingOfferView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading).padding(16)
                             .background(
-                                interval == plan.billingInterval ? Color.accentColor.opacity(0.08) : Color.clear,
+                                paymentMode == .recurring && interval == plan.billingInterval ? Color.accentColor
+                                    .opacity(0.08) : Color.clear,
                                 in: RoundedRectangle(cornerRadius: 10)
                             )
                             .overlay(RoundedRectangle(cornerRadius: 10)
                                 .strokeBorder(
-                                    interval == plan.billingInterval ? Color.accentColor : Color.secondary.opacity(0.3),
-                                    lineWidth: interval == plan.billingInterval ? 2 : 1
+                                    paymentMode == .recurring && interval == plan.billingInterval ? Color
+                                        .accentColor : Color.secondary.opacity(0.3),
+                                    lineWidth: paymentMode == .recurring && interval == plan.billingInterval ? 2 : 1
                                 ))
                             .contentShape(RoundedRectangle(cornerRadius: 10))
                         }.buttonStyle(.plain)
                             .accessibilityLabel(
                                 "\(plan.billingInterval == .yearly ? "Annual" : "Monthly"), \(plan.formattedPrice), \(plan.billingInterval == .yearly ? "per year" : "per month")"
                             )
-                            .accessibilityAddTraits(interval == plan.billingInterval ? .isSelected : [])
+                            .accessibilityAddTraits(paymentMode == .recurring && interval == plan
+                                .billingInterval ? .isSelected : [])
                             .accessibilityIdentifier("billing.plan.\(plan.billingInterval.rawValue)")
                             .disabled(isLoading)
                     }
                 }
             }
-            if let selected {
-                if reviewing || pending {
-                    LabeledContent("Payment period", value: effectiveInterval == .yearly ? "12 months" : "1 month")
-                    if !pending || state.pendingPlan != nil {
-                        LabeledContent("Total payment", value: selected.formattedPrice).font(.headline)
-                    }
-                }
-                if pending, state.pendingPlan == nil {
-                    Text(
-                        "Review the original amount and renewal terms on WayForPay before paying. This checkout keeps its original price."
-                    )
-                    .font(.callout).foregroundStyle(.secondary)
-                } else {
-                    Text(
-                        "\(selected.formattedPrice) charged \(effectiveInterval == .yearly ? "once a year" : "each month"). Renews automatically. Cancel renewal at any time in Account; access stays available until the paid period ends."
-                    )
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-                if reviewing {
-                    Text(
-                        "Payment opens in your browser. Pro activates after payment is confirmed. Return here to check the status."
-                    )
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-                if checkoutAvailable {
-                    HStack(spacing: 12) {
-                        Button(reviewing || pending ? "Continue to WayForPay" :
-                            "Review \(interval == .yearly ? "annual" : "monthly") plan")
-                        {
-                            if reviewing || pending { checkout(effectiveInterval) } else { reviewing = true }
-                        }.buttonStyle(.borderedProminent).controlSize(.large)
-                            .accessibilityIdentifier("billing.continue").disabled(isLoading)
-                        if reviewing, !pending {
-                            Button("Back to plans") { reviewing = false }.disabled(isLoading)
+            if showsPlans, !reviewing, !pending, let annual = state.oneTimeAnnualPlan {
+                Button { interval = .yearly; paymentMode = .oneTime } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("One year, no renewal").font(.headline)
+                            Text("\(annual.formattedPrice) once · 12 months of Pro").font(.callout)
+                            Text("More payment methods, including up to 3 bank payments where available.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: paymentMode == .oneTime ? "checkmark.circle.fill" : "circle")
+                    }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            Color.accentColor.opacity(paymentMode == .oneTime ? 0.08 : 0),
+                            in: RoundedRectangle(cornerRadius: 10)
+                        )
+                        .overlay(RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(paymentMode == .oneTime ? Color.accentColor : Color.secondary.opacity(0.3)))
+                }.buttonStyle(.plain).disabled(isLoading)
+                    .accessibilityIdentifier("billing.plan.one_time")
+                    .accessibilityAddTraits(paymentMode == .oneTime ? .isSelected : [])
+                Text(
+                    "Monthly for flexibility. Annual for regular use. One-time annual if you prefer to decide again next year."
+                )
+                .font(.callout).foregroundStyle(.secondary)
+            }
+            if showsPlans || pending {
+                if let selected {
+                    if reviewing || pending {
+                        LabeledContent("Payment period", value: effectiveInterval == .yearly ? "12 months" : "1 month")
+                        if !pending || state.pendingPlan != nil {
+                            LabeledContent("Total payment", value: selected.formattedPrice).font(.headline)
                         }
                     }
-                } else {
-                    Label("Payments are temporarily unavailable. You can keep using the free plan and local models.",
-                          systemImage: "clock")
+                    if pending, state.pendingPlan == nil {
+                        Text(
+                            "Review the original amount and renewal terms on WayForPay before paying. This checkout keeps its original price."
+                        )
+                        .font(.callout).foregroundStyle(.secondary)
+                    } else if effectiveMode == .oneTime {
+                        Text(
+                            "\(selected.formattedPrice) paid once for 12 months. No automatic renewal. Bank installment payments, if selected, follow the bank’s schedule and do not renew Pro."
+                        )
+                        .font(.callout).foregroundStyle(.secondary)
+                    } else {
+                        Text(
+                            "\(selected.formattedPrice) charged \(effectiveInterval == .yearly ? "once a year" : "each month"). Renews automatically. Cancel renewal at any time in Account; access stays available until the paid period ends."
+                        )
+                        .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if reviewing {
+                        Text(
+                            "Payment opens in your browser. Pro activates after payment is confirmed. Return here to check the status."
+                        )
+                        .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if checkoutAvailable {
+                        HStack(spacing: 12) {
+                            Button(reviewing || pending ? "Continue to WayForPay" :
+                                "Review \(interval == .yearly ? "annual" : "monthly") plan")
+                            {
+                                if reviewing || pending { checkout(effectiveInterval, effectiveMode) }
+                                else { reviewing = true }
+                            }.buttonStyle(.borderedProminent).controlSize(.large)
+                                .accessibilityIdentifier("billing.continue").disabled(isLoading)
+                            if reviewing, !pending {
+                                Button("Back to plans") { reviewing = false }.disabled(isLoading)
+                            }
+                        }
+                    } else {
+                        Label(
+                            "Payments are temporarily unavailable. You can keep using the free plan and local models.",
+                            systemImage: "clock"
+                        )
                         .font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("billing.unavailable")
+                    }
+                } else {
+                    Text("Prices could not be loaded. Check payment status to try again.").foregroundStyle(.secondary)
                 }
-            } else {
-                Text("Prices could not be loaded. Check payment status to try again.").foregroundStyle(.secondary)
             }
         }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: showsPlans)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: reviewing)
         .onChange(of: interval) { _, _ in reviewing = false }
+    }
+
+    private func benefit(_ title: String, _ detail: String, icon: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon).font(.title3).foregroundStyle(Color.accentColor).frame(width: 25)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline)
+                Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+@MainActor
+private struct BillingPolicySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var loading = true
+    @State private var failed = false
+    @State private var attempt = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Terms, refunds & privacy").font(.headline)
+                Spacer()
+                if loading { ProgressView().controlSize(.small) }
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }.padding()
+            Divider()
+            if failed {
+                ContentUnavailableView {
+                    Label("Could not load the policy", systemImage: "wifi.exclamationmark")
+                } description: {
+                    Text("Check your connection and try again.")
+                } actions: {
+                    Button("Try again") { failed = false; loading = true; attempt += 1 }
+                }
+            } else {
+                BillingPolicyWebView(loading: $loading, failed: $failed).id(attempt)
+            }
+        }.frame(width: 680, height: 600)
+    }
+}
+
+@MainActor
+private struct BillingPolicyWebView: NSViewRepresentable {
+    @Binding var loading: Bool
+    @Binding var failed: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        let view = WKWebView(frame: .zero, configuration: configuration)
+        view.navigationDelegate = context.coordinator
+        view.load(URLRequest(url: BillingService.publicPolicyURL, timeoutInterval: 20))
+        return view
+    }
+
+    func updateNSView(_: WKWebView, context _: Context) {}
+    static func dismantleNSView(_ view: WKWebView, coordinator _: Coordinator) {
+        view.stopLoading()
+        view.navigationDelegate = nil
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        let parent: BillingPolicyWebView
+        init(parent: BillingPolicyWebView) {
+            self.parent = parent
+        }
+
+        func webView(_: WKWebView, didFinish _: WKNavigation!) {
+            parent.loading = false
+        }
+
+        func webView(_: WKWebView, didFail _: WKNavigation!, withError _: Error) {
+            parent.loading = false; parent.failed = true
+        }
+
+        func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError _: Error) {
+            parent.loading = false; parent.failed = true
+        }
+
+        func webView(_: WKWebView, decidePolicyFor action: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void)
+        {
+            guard let url = action.request.url,
+                  url.scheme == "https", url.host == "rmarinsky.com.ua",
+                  url.user == nil, url.password == nil, url.port == nil || url.port == 443
+            else {
+                decisionHandler(.cancel); return
+            }
+            decisionHandler(.allow)
+        }
+
+        func webView(_: WKWebView, decidePolicyFor response: WKNavigationResponse,
+                     decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void)
+        {
+            if let http = response.response as? HTTPURLResponse, !(200 ... 299).contains(http.statusCode) {
+                parent.loading = false; parent.failed = true; decisionHandler(.cancel)
+            } else { decisionHandler(.allow) }
+        }
     }
 }
