@@ -8,7 +8,7 @@ final class HistoryPaletteWindowController: NSObject, NSWindowDelegate {
     private var panel: NSPanel?
     private var eventMonitor: Any?
 
-    private override init() {
+    override private init() {
         super.init()
     }
 
@@ -37,7 +37,7 @@ final class HistoryPaletteWindowController: NSObject, NSWindowDelegate {
             defer: false
         )
 
-        panel.title = "History"
+        panel.title = String(localized: "History")
         panel.contentView = hostingView
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
@@ -70,7 +70,7 @@ final class HistoryPaletteWindowController: NSObject, NSWindowDelegate {
         panel = nil
     }
 
-    nonisolated func windowWillClose(_ notification: Notification) {
+    nonisolated func windowWillClose(_: Notification) {
         Task { @MainActor in
             cleanupMonitor()
             panel = nil

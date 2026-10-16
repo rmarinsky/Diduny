@@ -11,7 +11,9 @@ struct AudioTimeoutError: Error, LocalizedError {
 
     var errorDescription: String? {
         "Audio operation '\(operation)' timed out after \(Int(timeout)) seconds. " +
-            "This may indicate an audio device issue. Please try again or select a different microphone."
+            String(
+                localized: "This may indicate an audio device issue. Please try again or select a different microphone."
+            )
     }
 }
 

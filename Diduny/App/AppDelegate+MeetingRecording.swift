@@ -13,6 +13,7 @@ extension AppDelegate {
 
     func toggleMeetingRecording(
         provider: TranscriptionProvider,
+        calendarMeeting: CalendarMeeting? = nil,
         cancelPipeline: (() async -> Void)? = nil
     ) {
         let meetingRecordingState = appState.meetingRecordingState
@@ -34,8 +35,10 @@ extension AppDelegate {
             meetingPipelineTask?.cancel()
             appState.meetingRecordingState = .processing
             handleMeetingStateChange(.processing)
+            let generation = meetingPipelineGeneration
             meetingPipelineTask = Task {
-                await self.startMeetingRecording(provider: provider)
+                await self.startMeetingRecording(provider: provider, calendarMeeting: calendarMeeting,
+                                                 pipelineGeneration: generation)
             }
         case .recording:
             meetingPipelineTask = Task {
@@ -208,6 +211,9 @@ extension AppDelegate {
 
     func startMeetingRecording(
         provider requestedProvider: TranscriptionProvider,
+        calendarMeeting: CalendarMeeting? = nil,
+        pipelineGeneration: UInt64? = nil,
+        canStart: (() -> Bool)? = nil,
         ensureScreenRecordingPermission: @escaping () async -> Bool = {
             await PermissionManager.shared.ensureScreenRecordingPermission(context: .meetingRecording)
         },
@@ -215,8 +221,16 @@ extension AppDelegate {
     ) async {
         Log.app.info("startMeetingRecording: BEGIN")
 
-        guard !Task.isCancelled, canStartRecording(kind: .meeting) else {
-            Log.app.info("startMeetingRecording: blocked by another active recording mode")
+        let generation = pipelineGeneration ?? meetingPipelineGeneration
+        guard generation == meetingPipelineGeneration, !Task.isCancelled else { return }
+        guard canStart?() ?? canStartRecording(kind: .meeting) else {
+            if generation == meetingPipelineGeneration,
+               appState.meetingRecordingState == .processing,
+               activeMeetingTranscriptionSessionID == nil {
+                appState.meetingRecordingState = .idle
+                handleMeetingStateChange(.idle)
+            }
+            Log.app.info("startMeetingRecording: startup rejected")
             return
         }
 
@@ -250,7 +264,7 @@ extension AppDelegate {
         guard hasPermission else {
             Log.app.warning("Screen capture permission not granted")
             await MainActor.run {
-                appState.errorMessage = "Screen recording permission required for meeting capture"
+                appState.errorMessage = String(localized: "Screen recording permission required for meeting capture")
                 appState.meetingRecordingState = .error
                 handleMeetingStateChange(.error)
             }
@@ -384,6 +398,11 @@ extension AppDelegate {
                     createdAt: startTime,
                     sourceDevice: deviceInfo
                 )
+                if let calendarMeeting,
+                   !RecordingsLibraryStorage.shared.linkCalendarMeeting(id: recordingId, meeting: calendarMeeting) {
+                    DictationOverlayController.shared.showInfoDuringRecording(
+                        message: String(localized: "Recording started, but the calendar link could not be saved."), mode: .meeting, duration: 4)
+                }
             }
 
             startMetrics.finish(outcome: "ok")
@@ -939,7 +958,6 @@ extension AppDelegate {
                     appState.meetingRecordingStartTime = nil
                     handleMeetingStateChange(.success)
                 }
-
             }
             Log.app.info("stopMeetingRecording: SUCCESS")
 
@@ -974,7 +992,9 @@ extension AppDelegate {
                     }
                     if !cloudModeEnabled, !didEnqueue {
                         DictationOverlayController.shared.showInfo(
-                            message: String(localized: "Recording saved. Download a local model in Settings to transcribe it."),
+                            message: String(
+                                localized: "Recording saved. Download a local model in Settings to transcribe it."
+                            ),
                             duration: 3.0
                         )
                     }
@@ -1037,9 +1057,8 @@ extension AppDelegate {
             } else if let audioURL = capturedAudioURL {
                 let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                 let hasLiveRow = RecordingsLibraryStorage.shared.recordings.contains { $0.id == recordingId }
-                let saved: Bool
-                if hasLiveRow {
-                    saved = RecordingsLibraryStorage.shared.finalizeInProgressRecording(
+                let saved: Bool = if hasLiveRow {
+                    RecordingsLibraryStorage.shared.finalizeInProgressRecording(
                         id: recordingId,
                         audioURL: audioURL,
                         duration: duration,
@@ -1048,7 +1067,7 @@ extension AppDelegate {
                         forceSave: true
                     )
                 } else {
-                    saved = RecordingsLibraryStorage.shared.saveRecording(
+                    RecordingsLibraryStorage.shared.saveRecording(
                         id: recordingId,
                         audioURL: audioURL,
                         type: .meeting,

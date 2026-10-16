@@ -19,8 +19,8 @@ enum ImportedMediaPicker {
     @MainActor
     static func selectFiles() -> [URL]? {
         let panel = NSOpenPanel()
-        panel.title = "Select Audio or Video Files to Transcribe"
-        panel.prompt = "Transcribe"
+        panel.title = String(localized: "Select Audio or Video Files to Transcribe")
+        panel.prompt = String(localized: "Transcribe")
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -71,7 +71,7 @@ struct TranscriptionBatchInspectorView: View {
             selectionID: settings.selectedBrowserSessionID,
             legacyChromeProfileID: settings.selectedChromeProfileID
         )
-        self.browserSessions = sessions
+        browserSessions = sessions
         _name = State(initialValue: batch.name)
         _description = State(initialValue: batch.description)
         _selectedBrowserSessionID = State(initialValue: selectedSession?.selectionID ?? "")
@@ -331,7 +331,7 @@ struct TranscriptionBatchInspectorView: View {
                 if recordings.deleteBatch(currentBatch) {
                     onClose()
                 } else {
-                    saveErrorMessage = "The batch and its recordings were left unchanged."
+                    saveErrorMessage = String(localized: "The batch and its recordings were left unchanged.")
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -406,7 +406,7 @@ struct TranscriptionBatchInspectorView: View {
                     Text("\(youtubeURLValidation.sources.count) valid")
                         .foregroundStyle(.green)
                     if youtubeURLValidation.duplicateCount > 0 {
-                        Text("\(youtubeURLValidation.duplicateCount) duplicate\(youtubeURLValidation.duplicateCount == 1 ? "" : "s")")
+                        Text("Duplicates: \(youtubeURLValidation.duplicateCount)")
                     }
                     if !youtubeURLValidation.invalidValues.isEmpty {
                         Text("\(youtubeURLValidation.invalidValues.count) invalid")
@@ -421,7 +421,7 @@ struct TranscriptionBatchInspectorView: View {
                     Button("Paste") {
                         youtubeURLText = NSPasteboard.general.string(forType: .string) ?? youtubeURLText
                     }
-                    Button("Add \(youtubeURLValidation.sources.count) URL\(youtubeURLValidation.sources.count == 1 ? "" : "s")") {
+                    Button("Add URLs (\(youtubeURLValidation.sources.count))") {
                         addYouTubeURLs()
                     }
                     .buttonStyle(.borderedProminent)
@@ -466,7 +466,7 @@ struct TranscriptionBatchInspectorView: View {
                 .frame(maxHeight: 180)
                 HStack {
                     Spacer()
-                    Button("Add \(selectedRecordingIDs.count) Recording\(selectedRecordingIDs.count == 1 ? "" : "s")") {
+                    Button("Add recordings (\(selectedRecordingIDs.count))") {
                         addExistingRecordings()
                     }
                     .buttonStyle(.borderedProminent)
@@ -534,12 +534,11 @@ struct TranscriptionBatchInspectorView: View {
         )
         guard accepted else {
             saveErrorMessage = batchService.batchError
-                ?? "Another transcription batch is active. Finish it before updating this batch."
+                ?? String(localized: "Another transcription batch is active. Finish it before updating this batch.")
             return false
         }
         return true
     }
-
 }
 
 struct NewTranscriptionBatchPanel: View {
@@ -567,7 +566,7 @@ struct NewTranscriptionBatchPanel: View {
         self.onClose = onClose
         let sessions = BrowserSessionStore.discover()
         let settings = SettingsStorage.shared
-        self.browserSessions = sessions
+        browserSessions = sessions
         _selectedBrowserSessionID = State(
             initialValue: BrowserSessionStore.selected(
                 from: sessions,
@@ -775,11 +774,14 @@ struct NewTranscriptionBatchPanel: View {
             )
             guard accepted else {
                 validationError = batchService.batchError
-                    ?? "Another transcription batch is active. Finish or retry it before creating a new batch."
+                    ??
+                    String(
+                        localized: "Another transcription batch is active. Finish or retry it before creating a new batch."
+                    )
                 return
             }
             guard let batchID = batchService.lastCreatedBatchID else {
-                validationError = "The transcription batch was created but could not be opened."
+                validationError = String(localized: "The transcription batch was created but could not be opened.")
                 return
             }
             onCreated(batchID)

@@ -6,7 +6,7 @@ import SwiftUI
 @MainActor
 final class MainWindowController {
     static let shared = MainWindowController()
-    static let batchComposerActionTitle = "Batch Files and URLs…"
+    static let batchComposerActionTitle = String(localized: "Batch Files and URLs…")
 
     var requestedSection: MainSection?
     var requestedRecordingID: UUID?

@@ -231,7 +231,7 @@ extension AppDelegate {
         guard micGranted else {
             Log.app.warning("startRecording: Microphone permission not granted")
             await MainActor.run {
-                appState.errorMessage = "Microphone access required"
+                appState.errorMessage = String(localized: "Microphone access required")
                 appState.recordingState = .error
                 handleRecordingStateChange(.error)
             }
@@ -246,7 +246,9 @@ extension AppDelegate {
             guard WhisperModelManager.shared.selectedModel() != nil else {
                 Log.app.warning("startRecording: No Whisper model selected")
                 await MainActor.run {
-                    appState.errorMessage = "No Whisper model downloaded. Please download one in Settings."
+                    appState
+                        .errorMessage =
+                        String(localized: "No Whisper model downloaded. Please download one in Settings.")
                     appState.recordingState = .error
                     handleRecordingStateChange(.error)
                 }
@@ -280,7 +282,7 @@ extension AppDelegate {
         }
         guard let device else {
             Log.app.error("startRecording: No audio input devices available")
-            appState.errorMessage = "No microphone found. Please connect a microphone."
+            appState.errorMessage = String(localized: "No microphone found. Please connect a microphone.")
             appState.recordingState = .error
             handleRecordingStateChange(.error)
             return
@@ -505,6 +507,11 @@ extension AppDelegate {
             let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
             capturedAudioData = compressedData
             let provider = voiceTranscriptionProvider
+            Task { await AnalyticsService.shared.record(
+                duration: duration,
+                mode: provider.rawValue,
+                scenario: "dictation"
+            ) }
             let shouldCompleteSetup = !OnboardingManager.shared.hasCompletedOnboarding
                 && provider == .cloud
                 && AuthService.shared.isLoggedIn
@@ -648,7 +655,9 @@ extension AppDelegate {
                 }
                 guard appState.recordingState == .processing else { return }
                 await MainActor.run {
-                    appState.errorMessage = "Cloud limit reached. Download a local model in Settings to continue."
+                    appState
+                        .errorMessage =
+                        String(localized: "Cloud limit reached. Download a local model in Settings to continue.")
                     appState.isEmptyTranscription = false
                     appState.deviceFallbackWarning = nil
                     appState.recordingState = .error

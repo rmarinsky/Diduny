@@ -12,19 +12,21 @@ enum TranscriptionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .networkError(error):
-            "Network error: \(error.localizedDescription)"
+            String(localized: "Network error: \(error.localizedDescription)")
         case let .apiError(message):
-            "API error: \(message)"
+            String(localized: "API error: \(message)")
         case .invalidResponse:
-            "Invalid response from server"
+            String(localized: "Invalid response from server")
         case .emptyTranscription:
-            "No speech detected"
+            String(localized: "No speech detected")
         case let .cloudConnectionFailed(reason):
-            "Cloud connection failed: \(reason)"
+            String(localized: "Cloud connection failed: \(reason)")
         case .invalidURL:
-            "Invalid API URL"
+            String(localized: "Invalid API URL")
         case let .usageLimitExceeded(usedHours, limitHours):
-            "Cloud usage limit reached (\(String(format: "%.1f", usedHours))h / \(String(format: "%.0f", limitHours))h). Using local model."
+            String(
+                localized: "Cloud usage limit reached (\(String(format: "%.1f", usedHours))h / \(String(format: "%.0f", limitHours))h). Using local model."
+            )
         }
     }
 }
@@ -45,13 +47,13 @@ enum AudioError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noInputDevice:
-            "No audio input device found"
+            String(localized: "No audio input device found")
         case .permissionDenied:
-            "Microphone permission denied. Please enable in System Settings."
+            String(localized: "Microphone permission denied. Please enable in System Settings.")
         case let .recordingFailed(reason):
-            "Recording failed: \(reason)"
+            String(localized: "Recording failed: \(reason)")
         case .deviceNotFound:
-            "Selected audio device not found"
+            String(localized: "Selected audio device not found")
         }
     }
 }
@@ -64,11 +66,13 @@ enum RealtimeTranscriptionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .connectionFailed(reason):
-            "Real-time connection failed: \(reason)"
+            String(localized: "Real-time connection failed: \(reason)")
         case let .webSocketError(error):
-            "WebSocket error: \(error.localizedDescription)"
+            String(localized: "WebSocket error: \(error.localizedDescription)")
         case let .usageLimitExceeded(usedHours, limitHours):
-            "Cloud usage limit reached (\(String(format: "%.1f", usedHours))h / \(String(format: "%.0f", limitHours))h). Using local model."
+            String(
+                localized: "Cloud usage limit reached (\(String(format: "%.1f", usedHours))h / \(String(format: "%.0f", limitHours))h). Using local model."
+            )
         }
     }
 }
@@ -81,11 +85,11 @@ enum KeychainError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .saveFailed:
-            "Failed to save to Keychain"
+            String(localized: "Failed to save to Keychain")
         case .readFailed:
-            "Failed to read from Keychain"
+            String(localized: "Failed to read from Keychain")
         case .deleteFailed:
-            "Failed to delete from Keychain"
+            String(localized: "Failed to delete from Keychain")
         }
     }
 }

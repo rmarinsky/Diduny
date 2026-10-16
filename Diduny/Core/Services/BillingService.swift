@@ -1,5 +1,10 @@
 import Foundation
 
+nonisolated enum BillingPaymentMode: String, Codable {
+    case recurring
+    case oneTime = "one_time"
+}
+
 nonisolated enum BillingInterval: String, Codable, CaseIterable, Identifiable {
     case monthly, yearly
     var id: String {
@@ -12,6 +17,7 @@ nonisolated struct BillingPlan: Decodable, Identifiable {
     let amount: Decimal
     let currency: String
     let productName: String
+    var paymentMode: BillingPaymentMode? = nil
     var id: BillingInterval {
         billingInterval
     }
@@ -31,12 +37,26 @@ nonisolated struct BillingState: Decodable {
     let plans: [BillingPlan]
     let pendingOrderReference: String?
     let pendingBillingInterval: BillingInterval?
+    let checkoutAvailable: Bool?
+    let pendingPlan: BillingPlan?
+    var paymentMode: BillingPaymentMode? = nil
+    var oneTimeAnnualPlan: BillingPlan? = nil
+
+    var hasTwoMonthsFree: Bool {
+        guard let monthly = plans.first(where: { $0.billingInterval == .monthly }),
+              let annual = plans.first(where: { $0.billingInterval == .yearly }),
+              monthly.amount > 0, monthly.currency == annual.currency else { return false }
+        return annual.amount == monthly.amount * 10
+    }
 }
 
 @Observable
 @MainActor
 final class BillingService {
-    nonisolated static let publicPolicyURL = URL(string: "https://rmarinsky.com.ua/en/legal/#diduny-offer")!
+    nonisolated static var publicPolicyURL: URL {
+        let path = Bundle.main.preferredLocalizations.first == "uk" ? "legal" : "en/legal"
+        return URL(string: "https://rmarinsky.com.ua/\(path)/#diduny-offer")!
+    }
 
     typealias Transport = @MainActor (URLRequest) async throws -> (Data, HTTPURLResponse)
     private let transport: Transport
@@ -45,6 +65,10 @@ final class BillingService {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     private var generation = 0
+    private var checkoutBlocked = false
+    var checkoutAvailable: Bool {
+        state?.checkoutAvailable != false && !checkoutBlocked
+    }
 
     init(baseURL: @escaping @MainActor () -> String = { SettingsStorage.shared.proxyBaseURL },
          transport: @escaping Transport = { try await AuthService.shared.performWithAuth($0) })
@@ -55,6 +79,7 @@ final class BillingService {
 
     func reset() {
         generation += 1
+        checkoutBlocked = false
         isLoading = false
         state = nil
         errorMessage = nil
@@ -70,23 +95,24 @@ final class BillingService {
             let fetched = try JSONDecoder().decode(BillingState.self, from: data)
             guard current == generation else { return }
             state = fetched
+            checkoutBlocked = false
             errorMessage = nil
-        } catch { if current == generation { errorMessage = error.localizedDescription } }
+        } catch { if current == generation { record(error) } }
     }
 
-    func checkout(_ interval: BillingInterval) async -> URL? {
+    func checkout(_ interval: BillingInterval, paymentMode: BillingPaymentMode = .recurring) async -> URL? {
         guard !isLoading else { return nil }
         isLoading = true
         let current = generation
         defer { if current == generation { isLoading = false } }
         do {
-            let data = try await request("checkout", method: "POST", interval: interval)
+            let data = try await request("checkout", method: "POST", interval: interval, paymentMode: paymentMode)
             let checkout = try JSONDecoder().decode(BillingCheckout.self, from: data)
             let url = try validatedPaymentURL(checkout.paymentUrl)
             guard current == generation else { return nil }
             errorMessage = nil
             return url
-        } catch { if current == generation { errorMessage = error.localizedDescription }; return nil }
+        } catch { if current == generation { record(error) }; return nil }
     }
 
     @discardableResult
@@ -106,12 +132,23 @@ final class BillingService {
             let fetched = try JSONDecoder().decode(BillingState.self, from: data)
             guard current == generation else { return nil }
             state = fetched
+            checkoutBlocked = false
             errorMessage = nil
-        } catch { if current == generation { errorMessage = error.localizedDescription } }
+        } catch { if current == generation { record(error) } }
         return nil
     }
 
-    private func request(_ path: String, method: String, interval: BillingInterval? = nil) async throws -> Data {
+    private func record(_ error: Error) {
+        if case BillingError.unavailable = error { checkoutBlocked = true }
+        errorMessage = error.localizedDescription
+    }
+
+    private func request(
+        _ path: String,
+        method: String,
+        interval: BillingInterval? = nil,
+        paymentMode: BillingPaymentMode = .recurring
+    ) async throws -> Data {
         let base = baseURL().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: "\(base)/api/v1/billing/\(path)") else { throw BillingError.invalidURL }
         var request = URLRequest(url: url)
@@ -119,12 +156,17 @@ final class BillingService {
         request.timeoutInterval = 20
         if method == "POST" {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(interval.map { ["billingInterval": $0.rawValue] } ?? [:])
+            var body = interval.map { ["billingInterval": $0.rawValue] } ?? [:]
+            if paymentMode == .oneTime { body["paymentMode"] = paymentMode.rawValue }
+            request.httpBody = try JSONEncoder().encode(body)
         }
         let (data, response) = try await transport(request)
         guard (200 ... 299).contains(response.statusCode) else {
             struct Failure: Decodable { let error: String }
             let message = (try? JSONDecoder().decode(Failure.self, from: data))?.error
+            if response.statusCode == 503, message == "Billing is not enabled" {
+                throw BillingError.unavailable
+            }
             throw BillingError.server(message ?? "Subscription is unavailable. Please try again.")
         }
         return data
@@ -141,11 +183,21 @@ final class BillingService {
 }
 
 private enum BillingError: LocalizedError {
-    case invalidURL, server(String)
+    case invalidURL, unavailable, server(String)
     var errorDescription: String? {
         switch self {
-        case .invalidURL: "The payment link could not be verified. Please refresh and try again."
-        case let .server(message): message
+        case .unavailable: String(
+                localized: "Payments are temporarily unavailable. Your free access is unchanged. Please try again later."
+            )
+        case .invalidURL: String(localized: "The payment link could not be verified. Please refresh and try again.")
+        case let .server(message):
+            Bundle.main.localizedString(
+                forKey: message,
+                value: String(
+                    localized: "Could not update your subscription. Check payment status or contact support."
+                ),
+                table: nil
+            )
         }
     }
 }

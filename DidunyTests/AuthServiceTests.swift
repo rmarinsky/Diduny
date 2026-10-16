@@ -28,10 +28,10 @@ final class AuthServiceTests: XCTestCase {
         super.tearDown()
     }
 
-    func test_hasStoredSessionRecognizesLegacySessionBeforeMigration() {
+    func test_legacySessionRequiresNewSignInBeforeLocalAccess() {
         UserDefaults.standard.set(true, forKey: legacySessionPresentKey)
 
-        XCTAssertTrue(AuthService.hasStoredSession)
+        XCTAssertFalse(AuthService.hasStoredSession)
     }
 
     @MainActor
@@ -91,7 +91,7 @@ final class AuthServiceTests: XCTestCase {
             return Self.response(for: request, body: #"{"message":"unused"}"#)
         }
 
-        for code in ["", "12345", "1234567", "12A456"] {
+        for code in ["", "12345", "1234567", "12A456", "١٢٣٤٥٦"] {
             do {
                 try await service.verifyOtp(email: "roman@example.com", code: code)
                 XCTFail("Expected invalid OTP: \(code)")
@@ -409,4 +409,49 @@ private final class MockAuthURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     override func stopLoading() {}
+}
+
+@MainActor
+final class OptionalAnalyticsTests: XCTestCase {
+    func test_withdrawalDuringRefreshRejectsStaleEnabledResponse() async {
+        var pending: CheckedContinuation<(Data, HTTPURLResponse), Error>?
+        var events = 0
+        let service = AnalyticsService(baseURL: { "https://race.example" }, account: { "race@example.test" }) { request in
+            if request.url!.path.hasSuffix("events") { events += 1 }
+            if request.httpMethod == "GET" {
+                return try await withCheckedThrowingContinuation { pending = $0 }
+            }
+            let enabled = String(data: request.httpBody ?? Data(), encoding: .utf8)?.contains("true") == true
+            return (Data("{\"enabled\":\(enabled),\"revision\":\"revision\"}".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        await service.setEnabled(true)
+        let refresh = Task { await service.refresh() }
+        while pending == nil { await Task.yield() }
+        await service.setEnabled(false)
+        XCTAssertFalse(service.enabled)
+        pending?.resume(returning: (Data(#"{"enabled":true,"revision":"old"}"#.utf8), HTTPURLResponse(url: URL(string:"https://race.example")!, statusCode:200,httpVersion:nil,headerFields:nil)!))
+        await refresh.value
+        await service.record(duration: 10, mode: "local", scenario: "dictation")
+        XCTAssertFalse(service.enabled)
+        XCTAssertEqual(events, 0)
+    }
+
+    func test_defaultOffAndWithdrawalStopsEventsWithoutChangingAccount() async {
+        var paths: [String] = []
+        let service = AnalyticsService(baseURL: { "https://test.example" }, account: { "a@example.test" }) { request in
+            paths.append(request.url!.path)
+            let enabled = String(data: request.httpBody ?? Data(), encoding: .utf8)?.contains("true") == true
+            let body = request.url!.path.hasSuffix("consent") ? "{\"enabled\":\(enabled),\"revision\":\"revision-1\"}" : "{\"accepted\":true}"
+            return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        await service.record(duration: 12, mode: "local", scenario: "dictation")
+        XCTAssertTrue(paths.isEmpty)
+        await service.setEnabled(true)
+        await service.record(duration: 12, mode: "local", scenario: "dictation")
+        XCTAssertEqual(paths.filter { $0.hasSuffix("events") }.count, 1)
+        await service.setEnabled(false)
+        await service.record(duration: 12, mode: "local", scenario: "dictation")
+        XCTAssertEqual(paths.filter { $0.hasSuffix("events") }.count, 1)
+        XCTAssertFalse(service.enabled)
+    }
 }

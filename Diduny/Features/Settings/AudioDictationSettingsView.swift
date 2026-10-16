@@ -9,7 +9,7 @@ struct AudioDictationSettingsView: View {
     @State private var isTestPlaying = false
     @State private var testRecordingURL: URL?
     @State private var testAudioPlayer: AVAudioPlayer?
-    @State private var testStatusMessage = ""
+    @State private var testStatusMessage = String(localized: "")
 
     @State private var transcriptionProvider: TranscriptionProvider = SettingsStorage.shared.transcriptionProvider
     @State private var translationProvider: TranscriptionProvider = SettingsStorage.shared.translationProvider
@@ -74,7 +74,7 @@ struct AudioDictationSettingsView: View {
             let preferredIsStale = appState.preferredDeviceUID != nil && effectiveUID == nil
 
             microphoneRow(
-                title: "System Default",
+                title: String(localized: "System Default"),
                 subtitle: systemDefaultSubtitle(preferredIsStale: preferredIsStale),
                 isSelected: isSystemDefault
             ) {
@@ -112,7 +112,10 @@ struct AudioDictationSettingsView: View {
                         Button {
                             if isTestPlaying { stopTestPlayback() } else { playTestRecording() }
                         } label: {
-                            Label(isTestPlaying ? "Stop" : "Play", systemImage: isTestPlaying ? "stop.fill" : "play.fill")
+                            Label(
+                                isTestPlaying ? "Stop" : "Play",
+                                systemImage: isTestPlaying ? "stop.fill" : "play.fill"
+                            )
                         }
                         .buttonStyle(.bordered)
                     }
@@ -129,7 +132,10 @@ struct AudioDictationSettingsView: View {
                                     .frame(height: 8)
                                 RoundedRectangle(cornerRadius: 4)
                                     .fill(levelColor)
-                                    .frame(width: geometry.size.width * CGFloat(testRecorderService.audioLevel), height: 8)
+                                    .frame(
+                                        width: geometry.size.width * CGFloat(testRecorderService.audioLevel),
+                                        height: 8
+                                    )
                             }
                         }
                         .frame(height: 8)
@@ -180,7 +186,7 @@ struct AudioDictationSettingsView: View {
                         title: displayName(for: language.code),
                         subtitle: language.sourceName,
                         isMuted: disabledDetectedLanguageCodes.contains(language.code),
-                        source: "Mac layout"
+                        source: String(localized: "Mac layout")
                     )
                 })
 
@@ -193,7 +199,7 @@ struct AudioDictationSettingsView: View {
                         LanguageChipModel(
                             code: code,
                             title: displayName(for: code),
-                            subtitle: "Manual",
+                            subtitle: String(localized: "Manual"),
                             isMuted: false,
                             source: "Manual"
                         )
@@ -201,9 +207,12 @@ struct AudioDictationSettingsView: View {
                 }
 
                 HStack(spacing: 8) {
-                    Label("Sent to Soniox: \(sonioxLanguageHints.joined(separator: ", "))", systemImage: "antenna.radiowaves.left.and.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Label(
+                        "Sent to Soniox: \(sonioxLanguageHints.joined(separator: ", "))",
+                        systemImage: "antenna.radiowaves.left.and.right"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                     Spacer()
                     Button("Manage...") {
                         isManagingSpeechLanguages = true
@@ -218,10 +227,10 @@ struct AudioDictationSettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(
                     "Cloud voice translation uses the second language as its output. " +
-                    "Local Whisper outputs English. Cloud meeting translation works in both directions."
+                        "Local Whisper outputs English. Cloud meeting translation works in both directions."
                 )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 ForEach(translationPairs) { pair in
                     TranslationPairRow(
                         pair: pair,
@@ -342,7 +351,7 @@ struct AudioDictationSettingsView: View {
 
     private func systemDefaultSubtitle(preferredIsStale: Bool) -> String {
         if preferredIsStale {
-            return "Unavailable -> System Default"
+            return String(localized: "Unavailable -> System Default")
         }
         return deviceManager.defaultDevice?.name ?? ""
     }
@@ -408,7 +417,9 @@ struct AudioDictationSettingsView: View {
         testRecorderService.audioLevel > 0.8 ? .red : testRecorderService.audioLevel > 0.5 ? .yellow : .green
     }
 
-    private var isTestRecording: Bool { testRecorderService.isRecording }
+    private var isTestRecording: Bool {
+        testRecorderService.isRecording
+    }
 
     private func deviceSubtitle(for device: AudioDevice) -> String {
         var parts: [String] = []
@@ -419,19 +430,19 @@ struct AudioDictationSettingsView: View {
 
     private func startTestRecording() {
         let (device, _) = deviceManager.resolveDevice(preferredUID: appState.preferredDeviceUID)
-        testStatusMessage = "Starting test recording..."
+        testStatusMessage = String(localized: "Starting test recording...")
         Task { @MainActor in
             do {
                 try await testRecorderService.startRecording(device: device)
-                testStatusMessage = "Recording... speak into your microphone"
+                testStatusMessage = String(localized: "Recording... speak into your microphone")
             } catch {
-                testStatusMessage = "Error: \(error.localizedDescription)"
+                testStatusMessage = String(localized: "Error: \(error.localizedDescription)")
             }
         }
     }
 
     private func stopTestRecording() {
-        testStatusMessage = "Stopping test recording..."
+        testStatusMessage = String(localized: "Stopping test recording...")
         Task { @MainActor in
             do {
                 let audioData = try await testRecorderService.stopRecording()
@@ -440,9 +451,9 @@ struct AudioDictationSettingsView: View {
                 try audioData.write(to: newURL, options: .atomic)
                 if let prev = testRecordingURL, prev != newURL { try? FileManager.default.removeItem(at: prev) }
                 testRecordingURL = newURL
-                testStatusMessage = "Recording saved. Press Play to listen."
+                testStatusMessage = String(localized: "Recording saved. Press Play to listen.")
             } catch {
-                testStatusMessage = "Error: \(error.localizedDescription)"
+                testStatusMessage = String(localized: "Error: \(error.localizedDescription)")
             }
         }
     }
@@ -453,13 +464,14 @@ struct AudioDictationSettingsView: View {
             testAudioPlayer = try AVAudioPlayer(contentsOf: url)
             testAudioPlayer?.delegate = AudioPlayerDelegate.shared
             AudioPlayerDelegate.shared.onFinish = { [self] in
-                DispatchQueue.main.async { isTestPlaying = false; testStatusMessage = "Playback finished" }
+                DispatchQueue.main
+                    .async { isTestPlaying = false; testStatusMessage = String(localized: "Playback finished") }
             }
             testAudioPlayer?.play()
             isTestPlaying = true
-            testStatusMessage = "Playing recording..."
+            testStatusMessage = String(localized: "Playing recording...")
         } catch {
-            testStatusMessage = "Playback error: \(error.localizedDescription)"
+            testStatusMessage = String(localized: "Playback error: \(error.localizedDescription)")
         }
     }
 
@@ -467,7 +479,7 @@ struct AudioDictationSettingsView: View {
         testAudioPlayer?.stop()
         testAudioPlayer = nil
         isTestPlaying = false
-        testStatusMessage = ""
+        testStatusMessage = String(localized: "")
     }
 
     private func cleanupTestRecording() {

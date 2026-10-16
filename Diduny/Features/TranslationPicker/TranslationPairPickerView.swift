@@ -75,7 +75,7 @@ struct TranslationPairPickerPanelView: View {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(Color.secondary.opacity(0.15))
                 )
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
         }

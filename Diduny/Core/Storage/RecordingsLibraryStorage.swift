@@ -387,7 +387,8 @@ final class RecordingsLibraryStorage {
             title: previous.title,
             description: previous.description,
             transcriptHistory: previous.transcriptHistory,
-            trimRange: previous.trimRange
+            trimRange: previous.trimRange,
+            calendarMeeting: previous.calendarMeeting
         )
 
         if forceSave {
@@ -446,7 +447,8 @@ final class RecordingsLibraryStorage {
                 title: previous.title,
                 description: previous.description,
                 transcriptHistory: previous.transcriptHistory,
-                trimRange: previous.trimRange
+                trimRange: previous.trimRange,
+            calendarMeeting: previous.calendarMeeting
             )
         }
         guard saveMetadataSynchronously() else {
@@ -681,6 +683,18 @@ final class RecordingsLibraryStorage {
 
     // MARK: - Update
 
+    /// An existing association cannot be silently replaced by another meeting.
+    @discardableResult
+    func linkCalendarMeeting(id: UUID, meeting: CalendarMeeting?) -> Bool {
+        guard allowsLibraryMutation(), let index = recordings.firstIndex(where: { $0.id == id }),
+              recordings[index].type.isMeetingLike else { return false }
+        let previous = recordings[index]
+        guard meeting == nil || previous.calendarMeeting == nil || previous.calendarMeeting?.reminderKey == meeting?.reminderKey else { return false }
+        recordings[index].calendarMeeting = meeting
+        guard saveMetadataSynchronously() else { recordings[index] = previous; return false }
+        return true
+    }
+
     @discardableResult
     func updateDetails(id: UUID, title: String, description: String) -> Bool {
         guard allowsLibraryMutation() else { return false }
@@ -800,6 +814,11 @@ final class RecordingsLibraryStorage {
         recordings[index].generatedTranscriptProvenance = generatedTranscriptProvenance
         if !saveMetadataSynchronously() {
             recordings[index] = previous
+            return
+        }
+        if self === RecordingsLibraryStorage.shared, let provider, ["local", "cloud"].contains(provider) {
+            let scenario = kind == .translation ? "translation" : previous.type == .meeting ? "meeting" : previous.type == .fileTranscription ? "file" : "dictation"
+            Task { await AnalyticsService.shared.record(duration: previous.effectiveDurationSeconds, mode: provider, scenario: scenario) }
         }
     }
 
@@ -1116,7 +1135,8 @@ final class RecordingsLibraryStorage {
                     title: previous.title,
                     description: previous.description,
                     transcriptHistory: previous.transcriptHistory,
-                    trimRange: previous.trimRange
+                    trimRange: previous.trimRange,
+            calendarMeeting: previous.calendarMeeting
                 )
                 didReset = true
             default:
@@ -1257,7 +1277,8 @@ final class RecordingsLibraryStorage {
                 title: recording.title,
                 description: recording.description,
                 transcriptHistory: recording.transcriptHistory,
-                trimRange: recording.trimRange
+                trimRange: recording.trimRange,
+                calendarMeeting: recording.calendarMeeting
             )
             saveMetadata()
 

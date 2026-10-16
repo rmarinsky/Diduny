@@ -243,7 +243,9 @@ protocol FileTranscriptionBatchRecordingStoring: AnyObject {
 }
 
 extension FileTranscriptionBatchRecordingStoring {
-    func storedRecording(recordingID _: UUID) -> Recording? { nil }
+    func storedRecording(recordingID _: UUID) -> Recording? {
+        nil
+    }
 
     func completedDuplicate(remoteProvider _: String, mediaID _: String) -> BatchTranscriptionDuplicate? {
         nil
@@ -1059,7 +1061,7 @@ final class FileTranscriptionBatchService {
                     update(itemID) {
                         $0.status = .partialResult
                         $0.captionErrorMessage = "Source captions could not be retrieved."
-                        $0.errorMessage = "Source captions could not be retrieved."
+                        $0.errorMessage = String(localized: "Source captions could not be retrieved.")
                         $0.finishedAt = Date()
                     }
                     return
@@ -1177,7 +1179,11 @@ final class FileTranscriptionBatchService {
                 ?? temporaryAudio?.fileURL
                 ?? storedAudioURL
             guard let originalAudioURL = availableAudioURL else { throw CocoaError(.fileNoSuchFile) }
-            let audioURL = try await prepareSelectedAudio(fileURL: originalAudioURL, recordingID: recordingID, itemID: itemID)
+            let audioURL = try await prepareSelectedAudio(
+                fileURL: originalAudioURL,
+                recordingID: recordingID,
+                itemID: itemID
+            )
             if audioURL != originalAudioURL { selectedAudioURL = audioURL }
 
             update(itemID) {
@@ -1290,7 +1296,11 @@ final class FileTranscriptionBatchService {
             guard let originalAudioURL = audioURL else {
                 throw CocoaError(.fileNoSuchFile)
             }
-            let audioURL = try await prepareSelectedAudio(fileURL: originalAudioURL, recordingID: recordingID, itemID: itemID)
+            let audioURL = try await prepareSelectedAudio(
+                fileURL: originalAudioURL,
+                recordingID: recordingID,
+                itemID: itemID
+            )
             if audioURL != originalAudioURL { selectedAudioURL = audioURL }
 
             update(itemID) { $0.status = settings.provider == .cloud ? .uploading : .processing }
@@ -1341,7 +1351,6 @@ final class FileTranscriptionBatchService {
                 $0.errorMessage = message
             }
         }
-
     }
 
     private func pauseForAuthorization() {
@@ -1520,6 +1529,7 @@ final class FileTranscriptionBatchService {
 
 private final class LiveFileTranscriptionBatchTranscriber: FileTranscriptionBatchTranscribing {
     func preflightError(for settings: FileTranscriptionSettingsSnapshot) -> String? {
+        guard AuthService.hasStoredSession else { return String(localized: "Sign in to use Diduny transcription.") }
         switch settings.provider {
         case .cloud:
             return AuthService.hasStoredSession ? nil : "Log in to use Cloud transcription."
@@ -1528,7 +1538,7 @@ private final class LiveFileTranscriptionBatchTranscriber: FileTranscriptionBatc
                 $0.name == settings.localModelName
             }), WhisperModelManager.shared.isModelDownloaded(model)
             else {
-                return "Download a local Whisper model in Settings to transcribe files and YouTube."
+                return String(localized: "Download a local Whisper model in Settings to transcribe files and YouTube.")
             }
             return nil
         }

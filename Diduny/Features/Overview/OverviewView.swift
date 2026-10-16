@@ -16,9 +16,25 @@ struct OverviewView: View {
         var calendarComponent: Calendar.Component {
             switch self { case .week: .weekOfYear; case .month: .month; case .year: .year }
         }
-        var daysBack: Int { switch self { case .week: 7; case .month: 30; case .year: 365 } }
-        var chartTitle: String { switch self { case .week: "Time saved this week"; case .month: "Time saved this month"; case .year: "Time saved this year" } }
-        var chartSubtitle: String { switch self { case .week, .month: "minutes per day"; case .year: "minutes per month" } }
+
+        var daysBack: Int {
+            switch self { case .week: 7; case .month: 30; case .year: 365 }
+        }
+
+        var chartTitle: String {
+            switch self {
+            case .week: String(
+                    localized: "Time saved this week"
+                ); case .month: String(
+                    localized: "Time saved this month"
+                ); case .year: String(localized: "Time saved this year")
+            }
+        }
+
+        var chartSubtitle: String {
+            switch self { case .week,
+                 .month: String(localized: "minutes per day"); case .year: String(localized: "minutes per month") }
+        }
     }
 
     // MARK: - Filtered recordings
@@ -49,7 +65,9 @@ struct OverviewView: View {
         periodStatistics.totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute)
     }
 
-    private var totalHours: Double { totalTimeSavedSeconds / 3600 }
+    private var totalHours: Double {
+        totalTimeSavedSeconds / 3600
+    }
 
     private var previousPeriodStart: Date {
         Calendar.current.date(byAdding: .day, value: -(timePeriod.daysBack * 2), to: Date()) ?? Date()
@@ -72,7 +90,7 @@ struct OverviewView: View {
     private var comparisonLabel: String {
         switch timePeriod {
         case .week:
-            return "last week"
+            return String(localized: "last week")
         case .month:
             let date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
             let formatter = DateFormatter()
@@ -84,7 +102,9 @@ struct OverviewView: View {
         }
     }
 
-    private var recordingCount: Int { periodStatistics.recordingCount }
+    private var recordingCount: Int {
+        periodStatistics.recordingCount
+    }
 
     private var totalWords: Int {
         periodStatistics.transcribedWordCount
@@ -170,10 +190,12 @@ struct OverviewView: View {
 
     private var heroDescription: String {
         guard totalTimeSavedSeconds > 0 else {
-            return "Based on \(formatWordsPerMinute(typingSpeedWordsPerMinute)) WPM typing baseline"
+            return String(localized: "Based on \(formatWordsPerMinute(typingSpeedWordsPerMinute)) WPM typing baseline")
         }
 
-        return "\(formatDurationCompact(typingTimeSavedSeconds)) typing · \(formatDurationCompact(mediaTimeSavedSeconds)) media"
+        return String(
+            localized: "\(formatDurationCompact(typingTimeSavedSeconds)) typing · \(formatDurationCompact(mediaTimeSavedSeconds)) media"
+        )
     }
 
     // MARK: - Body
@@ -230,10 +252,12 @@ struct OverviewView: View {
     private var heroCard: some View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("TIME SAVED · THIS \(timePeriod.rawValue.uppercased())")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(Color("BrandAccentDeep"))
-                    .kerning(0.5)
+                Text(
+                    "TIME SAVED · THIS \(NSLocalizedString(timePeriod.rawValue, comment: "Overview period").uppercased())"
+                )
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(Color("BrandAccentDeep"))
+                .kerning(0.5)
 
                 HStack(alignment: .lastTextBaseline, spacing: 4) {
                     Text(String(format: "%.1f", totalHours))
@@ -302,7 +326,7 @@ struct OverviewView: View {
                     value: totalWords >= 1000
                         ? String(format: "%.1fk", Double(totalWords) / 1000)
                         : "\(totalWords)",
-                    label: "Words transcribed"
+                    label: String(localized: "Words transcribed")
                 )
                 MetricCard(
                     icon: "dial.medium",
@@ -311,8 +335,8 @@ struct OverviewView: View {
                 )
                 MetricCard(
                     icon: nil,
-                    value: "\(streak)-day streak",
-                    label: streak > 0 ? streakSubtitle : "Start today",
+                    value: String(localized: "\(streak)-day streak"),
+                    label: streak > 0 ? streakSubtitle : String(localized: "Start today"),
                     isStreak: true,
                     streakCount: streak
                 )
@@ -321,7 +345,7 @@ struct OverviewView: View {
     }
 
     private var streakSubtitle: String {
-        "\(max(0, 14 - streak)) days to milestone"
+        String(localized: "\(max(0, 14 - streak)) days to milestone")
     }
 
     // MARK: - Chart Card
@@ -340,7 +364,7 @@ struct OverviewView: View {
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                         .foregroundStyle(Color.secondary.opacity(0.5))
                         .annotation(position: .trailing) {
-                            Text(String(format: "avg %dm", Int(avgMinutes)))
+                            Text(String(format: String(localized: "avg %dm"), locale: Locale.current, Int(avgMinutes)))
                                 .font(.system(size: 10))
                                 .foregroundColor(.secondary)
                         }
@@ -368,7 +392,7 @@ struct OverviewView: View {
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                         .annotation(position: .top) {
-                            if day.isToday && day.minutes > 0 {
+                            if day.isToday, day.minutes > 0 {
                                 Text(String(format: "%dm", Int(day.minutes)))
                                     .font(.system(size: 10, weight: .semibold))
                                     .foregroundColor(Color("BrandAccentDeep"))
@@ -451,9 +475,9 @@ struct OverviewView: View {
         let totalMinutes = Int((seconds / 60).rounded())
         if totalMinutes >= 60 {
             let hours = Double(totalMinutes) / 60
-            return String(format: "≈ %.1f hrs", hours)
+            return String(format: String(localized: "≈ %.1f hrs"), locale: Locale.current, hours)
         }
-        return "≈ \(totalMinutes) min"
+        return String(localized: "≈ \(totalMinutes) min")
     }
 }
 
@@ -487,7 +511,7 @@ private struct MetricCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
 
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
@@ -576,27 +600,29 @@ private struct RecentRow: View {
         }
         let f = DateFormatter(); f.dateFormat = "HH:mm"
         switch recording.type {
-        case .voice: return "Voice note — \(f.string(from: recording.createdAt))"
-        case .translation: return "Translation — \(f.string(from: recording.createdAt))"
-        case .meeting: return "Meeting — \(f.string(from: recording.createdAt))"
-        case .meetingTranslation: return "Meeting translation — \(f.string(from: recording.createdAt))"
-        case .fileTranscription: return "File — \(f.string(from: recording.createdAt))"
+        case .voice: return String(localized: "Voice note — \(f.string(from: recording.createdAt))")
+        case .translation: return String(localized: "Translation — \(f.string(from: recording.createdAt))")
+        case .meeting: return String(localized: "Meeting — \(f.string(from: recording.createdAt))")
+        case .meetingTranslation: return String(
+                localized: "Meeting translation — \(f.string(from: recording.createdAt))"
+            )
+        case .fileTranscription: return String(localized: "File — \(f.string(from: recording.createdAt))")
         }
     }
 
     private var formattedDuration: String {
         let total = Int(recording.effectiveDurationSeconds)
         let m = total / 60; let s = total % 60
-        return String(format: "%dm %02ds", m, s)
+        return String(format: String(localized: "%dm %02ds"), locale: Locale.current, m, s)
     }
 
     private var relativeDay: String {
         let cal = Calendar.current; let now = Date()
         if cal.isDateInToday(recording.createdAt) {
             let f = DateFormatter(); f.dateFormat = "HH:mm"
-            return "Today, \(f.string(from: recording.createdAt))"
+            return String(localized: "Today, \(f.string(from: recording.createdAt))")
         }
-        if cal.isDateInYesterday(recording.createdAt) { return "Yesterday" }
+        if cal.isDateInYesterday(recording.createdAt) { return String(localized: "Yesterday") }
         let d = cal.dateComponents([.day], from: recording.createdAt, to: now).day ?? 0
         if d < 7 { let f = DateFormatter(); f.dateFormat = "EEE"; return f.string(from: recording.createdAt) }
         let f = DateFormatter(); f.dateStyle = .short; f.timeStyle = .none

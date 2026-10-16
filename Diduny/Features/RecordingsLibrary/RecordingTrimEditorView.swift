@@ -23,7 +23,10 @@ struct RecordingTrimEditorView: View {
                 Button {
                     playback.togglePlayback(recordingId: recordingID, fileURL: fileURL, trimRange: editor.range)
                 } label: {
-                    Label(playback.isPlaying && playback.playingRecordingId == recordingID ? "Pause" : "Preview", systemImage: playback.isPlaying ? "pause.fill" : "play.fill")
+                    Label(
+                        playback.isPlaying && playback.playingRecordingId == recordingID ? "Pause" : "Preview",
+                        systemImage: playback.isPlaying ? "pause.fill" : "play.fill"
+                    )
                 }
                 Button { playback.stop(); editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }
                     .help("Undo (⌘Z)").accessibilityLabel("Undo trim change")
@@ -37,8 +40,16 @@ struct RecordingTrimEditorView: View {
             }.controlSize(.small)
             timeline
             HStack {
-                timeField("Start", text: Binding(get: { editor.startText }, set: { editor.editTime($0, isStart: true) }), isStart: true)
-                timeField("End", text: Binding(get: { editor.endText }, set: { editor.editTime($0, isStart: false) }), isStart: false)
+                timeField(
+                    String(localized: "Start"),
+                    text: Binding(get: { editor.startText }, set: { editor.editTime($0, isStart: true) }),
+                    isStart: true
+                )
+                timeField(
+                    String(localized: "End"),
+                    text: Binding(get: { editor.endText }, set: { editor.editTime($0, isStart: false) }),
+                    isStart: false
+                )
             }
             if editor.hasInvalidTime {
                 Text("Enter a valid time within the original recording, with Start before End.")
@@ -83,7 +94,8 @@ struct RecordingTrimEditorView: View {
                             path.move(to: CGPoint(x: x, y: 0)); path.addLine(to: CGPoint(x: x, y: 68))
                         }
                     }.stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                    Rectangle().fill(Color.accentColor.opacity(0.22)).frame(width: max(end - start, 1)).offset(x: 7 + start)
+                    Rectangle().fill(Color.accentColor.opacity(0.22)).frame(width: max(end - start, 1))
+                        .offset(x: 7 + start)
                     handle(isStart: true, position: start, width: width)
                     handle(isStart: false, position: end, width: width)
                 }
@@ -112,7 +124,8 @@ struct RecordingTrimEditorView: View {
                 .onEnded { _ in editor.endGesture(); dragging = false })
             .accessibilityElement()
             .accessibilityLabel(isStart ? "Start trim handle" : "End trim handle")
-            .accessibilityValue(AudioTrimEditorState.format(isStart ? editor.range.startSeconds : editor.range.endSeconds))
+            .accessibilityValue(AudioTrimEditorState
+                .format(isStart ? editor.range.startSeconds : editor.range.endSeconds))
             .accessibilityAdjustableAction { direction in
                 playback.stop()
                 let delta: Double = direction == .increment ? 1 : -1

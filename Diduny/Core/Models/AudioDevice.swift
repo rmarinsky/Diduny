@@ -34,14 +34,14 @@ enum AudioTransportType: String, Comparable {
 
     var displayName: String {
         switch self {
-        case .usb: "USB"
-        case .thunderbolt: "Thunderbolt"
-        case .firewire: "FireWire"
-        case .builtIn: "Built-in"
-        case .bluetooth: "Bluetooth"
-        case .aggregate: "Aggregate"
-        case .virtual: "Virtual"
-        case .unknown: "Unknown"
+        case .usb: String(localized: "USB")
+        case .thunderbolt: String(localized: "Thunderbolt")
+        case .firewire: String(localized: "FireWire")
+        case .builtIn: String(localized: "Built-in")
+        case .bluetooth: String(localized: "Bluetooth")
+        case .aggregate: String(localized: "Aggregate")
+        case .virtual: String(localized: "Virtual")
+        case .unknown: String(localized: "Unknown")
         }
     }
 }
@@ -58,10 +58,10 @@ enum MicrophoneSelectionStrategy: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .manual: "Manual"
-        case .auto: "Auto"
-        case .preferNoiseReduction: "Noise"
-        case .preferFidelity: "Fidelity"
+        case .manual: String(localized: "Manual")
+        case .auto: String(localized: "Auto")
+        case .preferNoiseReduction: String(localized: "Noise")
+        case .preferFidelity: String(localized: "Fidelity")
         }
     }
 
@@ -132,20 +132,20 @@ struct AudioDevice: Identifiable, Equatable, Hashable {
 
     var qualityHint: String {
         if isAirPodsLike {
-            return "Close mic, better in noise, lower bandwidth"
+            return String(localized: "Close mic, better in noise, lower bandwidth")
         }
         if isHeadsetLike {
-            return "Headset mic, usually better in noise"
+            return String(localized: "Headset mic, usually better in noise")
         }
         if isBuiltInMic {
-            return "Wider capture, may pick up more room noise"
+            return String(localized: "Wider capture, may pick up more room noise")
         }
         if transportType == .usb || transportType == .thunderbolt || transportType == .firewire {
-            return "External mic, usually best fidelity"
+            return String(localized: "External mic, usually best fidelity")
         }
         if transportType == .bluetooth {
-            return "Bluetooth mic, voice-optimized but bandwidth-limited"
+            return String(localized: "Bluetooth mic, voice-optimized but bandwidth-limited")
         }
-        return "General-purpose input device"
+        return String(localized: "General-purpose input device")
     }
 }

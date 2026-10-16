@@ -101,7 +101,7 @@ struct RecordingRowView: View {
 
     private var playButton: some View {
         let canPlay = RecordingsLibraryStorage.shared.hasPlayableAudio(for: recording)
-        let label = isPlaying ? "Pause recording" : "Play recording"
+        let label = isPlaying ? String(localized: "Pause recording") : String(localized: "Play recording")
         return Button {
             guard canPlay else { return }
             playbackService.togglePlayback(
@@ -127,8 +127,8 @@ struct RecordingRowView: View {
         }
         .buttonStyle(.plain)
         .disabled(!canPlay)
-        .help(canPlay ? label : "Audio not ready yet")
-        .accessibilityLabel(Text(canPlay ? label : "Audio not ready yet"))
+        .help(canPlay ? label : String(localized: "Audio not ready yet"))
+        .accessibilityLabel(Text(canPlay ? label : String(localized: "Audio not ready yet")))
         .accessibilityIdentifier(label)
     }
 
@@ -174,28 +174,28 @@ struct RecordingRowView: View {
                 if let onProcessRecovery {
                     RecordingActionButton(
                         systemName: "arrow.triangle.2.circlepath",
-                        label: "Process recovery",
+                        label: String(localized: "Process recovery"),
                         action: onProcessRecovery
                     )
                 }
                 if let onSaveRecoveryAudio {
                     RecordingActionButton(
                         systemName: "square.and.arrow.down",
-                        label: "Save audio only",
+                        label: String(localized: "Save audio only"),
                         action: onSaveRecoveryAudio
                     )
                 }
             } else if recording.status != .processing, recording.status != .recording {
                 RecordingActionButton(
                     systemName: "text.bubble",
-                    label: "Transcribe recording",
+                    label: String(localized: "Transcribe recording"),
                     action: onTranscribe
                 )
             }
 
             RecordingActionButton(
                 systemName: "trash",
-                label: "Delete recording",
+                label: String(localized: "Delete recording"),
                 isDestructive: true,
                 action: onDelete
             )
@@ -238,16 +238,16 @@ struct RecordingRowView: View {
 
     private var previewText: String {
         if recording.status == .recording {
-            return recording.statusDetail ?? "Recording…"
+            return recording.statusDetail ?? String(localized: "Recording…")
         }
         if recording.status == .needsRecovery {
-            return "Needs processing — recover audio from this session"
+            return String(localized: "Needs processing — recover audio from this session")
         }
         if recording.status == .processing {
-            return "Transcribing..."
+            return String(localized: "Transcribing...")
         }
         if recording.status == .failed {
-            return recording.errorMessage ?? "Transcription failed"
+            return recording.errorMessage ?? String(localized: "Transcription failed")
         }
         if let text = recording.transcriptionText, !text.isEmpty {
             return text

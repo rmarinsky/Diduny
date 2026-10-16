@@ -4,19 +4,23 @@ private enum TypingTestLanguage: String, CaseIterable, Identifiable {
     case english
     case ukrainian
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var label: String {
         switch self {
-        case .english: "English"
-        case .ukrainian: "Ukrainian"
+        case .english: String(localized: "English")
+        case .ukrainian: String(localized: "Ukrainian")
         }
     }
 
     var sampleText: String {
         switch self {
         case .english:
-            "Diduny turns spoken ideas into polished text, so notes, messages, and drafts can move faster without breaking the flow of work."
+            String(
+                localized: "Diduny turns spoken ideas into polished text, so notes, messages, and drafts can move faster without breaking the flow of work."
+            )
         case .ukrainian:
             "Дідуня перетворює голос на охайний текст, щоб нотатки, повідомлення та чернетки з'являлися швидше і не ламали робочий ритм."
         }
@@ -142,7 +146,7 @@ struct TypingTestView: View {
         Grid(horizontalSpacing: 12, verticalSpacing: 12) {
             GridRow {
                 metricTile(
-                    title: "Net speed",
+                    title: String(localized: "Net speed"),
                     value: "\(formatWordsPerMinute(measurement.netWordsPerMinute)) WPM",
                     icon: "speedometer"
                 )
@@ -152,7 +156,7 @@ struct TypingTestView: View {
                     icon: "checkmark.circle"
                 )
                 metricTile(
-                    title: "Elapsed",
+                    title: String(localized: "Elapsed"),
                     value: formatElapsed(elapsedSeconds),
                     icon: "timer"
                 )
@@ -160,17 +164,17 @@ struct TypingTestView: View {
 
             GridRow {
                 metricTile(
-                    title: "Fix time",
+                    title: String(localized: "Fix time"),
                     value: formatElapsed(displayedCorrectionTimeSeconds),
                     icon: "wrench.adjustable"
                 )
                 metricTile(
-                    title: "Errors",
+                    title: String(localized: "Errors"),
                     value: "\(incorrectInsertionCount)",
                     icon: "exclamationmark.triangle"
                 )
                 metricTile(
-                    title: "Edits",
+                    title: String(localized: "Edits"),
                     value: "\(correctionCount)",
                     icon: "delete.left"
                 )
@@ -285,12 +289,12 @@ struct TypingTestView: View {
 
     private var footerStatus: String {
         if isExactComplete {
-            return "Exact match. Saving uses net WPM, including corrections."
+            return String(localized: "Exact match. Saving uses net WPM, including corrections.")
         }
         if measurement.activeMistakeCount > 0 {
-            return "Fix highlighted characters before saving."
+            return String(localized: "Fix highlighted characters before saving.")
         }
-        return "Accuracy includes mistyped characters even after they are corrected."
+        return String(localized: "Accuracy includes mistyped characters even after they are corrected.")
     }
 
     private var inputBorderColor: Color {
@@ -341,7 +345,7 @@ struct TypingTestView: View {
                 Text(value)
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .monospacedDigit()
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -406,14 +410,17 @@ struct TypingTestView: View {
         var prefixCount = 0
         while prefixCount < oldCharacters.count,
               prefixCount < newCharacters.count,
-              oldCharacters[prefixCount] == newCharacters[prefixCount] {
+              oldCharacters[prefixCount] == newCharacters[prefixCount]
+        {
             prefixCount += 1
         }
 
         var suffixCount = 0
         while oldCharacters.count - suffixCount > prefixCount,
               newCharacters.count - suffixCount > prefixCount,
-              oldCharacters[oldCharacters.count - suffixCount - 1] == newCharacters[newCharacters.count - suffixCount - 1] {
+              oldCharacters[oldCharacters.count - suffixCount - 1] ==
+              newCharacters[newCharacters.count - suffixCount - 1]
+        {
             suffixCount += 1
         }
 

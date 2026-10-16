@@ -1664,6 +1664,6 @@ private struct EdgeCommandActionButton: View {
         .shadow(color: highlighted ? Color("BrandAccentDeep").opacity(0.14) : .clear, radius: 8, y: 4)
         .animation(.easeOut(duration: 0.15), value: highlighted)
         .onHover { isHovered = $0 }
-        .help(action.usesLanguagePair ? "Uses the selected translation language" : action.title)
+        .help(action.usesLanguagePair ? String(localized: "Uses the selected translation language") : action.title)
     }
 }

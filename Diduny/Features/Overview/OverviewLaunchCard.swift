@@ -85,14 +85,14 @@ struct OverviewLaunchCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("What’s New in Diduny \(releaseLine)")
                     .font(.title3.bold())
-                Text(highlights.headline)
+                Text(LocalizedStringKey(highlights.headline))
                     .font(.headline)
                 ForEach(Array(highlights.highlights.enumerated()), id: \.offset) { _, highlight in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: "circle.fill")
                             .font(.system(size: 5))
                             .accessibilityHidden(true)
-                        Text(highlight)
+                        Text(LocalizedStringKey(highlight))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .font(.subheadline)

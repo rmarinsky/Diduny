@@ -164,7 +164,7 @@ extension AppDelegate {
         guard hasPermission else {
             Log.app.warning("Screen capture permission not granted")
             await MainActor.run {
-                appState.errorMessage = "Screen recording permission required for meeting capture"
+                appState.errorMessage = String(localized: "Screen recording permission required for meeting capture")
                 appState.meetingTranslationRecordingState = .error
                 handleMeetingTranslationStateChange(.error)
                 activeMeetingTranslationLanguagePair = nil
@@ -678,9 +678,8 @@ extension AppDelegate {
                 }
                 let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
                 let hasLiveRow = RecordingsLibraryStorage.shared.recordings.contains { $0.id == recordingId }
-                let saved: Bool
-                if hasLiveRow {
-                    saved = RecordingsLibraryStorage.shared.finalizeInProgressRecording(
+                let saved: Bool = if hasLiveRow {
+                    RecordingsLibraryStorage.shared.finalizeInProgressRecording(
                         id: recordingId,
                         audioURL: audioURLForLibrarySave,
                         duration: duration,
@@ -689,7 +688,7 @@ extension AppDelegate {
                         forceSave: true
                     )
                 } else {
-                    saved = RecordingsLibraryStorage.shared.saveRecording(
+                    RecordingsLibraryStorage.shared.saveRecording(
                         id: recordingId,
                         audioURL: audioURLForLibrarySave,
                         type: .meetingTranslation,

@@ -1,15 +1,17 @@
 import Foundation
 
 enum TranscriptionProvider: String, CaseIterable, Identifiable {
-    case cloud = "cloud"
-    case local = "local"
+    case cloud
+    case local
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var displayName: String {
         switch self {
-        case .cloud: "Cloud"
-        case .local: "Local (Whisper)"
+        case .cloud: String(localized: "Cloud")
+        case .local: String(localized: "Local (Whisper)")
         }
     }
 }

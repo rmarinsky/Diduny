@@ -13,21 +13,25 @@ enum WhisperError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .modelLoadFailed:
-            "Failed to load Whisper model"
+            String(localized: "Failed to load Whisper model")
         case .contextNotInitialized:
-            "Whisper context not initialized"
+            String(localized: "Whisper context not initialized")
         case .transcriptionFailed:
-            "Local transcription failed"
+            String(localized: "Local transcription failed")
         case .audioConversionFailed:
-            "Failed to convert audio for Whisper"
+            String(localized: "Failed to convert audio for Whisper")
         case .modelNotFound:
-            "No Whisper model downloaded. Please download one in Settings."
+            String(localized: "No Whisper model downloaded. Please download one in Settings.")
         case let .downloadFailed(reason):
-            "Model download failed: \(reason)"
+            String(localized: "Model download failed: \(reason)")
         case .modelDoesNotSupportTranslation:
-            "Selected model is English-only and cannot translate. Please select a multilingual model."
+            String(
+                localized: "Selected model is English-only and cannot translate. Please select a multilingual model."
+            )
         case let .unsupportedTranslationTarget(target):
-            "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English. Target: \(target.uppercased())."
+            String(
+                localized: "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English. Target: \(target.uppercased())."
+            )
         }
     }
 }

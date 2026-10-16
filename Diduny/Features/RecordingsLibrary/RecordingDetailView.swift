@@ -68,13 +68,13 @@ struct RecordingDetailView: View {
 
         switch status {
         case .queued:
-            return "Queued..."
+            return String(localized: "Queued...")
         case .uploading:
-            return "Uploading..."
+            return String(localized: "Uploading...")
         case .processing:
-            return "Transcribing..."
+            return String(localized: "Transcribing...")
         case .finalizing:
-            return "Finalizing..."
+            return String(localized: "Finalizing...")
         case .completed, .error:
             return nil
         }
@@ -103,6 +103,24 @@ struct RecordingDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     detailsSection
                         .padding(16)
+
+                    if let meeting = currentRecording.calendarMeeting {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Calendar meeting", systemImage: "calendar").font(.headline)
+                            Text(meeting.title)
+                            Text(meeting.start.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary)
+                            if let url = meeting.meetingURL, CalendarMeeting.isJoinURL(url) {
+                                Text(url.absoluteString).font(.caption).textSelection(.enabled)
+                                Button("Open meeting link") { NSWorkspace.shared.open(url) }
+                            }
+                            Button("Unlink calendar event") {
+                                if !storage.linkCalendarMeeting(id: currentRecording.id, meeting: nil) {
+                                    operationErrorMessage = String(localized: "The calendar link could not be removed.")
+                                }
+                            }
+                        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                    }
 
                     if currentRecording.remoteSource != nil {
                         Divider()
@@ -147,7 +165,7 @@ struct RecordingDetailView: View {
                     finishTrimming()
                     onClose()
                 } else {
-                    operationErrorMessage = "The recording and its files were left unchanged."
+                    operationErrorMessage = String(localized: "The recording and its files were left unchanged.")
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -180,7 +198,8 @@ struct RecordingDetailView: View {
     private func saveTrim() -> Bool {
         guard var editor = trimEditor, editor.commitTimeFields() else { return false }
         guard storage.updateTrimRange(id: currentRecording.id, range: editor.rangeToSave) else {
-            operationErrorMessage = "The audio range could not be saved. The recording was left unchanged."
+            operationErrorMessage =
+                String(localized: "The audio range could not be saved. The recording was left unchanged.")
             return false
         }
         finishTrimming()
@@ -191,11 +210,11 @@ struct RecordingDetailView: View {
         guard let editor = trimEditor else { return true }
         guard editor.isDirty else { finishTrimming(); return true }
         let alert = NSAlert()
-        alert.messageText = "Save changes?"
-        alert.informativeText = "You changed the recording range."
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Discard")
-        alert.addButton(withTitle: "Keep editing")
+        alert.messageText = String(localized: "Save changes?")
+        alert.informativeText = String(localized: "You changed the recording range.")
+        alert.addButton(withTitle: String(localized: "Save"))
+        alert.addButton(withTitle: String(localized: "Discard"))
+        alert.addButton(withTitle: String(localized: "Keep editing"))
         switch alert.runModal() {
         case .alertFirstButtonReturn: return saveTrim()
         case .alertSecondButtonReturn: finishTrimming(); return true
@@ -270,7 +289,7 @@ struct RecordingDetailView: View {
                         title: title,
                         description: description
                     ) {
-                        operationErrorMessage = "The title and description were left unchanged."
+                        operationErrorMessage = String(localized: "The title and description were left unchanged.")
                     }
                 }
                 .controlSize(.small)
@@ -334,14 +353,17 @@ struct RecordingDetailView: View {
                 )
             } else {
                 playbackSection
-                .padding(12)
-                .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-                if currentRecording.canTrimAudio && hasPlayableAudio {
+                    .padding(12)
+                    .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                if currentRecording.canTrimAudio, hasPlayableAudio {
                     HStack {
                         Spacer()
                         Button("Trim…") {
                             playbackService.stop()
-                            trimEditor = AudioTrimEditorState(duration: currentRecording.durationSeconds, savedRange: currentRecording.trimRange)
+                            trimEditor = AudioTrimEditorState(
+                                duration: currentRecording.durationSeconds,
+                                savedRange: currentRecording.trimRange
+                            )
                             onNavigationGuardChanged?(canLeaveTrimEditor)
                             RecordingTrimNavigation.shared.canLeave = canLeaveTrimEditor
                         }
@@ -408,7 +430,7 @@ struct RecordingDetailView: View {
                 }
             } else if currentRecording.status == .failed {
                 Label(
-                    currentRecording.errorMessage ?? "Transcription failed",
+                    currentRecording.errorMessage ?? String(localized: "Transcription failed"),
                     systemImage: "exclamationmark.triangle.fill"
                 )
                 .foregroundStyle(.red)
@@ -493,7 +515,7 @@ struct RecordingDetailView: View {
                         Button("Save as TXT File…") {
                             exportText(
                                 text,
-                                title: "Save Transcript",
+                                title: String(localized: "Save Transcript"),
                                 defaultFileName: "\(currentRecording.type.displayName) Transcript.txt"
                             )
                         }
@@ -525,7 +547,7 @@ struct RecordingDetailView: View {
     private func transcriptVersionTitle(_ version: TranscriptVersion) -> String {
         switch version.kind {
         case .cloud:
-            return "Cloud Transcript"
+            return String(localized: "Cloud Transcript")
         case .local:
             return version.modelIdentifier.map { "Local Transcript · \($0)" } ?? "Local Transcript"
         case .translation:
@@ -541,7 +563,7 @@ struct RecordingDetailView: View {
     private func exportCaption(_ artifact: TranscriptArtifact) {
         exportText(
             artifact.text,
-            title: "Export Source Captions",
+            title: String(localized: "Export Source Captions"),
             defaultFileName: "YouTube Captions - \(artifact.languageCode).txt"
         )
     }
@@ -624,7 +646,7 @@ struct RecordingDetailView: View {
             } label: {
                 HStack {
                     Text(
-                        "Translate: \(translationPair.languageA.uppercased()) → \(currentRecording.translationTargetLanguageCode?.uppercased() ?? "Choose Language")"
+                        "Translate: \(translationPair.languageA.uppercased()) → \(currentRecording.translationTargetLanguageCode?.uppercased() ?? String(localized: "Choose Language"))"
                     )
                     Spacer()
                     Image(systemName: "chevron.down")
@@ -636,7 +658,7 @@ struct RecordingDetailView: View {
             .disabled(currentRecording.status == .processing)
 
             Text(
-                "Translation direction: \(translationPair.languageA.uppercased()) → \(currentRecording.translationTargetLanguageCode?.uppercased() ?? "choose a language")"
+                "Translation direction: \(translationPair.languageA.uppercased()) → \(currentRecording.translationTargetLanguageCode?.uppercased() ?? String(localized: "choose a language"))"
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -664,7 +686,7 @@ struct RecordingDetailView: View {
             .first(where: { $0.name == selectedWhisperModel })?
             .displayName
             ?? downloadedWhisperModels.first?.displayName
-            ?? "the selected local model"
+            ?? String(localized: "the selected local model")
     }
 
     // MARK: - Helpers
@@ -729,13 +751,12 @@ struct RecordingDetailView: View {
     }
 
     private var formattedDuration: String {
-        let totalSeconds: Int
-        if currentRecording.durationSeconds > 0 {
-            totalSeconds = Int(currentRecording.effectiveDurationSeconds)
+        let totalSeconds: Int = if currentRecording.durationSeconds > 0 {
+            Int(currentRecording.effectiveDurationSeconds)
         } else if let ended = currentRecording.resolvedEndedAt {
-            totalSeconds = max(0, Int(ended.timeIntervalSince(currentRecording.createdAt)))
+            max(0, Int(ended.timeIntervalSince(currentRecording.createdAt)))
         } else {
-            totalSeconds = 0
+            0
         }
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60

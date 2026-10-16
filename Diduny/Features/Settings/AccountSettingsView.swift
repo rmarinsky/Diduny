@@ -7,7 +7,9 @@ struct AccountSettingsView: View {
     @State private var proxyTestResult: ProxyTestResult?
     @State private var isRefreshingConfig = false
 
-    private var authService: AuthService { AuthService.shared }
+    private var authService: AuthService {
+        AuthService.shared
+    }
 
     enum ProxyTestResult {
         case success
@@ -17,53 +19,58 @@ struct AccountSettingsView: View {
     var body: some View {
         Form {
             Section("Account") {
-#if DEV_BUILD
-                HStack {
-                    TextField("Proxy URL", text: $proxyBaseURL)
-                        .textFieldStyle(.roundedBorder)
-                        .onChange(of: proxyBaseURL) { _, newValue in
-                            SettingsStorage.shared.proxyBaseURL = newValue
-                        }
-                }
-#endif
+                #if DEV_BUILD
+                    HStack {
+                        TextField("Proxy URL", text: $proxyBaseURL)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: proxyBaseURL) { _, newValue in
+                                SettingsStorage.shared.proxyBaseURL = newValue
+                            }
+                    }
+                #endif
 
                 AccountSignInView()
 
-#if DEV_BUILD
-                HStack(spacing: 8) {
-                    Button("Test Connection") {
-                        testProxyConnection()
+                #if DEV_BUILD
+                    HStack(spacing: 8) {
+                        Button("Test Connection") {
+                            testProxyConnection()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(proxyBaseURL.isEmpty || isTestingProxy)
+
+                        Button("Refresh Config") {
+                            refreshRemoteConfig()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isRefreshingConfig)
+
+                        if isTestingProxy || isRefreshingConfig {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+
+                        Spacer()
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(proxyBaseURL.isEmpty || isTestingProxy)
 
-                    Button("Refresh Config") {
-                        refreshRemoteConfig()
+                    if let result = proxyTestResult {
+                        testResultView(result)
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(isRefreshingConfig)
-
-                    if isTestingProxy || isRefreshingConfig {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-
-                    Spacer()
-                }
-
-                if let result = proxyTestResult {
-                    testResultView(result)
-                }
-#endif
+                #endif
             }
 
             BillingSettingsSection(isLoggedIn: authService.isLoggedIn)
 
+            if authService.isLoggedIn { AnalyticsSettingsSection() }
             cloudUsageSection
 
             usageSection
         }
         .formStyle(.grouped)
+        .task(id: authService.userEmail) {
+            if authService.isLoggedIn { await AnalyticsService.shared.refresh() }
+            else { AnalyticsService.shared.reset() }
+        }
         .onAppear {
             proxyBaseURL = SettingsStorage.shared.proxyBaseURL
             if authService.isLoggedIn {
@@ -94,11 +101,14 @@ struct AccountSettingsView: View {
                                 .tint(usageProgressColor(usageService.usagePercent))
 
                             HStack {
-                                Text(String(format: "%.1fh / %.0fh used this month",
-                                            usage.usedHours,
-                                            usage.limitHours ?? UsageService.freeCloudLimitHours))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                Text(String(
+                                    format: String(localized: "%.1fh / %.0fh used this month"),
+                                    locale: Locale.current,
+                                    usage.usedHours,
+                                    usage.limitHours ?? UsageService.freeCloudLimitHours
+                                ))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
 
                                 Spacer()
 
@@ -141,7 +151,6 @@ struct AccountSettingsView: View {
 
     // MARK: - Usage Section
 
-    @ViewBuilder
     private var usageSection: some View {
         Section("Usage") {
             let recordings = RecordingsLibraryStorage.shared.recordings
@@ -162,11 +171,36 @@ struct AccountSettingsView: View {
 
                 Divider()
 
-                usageRow(icon: "mic.fill", label: "Voice dictation", duration: statistics.voiceDurationSeconds, color: Color("BrandAccentDeep"))
-                usageRow(icon: "globe", label: "Translation", duration: statistics.translationDurationSeconds, color: .green)
-                usageRow(icon: "person.3.fill", label: "Meetings", duration: statistics.meetingDurationSeconds, color: .orange)
-                usageRow(icon: "doc.fill", label: "Imported files", duration: statistics.importedFileDurationSeconds, color: .brown)
-                usageRow(icon: "play.rectangle.fill", label: "YouTube", duration: statistics.youtubeDurationSeconds, color: .red)
+                usageRow(
+                    icon: "mic.fill",
+                    label: "Voice dictation",
+                    duration: statistics.voiceDurationSeconds,
+                    color: Color("BrandAccentDeep")
+                )
+                usageRow(
+                    icon: "globe",
+                    label: "Translation",
+                    duration: statistics.translationDurationSeconds,
+                    color: .green
+                )
+                usageRow(
+                    icon: "person.3.fill",
+                    label: "Meetings",
+                    duration: statistics.meetingDurationSeconds,
+                    color: .orange
+                )
+                usageRow(
+                    icon: "doc.fill",
+                    label: String(localized: "Imported files"),
+                    duration: statistics.importedFileDurationSeconds,
+                    color: .brown
+                )
+                usageRow(
+                    icon: "play.rectangle.fill",
+                    label: String(localized: "YouTube"),
+                    duration: statistics.youtubeDurationSeconds,
+                    color: .red
+                )
 
                 Divider()
 
@@ -183,20 +217,21 @@ struct AccountSettingsView: View {
                 .accessibilityElement(children: .combine)
             }
 
-            Text("Recording time is tracked locally. This data will be used to show how much time Diduny has saved you.")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Text(
+                "Recording time is tracked locally. This data will be used to show how much time Diduny has saved you."
+            )
+            .font(.caption)
+            .foregroundColor(.secondary)
         }
     }
 
-    @ViewBuilder
     private func usageRow(icon: String, label: String, duration: TimeInterval, color: Color) -> some View {
         HStack {
             Image(systemName: icon)
                 .foregroundColor(color)
                 .frame(width: 16)
                 .accessibilityHidden(true)
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .foregroundColor(.secondary)
             Spacer()
             Text(formatDuration(duration))
@@ -223,7 +258,6 @@ struct AccountSettingsView: View {
 
     // MARK: - Helpers
 
-    @ViewBuilder
     private func testResultView(_ result: ProxyTestResult) -> some View {
         HStack {
             switch result {
@@ -250,7 +284,7 @@ struct AccountSettingsView: View {
             let urlString = proxyBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             guard let url = URL(string: "\(urlString)/api/v1/health") else {
                 await MainActor.run {
-                    proxyTestResult = .failure("Invalid proxy URL")
+                    proxyTestResult = .failure(String(localized: "Invalid proxy URL"))
                     isTestingProxy = false
                 }
                 return

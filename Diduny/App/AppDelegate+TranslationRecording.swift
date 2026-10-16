@@ -209,7 +209,7 @@ extension AppDelegate {
         guard micGranted else {
             Log.app.warning("startTranslationRecording: Microphone permission not granted")
             await MainActor.run {
-                appState.errorMessage = "Microphone access required"
+                appState.errorMessage = String(localized: "Microphone access required")
                 appState.translationRecordingState = .error
                 handleTranslationStateChange(.error)
                 activeTranslationLanguagePair = nil
@@ -223,7 +223,9 @@ extension AppDelegate {
             guard let model = WhisperModelManager.shared.selectedModel() else {
                 Log.app.warning("startTranslationRecording: No Whisper model selected")
                 await MainActor.run {
-                    appState.errorMessage = "No Whisper model downloaded. Please download one in Settings."
+                    appState
+                        .errorMessage =
+                        String(localized: "No Whisper model downloaded. Please download one in Settings.")
                     appState.translationRecordingState = .error
                     handleTranslationStateChange(.error)
                     activeTranslationLanguagePair = nil
@@ -256,7 +258,7 @@ extension AppDelegate {
         guard let device else {
             Log.app.error("startTranslationRecording: No audio input devices available")
             await MainActor.run {
-                appState.errorMessage = "No microphone found. Please connect a microphone."
+                appState.errorMessage = String(localized: "No microphone found. Please connect a microphone.")
                 appState.translationRecordingState = .error
                 handleTranslationStateChange(.error)
                 activeTranslationLanguagePair = nil
@@ -454,15 +456,14 @@ extension AppDelegate {
                 )
                 Log.app.info("stopTranslationRecording: HTTP cloud translation (\(rawText.count) chars)")
             }
-            let cleanedRawText: String
-            if !realtimeResult.text.isEmpty {
-                cleanedRawText = await cleanRealtimeResultText(
+            let cleanedRawText: String = if !realtimeResult.text.isEmpty {
+                await cleanRealtimeResultText(
                     rawText,
                     realtimeResult: realtimeResult,
                     logPrefix: "Translation"
                 )
             } else {
-                cleanedRawText = await TranscriptCleanupService.shared.clean(
+                await TranscriptCleanupService.shared.clean(
                     rawText,
                     fillerWords: SettingsStorage.shared.fillerWords
                 )
@@ -504,6 +505,12 @@ extension AppDelegate {
                 activeTranslationTargetLanguage = nil
             }
             Log.app.info("stopTranslationRecording: SUCCESS")
+            let analyticsDuration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+            Task { await AnalyticsService.shared.record(
+                duration: analyticsDuration,
+                mode: SettingsStorage.shared.effectiveTranslationProvider.rawValue,
+                scenario: "translation"
+            ) }
 
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             let compressedData = await AudioCompressionService.compressToFLAC(audioData: audioData)
@@ -605,9 +612,9 @@ extension AppDelegate {
         let feedbackMode: RecordingMode = .translation(targetLanguage: translationPairLabel)
         let onNoSpeech: () -> Void = { [weak self] in
             Task { @MainActor [weak self] in
-                guard let self, self.appState.translationRecordingState == .recording else { return }
-                await self.cancelTranslationRecording(forceDiscardAudio: true)
-                self.showRecordingFeedbackInfo(
+                guard let self, appState.translationRecordingState == .recording else { return }
+                await cancelTranslationRecording(forceDiscardAudio: true)
+                showRecordingFeedbackInfo(
                     message: "No speech detected. Recording cancelled.",
                     mode: feedbackMode,
                     duration: 2.5
@@ -700,7 +707,10 @@ extension AppDelegate {
                     self.translationRealtimeSessionEnabled = false
                     self.translationRealtimeAccumulator = nil
                     self.translationRealtimeConnectionError = error.localizedDescription
-                    self.updateRecordingFeedbackConnectionStatus(.failed(error.localizedDescription), mode: feedbackMode)
+                    self.updateRecordingFeedbackConnectionStatus(
+                        .failed(error.localizedDescription),
+                        mode: feedbackMode
+                    )
                 }
                 NSLog("[Transcription] Translation RT connection failed: %@", error.localizedDescription)
             }
@@ -728,11 +738,10 @@ extension AppDelegate {
             return .empty
         }
 
-        let preFinalizeText: String
-        if finalize {
-            preFinalizeText = await accumulator?.bestText(includeProvisional: true) ?? ""
+        let preFinalizeText: String = if finalize {
+            await accumulator?.bestText(includeProvisional: true) ?? ""
         } else {
-            preFinalizeText = ""
+            ""
         }
         let optimisticCleanupTask = finalize
             ? startOptimisticRealtimeCleanup(for: preFinalizeText)
@@ -743,7 +752,7 @@ extension AppDelegate {
         }
         await realtimeTranscriptionService.disconnect()
 
-        let text = (await accumulator?.bestText(includeProvisional: true) ?? "")
+        let text = await (accumulator?.bestText(includeProvisional: true) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let preFinalizeTrimmed = preFinalizeText.trimmingCharacters(in: .whitespacesAndNewlines)
         let textChangedAfterFinalize = text != preFinalizeTrimmed
@@ -779,7 +788,7 @@ extension AppDelegate {
 
         escapeService.onProgressEscape = { [weak self] pressCount, _ in
             guard let self else { return }
-            self.showRecordingInfoDuringActiveRecording(
+            showRecordingInfoDuringActiveRecording(
                 message: SettingsStorage.shared.escapeCancelRepeatHint(afterPressCount: pressCount),
                 mode: .translation(targetLanguage: translationPairLabel),
                 duration: 1.5

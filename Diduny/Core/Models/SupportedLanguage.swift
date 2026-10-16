@@ -3,9 +3,21 @@ import Foundation
 
 struct SupportedLanguage: Identifiable, Hashable {
     let code: String
-    let name: String
+    private let fallbackName: String
+    var name: String {
+        if code == "auto" { return String(localized: "Auto") }
+        let locale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "en")
+        return locale.localizedString(forLanguageCode: code) ?? fallbackName
+    }
 
-    var id: String { code }
+    init(code: String, name: String) {
+        self.code = code
+        fallbackName = name
+    }
+
+    var id: String {
+        code
+    }
 
     /// All languages supported by cloud transcription & translation (60 languages).
     static let cloudLanguages: [SupportedLanguage] = [
@@ -68,7 +80,7 @@ struct SupportedLanguage: Identifiable, Hashable {
         SupportedLanguage(code: "uk", name: "Ukrainian"),
         SupportedLanguage(code: "ur", name: "Urdu"),
         SupportedLanguage(code: "vi", name: "Vietnamese"),
-        SupportedLanguage(code: "cy", name: "Welsh"),
+        SupportedLanguage(code: "cy", name: "Welsh")
     ]
 
     /// Languages supported by local Whisper models (subset).
@@ -126,10 +138,10 @@ struct SupportedLanguage: Identifiable, Hashable {
         SupportedLanguage(code: "uk", name: "Ukrainian"),
         SupportedLanguage(code: "ur", name: "Urdu"),
         SupportedLanguage(code: "vi", name: "Vietnamese"),
-        SupportedLanguage(code: "zh", name: "Chinese"),
+        SupportedLanguage(code: "zh", name: "Chinese")
     ]
 
-    // Legacy alias for backward compatibility
+    /// Legacy alias for backward compatibility
     static let allLanguages: [SupportedLanguage] = cloudLanguages
 
     static func language(for code: String) -> SupportedLanguage? {
@@ -207,7 +219,7 @@ struct TranslationLanguagePair: Identifiable, Codable, Hashable {
     }
 }
 
-struct KeyboardLanguageDetector {
+enum KeyboardLanguageDetector {
     struct DetectedLanguage: Identifiable, Hashable {
         let code: String
         let sourceName: String
@@ -345,7 +357,7 @@ private enum SupportedLanguageCodes {
     }
 }
 
-private extension Array where Element == KeyboardLanguageDetector.DetectedLanguage {
+private extension [KeyboardLanguageDetector.DetectedLanguage] {
     func deduplicatedByCode() -> [Element] {
         var result: [Element] = []
         var seen = Set<String>()
