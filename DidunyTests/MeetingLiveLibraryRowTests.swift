@@ -771,11 +771,11 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
     func test_meetingProviderResolution_usesCachedEligibilityWithoutNetworkPreflight() {
         let exhausted = UsageResponse(
             isWhitelisted: false,
-            usedHours: 5,
-            limitHours: 5,
+            usedHours: 2,
+            limitHours: 2,
             remainingHours: 0,
-            usedMs: 18_000_000,
-            limitMs: 18_000_000,
+            usedMs: 7_200_000,
+            limitMs: 7_200_000,
             remainingMs: 0
         )
 
@@ -796,8 +796,8 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         ), .cloud)
         XCTAssertEqual(AppDelegate.resolveMeetingTranscriptionProvider(
             requestedProvider: .local,
-            hasStoredSession: true,
-            cachedUsage: nil
+            hasStoredSession: false,
+            cachedUsage: exhausted
         ), .local)
     }
 

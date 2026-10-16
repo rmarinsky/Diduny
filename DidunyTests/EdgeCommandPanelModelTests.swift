@@ -196,6 +196,13 @@ struct EdgeCommandPanelModelTests {
         #expect(!model.selectMeetingSuggestionProvider(.cloud))
     }
 
+    @Test("Paid Pro access works without a whitelist and without remaining free hours")
+    func paidProCloudAccessIsRecognized() throws {
+        let data = Data(#"{"isWhitelisted":false,"isUnlimited":true,"usedHours":8,"limitHours":null,"remainingHours":null,"usedMs":28800000,"limitMs":null,"remainingMs":null}"#.utf8)
+        let usage = try JSONDecoder().decode(UsageResponse.self, from: data)
+        #expect(UsageService.canUseCloudTranscription(hasStoredSession: true, usage: usage))
+    }
+
     @Test("Cloud use requires confirmed usage while an unknown cache remains selectable")
     func cloudEligibilityDistinguishesConfirmedUseFromAnUnknownOffer() {
         let available = UsageResponse(

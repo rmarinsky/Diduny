@@ -57,6 +57,8 @@ struct AccountSettingsView: View {
 #endif
             }
 
+            BillingSettingsSection(isLoggedIn: authService.isLoggedIn)
+
             cloudUsageSection
 
             usageSection
@@ -79,11 +81,11 @@ struct AccountSettingsView: View {
                 let usageService = UsageService.shared
 
                 if let usage = usageService.cachedUsage {
-                    if usage.isWhitelisted {
+                    if usage.hasUnlimitedAccess {
                         HStack {
                             Image(systemName: "infinity")
                                 .foregroundColor(.green)
-                            Text("Unlimited (whitelisted)")
+                            Text("Unlimited cloud access")
                                 .foregroundColor(.secondary)
                         }
                     } else {
@@ -94,7 +96,7 @@ struct AccountSettingsView: View {
                             HStack {
                                 Text(String(format: "%.1fh / %.0fh used this month",
                                             usage.usedHours,
-                                            usage.limitHours ?? 5))
+                                            usage.limitHours ?? UsageService.freeCloudLimitHours))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
 

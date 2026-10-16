@@ -33,10 +33,10 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             expected = (
-                "# Finish cloud recordings without the extra wait\n\n"
-                "- Dictation and voice translation now send the correct end-of-recording signal.\n"
-                "- Meeting transcripts no longer wait for a timeout when the service has finished.\n"
-                "- Existing safeguards for delayed final words remain in place.\n"
+                "# Choose monthly or annual Diduny Pro\n\n"
+                "- Annual Pro gives you twelve months for the price of ten, with the full yearly payment shown before checkout.\n"
+                "- Manage automatic renewal in Account. Cancelling keeps access until the end of your paid period.\n"
+                "- Get two free cloud hours each month, or use local models for free without an hourly limit.\n"
             )
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
