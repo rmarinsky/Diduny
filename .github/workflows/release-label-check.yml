@@ -36,6 +36,9 @@ jobs:
             exit 1
           fi
 
+      - name: Validate calendar permission packaging
+        run: python3 scripts/test_calendar_permissions.py
+
       - name: Validate release highlights
         run: |
           python3 scripts/test_release_highlights.py

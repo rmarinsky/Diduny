@@ -1058,3 +1058,6 @@
 "⌘," = "⌘,";
 "⌘⇧D" = "⌘⇧D";
 "✓" = "✓";
+
+"Open Calendar Permissions" = "Open Calendar Permissions";
+"Calendar access was not granted. Allow Diduny in System Settings → Privacy & Security → Calendars, then connect again." = "Calendar access was not granted. Allow Diduny in System Settings → Privacy & Security → Calendars, then connect again.";

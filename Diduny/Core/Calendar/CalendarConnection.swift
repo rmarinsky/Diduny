@@ -58,7 +58,7 @@ struct CalendarConfiguration: Codable, Equatable {
         busy = true; error = nil
         do {
             guard try await authorize() else {
-                if request == generation { busy = false; error = String(localized: "Calendar access was not granted. You can change it in System Settings.") }
+                if request == generation { busy = false; error = String(localized: "Calendar access was not granted. Allow Diduny in System Settings → Privacy & Security → Calendars, then connect again.") }
                 return
             }
             guard request == generation else { return }

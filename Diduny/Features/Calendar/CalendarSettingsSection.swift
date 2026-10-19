@@ -35,7 +35,12 @@ struct CalendarSettingsSection: View {
             } else {
                 Button("Connect macOS calendars…") { approved = false; showConsent = true }.buttonStyle(.borderedProminent)
             }
-            if let error = connection.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+            if let error = connection.error {
+                Text(error).foregroundStyle(.red).textSelection(.enabled)
+                Button("Open Calendar Permissions") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
+                }
+            }
             Button("Open Internet Accounts") {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension")!)
             }

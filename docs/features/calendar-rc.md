@@ -67,3 +67,11 @@ No new native visual evidence was captured. The earlier candidate archive, signa
 checksums and manual verification limits above belong to their stated source revision;
 they do not describe a rebuilt combined candidate. Backend and website changes remain in
 separate repositories. Publishing this draft PR does not deploy them or release the app.
+
+## Calendar permission correction · 2026-10-19
+
+A user screenshot reported denied calendar access. Inspection found the calendar entitlement missing from both `project.yml` and `Diduny.entitlements` while Hardened Runtime was enabled. The old local candidate must not be treated as calendar-ready: signature validity did not prove required entitlement coverage. The fix adds `com.apple.security.personal-information.calendars` to both inputs, with a CI packaging contract that failed before the fix and passes after project regeneration. A newly built signed TEST app was inspected with `codesign` and contains the key. The system permission itself was not changed or verified.
+
+The error UI now links directly to Calendar Permissions and explains reconnecting after changing access. The user's exact running build and TCC authorization state are unknown, so this confirms a packaging defect without claiming it was the only cause of the reported denial. No installed app was replaced. Native permission grant/retry and the settings deep link still need live verification.
+
+Correction validation: 3 packaging contract tests passed after `xcodegen generate`; 10 targeted CalendarConnection/CalendarMeeting app tests passed with the existing unsigned test-host setup; 3 release-highlights tests and plist/diff checks passed. Two independent source reviews found no blockers. No real calendar permission grant or account read is claimed.
