@@ -40,7 +40,19 @@ struct CalendarReminderLedger: Codable, Equatable {
 extension CalendarMeeting {
     static func joinURL(in text: String) -> URL? {
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
-        return detector.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap(\.url).first(where: isJoinURL)
+        return detector.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap(\.url)
+            .compactMap { url -> URL? in
+                guard isJoinURL(url) else { return nil }
+                // Outlook can append <Safe Links URL> to the displayed meeting URL.
+                // Trim only this known suffix; never decode queries or unwrap redirect links.
+                let value = url.absoluteString
+                let suffix = value.range(
+                    of: #"(?i)(?:%3c|&lt;|<)https://(?:[a-z0-9-]+\.)*safelinks\.protection\.outlook\.com(?:[/?#]|$)"#,
+                    options: .regularExpression)
+                guard let suffix else { return url }
+                guard let clean = URL(string: String(value[..<suffix.lowerBound])), isJoinURL(clean) else { return nil }
+                return clean
+            }.first
     }
 
     static func isJoinURL(_ url: URL) -> Bool {

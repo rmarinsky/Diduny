@@ -83,3 +83,9 @@ Calendar settings groups calendars by EventKit source identifier, with compact c
 This is a suggested selection, not provider-primary discovery. EventKit does not expose a primary calendar for every account. Custom or other-language service names may need manual deselection; shared read-only meeting calendars require manual opt-in. No provider registration or account changes are introduced.
 
 Validation: initial-selection test failed before filtering; exact-name Exchange test failed six cases before correction. Final CalendarConnection/CalendarMeeting tests: 12 passed, 0 failed. Calendar entitlement packaging: 3 passed. Two independent source reviews completed; initial-query minimization and Ukrainian wording findings resolved. Signed DEV build installed and verified: account groups, collapsed/expanded Exchange service calendars, preserved selection and event read after restart. Fresh first-connect defaults are covered by tests, not a destructive reset of the user's connection.
+
+## Teams links adjacent to Outlook Safe Links (2026-10-19)
+
+The shared calendar URL extractor now trims a known adjacent Outlook Safe Links suffix from a supported direct meeting URL. Literal, HTML-escaped and URL-encoded angle boundaries are covered. It does not decode meeting query parameters or unwrap Safe Links redirects. The HTTPS/provider allowlist still applies before and after trimming.
+
+Regression evidence: original parser failed all three delimiter cases; an intermediate broad delimiter split failed encoded-context preservation and wrapper rejection. Final targeted suite: 13 passed, 0 failed. Two independent code reviews completed; their query-preservation findings were fixed. Signed DEV build installed with executable SHA-256 `34218a4877ddb5d5f46b1d0d02aa61b3399d24920c01d56c6b15bb2d24af780e`. Live Join navigation is not exercised.

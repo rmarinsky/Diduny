@@ -37,6 +37,21 @@ final class CalendarMeetingTests: XCTestCase {
         }
     }
 
+    func testTeamsLinkStopsBeforeAdjacentOutlookSafeLinksWithoutChangingJoinParameters() {
+        let teams = "https://teams.microsoft.com/meet/123456789?p=ExamplePasscode"
+        let safe = "https://eur02.safelinks.protection.outlook.com/?url=https%3A%2F%2Fteams.microsoft.com%2Fmeet%2F123456789%3Fp%3DExamplePasscode&data=synthetic"
+        for text in ["Join \(teams)<\(safe)>", "\(teams)%3C\(safe)%3E", "\(teams)&lt;\(safe)&gt;"] {
+            XCTAssertEqual(CalendarMeeting.joinURL(in: text)?.absoluteString, teams)
+        }
+        let legacy = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_example%40thread.v2/0?context=%7B%22Tid%22%3A%22example%22%7D&anon=true"
+        XCTAssertEqual(CalendarMeeting.joinURL(in: legacy)?.absoluteString, legacy)
+        let encodedContext = "https://teams.microsoft.com/meet/123?context=%3Chttps://example.com%3E"
+        XCTAssertEqual(CalendarMeeting.joinURL(in: encodedContext)?.absoluteString, encodedContext)
+        XCTAssertNil(CalendarMeeting.joinURL(in: "https://eur02.safelinks.protection.outlook.com/?url=%3Chttps://teams.microsoft.com/meet/123%3E"))
+        XCTAssertNil(CalendarMeeting.joinURL(in: safe))
+        XCTAssertNil(CalendarMeeting.joinURL(in: "https://teams.microsoft.com.evil.test/meet/123<\(safe)>"))
+    }
+
     func testPendingRemindersMergeStaggeredOccurrencesAndPruneRemovedEvents() {
         let now = Date()
         let a = CalendarMeeting(id: "a", calendarID: "work", title: "A", start: now, end: now.addingTimeInterval(600))
