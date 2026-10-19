@@ -20,6 +20,31 @@ import XCTest
         XCTAssertFalse(disconnected.configuration.connected)
     }
 
+    func testEditableExchangeServiceCalendarsAreNotSuggestedByName() {
+        for title in ["Дні народження", "Свята (Україна)", "Свята в Україні", "Birthdays", "Holidays", "  BIRTHDAYS  "] {
+            XCTAssertFalse(CalendarChoice(id: title, title: title, source: "Exchange").suggested, title)
+        }
+        for title in ["Work", "Персональне", "Birthday campaign planning"] {
+            XCTAssertTrue(CalendarChoice(id: title, title: title, source: "Exchange").suggested, title)
+        }
+    }
+
+    func testInitialSelectionExcludesOtherCalendarsAndPreservesManualOptInAfterRestore() async {
+        let defaults = UserDefaults(suiteName: "CalendarDefaults-\(UUID())")!
+        let snapshot = ScheduledCalendarSnapshot(calendars: [
+            .init(id: "work", title: "Work", source: "Account"),
+            .init(id: "birthdays", title: "Birthdays", source: "Other", eligibleForSuggestion: false),
+            .init(id: "subscription", title: "Shared schedule", source: "Account", eligibleForSuggestion: false)
+        ], meetings: [])
+        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in snapshot })
+        await connection.connect()
+        XCTAssertEqual(connection.configuration.selected, ["work"])
+        connection.selectCalendar("birthdays", selected: true)
+        let restored = CalendarConnection(defaults: defaults, authorize: { XCTFail("No new consent"); return false }, read: { _ in snapshot })
+        await restored.refresh()
+        XCTAssertEqual(restored.configuration.selected, ["work", "birthdays"])
+    }
+
     func testNoLinkEventCanRecordAndDeselectedEventsCannotActOrRemainInMemory() async {
         let defaults = UserDefaults(suiteName: "CalendarSelection-\(UUID())")!
         let event = CalendarMeeting(id: "local", calendarID: "work", title: "In person", start: Date(), end: Date().addingTimeInterval(600))

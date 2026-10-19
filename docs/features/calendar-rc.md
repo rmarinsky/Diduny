@@ -75,3 +75,11 @@ A user screenshot reported denied calendar access. Inspection found the calendar
 The error UI now links directly to Calendar Permissions and explains reconnecting after changing access. The user's exact running build and TCC authorization state are unknown, so this confirms a packaging defect without claiming it was the only cause of the reported denial. No installed app was replaced. Native permission grant/retry and the settings deep link still need live verification.
 
 Correction validation: 3 packaging contract tests passed after `xcodegen generate`; 10 targeted CalendarConnection/CalendarMeeting app tests passed with the existing unsigned test-host setup; 3 release-highlights tests and plist/diff checks passed. Two independent source reviews found no blockers. No real calendar permission grant or account read is claimed.
+
+## Calendar selection and account grouping (2026-10-19)
+
+Calendar settings groups calendars by EventKit source identifier, with compact checkboxes and selected counts. Other calendars remain available in a collapsed disclosure. First connection selects editable, non-subscribed, non-birthday calendars; recognized exact English/Ukrainian birthday/holiday names are also excluded because Exchange exposes some as editable ordinary calendars. Existing saved selections, including explicit opt-in to these calendars, are preserved. Initial EventKit event queries use this same selection before reading event details.
+
+This is a suggested selection, not provider-primary discovery. EventKit does not expose a primary calendar for every account. Custom or other-language service names may need manual deselection; shared read-only meeting calendars require manual opt-in. No provider registration or account changes are introduced.
+
+Validation: initial-selection test failed before filtering; exact-name Exchange test failed six cases before correction. Final CalendarConnection/CalendarMeeting tests: 12 passed, 0 failed. Calendar entitlement packaging: 3 passed. Two independent source reviews completed; initial-query minimization and Ukrainian wording findings resolved. Signed DEV build installed and verified: account groups, collapsed/expanded Exchange service calendars, preserved selection and event read after restart. Fresh first-connect defaults are covered by tests, not a destructive reset of the user's connection.

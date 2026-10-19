@@ -5,6 +5,16 @@ struct CalendarChoice: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let source: String
+    var sourceID: String = ""
+    var eligibleForSuggestion: Bool = true
+
+    var suggested: Bool {
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // Exchange can expose these as ordinary editable calendars.
+        let serviceNames: Set<String> = ["birthdays", "holidays", "дні народження",
+                                         "свята", "свята (україна)", "свята в україні"]
+        return eligibleForSuggestion && !serviceNames.contains(name)
+    }
 }
 
 struct ScheduledCalendarSnapshot: Sendable {
@@ -103,7 +113,7 @@ struct CalendarConfiguration: Codable, Equatable {
             calendars = snapshot.calendars
             fetchedAt = Date(); error = nil; busy = false
             if selectInitialCalendars {
-                configuration.selected = Set(calendars.map(\.id)); persist()
+                configuration.selected = Set(calendars.filter(\.suggested).map(\.id)); persist()
             }
             meetings = snapshot.meetings.filter { configuration.selected.contains($0.calendarID) }
             deliverReminders()

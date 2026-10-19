@@ -18,7 +18,13 @@ actor SystemCalendarSource {
     func read(selected: Set<String>?) throws -> ScheduledCalendarSnapshot {
         guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { throw Failure.accessDenied }
         let calendars = store.calendars(for: .event)
-        let selectedCalendars = calendars.filter { selected?.contains($0.calendarIdentifier) ?? true }
+        let choices = calendars.map {
+            CalendarChoice(id: $0.calendarIdentifier, title: $0.title, source: $0.source.title,
+                           sourceID: $0.source.sourceIdentifier,
+                           eligibleForSuggestion: $0.type != .birthday && !$0.isSubscribed && $0.allowsContentModifications)
+        }
+        let included = selected ?? Set(choices.filter(\.suggested).map(\.id))
+        let selectedCalendars = calendars.filter { included.contains($0.calendarIdentifier) }
         let now = Date()
         let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-86400),
                                                 end: now.addingTimeInterval(7 * 86400), calendars: selectedCalendars)
@@ -37,9 +43,7 @@ actor SystemCalendarSource {
                                    declined: event.attendees?.contains { $0.isCurrentUser && $0.participantStatus == .declined } ?? false,
                                    allDay: event.isAllDay)
         }
-        return ScheduledCalendarSnapshot(calendars: calendars.map {
-            CalendarChoice(id: $0.calendarIdentifier, title: $0.title, source: $0.source.title)
-        }, meetings: meetings)
+        return ScheduledCalendarSnapshot(calendars: choices, meetings: meetings)
     }
 }
 

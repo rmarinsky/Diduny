@@ -20,15 +20,37 @@ struct CalendarSettingsSection: View {
                 if let date = connection.fetchedAt {
                     Text("Last read: \(date.formatted(date: .omitted, time: .standard))").font(.caption).foregroundStyle(.secondary)
                 }
-                ForEach(connection.calendars) { calendar in
-                    Toggle(isOn: Binding(get: { connection.configuration.selected.contains(calendar.id) },
-                                         set: { connection.selectCalendar(calendar.id, selected: $0) })) {
-                        VStack(alignment: .leading) {
-                            Text(calendar.title)
-                            Text(calendar.source).font(.caption).foregroundStyle(.secondary)
+                ForEach(calendarGroups, id: \.id) { group in
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Label(group.title, systemImage: "person.crop.circle").font(.headline)
+                            Spacer()
+                            Text("\(group.calendars.filter { connection.configuration.selected.contains($0.id) }.count) selected")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
-                    }
+                        ForEach(group.calendars.filter(\.suggested)) { calendar in
+                            calendarToggle(calendar)
+                        }
+                        let other = group.calendars.filter { !$0.suggested }
+                        if !other.isEmpty {
+                            DisclosureGroup {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text("Birthdays, holidays, subscriptions and read-only calendars. Enable any calendar that contains meetings you need.")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    ForEach(other) { calendar in calendarToggle(calendar) }
+                                }.padding(.top, 6)
+                            } label: {
+                                HStack {
+                                    Text("Other calendars")
+                                    Text("\(other.filter { connection.configuration.selected.contains($0.id) }.count) selected")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }.padding(.vertical, 6)
                 }
+                Text("New connections select editable calendars. Recognized birthdays, holidays, subscriptions and read-only calendars start off. Your saved choices are preserved.")
+                    .font(.caption).foregroundStyle(.secondary)
                 if connection.calendars.isEmpty && !connection.busy {
                     Text("No calendars are available. Add an account in System Settings → Internet Accounts, then refresh.")
                 }
@@ -101,6 +123,27 @@ struct CalendarSettingsSection: View {
                 Text("Updates follow macOS account synchronization. Diduny rereads on changes and every minute; it cannot guarantee provider delivery latency.").font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var calendarGroups: [(id: String, title: String, calendars: [CalendarChoice])] {
+        Dictionary(grouping: connection.calendars, by: { $0.sourceID.isEmpty ? $0.source : $0.sourceID })
+            .map { id, calendars in
+                (id: id, title: calendars.first?.source ?? "",
+                 calendars: calendars.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending })
+            }
+            .sorted { lhs, rhs in
+                let order = lhs.title.localizedStandardCompare(rhs.title)
+                return order == .orderedSame ? lhs.id < rhs.id : order == .orderedAscending
+            }
+    }
+
+    private func calendarToggle(_ calendar: CalendarChoice) -> some View {
+        Toggle(calendar.title, isOn: Binding(
+            get: { connection.configuration.selected.contains(calendar.id) },
+            set: { connection.selectCalendar(calendar.id, selected: $0) }
+        ))
+        .toggleStyle(.checkbox)
+        .accessibilityLabel(Text("\(calendar.title), \(calendar.source)"))
     }
 
     private func preference<T>(_ key: WritableKeyPath<CalendarConfiguration, T>) -> Binding<T> {

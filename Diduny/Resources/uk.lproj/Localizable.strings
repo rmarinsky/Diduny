@@ -1061,3 +1061,11 @@
 
 "Open Calendar Permissions" = "Відкрити дозволи календаря";
 "Calendar access was not granted. Allow Diduny in System Settings → Privacy & Security → Calendars, then connect again." = "Доступ до календаря не надано. Дозвольте його для Diduny у Параметрах системи → Приватність і безпека → Календарі, потім під’єднайтеся знову.";
+
+"Other calendars" = "Інші календарі";
+
+"%lld selected" = "Вибрано: %lld";
+
+"Birthdays, holidays, subscriptions and read-only calendars. Enable any calendar that contains meetings you need." = "Дні народження, свята, підписки й календарі лише для читання. Увімкніть будь-який календар із потрібними вам зустрічами.";
+
+"New connections select editable calendars. Recognized birthdays, holidays, subscriptions and read-only calendars start off. Your saved choices are preserved." = "Для нових підключень вибрано календарі з можливістю редагування. Розпізнані календарі днів народження та свят, підписки й календарі лише для читання спочатку вимкнені. Ваш збережений вибір не змінюється.";

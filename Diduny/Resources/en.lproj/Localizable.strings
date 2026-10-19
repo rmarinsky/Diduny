@@ -1061,3 +1061,11 @@
 
 "Open Calendar Permissions" = "Open Calendar Permissions";
 "Calendar access was not granted. Allow Diduny in System Settings → Privacy & Security → Calendars, then connect again." = "Calendar access was not granted. Allow Diduny in System Settings → Privacy & Security → Calendars, then connect again.";
+
+"Other calendars" = "Other calendars";
+
+"%lld selected" = "%lld selected";
+
+"Birthdays, holidays, subscriptions and read-only calendars. Enable any calendar that contains meetings you need." = "Birthdays, holidays, subscriptions and read-only calendars. Enable any calendar that contains meetings you need.";
+
+"New connections select editable calendars. Recognized birthdays, holidays, subscriptions and read-only calendars start off. Your saved choices are preserved." = "New connections select editable calendars. Recognized birthdays, holidays, subscriptions and read-only calendars start off. Your saved choices are preserved.";
