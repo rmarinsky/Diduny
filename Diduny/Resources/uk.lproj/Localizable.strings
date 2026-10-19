@@ -1069,3 +1069,47 @@
 "Birthdays, holidays, subscriptions and read-only calendars. Enable any calendar that contains meetings you need." = "Дні народження, свята, підписки й календарі лише для читання. Увімкніть будь-який календар із потрібними вам зустрічами.";
 
 "New connections select editable calendars. Recognized birthdays, holidays, subscriptions and read-only calendars start off. Your saved choices are preserved." = "Для нових підключень вибрано календарі з можливістю редагування. Розпізнані календарі днів народження та свят, підписки й календарі лише для читання спочатку вимкнені. Ваш збережений вибір не змінюється.";
+
+"Calendar & Meetings" = "Календар і зустрічі";
+
+"On this Mac" = "На цьому Mac";
+
+"CalDAV account" = "Обліковий запис CalDAV";
+
+"Calendar subscriptions" = "Підписки на календарі";
+
+"Calendar account" = "Обліковий запис календаря";
+
+"Birthday calendar" = "Дні народження";
+
+"Subscribed calendar" = "Календар за підпискою";
+
+"Read-only calendar" = "Лише для читання";
+
+"Editable calendar" = "Можна редагувати";
+
+"macOS Calendars" = "Календарі macOS";
+
+"Manage calendars…" = "Керувати календарями…";
+
+"Refreshing calendars…" = "Оновлюємо календарі…";
+
+"Use calendars already connected to this Mac. Choose which ones appear in Diduny." = "Використовуйте календарі, підключені до цього Mac. Виберіть, які показувати в Diduny.";
+
+"Choose calendars" = "Виберіть календарі";
+
+"Only selected calendars appear in meetings and reminders." = "Лише вибрані календарі використовуються для зустрічей і нагадувань.";
+
+"Internet Accounts…" = "Облікові записи інтернету…";
+
+"Meeting audio and transcription…" = "Звук і транскрибування зустрічей…";
+
+"Choose the provider, audio sources and recording levels in Audio & Dictation." = "Провайдер, джерела звуку й рівні запису налаштовуються в розділі «Аудіо й диктування».";
+
+"The next three meetings are shown here. More meetings are available in the menu bar." = "Тут показано три найближчі зустрічі. Інші доступні в смузі меню.";
+
+"Diduny only reads calendar events." = "Diduny лише читає події календаря.";
+
+"Birthdays" = "Дні народження";
+
+"Audio settings" = "Налаштування звуку";

@@ -1,3 +1,4 @@
+import AppKit
 import EventKit
 import Foundation
 
@@ -18,10 +19,28 @@ actor SystemCalendarSource {
     func read(selected: Set<String>?) throws -> ScheduledCalendarSnapshot {
         guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { throw Failure.accessDenied }
         let calendars = store.calendars(for: .event)
-        let choices = calendars.map {
-            CalendarChoice(id: $0.calendarIdentifier, title: $0.title, source: $0.source.title,
-                           sourceID: $0.source.sourceIdentifier,
-                           eligibleForSuggestion: $0.type != .birthday && !$0.isSubscribed && $0.allowsContentModifications)
+        let choices = calendars.map { calendar in
+            let kind: CalendarSourceKind
+            switch calendar.source.sourceType {
+            case .local: kind = .local
+            case .exchange: kind = .exchange
+            case .calDAV: kind = .calDAV
+            case .mobileMe: kind = .iCloud
+            case .subscribed: kind = .subscribed
+            case .birthdays: kind = .birthdays
+            @unknown default: kind = .unknown
+            }
+            let color = calendar.color?.usingColorSpace(.deviceRGB)
+            let rgb = color.map {
+                (UInt32(max(0, min(255, $0.redComponent * 255))) << 16) |
+                (UInt32(max(0, min(255, $0.greenComponent * 255))) << 8) |
+                UInt32(max(0, min(255, $0.blueComponent * 255)))
+            }
+            return CalendarChoice(id: calendar.calendarIdentifier, title: calendar.title, source: calendar.source.title,
+                                  sourceID: calendar.source.sourceIdentifier,
+                                  eligibleForSuggestion: calendar.type != .birthday && !calendar.isSubscribed && calendar.allowsContentModifications,
+                                  sourceKind: kind, colorRGB: rgb, readOnly: !calendar.allowsContentModifications,
+                                  subscription: calendar.isSubscribed, birthday: calendar.type == .birthday)
         }
         let included = selected ?? Set(choices.filter(\.suggested).map(\.id))
         let selectedCalendars = calendars.filter { included.contains($0.calendarIdentifier) }

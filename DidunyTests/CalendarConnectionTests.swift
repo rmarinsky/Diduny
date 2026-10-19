@@ -20,6 +20,16 @@ import XCTest
         XCTAssertFalse(disconnected.configuration.connected)
     }
 
+    func testCalendarSourceLabelsExplainGenericNamesWithoutGuessingProviders() {
+        XCTAssertEqual(CalendarChoice(id: "1", title: "Calendar", source: "Default", sourceKind: .local).displaySource,
+                       String(localized: "On this Mac"))
+        XCTAssertEqual(CalendarChoice(id: "2", title: "Calendar", source: "Other", sourceKind: .birthdays).displaySource,
+                       String(localized: "Birthdays"))
+        XCTAssertEqual(CalendarChoice(id: "3", title: "Calendar", source: "Work", sourceKind: .exchange).displaySource, "Work")
+        XCTAssertEqual(CalendarChoice(id: "4", title: "Calendar", source: "Default", sourceKind: .calDAV).displaySource,
+                       String(localized: "CalDAV account"))
+    }
+
     func testEditableExchangeServiceCalendarsAreNotSuggestedByName() {
         for title in ["Дні народження", "Свята (Україна)", "Свята в Україні", "Birthdays", "Holidays", "  BIRTHDAYS  "] {
             XCTAssertFalse(CalendarChoice(id: title, title: title, source: "Exchange").suggested, title)

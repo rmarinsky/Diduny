@@ -5,56 +5,41 @@ struct CalendarSettingsSection: View {
     @State private var showConsent = false
     @State private var approved = false
     @State private var showBrowser = false
+    @State private var showCalendars = false
+    @State private var showUpcoming = false
 
     var body: some View {
         Section {
-            Label("Your calendars, on this Mac", systemImage: "calendar.badge.clock").font(.headline)
-            Text("Connect Google, Microsoft, iCloud or CalDAV calendars already added to macOS. No Diduny OAuth registration is required.")
-                .foregroundStyle(.secondary)
             if connection.configuration.connected {
+                HStack(spacing: 12) {
+                    Image(systemName: "calendar.badge.checkmark")
+                        .font(.title2).foregroundStyle(.tint).accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("macOS Calendars").font(.headline)
+                        Text("\(connection.calendars.filter { connection.configuration.selected.contains($0.id) }.count) selected")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Manage calendars…") { showCalendars = true }
+                }.padding(.vertical, 6)
                 HStack {
-                    Button("Refresh calendars") { Task { await connection.refresh() } }.disabled(connection.busy)
-                    Button("Disconnect calendars", role: .destructive) { connection.disconnect() }
-                    if connection.busy { ProgressView().controlSize(.small) }
+                    if connection.busy {
+                        ProgressView().controlSize(.small)
+                        Text("Refreshing calendars…").font(.caption).foregroundStyle(.secondary)
+                    } else if let date = connection.fetchedAt {
+                        Text("Last read: \(date.formatted(date: .omitted, time: .standard))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Refresh") { Task { await connection.refresh() } }.disabled(connection.busy)
                 }
-                if let date = connection.fetchedAt {
-                    Text("Last read: \(date.formatted(date: .omitted, time: .standard))").font(.caption).foregroundStyle(.secondary)
-                }
-                ForEach(calendarGroups, id: \.id) { group in
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Label(group.title, systemImage: "person.crop.circle").font(.headline)
-                            Spacer()
-                            Text("\(group.calendars.filter { connection.configuration.selected.contains($0.id) }.count) selected")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                        ForEach(group.calendars.filter(\.suggested)) { calendar in
-                            calendarToggle(calendar)
-                        }
-                        let other = group.calendars.filter { !$0.suggested }
-                        if !other.isEmpty {
-                            DisclosureGroup {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text("Birthdays, holidays, subscriptions and read-only calendars. Enable any calendar that contains meetings you need.")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                    ForEach(other) { calendar in calendarToggle(calendar) }
-                                }.padding(.top, 6)
-                            } label: {
-                                HStack {
-                                    Text("Other calendars")
-                                    Text("\(other.filter { connection.configuration.selected.contains($0.id) }.count) selected")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }.padding(.vertical, 6)
-                }
-                Text("New connections select editable calendars. Recognized birthdays, holidays, subscriptions and read-only calendars start off. Your saved choices are preserved.")
-                    .font(.caption).foregroundStyle(.secondary)
                 if connection.calendars.isEmpty && !connection.busy {
                     Text("No calendars are available. Add an account in System Settings → Internet Accounts, then refresh.")
                 }
             } else {
+                Label("Connect your calendars", systemImage: "calendar.badge.plus").font(.headline)
+                Text("Use calendars already connected to this Mac. Choose which ones appear in Diduny.")
+                    .foregroundStyle(.secondary)
                 Button("Connect macOS calendars…") { approved = false; showConsent = true }.buttonStyle(.borderedProminent)
             }
             if let error = connection.error {
@@ -63,13 +48,11 @@ struct CalendarSettingsSection: View {
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
                 }
             }
-            Button("Open Internet Accounts") {
-                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension")!)
-            }
             DisclosureGroup("Read a calendar from a browser", isExpanded: $showBrowser) {
                 BrowserCalendarSettingsView()
             }
         } header: { Text("Calendars") }
+        .sheet(isPresented: $showCalendars) { calendarManagement }
         .sheet(isPresented: $showConsent) {
             VStack(alignment: .leading, spacing: 18) {
                 Label("Connect your calendars", systemImage: "hand.raised").font(.title2.bold())
@@ -105,31 +88,85 @@ struct CalendarSettingsSection: View {
                 Text("Full-screen reminders can always be dismissed with Escape. Local mode saves audio if no model is ready; it never silently uploads it. To keep reminders running after login, use Launch at Login in General.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Upcoming meetings") {
-                if connection.currentMeetings.isEmpty { Text("No upcoming timed events in the selected calendars.").foregroundStyle(.secondary) }
-                ForEach(connection.currentMeetings.prefix(30)) { meeting in
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(meeting.title).font(.headline)
-                            Text(meeting.start.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary)
-                            if let url = meeting.meetingURL { Text(url.absoluteString).font(.caption).textSelection(.enabled) }
-                        }
-                        Spacer()
-                        Button(meeting.meetingURL == nil ? "Record meeting" : "Join") {
-                            connection.join(meeting, record: meeting.meetingURL == nil || connection.configuration.recordOnJoin)
+            Section {
+                DisclosureGroup("Upcoming meetings", isExpanded: $showUpcoming) {
+                    if connection.currentMeetings.isEmpty {
+                        Text("No upcoming timed events in the selected calendars.").foregroundStyle(.secondary)
+                    }
+                    ForEach(connection.currentMeetings.prefix(3)) { meeting in
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(meeting.title).lineLimit(1)
+                                Text(meeting.start.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button(meeting.meetingURL == nil ? "Record meeting" : "Join") {
+                                connection.join(meeting, record: meeting.meetingURL == nil || connection.configuration.recordOnJoin)
+                            }
+                            .buttonStyle(.link)
+                            .help(meeting.meetingURL?.absoluteString ?? meeting.title)
+                            .accessibilityLabel(Text("\(meeting.meetingURL == nil ? String(localized: "Record meeting") : String(localized: "Join")): \(meeting.title)"))
+                            .accessibilityHint(Text(meeting.meetingURL?.host ?? ""))
+                        }.padding(.vertical, 4)
+                    }
+                    Text("The next three meetings are shown here. More meetings are available in the menu bar.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+        }
+    }
+
+    private var calendarManagement: some View {
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Choose calendars").font(.title2.bold())
+                    Text("Only selected calendars appear in meetings and reminders.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Done") { showCalendars = false }.keyboardShortcut(.defaultAction)
+            }.padding(24)
+            Divider()
+            List {
+                ForEach(calendarGroups, id: \.id) { group in
+                    Section {
+                        ForEach(group.calendars) { calendar in calendarToggle(calendar) }
+                    } header: {
+                        HStack {
+                            Text(group.title).font(.headline)
+                            Spacer()
+                            if let calendar = group.calendars.first, group.title != calendar.sourceKind.label {
+                                Text(calendar.sourceKind.label).font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
-                Text("Updates follow macOS account synchronization. Diduny rereads on changes and every minute; it cannot guarantee provider delivery latency.").font(.caption).foregroundStyle(.secondary)
-            }
-        }
+            }.listStyle(.inset)
+            Divider()
+            Text("Diduny only reads calendar events.").font(.caption).foregroundStyle(.secondary).padding(.top, 12)
+            HStack {
+                Button("Internet Accounts…") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension")!)
+                }
+                Spacer()
+                Button("Disconnect calendars", role: .destructive) {
+                    connection.disconnect(); showCalendars = false
+                }
+            }.padding(20)
+        }.frame(width: 580, height: 520)
     }
 
     private var calendarGroups: [(id: String, title: String, calendars: [CalendarChoice])] {
         Dictionary(grouping: connection.calendars, by: { $0.sourceID.isEmpty ? $0.source : $0.sourceID })
             .map { id, calendars in
-                (id: id, title: calendars.first?.source ?? "",
-                 calendars: calendars.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending })
+                (id: id, title: calendars.first?.displaySource ?? "",
+                 calendars: calendars.sorted { lhs, rhs in
+                     if lhs.suggested != rhs.suggested { return lhs.suggested }
+                     return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+                 })
             }
             .sorted { lhs, rhs in
                 let order = lhs.title.localizedStandardCompare(rhs.title)
@@ -138,12 +175,24 @@ struct CalendarSettingsSection: View {
     }
 
     private func calendarToggle(_ calendar: CalendarChoice) -> some View {
-        Toggle(calendar.title, isOn: Binding(
+        Toggle(isOn: Binding(
             get: { connection.configuration.selected.contains(calendar.id) },
             set: { connection.selectCalendar(calendar.id, selected: $0) }
-        ))
+        )) {
+            HStack(spacing: 10) {
+                let rgb = calendar.colorRGB ?? 0x808080
+                Circle().fill(Color(red: Double((rgb >> 16) & 255) / 255,
+                                    green: Double((rgb >> 8) & 255) / 255,
+                                    blue: Double(rgb & 255) / 255))
+                    .frame(width: 9, height: 9).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(calendar.title)
+                    Text(calendar.detailLabel).font(.caption).foregroundStyle(.secondary)
+                }
+            }.padding(.vertical, 5)
+        }
         .toggleStyle(.checkbox)
-        .accessibilityLabel(Text("\(calendar.title), \(calendar.source)"))
+        .accessibilityLabel(Text("\(calendar.title), \(calendar.displaySource), \(calendar.detailLabel)"))
     }
 
     private func preference<T>(_ key: WritableKeyPath<CalendarConfiguration, T>) -> Binding<T> {

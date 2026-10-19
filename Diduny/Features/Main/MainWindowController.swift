@@ -11,6 +11,7 @@ final class MainWindowController {
     var requestedSection: MainSection?
     var requestedRecordingID: UUID?
     var requestedBatchComposer = false
+    var showsMeetingAudioSettings = false
 
     private var window: NSWindow?
     private var windowDelegate: MainWindowDelegate?

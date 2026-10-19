@@ -20,7 +20,7 @@ enum MainSection: String, CaseIterable, Hashable {
         case .overview: String(localized: "Overview")
         case .recordings: String(localized: "Recordings")
         case .typingTest: String(localized: "Typing Test")
-        case .meetings: String(localized: "Meetings")
+        case .meetings: String(localized: "Calendar & Meetings")
         case .general: String(localized: "General")
         case .audioDictation: String(localized: "Audio & Dictation")
         case .models: String(localized: "Models")

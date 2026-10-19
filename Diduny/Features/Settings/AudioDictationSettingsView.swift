@@ -34,6 +34,25 @@ struct AudioDictationSettingsView: View {
     }
 
     var body: some View {
+        @Bindable var navigation = MainWindowController.shared
+        VStack(spacing: 0) {
+            Picker("Audio settings", selection: $navigation.showsMeetingAudioSettings) {
+                Text("Dictation").tag(false)
+                Text("Meetings").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 340)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            if navigation.showsMeetingAudioSettings {
+                MeetingAudioSettingsView()
+            } else {
+                dictationForm
+            }
+        }
+    }
+
+    private var dictationForm: some View {
         Form {
             inputDeviceSection
             testRecordingSection
@@ -484,8 +503,7 @@ struct AudioDictationSettingsView: View {
 
     private func cleanupTestRecording() {
         testRecorderService.cancelRecording()
-        testAudioPlayer?.stop()
-        testAudioPlayer = nil
+        stopTestPlayback()
         if let url = testRecordingURL { try? FileManager.default.removeItem(at: url); testRecordingURL = nil }
     }
 }

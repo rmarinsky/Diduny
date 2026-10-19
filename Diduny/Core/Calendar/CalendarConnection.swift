@@ -1,12 +1,45 @@
 import Foundation
 import Observation
 
+enum CalendarSourceKind: Sendable {
+    case local, exchange, calDAV, iCloud, subscribed, birthdays, unknown
+
+    var label: String {
+        switch self {
+        case .local: String(localized: "On this Mac")
+        case .exchange: "Exchange"
+        case .calDAV: String(localized: "CalDAV account")
+        case .iCloud: "iCloud"
+        case .subscribed: String(localized: "Calendar subscriptions")
+        case .birthdays: String(localized: "Birthdays")
+        case .unknown: String(localized: "Calendar account")
+        }
+    }
+}
+
 struct CalendarChoice: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let source: String
     var sourceID: String = ""
     var eligibleForSuggestion: Bool = true
+    var sourceKind: CalendarSourceKind = .unknown
+    var colorRGB: UInt32? = nil
+    var readOnly = false
+    var subscription = false
+    var birthday = false
+    var displaySource: String {
+        let generic = ["", "default", "other", "subscribed calendars"]
+        return sourceKind == .local || generic.contains(source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+            ? sourceKind.label : source
+    }
+
+    var detailLabel: String {
+        if birthday { return String(localized: "Birthday calendar") }
+        if subscription { return String(localized: "Subscribed calendar") }
+        if readOnly { return String(localized: "Read-only calendar") }
+        return String(localized: "Editable calendar")
+    }
 
     var suggested: Bool {
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

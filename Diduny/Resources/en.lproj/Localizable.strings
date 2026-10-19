@@ -1069,3 +1069,47 @@
 "Birthdays, holidays, subscriptions and read-only calendars. Enable any calendar that contains meetings you need." = "Birthdays, holidays, subscriptions and read-only calendars. Enable any calendar that contains meetings you need.";
 
 "New connections select editable calendars. Recognized birthdays, holidays, subscriptions and read-only calendars start off. Your saved choices are preserved." = "New connections select editable calendars. Recognized birthdays, holidays, subscriptions and read-only calendars start off. Your saved choices are preserved.";
+
+"Calendar & Meetings" = "Calendar & Meetings";
+
+"On this Mac" = "On this Mac";
+
+"CalDAV account" = "CalDAV account";
+
+"Calendar subscriptions" = "Calendar subscriptions";
+
+"Calendar account" = "Calendar account";
+
+"Birthday calendar" = "Birthday calendar";
+
+"Subscribed calendar" = "Subscribed calendar";
+
+"Read-only calendar" = "Read-only calendar";
+
+"Editable calendar" = "Editable calendar";
+
+"macOS Calendars" = "macOS Calendars";
+
+"Manage calendars…" = "Manage calendars…";
+
+"Refreshing calendars…" = "Refreshing calendars…";
+
+"Use calendars already connected to this Mac. Choose which ones appear in Diduny." = "Use calendars already connected to this Mac. Choose which ones appear in Diduny.";
+
+"Choose calendars" = "Choose calendars";
+
+"Only selected calendars appear in meetings and reminders." = "Only selected calendars appear in meetings and reminders.";
+
+"Internet Accounts…" = "Internet Accounts…";
+
+"Meeting audio and transcription…" = "Meeting audio and transcription…";
+
+"Choose the provider, audio sources and recording levels in Audio & Dictation." = "Choose the provider, audio sources and recording levels in Audio & Dictation.";
+
+"The next three meetings are shown here. More meetings are available in the menu bar." = "The next three meetings are shown here. More meetings are available in the menu bar.";
+
+"Diduny only reads calendar events." = "Diduny only reads calendar events.";
+
+"Birthdays" = "Birthdays";
+
+"Audio settings" = "Audio settings";

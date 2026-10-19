@@ -2,6 +2,22 @@ import AVFoundation
 import SwiftUI
 
 struct MeetingSettingsView: View {
+    var body: some View {
+        Form {
+            CalendarSettingsSection()
+            Section {
+                Button("Meeting audio and transcription…") {
+                    MainWindowController.shared.showsMeetingAudioSettings = true
+                    MainWindowController.shared.showWindow(section: .audioDictation)
+                }
+            } footer: {
+                Text("Choose the provider, audio sources and recording levels in Audio & Dictation.")
+            }
+        }.formStyle(.grouped)
+    }
+}
+
+struct MeetingAudioSettingsView: View {
     @State private var meetingSuggestionsEnabled = SettingsStorage.shared.meetingSuggestionsEnabled
     @State private var meetingCloudModeEnabled: Bool = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
     @State private var localLivePreviewEnabled = SettingsStorage.shared.meetingLocalLivePreviewEnabled
@@ -19,7 +35,6 @@ struct MeetingSettingsView: View {
 
     var body: some View {
         Form {
-            CalendarSettingsSection()
             Section {
                 Toggle("Suggest recording when a meeting starts", isOn: $meetingSuggestionsEnabled)
                     .onChange(of: meetingSuggestionsEnabled) { _, newValue in
@@ -71,31 +86,16 @@ struct MeetingSettingsView: View {
             }
 
             Section {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Audio Source")
-                        .font(.headline)
-
+                Picker("Audio Source", selection: $audioSource) {
                     ForEach(MeetingAudioSource.allCases, id: \.self) { source in
-                        HStack {
-                            Image(systemName: audioSource == source ? "circle.inset.filled" : "circle")
-                                .foregroundColor(audioSource == source ? .accentColor : .secondary)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(source.displayName)
-                                Text(source.description)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-
-                            Spacer()
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            audioSource = source
-                            SettingsStorage.shared.meetingAudioSource = source
-                        }
+                        Text(source.displayName).tag(source)
                     }
                 }
+                .pickerStyle(.radioGroup)
+                .onChange(of: audioSource) { _, value in
+                    SettingsStorage.shared.meetingAudioSource = value
+                }
+                Text(audioSource.description).font(.caption).foregroundStyle(.secondary)
             } header: {
                 Text("Meeting Recording")
             } footer: {
@@ -148,31 +148,6 @@ struct MeetingSettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 }
-            }
-
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Hotkey: ⌘⇧M")
-                        .font(.subheadline)
-
-                    Text("Or use Menu → Transcribe Meeting")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            } header: {
-                Text("How to Use")
-            }
-
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Supports recordings up to 1+ hour", systemImage: "clock")
-                    Label("Transcription starts after you stop", systemImage: "text.bubble")
-                    Label("Result copied to clipboard", systemImage: "doc.on.clipboard")
-                }
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            } header: {
-                Text("Features")
             }
 
             // Test System Audio Capture Section
@@ -245,6 +220,9 @@ struct MeetingSettingsView: View {
             meetingSuggestionsEnabled = SettingsStorage.shared.meetingSuggestionsEnabled
             meetingCloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
             localLivePreviewEnabled = SettingsStorage.shared.meetingLocalLivePreviewEnabled
+            audioSource = SettingsStorage.shared.meetingAudioSource
+            micGain = SettingsStorage.shared.meetingMicGain
+            systemGain = SettingsStorage.shared.meetingSystemGain
         }
         .onDisappear {
             cleanupTestCapture()
