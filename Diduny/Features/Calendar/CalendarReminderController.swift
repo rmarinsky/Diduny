@@ -6,10 +6,20 @@ private final class CalendarReminderWindow: NSPanel {
 }
 
 @MainActor final class CalendarReminderController {
-    private var window: NSWindow?
+    private(set) var window: NSWindow?
     private var pending: [CalendarMeeting] = []
     private let presentation = CalendarReminderPresentation()
-    func dismiss() { window?.close(); window = nil; pending = [] }
+    func dismiss() {
+        window?.orderOut(nil)
+        window?.close()
+        window = nil
+        pending = []
+    }
+
+    func join(_ meeting: CalendarMeeting, record: Bool, connection: CalendarConnection) {
+        dismiss()
+        connection.join(meeting, record: record)
+    }
 
     func show(_ meetings: [CalendarMeeting], connection: CalendarConnection) {
         guard !meetings.isEmpty else { return }
@@ -21,16 +31,20 @@ private final class CalendarReminderWindow: NSPanel {
         let frame = fullscreen ? (NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1000, height: 700))
                                : NSRect(x: 0, y: 0, width: 480, height: 400)
         let panel = CalendarReminderWindow(contentRect: frame,
-            styleMask: fullscreen ? [.borderless] : [.titled, .closable], backing: .buffered, defer: false)
+            styleMask: fullscreen ? [.borderless, .nonactivatingPanel] : [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = String(localized: "Upcoming meeting")
         panel.isReleasedWhenClosed = false
-        panel.level = .floating
+        panel.hidesOnDeactivate = false
+        panel.animationBehavior = .none
+        panel.level = fullscreen ? .screenSaver : .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.contentView = NSHostingView(rootView: CalendarReminderView(meetings: merged, connection: connection, presentation: presentation,
-                                                                          dismiss: { [weak self] in self?.dismiss() }))
+                                                                          dismiss: { [weak self] in self?.dismiss() },
+                                                                          join: { [weak self] meeting, record in self?.join(meeting, record: record, connection: connection) }))
         if !fullscreen { panel.center() }
         window = panel
         panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
     }
 }
 
@@ -39,6 +53,7 @@ private struct CalendarReminderView: View {
     let connection: CalendarConnection
     @Bindable var presentation: CalendarReminderPresentation
     let dismiss: () -> Void
+    let join: (CalendarMeeting, Bool) -> Void
     var body: some View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             VStack(spacing: 20) {
@@ -52,11 +67,11 @@ private struct CalendarReminderView: View {
                                 Text(current.start <= context.date ? String(localized: "Starting now") : current.start.formatted(date: .omitted, time: .shortened))
                                 if let url = current.meetingURL {
                                     Text(url.absoluteString).font(.caption).textSelection(.enabled)
-                                    Button("Join") { connection.join(current, record: presentation.record); dismiss() }
+                                    Button("Join") { join(current, presentation.record) }
                                         .buttonStyle(.borderedProminent).controlSize(.large)
                                 } else {
                                     Text("This event has no supported meeting link.").foregroundStyle(.secondary)
-                                    Button("Record meeting") { connection.join(current, record: true); dismiss() }
+                                    Button("Record meeting") { join(current, true) }
                                         .buttonStyle(.borderedProminent)
                                 }
                             }.padding()

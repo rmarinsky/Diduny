@@ -1,7 +1,38 @@
 @testable import Diduny
 import XCTest
+import AppKit
 
 @MainActor final class CalendarConnectionTests: XCTestCase {
+    func testDueFullscreenReminderStaysAboveOtherAppsAndDismissesBeforeJoinWork() async {
+        let defaults = UserDefaults(suiteName: "CalendarPanel-\(UUID())")!
+        let event = CalendarMeeting(id: "synthetic", calendarID: "work", title: "Reminder test",
+                                    start: Date().addingTimeInterval(-5), end: Date().addingTimeInterval(600),
+                                    meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))
+        let snapshot = ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: [event])
+        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in snapshot })
+        let controller = CalendarReminderController()
+        defer { controller.dismiss(); connection.disconnect() }
+        connection.updatePreferences { $0.fullScreen = true; $0.reminderMinutes = 0 }
+        connection.onReminder = { controller.show($0, connection: connection) }
+        await connection.connect()
+        guard let panel = controller.window else { return XCTFail("Due event must present its reminder") }
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertFalse(panel.hidesOnDeactivate, "Reminder must remain visible while another app is active")
+        XCTAssertEqual(panel.level, .screenSaver, "Fullscreen reminder must cover other app windows")
+        XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel))
+        var joined = false
+        connection.onJoin = { _, record, _ in
+            XCTAssertFalse(panel.isVisible, "Hide the banner before browser or recording work starts")
+            XCTAssertNil(controller.window)
+            XCTAssertFalse(record)
+            joined = true
+        }
+        controller.join(event, record: false, connection: connection)
+        XCTAssertTrue(joined)
+        await connection.refresh()
+        XCTAssertNil(controller.window, "Refreshing must not redisplay the joined occurrence")
+    }
+
     func testConsentSelectionAndReminderHistoryRestoreButEventsRemainInMemory() async throws {
         let defaults = UserDefaults(suiteName: "CalendarConnectionTests-\(UUID())")!
         let snapshot = ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Account")], meetings: [])
