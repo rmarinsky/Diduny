@@ -33,10 +33,10 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             expected = (
-                "# Connected meetings, clearer choices\n\n"
-                "- Connect macOS calendars, see upcoming meetings and reminders, and link locally transcribed recordings to their events.\n"
-                "- Use Ukrainian or English and sign in with an email code. Local models stay free; cloud includes two free hours each month.\n"
-                "- Compare Pro plans, review payment and renewal terms, or buy one year without renewal. Usage statistics require a separate choice on every plan.\n"
+                "# Recover YouTube access and open meetings\n\n"
+                "- Choose a browser profile beside a paused YouTube import, open the video in that profile, and check access to continue.\n"
+                "- See specific explanations for YouTube sign-in, browser cookie access, verification, and unavailable videos.\n"
+                "- Open meeting links from Upcoming meetings in the menu bar.\n"
             )
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
