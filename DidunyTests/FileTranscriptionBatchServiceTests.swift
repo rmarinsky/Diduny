@@ -1,4 +1,5 @@
 import AVFoundation
+import SwiftUI
 @testable import Diduny
 import XCTest
 
@@ -121,6 +122,18 @@ final class YouTubeRemoteMediaSourceTests: XCTestCase {
         XCTAssertEqual(
             BundledRemoteMediaExtractor.classifyFailure(Data("Sign in to confirm".utf8)),
             .authorizationRequired
+        )
+        XCTAssertEqual(
+            BundledRemoteMediaExtractor.classifyFailure(Data("Sign in to confirm you're not a bot".utf8)),
+            .botVerificationRequired
+        )
+        XCTAssertEqual(
+            BundledRemoteMediaExtractor.classifyFailure(Data("ERROR: failed to load cookies".utf8)),
+            .browserCookiesUnavailable
+        )
+        XCTAssertEqual(
+            BundledRemoteMediaExtractor.classifyFailure(Data("Private video. Sign in if you have access".utf8)),
+            .sourceUnavailable
         )
     }
 
@@ -311,6 +324,19 @@ final class YouTubeRemoteMediaSourceTests: XCTestCase {
             ),
             chrome
         )
+    }
+
+    func test_browserLaunchArgumentsKeepExactProfileAndVideoWithoutShellExpansion() throws {
+        let url = try YouTubeRemoteMediaSource.normalize("https://youtu.be/dQw4w9WgXcQ").canonicalURL
+        for browser in [BrowserKind.chrome, .edge, .brave] {
+            XCTAssertEqual(BrowserSession(browser: browser, profileID: "Profile 2").launchArguments(for: url),
+                           ["--profile-directory=Profile 2", "--new-window", url.absoluteString])
+        }
+        for browser in [BrowserKind.firefox, .zen] {
+            XCTAssertEqual(BrowserSession(browser: browser, profileID: "/tmp/Profile $(test)").launchArguments(for: url),
+                           ["--no-remote", "--profile", "/tmp/Profile $(test)", "--new-tab", url.absoluteString])
+        }
+        XCTAssertEqual(BrowserSession(browser: .safari).launchArguments(for: url), [])
     }
 
     func test_runtimeArguments_useSelectedBrowserSessionBundledDenoAndExactAudioFormat() throws {
@@ -545,6 +571,85 @@ final class FileTranscriptionBatchServiceTests: XCTestCase {
 
         XCTAssertEqual(service.items.map(\.status), [.completed, .completed])
         XCTAssertGreaterThanOrEqual(extractor.metadataCallCount, 3)
+    }
+
+    func test_cookieRecoveryPausesThenUsesChangedProfileAndChecksMetadataAgain() async throws {
+        let extractor = BatchTestRemoteExtractor(metadataAuthorizationFailureCount: 1)
+        extractor.authorizationFailure = .browserCookiesUnavailable
+        var session = BrowserSession(browser: .chrome, profileID: "Default")
+        let service = FileTranscriptionBatchService(
+            preparer: BatchTestPreparer(), transcriber: BatchTestTranscriber(),
+            recordingStore: BatchTestRecordingStore(), remoteExtractor: extractor,
+            chromeProfile: { session }, settingsSnapshot: { .testValue }, playCompletionSound: {}
+        )
+        let source = try YouTubeRemoteMediaSource.normalize("https://youtu.be/dQw4w9WgXcQ")
+        service.beginBatch(remoteSources: [source])
+        try await waitUntil { !service.isProcessing }
+        XCTAssertEqual(service.items.first?.status, .authorizationPaused)
+        XCTAssertEqual(service.items.first?.errorMessage, RemoteMediaExtractorError.browserCookiesUnavailable.localizedDescription)
+        session = BrowserSession(browser: .edge, profileID: "Profile 2")
+        service.retryAuthorization()
+        try await waitUntil { !service.isProcessing }
+        XCTAssertEqual(service.completedCount, 1)
+        XCTAssertEqual(extractor.metadataSessions, [BrowserSession(browser: .chrome, profileID: "Default"), session])
+    }
+
+    func test_unreadableCookiesRemainActionableWhenPublicFallbackRequiresVerification() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("YouTubeAccess-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = root.appendingPathComponent("extractor")
+        let script = """
+        #!/bin/sh
+        case " $* " in
+          *"chrome:Default"*) echo 'ERROR: no such table: cookies' >&2; exit 1 ;;
+          *"edge:Profile 2"*) ;;
+          *) echo "Sign in to confirm you're not a bot" >&2; exit 1 ;;
+        esac
+        case " $* " in
+          *"--dump-single-json"*)
+            echo '{"id":"dQw4w9WgXcQ","title":"Test video","duration":12,"formats":[{"format_id":"audio","ext":"m4a","acodec":"mp4a","vcodec":"none"}]}'
+            exit 0 ;;
+        esac
+        while [ "$#" -gt 0 ]; do
+          if [ "$1" = '--output' ]; then shift; output="$1"; fi
+          shift
+        done
+        printf 'fixture audio' > "${output%%.%*}.m4a"
+        """
+        try Data(script.utf8).write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        let extractor = BundledRemoteMediaExtractor(ytDLPURL: executable, denoURL: executable, temporaryDirectory: root)
+        var session = BrowserSession(browser: .chrome, profileID: "Default", profileName: "Personal")
+        let service = FileTranscriptionBatchService(
+            preparer: BatchTestPreparer(), transcriber: BatchTestTranscriber(), recordingStore: BatchTestRecordingStore(),
+            remoteExtractor: extractor, chromeProfile: { session }, settingsSnapshot: { .testValue }, playCompletionSound: {}
+        )
+        service.beginBatch(remoteSources: [try YouTubeRemoteMediaSource.normalize("https://youtu.be/dQw4w9WgXcQ")])
+        try await waitUntil(timeout: .seconds(10)) { !service.isProcessing }
+        let item = try XCTUnwrap(service.items.first)
+        XCTAssertEqual(item.status, .authorizationPaused)
+        XCTAssertEqual(item.errorMessage, RemoteMediaExtractorError.browserCookiesUnavailable.localizedDescription)
+
+        let recovery = BatchTranscriptionStatusView(item: item, service: service, browserSessions: [session]) { _ in }
+            .padding(16).frame(width: 420).background(Color(nsColor: .windowBackgroundColor))
+        let host = NSHostingView(rootView: recovery)
+        host.frame = CGRect(origin: .zero, size: host.fittingSize)
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let capture = NSImage(size: host.bounds.size)
+        capture.addRepresentation(bitmap)
+        let attachment = XCTAttachment(image: capture)
+        attachment.name = "YouTube browser access recovery - synthetic TEST state"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        session = BrowserSession(browser: .edge, profileID: "Profile 2", profileName: "Work")
+        service.retryAuthorization()
+        try await waitUntil(timeout: .seconds(10)) { !service.isProcessing }
+        XCTAssertEqual(service.completedCount, 1)
+        XCTAssertNil(service.batchError)
     }
 
     func test_remoteAuthorizationPauseIsPersistedForRestart() async throws {
@@ -1749,17 +1854,21 @@ private final class BatchTestRemoteExtractor: RemoteMediaExtracting {
         self.downloadDelay = downloadDelay
     }
 
+    var authorizationFailure: RemoteMediaExtractorError = .authorizationRequired
+    var metadataSessions: [BrowserSession] = []
+
     func metadata(
         for source: YouTubeRemoteMediaSource,
-        session _: BrowserSession
+        session: BrowserSession
     ) async throws -> RemoteMediaMetadata {
         metadataCallCount += 1
+        metadataSessions.append(session)
         if metadataDelay > .zero {
             try await Task.sleep(for: metadataDelay)
         }
         if remainingAuthorizationFailures > 0 {
             remainingAuthorizationFailures -= 1
-            throw RemoteMediaExtractorError.authorizationRequired
+            throw authorizationFailure
         }
         return RemoteMediaMetadata(
             source: RemoteMediaSourceMetadata(

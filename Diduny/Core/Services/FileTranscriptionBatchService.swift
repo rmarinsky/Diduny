@@ -53,7 +53,7 @@ private actor AsyncPermitPool {
 
 private enum RemotePreflightOutcome {
     case metadata(UUID, RemoteMediaMetadata)
-    case authorizationRequired
+    case authorizationRequired(UUID, RemoteMediaExtractorError)
     case failed(UUID, String)
 }
 
@@ -587,6 +587,7 @@ final class FileTranscriptionBatchService {
         initialRecordingIDs = batch.recordingIDs
         items = persistedItems.map { item in
             var item = item
+            if item.status == .authorizationPaused { item.remoteMetadata = nil }
             if !item.status.isTerminal || item.status == .authorizationPaused {
                 item.status = .failed
             }
@@ -763,10 +764,12 @@ final class FileTranscriptionBatchService {
             guard items[index].status == .failed
                 || items[index].status == .partialResult
                 || items[index].status == .cancelled
+                || items[index].status == .authorizationPaused
             else { continue }
             let isCaptionOnlyRetry = items[index].status == .partialResult
                 && items[index].transcriptionText != nil
                 && items[index].captionErrorMessage != nil
+            if items[index].status == .authorizationPaused { items[index].remoteMetadata = nil }
             items[index].status = .queued
             items[index].errorMessage = nil
             if !isCaptionOnlyRetry {
@@ -792,6 +795,7 @@ final class FileTranscriptionBatchService {
     func retryAuthorization() {
         for index in items.indices where items[index].status == .authorizationPaused {
             items[index].status = .queued
+            if items[index].remoteSource != nil { items[index].remoteMetadata = nil }
             items[index].errorMessage = nil
             items[index].finishedAt = nil
         }
@@ -889,7 +893,7 @@ final class FileTranscriptionBatchService {
             update(itemID) { $0.status = .checkingLink }
         }
 
-        var authorizationRequired = false
+        var authorizationError: RemoteMediaExtractorError?
         await withTaskGroup(of: RemotePreflightOutcome.self) { group in
             for (itemID, source) in candidates {
                 group.addTask { [remoteMetadataPermits] in
@@ -906,9 +910,9 @@ final class FileTranscriptionBatchService {
                         )
                         await remoteMetadataPermits.release()
                         return .metadata(itemID, metadata)
-                    } catch RemoteMediaExtractorError.authorizationRequired {
+                    } catch let error as RemoteMediaExtractorError where error.requiresBrowserRecovery {
                         await remoteMetadataPermits.release()
-                        return .authorizationRequired
+                        return .authorizationRequired(itemID, error)
                     } catch {
                         await remoteMetadataPermits.release()
                         return .failed(itemID, error.localizedDescription)
@@ -936,8 +940,9 @@ final class FileTranscriptionBatchService {
                             $0.finishedAt = Date()
                         }
                     }
-                case .authorizationRequired:
-                    authorizationRequired = true
+                case let .authorizationRequired(itemID, error):
+                    authorizationError = authorizationError ?? error
+                    update(itemID) { $0.errorMessage = error.localizedDescription }
                 case let .failed(itemID, message):
                     update(itemID) {
                         $0.status = .failed
@@ -949,8 +954,8 @@ final class FileTranscriptionBatchService {
         }
 
         guard !Task.isCancelled else { return false }
-        if authorizationRequired {
-            pauseForAuthorization()
+        if let authorizationError {
+            pauseForAuthorization(authorizationError)
             return false
         }
         return true
@@ -1055,8 +1060,8 @@ final class FileTranscriptionBatchService {
                         $0.finishedAt = Date()
                     }
                     return
-                } catch RemoteMediaExtractorError.authorizationRequired {
-                    throw RemoteMediaExtractorError.authorizationRequired
+                } catch let error as RemoteMediaExtractorError where error.requiresBrowserRecovery {
+                    throw error
                 } catch {
                     update(itemID) {
                         $0.status = .partialResult
@@ -1113,8 +1118,8 @@ final class FileTranscriptionBatchService {
                                 ) {
                                     update(itemID) { $0.sourceCaptionArtifacts = [caption] }
                                 }
-                            } catch RemoteMediaExtractorError.authorizationRequired {
-                                throw RemoteMediaExtractorError.authorizationRequired
+                            } catch let error as RemoteMediaExtractorError where error.requiresBrowserRecovery {
+                                throw error
                             } catch {
                                 captionAttemptFailed = true
                                 update(itemID) {
@@ -1217,8 +1222,9 @@ final class FileTranscriptionBatchService {
                 $0.transcriptionText = transcript.text
                 $0.errorMessage = captionAttemptFailed ? $0.captionErrorMessage : nil
             }
-        } catch RemoteMediaExtractorError.authorizationRequired {
-            pauseForAuthorization()
+        } catch let error as RemoteMediaExtractorError where error.requiresBrowserRecovery {
+            update(itemID) { $0.errorMessage = error.localizedDescription }
+            pauseForAuthorization(error)
         } catch is CancellationError {
             if item(withID: itemID)?.status == .authorizationPaused { return }
             if let recordingID {
@@ -1353,13 +1359,13 @@ final class FileTranscriptionBatchService {
         }
     }
 
-    private func pauseForAuthorization() {
-        batchError = RemoteMediaExtractorError.authorizationRequired.localizedDescription
+    private func pauseForAuthorization(_ error: RemoteMediaExtractorError) {
+        batchError = error.localizedDescription
         for index in items.indices where items[index].remoteSource != nil
             && !items[index].status.isTerminal
         {
             items[index].status = .authorizationPaused
-            items[index].errorMessage = nil
+            items[index].errorMessage = items[index].errorMessage ?? error.localizedDescription
             items[index].finishedAt = nil
         }
         persistWorkItems()

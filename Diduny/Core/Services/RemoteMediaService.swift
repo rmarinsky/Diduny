@@ -243,10 +243,16 @@ enum RemoteMediaExtractorError: LocalizedError, Equatable {
     case unsupportedDRM
     case noAudioOnlyStream
     case authorizationRequired
+    case browserCookiesUnavailable
+    case botVerificationRequired
     case sourceUnavailable
     case extractorOutdated
     case insufficientDiskSpace
     case acquisitionFailed
+
+    var requiresBrowserRecovery: Bool {
+        self == .authorizationRequired || self == .browserCookiesUnavailable || self == .botVerificationRequired
+    }
 
     var errorDescription: String? {
         switch self {
@@ -261,9 +267,13 @@ enum RemoteMediaExtractorError: LocalizedError, Equatable {
         case .noAudioOnlyStream:
             String(localized: "Unsupported — no audio-only stream available.")
         case .authorizationRequired:
-            String(localized: "Sign in to YouTube in the selected browser session, then retry authorization.")
+            String(localized: "YouTube requires sign-in. Open the video in the selected browser profile, sign in, then check access.")
+        case .browserCookiesUnavailable:
+            String(localized: "Diduny cannot read this browser profile’s cookies. Choose another profile, or close the browser and check access again.")
+        case .botVerificationRequired:
+            String(localized: "YouTube requires a verification check. Open the video in the selected browser profile, complete the check, then check access again.")
         case .sourceUnavailable:
-            String(localized: "This YouTube video is unavailable to the selected browser session.")
+            String(localized: "This video is private, removed, or unavailable in your region. Open YouTube to check whether the selected profile can play it.")
         case .extractorOutdated:
             String(localized: "YouTube compatibility requires a Diduny update.")
         case .insufficientDiskSpace:
@@ -534,6 +544,56 @@ struct BrowserSession: Codable, Equatable, Hashable, Identifiable {
 
     init(id: String, name: String) {
         self.init(browser: .chrome, profileID: id, profileName: name)
+    }
+}
+
+extension BrowserSession {
+    func launchArguments(for url: URL) -> [String] {
+        switch browser {
+        case .chrome, .brave, .edge:
+            return profileID.map { ["--profile-directory=\($0)", "--new-window", url.absoluteString] }
+                ?? ["--new-window", url.absoluteString]
+        case .firefox, .zen:
+            return profileID.map { ["--no-remote", "--profile", $0, "--new-tab", url.absoluteString] }
+                ?? ["--new-tab", url.absoluteString]
+        case .safari:
+            return []
+        }
+    }
+
+    @MainActor
+    func openYouTube(_ source: YouTubeRemoteMediaSource) async throws {
+        guard let application = NSWorkspace.shared.urlForApplication(withBundleIdentifier: browser.bundleIdentifier) else {
+            throw BrowserOpenError.browserUnavailable
+        }
+        // Firefox's remote process can ignore a requested profile. Require it to be closed
+        // before launching a separate instance, rather than opening another account.
+        if [.firefox, .zen].contains(browser), profileID != nil,
+           !NSRunningApplication.runningApplications(withBundleIdentifier: browser.bundleIdentifier).isEmpty {
+            throw BrowserOpenError.closeFirefoxFirst
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        if browser == .safari {
+            _ = try await NSWorkspace.shared.open([source.canonicalURL], withApplicationAt: application, configuration: configuration)
+        } else {
+            configuration.arguments = launchArguments(for: source.canonicalURL)
+            configuration.createsNewApplicationInstance = true
+            _ = try await NSWorkspace.shared.openApplication(at: application, configuration: configuration)
+        }
+    }
+}
+
+private enum BrowserOpenError: LocalizedError {
+    case browserUnavailable
+    case closeFirefoxFirst
+
+    var errorDescription: String? {
+        switch self {
+        case .browserUnavailable:
+            String(localized: "This browser is no longer available. Select another browser profile.")
+        case .closeFirefoxFirst:
+            String(localized: "Close Firefox or Zen before opening a specific profile, then try Open YouTube again.")
+        }
     }
 }
 
@@ -995,12 +1055,16 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
                     Log.app.warning(
                         "Selected browser session cookies are unavailable; retrying public YouTube access"
                     )
-                    return try await run(
-                        executableURL: executableURL,
-                        arguments: publicArguments,
-                        onProgress: onProgress,
-                        allowsPublicFallback: false
-                    )
+                    do {
+                        return try await run(
+                            executableURL: executableURL,
+                            arguments: publicArguments,
+                            onProgress: onProgress,
+                            allowsPublicFallback: false
+                        )
+                    } catch let fallbackError as RemoteMediaExtractorError where fallbackError.requiresBrowserRecovery {
+                        throw RemoteMediaExtractorError.browserCookiesUnavailable
+                    }
                 }
                 let failure = Self.classifyFailure(error)
                 Log.app.error(
@@ -1022,7 +1086,9 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
             || message.contains("no such table: cookies")
             || message.contains("could not copy chrome cookie database")
             || message.contains("failed to load cookies")
-            || message.contains("cookie") && message.contains("failed to decrypt")
+            || message.contains("cookie") && (message.contains("failed to decrypt")
+                || message.contains("permission denied") || message.contains("operation not permitted")
+                || message.contains("database is locked"))
     }
 
     private nonisolated static func removingBrowserSession(from arguments: [String]) -> [String]? {
@@ -1076,18 +1142,21 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
 
     nonisolated static func classifyFailure(_ data: Data) -> RemoteMediaExtractorError {
         let message = String(data: data, encoding: .utf8)?.lowercased() ?? ""
-        if message.contains("sign in")
-            || message.contains("cookies")
-            || message.contains("not a bot")
-        {
-            return .authorizationRequired
-        }
         if message.contains("private video")
             || message.contains("video unavailable")
             || message.contains("not available in your country")
             || message.contains("has been removed")
         {
             return .sourceUnavailable
+        }
+        if isBrowserCookieDatabaseFailure(data) || message.contains("could not find") && message.contains("cookies") {
+            return .browserCookiesUnavailable
+        }
+        if message.contains("not a bot") || message.contains("confirm you’re not") {
+            return .botVerificationRequired
+        }
+        if message.contains("sign in") || message.contains("login required") {
+            return .authorizationRequired
         }
         if message.contains("unsupported url") || message.contains("extractor") && message.contains("update") {
             return .extractorOutdated
