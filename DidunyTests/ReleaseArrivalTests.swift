@@ -45,13 +45,13 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Finish cloud recordings without the extra wait")
+        XCTAssertEqual(highlights.headline, "Connected meetings, clearer choices")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Dictation and voice translation now send the correct end-of-recording signal.",
-                "Meeting transcripts no longer wait for a timeout when the service has finished.",
-                "Existing safeguards for delayed final words remain in place.",
+                "Connect macOS calendars, see upcoming meetings and reminders, and link locally transcribed recordings to their events.",
+                "Use Ukrainian or English and sign in with an email code. Local models stay free; cloud includes two free hours each month.",
+                "Compare Pro plans, review payment and renewal terms, or buy one year without renewal. Usage statistics require a separate choice on every plan.",
             ]
         )
     }

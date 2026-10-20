@@ -23,6 +23,8 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
+            AppLanguageSettingsSection()
+
             Section {
                 Toggle("Auto-paste transcribed text", isOn: $autoPaste)
                     .onChange(of: autoPaste) { _, newValue in
@@ -80,7 +82,9 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("Message Formatting")
             } footer: {
-                Text("For chat applies to dictation and translated messages up to 280 characters and 50 words on one line. It always lowercases the first word, including names and acronyms, and omits the final period. Internal punctuation, question marks, exclamation marks and ellipses are preserved. Meeting transcripts are unchanged.")
+                Text(
+                    "For chat applies to dictation and translated messages up to 280 characters and 50 words on one line. It always lowercases the first word, including names and acronyms, and omits the final period. Internal punctuation, question marks, exclamation marks and ellipses are preserved. Meeting transcripts are unchanged."
+                )
             }
 
             Section {
@@ -226,4 +230,22 @@ struct GeneralSettingsView: View {
 #Preview {
     GeneralSettingsView()
         .frame(width: 500, height: 400)
+}
+
+struct AppLanguageSettingsSection: View {
+    @State private var appLanguage = AppLanguage.preference()
+    var body: some View {
+        Section {
+            Picker("App language", selection: $appLanguage) {
+                ForEach(AppLanguage.allCases) { language in
+                    Text(language.displayName).tag(language)
+                }
+            }
+            .onChange(of: appLanguage) { _, value in value.save() }
+        } footer: {
+            Text(
+                "Restart Diduny to apply the language to all windows and menus. Recording and translation languages do not change."
+            )
+        }
+    }
 }

@@ -12,8 +12,8 @@ struct OfflineModelsSettingsView: View {
 
         var label: String {
             switch self {
-            case .speed: "Speed"
-            case .accuracy: "Accuracy"
+            case .speed: String(localized: "Speed")
+            case .accuracy: String(localized: "Accuracy")
             }
         }
     }
@@ -85,7 +85,7 @@ struct OfflineModelsSettingsView: View {
                         if selectedModel == model.name {
                             ModelBadge("Active", color: Color("BrandAccentDeep"))
                         } else if modelManager.isModelDownloaded(model) {
-                            ModelBadge("Downloaded", color: .green)
+                            ModelBadge(String(localized: "Downloaded"), color: .green)
                         }
 
                         if model.isEnglishOnly {
@@ -184,7 +184,7 @@ struct OfflineModelsSettingsView: View {
 
     private func metricView(label: String, value: Double) -> some View {
         HStack(spacing: 4) {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.caption2)
                 .foregroundColor(.secondary)
             HStack(spacing: 2) {

@@ -37,6 +37,7 @@ struct MenuBarContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            CalendarMenuItems()
             Button(recordingButtonTitle, action: onToggleRecording)
                 .globalKeyboardShortcut(.toggleRecording)
                 .disabled(isDictationButtonDisabled)
@@ -160,15 +161,15 @@ struct MenuBarContentView: View {
     private var recordingButtonTitle: String {
         switch appState.recordingState {
         case .idle:
-            "Dictation"
+            String(localized: "Dictation")
         case .recording:
-            "Stop Dictation"
+            String(localized: "Stop Dictation")
         case .processing:
-            "Processing Dictation…"
+            String(localized: "Processing Dictation…")
         case .success:
-            "Dictation"
+            String(localized: "Dictation")
         case .error:
-            "Dictation"
+            String(localized: "Dictation")
         }
     }
 
@@ -186,15 +187,15 @@ struct MenuBarContentView: View {
     private var translateButtonTitle: String {
         switch appState.translationRecordingState {
         case .idle:
-            "Translation \(translationTargetLabel)"
+            String(localized: "Translation \(translationTargetLabel)")
         case .recording:
-            "Stop Translation"
+            String(localized: "Stop Translation")
         case .processing:
-            "Processing Translation…"
+            String(localized: "Processing Translation…")
         case .success:
-            "Translation \(translationTargetLabel)"
+            String(localized: "Translation \(translationTargetLabel)")
         case .error:
-            "Translation \(translationTargetLabel)"
+            String(localized: "Translation \(translationTargetLabel)")
         }
     }
 
@@ -208,15 +209,15 @@ struct MenuBarContentView: View {
     private var meetingButtonTitle: String {
         switch appState.meetingRecordingState {
         case .idle:
-            "Meeting"
+            String(localized: "Meeting")
         case .recording:
-            "Stop Meeting"
+            String(localized: "Stop Meeting")
         case .processing:
-            "Processing Meeting…"
+            String(localized: "Processing Meeting…")
         case .success:
-            "Meeting"
+            String(localized: "Meeting")
         case .error:
-            "Meeting"
+            String(localized: "Meeting")
         }
     }
 
@@ -230,15 +231,15 @@ struct MenuBarContentView: View {
     private var meetingTranslationButtonTitle: String {
         switch appState.meetingTranslationRecordingState {
         case .idle:
-            "Meeting Translation \(translationTargetLabel)"
+            String(localized: "Meeting Translation \(translationTargetLabel)")
         case .recording:
-            "Stop Meeting Translation"
+            String(localized: "Stop Meeting Translation")
         case .processing:
-            "Processing Meeting Translation…"
+            String(localized: "Processing Meeting Translation…")
         case .success:
-            "Meeting Translation \(translationTargetLabel)"
+            String(localized: "Meeting Translation \(translationTargetLabel)")
         case .error:
-            "Meeting Translation \(translationTargetLabel)"
+            String(localized: "Meeting Translation \(translationTargetLabel)")
         }
     }
 
@@ -255,7 +256,7 @@ struct MenuBarContentView: View {
             label += " (\(device.transportType.displayName))"
         }
         if device.isDefault {
-            label += " — Default"
+            label += String(localized: " — Default")
         }
         return label
     }
@@ -286,7 +287,10 @@ struct MenuBarContentView: View {
 
     private func selectCloudMode() {
         guard AuthService.shared.isLoggedIn else {
-            DictationOverlayController.shared.showInfo(message: "Log in to use cloud processing", duration: 3.0)
+            DictationOverlayController.shared.showInfo(
+                message: String(localized: "Log in to use cloud processing"),
+                duration: 3.0
+            )
             onOpenMainWindow(.account)
             return
         }

@@ -12,10 +12,10 @@ enum RecordingKind {
 
     var displayName: String {
         switch self {
-        case .voice: "dictation"
-        case .translation: "translation"
-        case .meeting: "meeting recording"
-        case .meetingTranslation: "meeting translation"
+        case .voice: String(localized: "dictation")
+        case .translation: String(localized: "translation")
+        case .meeting: String(localized: "meeting recording")
+        case .meetingTranslation: String(localized: "meeting translation")
         }
     }
 }
@@ -169,6 +169,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var translationPushToTalkService = PushToTalkService()
     lazy var meetingRecorderService = MeetingRecorderService()
     lazy var meetingJoinMonitor = MeetingJoinMonitor()
+    let calendarReminderController = CalendarReminderController()
+    var calendarStoreObserver: NSObjectProtocol?
+    var calendarWakeObserver: NSObjectProtocol?
     lazy var realtimeTranscriptionService = CloudRealtimeService()
     var localVoiceStreamingService: LocalWhisperStreamingService?
     var localMeetingStreamingService: LocalWhisperStreamingService?
@@ -195,6 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_: Notification) {
+        Task { if AuthService.shared.isLoggedIn { await AnalyticsService.shared.refresh() } }
         launchedAtLogin = LaunchAtLogin.wasLaunchedAtLogin
         NSLog("[Diduny] applicationDidFinishLaunching: launchedAtLogin=%d", launchedAtLogin ? 1 : 0)
 
@@ -336,6 +340,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         updateMeetingJoinMonitoring()
+        setupCalendarIntegration()
 
     }
 
@@ -536,11 +541,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showRecoveryAlert(for state: RecoveryState) {
         let alert = NSAlert()
-        alert.messageText = "Recover Previous Recording?"
-        alert.informativeText = "An incomplete \(state.recordingType.displayName) recording was found from \(formatDate(state.startTime)). Would you like to process it now?"
+        alert.messageText = String(localized: "Recover Previous Recording?")
+        alert
+            .informativeText =
+            String(
+                localized: "An incomplete \(state.recordingType.displayName) recording was found from \(formatDate(state.startTime)). Would you like to process it now?"
+            )
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Process")
-        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: String(localized: "Process"))
+        alert.addButton(withTitle: String(localized: "Discard"))
 
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {
@@ -687,6 +696,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_: Notification) {
+        CalendarConnection.shared.stop()
+        BrowserCalendarConnection.shared.stop()
+        calendarReminderController.dismiss()
+        if let calendarStoreObserver { NotificationCenter.default.removeObserver(calendarStoreObserver) }
+        if let calendarWakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(calendarWakeObserver) }
         meetingJoinMonitor.stop()
         hotkeyService.unregisterAll()
         pushToTalkService.stop()
@@ -889,6 +903,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func canStartRecording(kind: RecordingKind) -> Bool {
+        guard AuthService.shared.isLoggedIn else {
+            openSettings(tab: .account)
+            return false
+        }
         var blockers: [RecordingKind] = []
 
         if kind != .voice, isStateInProgress(appState.recordingState) {

@@ -9,7 +9,7 @@ final class TextTranslationWindowController: NSObject, NSWindowDelegate {
     private var eventMonitor: Any?
     private var viewModel: TextTranslationViewModel?
 
-    private override init() {
+    override private init() {
         super.init()
     }
 
@@ -45,7 +45,7 @@ final class TextTranslationWindowController: NSObject, NSWindowDelegate {
             defer: false
         )
 
-        panel.title = "Translate"
+        panel.title = String(localized: "Translate")
         panel.contentView = hostingView
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
@@ -77,7 +77,7 @@ final class TextTranslationWindowController: NSObject, NSWindowDelegate {
         viewModel = nil
     }
 
-    nonisolated func windowWillClose(_ notification: Notification) {
+    nonisolated func windowWillClose(_: Notification) {
         Task { @MainActor in
             cleanupMonitor()
             panel = nil
@@ -100,7 +100,7 @@ final class TranslationTargetPickerWindowController: NSObject, NSWindowDelegate 
     private var panel: NSPanel?
     private var eventMonitor: Any?
 
-    private override init() {
+    override private init() {
         super.init()
     }
 
@@ -157,7 +157,7 @@ final class TranslationTargetPickerWindowController: NSObject, NSWindowDelegate 
             defer: false
         )
 
-        panel.title = "Translation Pair"
+        panel.title = String(localized: "Translation Pair")
         panel.contentView = hostingView
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
@@ -187,7 +187,7 @@ final class TranslationTargetPickerWindowController: NSObject, NSWindowDelegate 
         panel = nil
     }
 
-    nonisolated func windowWillClose(_ notification: Notification) {
+    nonisolated func windowWillClose(_: Notification) {
         Task { @MainActor in
             cleanupMonitor()
             panel = nil
@@ -281,7 +281,8 @@ private struct TranslationPairPickerView: View {
         .frame(width: 380, height: 430)
         .onAppear {
             if !isEnabled(effectivePair),
-               let englishPair = pairs.first(where: { $0.contains("en") }) {
+               let englishPair = pairs.first(where: { $0.contains("en") })
+            {
                 selectedPairID = englishPair.id
             }
         }

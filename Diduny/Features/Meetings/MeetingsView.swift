@@ -25,7 +25,7 @@ struct MeetingsView: View {
     }
 
     private var meetingRecordings: [Recording] {
-        storage.recordings.filter { $0.type.isMeetingLike }
+        storage.recordings.filter(\.type.isMeetingLike)
     }
 
     private var visibleMeetingRecordings: [Recording] {
@@ -46,7 +46,10 @@ struct MeetingsView: View {
                 Button {
                     toggleSelectionMode()
                 } label: {
-                    Label(isSelectionMode ? "Done" : "Select", systemImage: isSelectionMode ? "checkmark.circle" : "checklist")
+                    Label(
+                        isSelectionMode ? "Done" : "Select",
+                        systemImage: isSelectionMode ? "checkmark.circle" : "checklist"
+                    )
                 }
                 .labelStyle(.titleAndIcon)
                 .buttonStyle(.bordered)
@@ -124,7 +127,10 @@ struct MeetingsView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(Color(.quaternaryLabelColor).opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            Color(.quaternaryLabelColor).opacity(0.1),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
@@ -176,9 +182,9 @@ struct MeetingsView: View {
                     Button("Skip") {
                         skippedCurrentMeetingPrompt = true
                     }
-                        .buttonStyle(BannerOutlineButtonStyle())
-                        .help("Skip meeting recording prompt")
-                        .accessibilityIdentifier("Skip meeting recording prompt")
+                    .buttonStyle(BannerOutlineButtonStyle())
+                    .help("Skip meeting recording prompt")
+                    .accessibilityIdentifier("Skip meeting recording prompt")
 
                     Button("Record") {
                         MainWindowController.shared.toggleMeetingRecording()
@@ -206,28 +212,28 @@ struct MeetingsView: View {
 
             VStack(spacing: 0) {
                 ruleRow(
-                    label: "Auto-record meetings with 3 or more attendees",
+                    label: String(localized: "Auto-record meetings with 3 or more attendees"),
                     isOn: $autoRecordLargeMeetings
                 )
 
                 Divider().padding(.horizontal, 16)
 
                 ruleRow(
-                    label: "Only record meetings I organize",
+                    label: String(localized: "Only record meetings I organize"),
                     isOn: $organizerOnly
                 )
 
                 Divider().padding(.horizontal, 16)
 
                 ruleRow(
-                    label: "Auto-share transcript with attendees afterwards",
+                    label: String(localized: "Auto-share transcript with attendees afterwards"),
                     isOn: $autoShareTranscript
                 )
 
                 Divider().padding(.horizontal, 16)
 
                 ruleRow(
-                    label: "Always ask before recording",
+                    label: String(localized: "Always ask before recording"),
                     isOn: $alwaysAskBeforeRecording
                 )
             }
@@ -240,10 +246,9 @@ struct MeetingsView: View {
         }
     }
 
-    @ViewBuilder
     private func ruleRow(label: String, isOn: Binding<Bool>) -> some View {
         HStack {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.system(size: 13))
                 .foregroundColor(.primary)
             Spacer()
@@ -377,7 +382,7 @@ private struct MeetingRow: View {
     let recording: Recording
     var isSelectionMode = false
     var isSelected = false
-    var onToggleSelection: (() -> Void)? = nil
+    var onToggleSelection: (() -> Void)?
     let onTap: () -> Void
 
     @State private var playbackService = AudioPlaybackService.shared
@@ -438,7 +443,7 @@ private struct MeetingRow: View {
                         Text("·")
                             .foregroundColor(.secondary)
                             .font(.system(size: 11))
-                        Text("\(chapters.count) chapter\(chapters.count == 1 ? "" : "s")")
+                        Text("Chapters: \(chapters.count)")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }
@@ -503,9 +508,9 @@ private struct MeetingRow: View {
         let f = DateFormatter(); f.dateFormat = "HH:mm"
         switch recording.type {
         case .meetingTranslation:
-            return "Meeting translation — \(f.string(from: recording.createdAt))"
+            return String(localized: "Meeting translation — \(f.string(from: recording.createdAt))")
         case .meeting:
-            return "Meeting — \(f.string(from: recording.createdAt))"
+            return String(localized: "Meeting — \(f.string(from: recording.createdAt))")
         case .voice, .translation, .fileTranscription:
             return recording.type.displayName
         }
@@ -520,8 +525,8 @@ private struct MeetingRow: View {
 
     private var relativeDay: String {
         let cal = Calendar.current; let now = Date()
-        if cal.isDateInToday(recording.createdAt) { return "Today" }
-        if cal.isDateInYesterday(recording.createdAt) { return "Yesterday" }
+        if cal.isDateInToday(recording.createdAt) { return String(localized: "Today") }
+        if cal.isDateInYesterday(recording.createdAt) { return String(localized: "Yesterday") }
         let d = cal.dateComponents([.day], from: recording.createdAt, to: now).day ?? 0
         if d < 7 { let f = DateFormatter(); f.dateFormat = "EEE"; return f.string(from: recording.createdAt) }
         let f = DateFormatter(); f.dateStyle = .short; f.timeStyle = .none; return f.string(from: recording.createdAt)

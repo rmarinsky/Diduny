@@ -39,6 +39,35 @@ final class SettingsStorageProviderTests: XCTestCase {
     private var storedTextTranslationSourceLanguage: Any?
     private var storedTextTranslationTargetLanguage: Any?
 
+    func test_appLanguageUsesSystemUnlessAnAppOverrideIsSelected() throws {
+        let name = "diduny.localization-test.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        XCTAssertEqual(AppLanguage.preference(in: defaults, domain: name), .system)
+        AppLanguage.ukrainian.save(to: defaults)
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["uk", "en"])
+        XCTAssertEqual(AppLanguage.preference(in: defaults, domain: name), .ukrainian)
+        AppLanguage.english.save(to: defaults)
+        XCTAssertEqual(AppLanguage.preference(in: defaults, domain: name), .english)
+        AppLanguage.system.save(to: defaults)
+        XCTAssertNil(defaults.persistentDomain(forName: name)?["AppleLanguages"])
+        XCTAssertEqual(AppLanguage.preference(in: defaults, domain: name), .system)
+    }
+
+    func test_localizationBundlesContainTypedPaymentAndRecordingMessages() throws {
+        let ukPath = try XCTUnwrap(Bundle.main.path(forResource: "uk", ofType: "lproj"))
+        let uk = try XCTUnwrap(Bundle(path: ukPath))
+        XCTAssertEqual(uk.localizedString(forKey: "Send Code", value: nil, table: nil), "Надіслати код")
+        XCTAssertEqual(uk.localizedString(forKey: "%lld recordings", value: nil, table: nil), "Записів: %lld")
+        XCTAssertEqual(
+            String(format: uk.localizedString(forKey: "%lld recordings", value: nil, table: nil), 3),
+            "Записів: 3"
+        )
+        XCTAssertEqual(Bundle.preferredLocalizations(from: ["en", "uk"], forPreferences: ["uk-UA"]).first, "uk")
+        XCTAssertEqual(Bundle.preferredLocalizations(from: ["en", "uk"], forPreferences: ["en-GB"]).first, "en")
+        XCTAssertEqual(Bundle.preferredLocalizations(from: ["en", "uk"], forPreferences: ["de-DE"]).first, "en")
+    }
+
     func test_messageModeDefaultsToNormalAndControlsPreparedDeliveryText() {
         let key = "messageFormattingMode"
         let stored = UserDefaults.standard.object(forKey: key)

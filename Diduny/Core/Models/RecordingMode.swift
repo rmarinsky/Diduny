@@ -1,3 +1,5 @@
+import Foundation
+
 enum RecordingMode: Equatable {
     case voice
     case translation(targetLanguage: String = "EN <-> UK")
@@ -7,21 +9,21 @@ enum RecordingMode: Equatable {
 
     var label: String {
         switch self {
-        case .voice: "Recording..."
-        case let .translation(targetLanguage): "Recording -> \(targetLanguage)..."
-        case .meeting: "Meeting Recording..."
-        case .meetingTranslation: "Meeting Translation..."
-        case .fileTranscription: "Transcribing File..."
+        case .voice: String(localized: "Recording...")
+        case let .translation(targetLanguage): String(localized: "Recording -> \(targetLanguage)...")
+        case .meeting: String(localized: "Meeting Recording...")
+        case .meetingTranslation: String(localized: "Meeting Translation...")
+        case .fileTranscription: String(localized: "Transcribing File...")
         }
     }
 
     var processingLabel: String {
         switch self {
-        case .voice: "Processing..."
-        case .translation: "Translating..."
-        case .meeting: "Processing Meeting..."
-        case .meetingTranslation: "Translating Meeting..."
-        case .fileTranscription: "Transcribing File..."
+        case .voice: String(localized: "Processing...")
+        case .translation: String(localized: "Translating...")
+        case .meeting: String(localized: "Processing Meeting...")
+        case .meetingTranslation: String(localized: "Translating Meeting...")
+        case .fileTranscription: String(localized: "Transcribing File...")
         }
     }
 

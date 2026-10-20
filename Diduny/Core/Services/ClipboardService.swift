@@ -7,18 +7,24 @@ enum MessageFormattingMode: String, CaseIterable, Identifiable {
     case normal
     case chat
 
-    var id: String { rawValue }
-    var displayName: String { self == .normal ? "Normal" : "For chat" }
+    var id: String {
+        rawValue
+    }
+
+    var displayName: String {
+        self == .normal ? "Normal" : "For chat"
+    }
 
     func format(_ text: String) -> String {
         var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard self == .chat, result.count <= 280,
-              !result.contains(where: { $0.isNewline }),
+              !result.contains(where: \.isNewline),
               result.split(whereSeparator: { $0.isWhitespace }).count <= 50 else { return result }
 
         let fullStops: Set<Character> = [".", "。", "．", "۔"]
         if let last = result.last, fullStops.contains(last),
-           result.dropLast().last != last {
+           result.dropLast().last != last
+        {
             result.removeLast()
         }
 
@@ -26,7 +32,7 @@ enum MessageFormattingMode: String, CaseIterable, Identifiable {
         if let start = result.firstIndex(where: { $0.isLetter }) {
             let word = result[start...].prefix(while: { $0.isLetter || $0 == "’" || $0 == "'" })
             let end = result.index(start, offsetBy: word.count)
-            result.replaceSubrange(start..<end, with: word.lowercased())
+            result.replaceSubrange(start ..< end, with: word.lowercased())
         }
         return result
     }
@@ -46,13 +52,13 @@ enum ClipboardError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .accessibilityNotGranted:
-            "Accessibility permission required for auto-paste"
+            String(localized: "Accessibility permission required for auto-paste")
         case .pasteEventFailed:
-            "Failed to simulate paste keyboard event"
+            String(localized: "Failed to simulate paste keyboard event")
         case .copyEventFailed:
-            "Failed to simulate copy keyboard event"
+            String(localized: "Failed to simulate copy keyboard event")
         case .captureSelectionFailed:
-            "Failed to capture selected text"
+            String(localized: "Failed to capture selected text")
         }
     }
 }
@@ -60,7 +66,7 @@ enum ClipboardError: LocalizedError {
 final class ClipboardService: ClipboardServiceProtocol {
     static let shared = ClipboardService()
     static let pasteReadinessDelayNanoseconds: UInt64 = 50_000_000
-    static let shortcutKeyHoldMicroseconds: useconds_t = 12_000
+    static let shortcutKeyHoldMicroseconds: useconds_t = 12000
 
     private let pasteboard = NSPasteboard.general
 
@@ -144,8 +150,9 @@ final class ClipboardService: ClipboardServiceProtocol {
         while Date() < timeout {
             if pasteboard.changeCount != initialChangeCount,
                let selectedText = pasteboard.string(forType: .string)?
-                   .trimmingCharacters(in: .whitespacesAndNewlines),
-               !selectedText.isEmpty {
+               .trimmingCharacters(in: .whitespacesAndNewlines),
+               !selectedText.isEmpty
+            {
                 return selectedText
             }
 

@@ -128,7 +128,7 @@ enum InProgressRecordingStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .applicationSupportDirectoryUnavailable:
-            "Application Support directory is unavailable."
+            String(localized: "Application Support directory is unavailable.")
         }
     }
 }

@@ -1,5 +1,5 @@
-import AVFoundation
 import Accelerate
+import AVFoundation
 import CoreAudio
 import CoreMedia
 import Foundation
@@ -771,9 +771,9 @@ extension SystemAudioCaptureService: SCStreamDelegate {
         controlQueue.async { [weak self] in
             guard let self else { return }
             guard let activeStream = self.stream, activeStream === stream,
-                  self.isCapturing, !self.isStoppingCapture else { return }
+                  isCapturing, !self.isStoppingCapture else { return }
             Log.audio.error("Stream stopped with error: \(error)")
-            self.scheduleSystemRecovery(after: error)
+            scheduleSystemRecovery(after: error)
         }
     }
 }
@@ -795,21 +795,21 @@ extension SystemAudioCaptureService: SCStreamOutput {
         controlQueue.async { [weak self] in
             guard let self else { return }
             guard let activeStream = self.stream, activeStream === stream,
-                  self.isCapturing, !self.isStoppingCapture else { return }
+                  isCapturing, !self.isStoppingCapture else { return }
 
-            self.delegateCallCount += 1
-            if self.delegateCallCount <= 5 {
+            delegateCallCount += 1
+            if delegateCallCount <= 5 {
                 NSLog("[AudioCapture] delegate called #%d, type=%d (.screen=0, .audio=1)",
-                      self.delegateCallCount, type.rawValue)
+                      delegateCallCount, type.rawValue)
             }
 
             guard let samples = audioSamples else { return }
-            self.sampleCount += 1
-            if self.sampleCount <= 3 {
-                NSLog("[AudioCapture] system audio sample #%d, %d frames", self.sampleCount, samples.count)
+            sampleCount += 1
+            if sampleCount <= 3 {
+                NSLog("[AudioCapture] system audio sample #%d, %d frames", sampleCount, samples.count)
             }
 
-            self.mixerQueue.async { [weak self] in
+            mixerQueue.async { [weak self] in
                 self?.handleSystemAudio(samples)
             }
         }
@@ -899,7 +899,15 @@ extension SystemAudioCaptureService: SCStreamOutput {
         systemBuffer.withUnsafeBufferPointer { sysPtr in
             micBuffer.withUnsafeBufferPointer { micPtr in
                 mixScratchBuffer.withUnsafeMutableBufferPointer { mixPtr in
-                    vDSP_vadd(sysPtr.baseAddress!, 1, micPtr.baseAddress!, 1, mixPtr.baseAddress!, 1, vDSP_Length(mixCount))
+                    vDSP_vadd(
+                        sysPtr.baseAddress!,
+                        1,
+                        micPtr.baseAddress!,
+                        1,
+                        mixPtr.baseAddress!,
+                        1,
+                        vDSP_Length(mixCount)
+                    )
                     vDSP_vclip(mixPtr.baseAddress!, 1, &lo, &hi, mixPtr.baseAddress!, 1, vDSP_Length(mixCount))
                 }
             }
@@ -1199,19 +1207,19 @@ enum SystemAudioError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noDisplayFound:
-            "No display found for screen capture"
+            String(localized: "No display found for screen capture")
         case .streamCreationFailed:
-            "Failed to create audio capture stream"
+            String(localized: "Failed to create audio capture stream")
         case let .streamRecoveryFailed(reason):
             reason
         case .permissionDenied:
-            "Screen recording permission required"
+            String(localized: "Screen recording permission required")
         case .microphoneFormatInvalid:
-            "Invalid microphone audio format"
+            String(localized: "Invalid microphone audio format")
         case let .microphoneStartFailed(reason):
             reason
         case let .chunkRotationFailed(reason):
-            "Failed to rotate recording chunk: \(reason)"
+            String(localized: "Failed to rotate recording chunk: \(reason)")
         }
     }
 }

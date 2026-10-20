@@ -75,21 +75,21 @@ private extension BatchTranscriptionItem.Status {
 
     var displayName: String {
         switch self {
-        case .queued: "Queued"
-        case .checkingLink: "Checking link…"
-        case .checkingDuplicate: "Checking duplicate…"
-        case .retrievingCaptions: "Retrieving captions…"
-        case .downloading: "Downloading audio…"
-        case .preparing: "Preparing audio…"
-        case .uploading: "Uploading…"
-        case .processing: "Transcribing…"
-        case .finalizing: "Finishing…"
-        case .completed: "Completed"
-        case .partialResult: "Partial result"
-        case .duplicate: "Transcript reused"
-        case .authorizationPaused: "Authorization paused"
-        case .failed: "Failed"
-        case .cancelled: "Cancelled"
+        case .queued: String(localized: "Queued")
+        case .checkingLink: String(localized: "Checking link…")
+        case .checkingDuplicate: String(localized: "Checking duplicate…")
+        case .retrievingCaptions: String(localized: "Retrieving captions…")
+        case .downloading: String(localized: "Downloading audio…")
+        case .preparing: String(localized: "Preparing audio…")
+        case .uploading: String(localized: "Uploading…")
+        case .processing: String(localized: "Transcribing…")
+        case .finalizing: String(localized: "Finishing…")
+        case .completed: String(localized: "Completed")
+        case .partialResult: String(localized: "Partial result")
+        case .duplicate: String(localized: "Transcript reused")
+        case .authorizationPaused: String(localized: "Authorization paused")
+        case .failed: String(localized: "Failed")
+        case .cancelled: String(localized: "Cancelled")
         }
     }
 }

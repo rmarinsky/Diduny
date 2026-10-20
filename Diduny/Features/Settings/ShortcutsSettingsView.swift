@@ -18,7 +18,8 @@ struct ShortcutsSettingsView: View {
     @State private var translationHotkeyPressCount = SettingsStorage.shared.translationHotkeyPressCount
     @State private var meetingHotkeyPressCount = SettingsStorage.shared.meetingHotkeyPressCount
     @State private var meetingTranslationHotkeyPressCount = SettingsStorage.shared.meetingTranslationHotkeyPressCount
-    @State private var translateSelectedTextHotkeyPressCount = SettingsStorage.shared.translateSelectedTextHotkeyPressCount
+    @State private var translateSelectedTextHotkeyPressCount = SettingsStorage.shared
+        .translateSelectedTextHotkeyPressCount
     @State private var escapeCancelEnabled = SettingsStorage.shared.escapeCancelEnabled
     @State private var escapeCancelPressCount = SettingsStorage.shared.escapeCancelPressCount
     @State private var escapeCancelSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
@@ -96,7 +97,7 @@ struct ShortcutsSettingsView: View {
     }
 
     private func sectionTitle(_ title: String) -> some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(ShortcutStyle.tertiaryText)
             .frame(width: ShortcutLayout.contentWidth, height: 13, alignment: .leading)
@@ -219,8 +220,8 @@ struct ShortcutsSettingsView: View {
             KeyboardShortcuts.Recorder(for: shortcut) { _ in
                 shortcutDisplayRefresh += 1
             }
-                .frame(width: ShortcutLayout.shortcutInputWidth, height: 32)
-                .opacity(0.01)
+            .frame(width: ShortcutLayout.shortcutInputWidth, height: 32)
+            .opacity(0.01)
         }
         .frame(width: ShortcutLayout.shortcutInputWidth, height: 32, alignment: .leading)
     }
@@ -232,7 +233,7 @@ struct ShortcutsSettingsView: View {
     }
 
     private func keycap(_ label: String) -> some View {
-        Text(label)
+        Text(LocalizedStringKey(label))
             .font(.system(size: 12, weight: .medium, design: .monospaced))
             .foregroundStyle(ShortcutStyle.primaryText)
             .frame(minWidth: 24, minHeight: 22)
@@ -492,7 +493,10 @@ struct ShortcutsSettingsView: View {
                 .fill(isActive ? ShortcutStyle.accent : .clear)
                 .overlay {
                     Circle()
-                        .stroke(isActive ? ShortcutStyle.accent : ShortcutStyle.secondaryText.opacity(0.45), lineWidth: 1)
+                        .stroke(
+                            isActive ? ShortcutStyle.accent : ShortcutStyle.secondaryText.opacity(0.45),
+                            lineWidth: 1
+                        )
                 }
 
             if isActive {
@@ -635,7 +639,7 @@ struct ShortcutsSettingsView: View {
 
     // MARK: - Shared Controls
 
-    private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    private func settingsCard(@ViewBuilder content: () -> some View) -> some View {
         VStack(spacing: 0) {
             content()
         }
@@ -655,7 +659,7 @@ struct ShortcutsSettingsView: View {
     }
 
     private func headerCell(_ title: String, width: CGFloat) -> some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(ShortcutStyle.tertiaryText)
             .frame(width: width, height: 30, alignment: .leading)
@@ -663,7 +667,7 @@ struct ShortcutsSettingsView: View {
     }
 
     private func rowTitle(_ title: String, width: CGFloat) -> some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(ShortcutStyle.primaryText)
             .lineLimit(1)
@@ -728,7 +732,7 @@ struct ShortcutsSettingsView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(isSelected ? Color.white : ShortcutStyle.secondaryText)
                 .frame(width: width - 4, height: 24)
@@ -741,17 +745,18 @@ struct ShortcutsSettingsView: View {
     }
 
     private func formattedHoldDelay(_ value: TimeInterval) -> String {
-        String(format: "%.1f s", value)
+        String(format: String(localized: "%.1f s"), locale: Locale.current, value)
     }
 
     private func holdTriggerTitle(key: PushToTalkKey) -> String {
-        guard key != .none else { return "Choose modifier key" }
-        return "Hold \(key.displayName)"
+        guard key != .none else { return String(localized: "Choose modifier key") }
+        return String(localized: "Hold \(key.displayName)")
     }
 
     private func holdTriggerAccessibilityLabel(key: PushToTalkKey, isActive: Bool) -> String {
-        guard key != .none else { return "Choose a modifier key before enabling hold trigger" }
-        return isActive ? "Disable hold trigger for \(key.displayName)" : "Enable hold trigger for \(key.displayName)"
+        guard key != .none else { return String(localized: "Choose a modifier key before enabling hold trigger") }
+        return isActive ? String(localized: "Disable hold trigger for \(key.displayName)") :
+            String(localized: "Enable hold trigger for \(key.displayName)")
     }
 
     private func holdTriggerBackground(isActive: Bool) -> Color {
@@ -842,11 +847,19 @@ extension Notification.Name {
 /// this reports the region as non-draggable while passing mouse events through
 /// to the SwiftUI gesture above it.
 private struct WindowDragBlocker: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { BlockerView() }
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func makeNSView(context _: Context) -> NSView {
+        BlockerView()
+    }
+
+    func updateNSView(_: NSView, context _: Context) {}
 
     private final class BlockerView: NSView {
-        override var mouseDownCanMoveWindow: Bool { false }
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override var mouseDownCanMoveWindow: Bool {
+            false
+        }
+
+        override func hitTest(_: NSPoint) -> NSView? {
+            nil
+        }
     }
 }

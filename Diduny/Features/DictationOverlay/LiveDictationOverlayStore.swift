@@ -31,41 +31,41 @@ final class LiveDictationOverlayStore {
     var title: String {
         switch mode {
         case .voice:
-            "Transcribing"
+            String(localized: "Transcribing")
         case .translation:
-            "Translating"
+            String(localized: "Translating")
         case .meeting:
-            "Recording meeting"
+            String(localized: "Recording meeting")
         case .meetingTranslation:
-            "Translating meeting"
+            String(localized: "Translating meeting")
         case .fileTranscription:
-            "File Transcription"
+            String(localized: "File Transcription")
         }
     }
 
     var statusText: String {
         switch phase {
         case .starting:
-            "Starting"
+            String(localized: "Starting")
         case .recording:
             switch connectionStatus {
             case .connected:
-                "Recording live"
+                String(localized: "Recording live")
             case .connecting:
-                "Connecting"
+                String(localized: "Connecting")
             case .reconnecting:
-                "Reconnecting"
+                String(localized: "Reconnecting")
             case .failed:
-                "Recording offline"
+                String(localized: "Recording offline")
             case .disconnected:
-                "Recording"
+                String(localized: "Recording")
             }
         case .finalizing:
-            "Finalizing"
+            String(localized: "Finalizing")
         case .processing:
-            "Formatting"
+            String(localized: "Formatting")
         case .pasted:
-            "Complete"
+            String(localized: "Complete")
         case let .error(message):
             message
         case let .info(message):
@@ -156,7 +156,7 @@ final class LiveDictationOverlayStore {
     }
 
     var sourceLabel: String {
-        mode.isMeeting ? "System + microphone" : "Microphone"
+        mode.isMeeting ? String(localized: "System + microphone") : "Microphone"
     }
 
     var targetLabel: String? {
@@ -189,14 +189,12 @@ final class LiveDictationOverlayStore {
             meetingTranscript.processTokens(tokens)
         }
 
-        let isTranslationMode: Bool = {
-            switch mode {
-            case .translation, .meetingTranslation:
-                true
-            case .voice, .meeting, .fileTranscription:
-                false
-            }
-        }()
+        let isTranslationMode = switch mode {
+        case .translation, .meetingTranslation:
+            true
+        case .voice, .meeting, .fileTranscription:
+            false
+        }
 
         var provisionalPrimary = ""
         var provisionalFallback = ""
@@ -229,7 +227,7 @@ final class LiveDictationOverlayStore {
         if !provisionalPrimary.isEmpty || !provisionalFallback.isEmpty {
             provisionalText = provisionalPrimary
             fallbackProvisionalText = provisionalFallback
-        } else if tokens.contains(where: { $0.isFinal }) {
+        } else if tokens.contains(where: \.isFinal) {
             provisionalText = ""
             fallbackProvisionalText = ""
         }

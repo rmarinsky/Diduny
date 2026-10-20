@@ -135,7 +135,7 @@ struct RecordingsLibraryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .inspector(isPresented: Binding(
             get: { inspectorSelection != nil },
-            set: { if !$0 { requestInspectorSelection(nil)} }
+            set: { if !$0 { requestInspectorSelection(nil) } }
         )) {
             inspectorContent
                 .frame(minHeight: 500)
@@ -167,7 +167,7 @@ struct RecordingsLibraryView: View {
                             requestInspectorSelection(nil)
                         }
                     } else {
-                        deletionErrorMessage = "The recording and its files were left unchanged."
+                        deletionErrorMessage = String(localized: "The recording and its files were left unchanged.")
                     }
                 }
                 recordingToDelete = nil
@@ -402,7 +402,8 @@ struct RecordingsLibraryView: View {
                                 .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(batch.name).font(.headline).foregroundStyle(.primary)
-                                Text(batch.description.isEmpty ? "No description" : batch.description)
+                                Text(batch.description.isEmpty ? String(localized: "No description") : batch
+                                    .description)
                                     .lineLimit(1)
                                     .foregroundStyle(.secondary)
                             }
@@ -464,7 +465,7 @@ struct RecordingsLibraryView: View {
                     onOpenRecording: { recordingID in
                         requestInspectorSelection(.recording(recordingID, parentBatchID: id))
                     },
-                    onClose: { requestInspectorSelection(nil)}
+                    onClose: { requestInspectorSelection(nil) }
                 )
                 .inspectorColumnWidth(min: 380, ideal: 430, max: 500)
             }
@@ -474,7 +475,7 @@ struct RecordingsLibraryView: View {
                 onCreated: { batchID in
                     requestInspectorSelection(.batch(batchID))
                 },
-                onClose: { requestInspectorSelection(nil)}
+                onClose: { requestInspectorSelection(nil) }
             )
             .inspectorColumnWidth(min: 430, ideal: 480, max: 560)
         case nil:
@@ -580,7 +581,7 @@ struct RecordingsLibraryView: View {
             )
             if !ok, action != .discard {
                 DictationOverlayController.shared.showInfo(
-                    message: "Could not recover meeting audio",
+                    message: String(localized: "Could not recover meeting audio"),
                     duration: 3
                 )
             }
@@ -624,7 +625,7 @@ struct RecordingsLibraryView: View {
         if storage.deleteRecordings(ids) {
             cancelSelection()
         } else {
-            deletionErrorMessage = "The selected recordings and their files were left unchanged."
+            deletionErrorMessage = String(localized: "The selected recordings and their files were left unchanged.")
         }
     }
 

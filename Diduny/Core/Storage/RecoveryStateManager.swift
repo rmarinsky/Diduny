@@ -9,11 +9,11 @@ enum InterruptedWAVRecoveryError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidContainer:
-            "The interrupted recording container is invalid."
+            String(localized: "The interrupted recording container is invalid.")
         case .recordingTooLarge:
-            "The interrupted WAV recording is too large to recover."
+            String(localized: "The interrupted WAV recording is too large to recover.")
         case .noDecodableAudio:
-            "The interrupted recording does not contain decodable audio."
+            String(localized: "The interrupted recording does not contain decodable audio.")
         }
     }
 }
@@ -97,7 +97,7 @@ enum RecoveryRecordingProcessorError: LocalizedError {
     case couldNotPersist
 
     var errorDescription: String? {
-        "Diduny could not preserve the interrupted recording."
+        String(localized: "Diduny could not preserve the interrupted recording.")
     }
 }
 
@@ -186,10 +186,10 @@ struct RecoveryState: Codable {
 
         var displayName: String {
             switch self {
-            case .voice: "voice"
-            case .meeting: "meeting"
-            case .translation: "translation"
-            case .meetingTranslation: "meeting translation"
+            case .voice: String(localized: "voice")
+            case .meeting: String(localized: "meeting")
+            case .translation: String(localized: "translation")
+            case .meetingTranslation: String(localized: "meeting translation")
             }
         }
 
