@@ -1112,3 +1112,31 @@
 "Birthdays" = "Дні народження";
 
 "Audio settings" = "Налаштування звуку";
+
+"Calendar access could not be refreshed. Open Calendar settings and try again." = "Не вдалося оновити доступ до календаря. Відкрийте налаштування календаря та спробуйте знову.";
+
+"This meeting changed or is no longer available. Reopen Upcoming meetings and select it again." = "Ця зустріч змінилася або більше недоступна. Відкрийте «Найближчі зустрічі» та виберіть її знову.";
+
+"YouTube requires sign-in. Open the video in the selected browser profile, sign in, then check access." = "YouTube вимагає входу. Відкрийте відео у вибраному профілі браузера, увійдіть і перевірте доступ.";
+
+"Diduny cannot read this browser profile’s cookies. Choose another profile, or close the browser and check access again." = "Diduny не може прочитати cookies цього профілю браузера. Виберіть інший профіль або закрийте браузер і перевірте доступ знову.";
+
+"YouTube requires a verification check. Open the video in the selected browser profile, complete the check, then check access again." = "YouTube вимагає перевірки. Відкрийте відео у вибраному профілі браузера, пройдіть перевірку й повторно перевірте доступ.";
+
+"This video is private, removed, or unavailable in your region. Open YouTube to check whether the selected profile can play it." = "Це відео приватне, видалене або недоступне у вашому регіоні. Відкрийте YouTube і перевірте, чи відтворюється воно у вибраному профілі.";
+
+"This browser is no longer available. Select another browser profile." = "Цей браузер більше недоступний. Виберіть інший браузер і профіль.";
+
+"Close Firefox or Zen before opening a specific profile, then try Open YouTube again." = "Закрийте Firefox або Zen перед відкриттям окремого профілю, а потім знову натисніть «Відкрити YouTube».";
+
+"No supported browser was found. Install or open a browser, then refresh the list." = "Підтримуваних браузерів не знайдено. Встановіть або відкрийте браузер, а потім оновіть список.";
+
+"Browser and profile" = "Браузер і профіль";
+
+"Open YouTube" = "Відкрити YouTube";
+
+"Check access" = "Перевірити доступ";
+
+"Refresh browser profiles" = "Оновити профілі браузерів";
+
+"The meeting is open. Sign in to Diduny in Account settings before starting a recording." = "Зустріч відкрита. Щоб почати запис, увійдіть у Diduny в налаштуваннях облікового запису.";

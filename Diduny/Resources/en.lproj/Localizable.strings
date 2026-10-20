@@ -1112,3 +1112,31 @@
 "Birthdays" = "Birthdays";
 
 "Audio settings" = "Audio settings";
+
+"Calendar access could not be refreshed. Open Calendar settings and try again." = "Calendar access could not be refreshed. Open Calendar settings and try again.";
+
+"This meeting changed or is no longer available. Reopen Upcoming meetings and select it again." = "This meeting changed or is no longer available. Reopen Upcoming meetings and select it again.";
+
+"YouTube requires sign-in. Open the video in the selected browser profile, sign in, then check access." = "YouTube requires sign-in. Open the video in the selected browser profile, sign in, then check access.";
+
+"Diduny cannot read this browser profile’s cookies. Choose another profile, or close the browser and check access again." = "Diduny cannot read this browser profile’s cookies. Choose another profile, or close the browser and check access again.";
+
+"YouTube requires a verification check. Open the video in the selected browser profile, complete the check, then check access again." = "YouTube requires a verification check. Open the video in the selected browser profile, complete the check, then check access again.";
+
+"This video is private, removed, or unavailable in your region. Open YouTube to check whether the selected profile can play it." = "This video is private, removed, or unavailable in your region. Open YouTube to check whether the selected profile can play it.";
+
+"This browser is no longer available. Select another browser profile." = "This browser is no longer available. Select another browser profile.";
+
+"Close Firefox or Zen before opening a specific profile, then try Open YouTube again." = "Close Firefox or Zen before opening a specific profile, then try Open YouTube again.";
+
+"No supported browser was found. Install or open a browser, then refresh the list." = "No supported browser was found. Install or open a browser, then refresh the list.";
+
+"Browser and profile" = "Browser and profile";
+
+"Open YouTube" = "Open YouTube";
+
+"Check access" = "Check access";
+
+"Refresh browser profiles" = "Refresh browser profiles";
+
+"The meeting is open. Sign in to Diduny in Account settings before starting a recording." = "The meeting is open. Sign in to Diduny in Account settings before starting a recording.";
