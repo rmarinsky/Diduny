@@ -766,7 +766,7 @@ final class FileTranscriptionBatchService {
                 || items[index].status == .cancelled
                 || items[index].status == .authorizationPaused
             else { continue }
-            let isCaptionOnlyRetry = items[index].status == .partialResult
+            let isCaptionOnlyRetry = (items[index].status == .partialResult || items[index].remoteArtifactWork == .captionsOnly)
                 && items[index].transcriptionText != nil
                 && items[index].captionErrorMessage != nil
             if items[index].status == .authorizationPaused { items[index].remoteMetadata = nil }

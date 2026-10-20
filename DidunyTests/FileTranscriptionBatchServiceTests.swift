@@ -632,7 +632,8 @@ final class FileTranscriptionBatchServiceTests: XCTestCase {
         XCTAssertEqual(item.errorMessage, RemoteMediaExtractorError.browserCookiesUnavailable.localizedDescription)
 
         let recovery = BatchTranscriptionStatusView(item: item, service: service, browserSessions: [session]) { _ in }
-            .padding(16).frame(width: 420).background(Color(nsColor: .windowBackgroundColor))
+            .environment(\.locale, Locale(identifier: "uk"))
+            .padding(16).frame(width: 300).background(Color(nsColor: .windowBackgroundColor))
         let host = NSHostingView(rootView: recovery)
         host.frame = CGRect(origin: .zero, size: host.fittingSize)
         host.layoutSubtreeIfNeeded()
@@ -650,6 +651,29 @@ final class FileTranscriptionBatchServiceTests: XCTestCase {
         try await waitUntil(timeout: .seconds(10)) { !service.isProcessing }
         XCTAssertEqual(service.completedCount, 1)
         XCTAssertNil(service.batchError)
+    }
+
+    func test_resumingPausedCaptionRecoveryPreservesGeneratedTranscript() async throws {
+        let source = try YouTubeRemoteMediaSource.normalize("https://youtu.be/dQw4w9WgXcQ")
+        var item = BatchTranscriptionItem(remoteSource: source)
+        item.status = .authorizationPaused
+        item.remoteArtifactWork = .captionsOnly
+        item.transcriptionText = "Existing generated transcript"
+        item.captionErrorMessage = "Caption access failed"
+        let batch = TranscriptionBatch(name: "Paused captions", isProcessingClosed: true, workItems: [item])
+        let transcriber = BatchTestTranscriber()
+        let caption = TranscriptArtifact(text: "Source captions", languageCode: "uk", provenance: .youtubeAuthored)
+        let service = FileTranscriptionBatchService(
+            preparer: BatchTestPreparer(), transcriber: transcriber, recordingStore: BatchTestRecordingStore(),
+            remoteExtractor: BatchTestRemoteExtractor(caption: caption), chromeProfile: { BrowserSession(browser: .chrome) },
+            settingsSnapshot: { .testValue }, playCompletionSound: {}
+        )
+        service.resume(batch: batch, retrying: [item.id])
+        try await waitUntil { !service.isProcessing }
+        XCTAssertEqual(service.items.first?.status, .completed)
+        XCTAssertEqual(service.items.first?.transcriptionText, "Existing generated transcript")
+        XCTAssertEqual(service.items.first?.sourceCaptionArtifacts, [caption])
+        XCTAssertTrue(transcriber.transcribedFileNames.isEmpty)
     }
 
     func test_remoteAuthorizationPauseIsPersistedForRestart() async throws {

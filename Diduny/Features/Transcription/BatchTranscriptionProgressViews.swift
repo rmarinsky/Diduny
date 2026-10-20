@@ -76,18 +76,37 @@ struct BatchTranscriptionStatusView: View {
                 Text("No supported browser was found. Install or open a browser, then refresh the list.")
                     .font(.caption)
             } else {
+                Text("Browser and profile")
                 Picker("Browser and profile", selection: $selectedSessionID) {
                     ForEach(browserSessions, id: \.selectionID) { session in
                         Text(session.displayName).tag(session.selectionID)
                     }
                 }
+                .labelsHidden()
                 .onChange(of: selectedSessionID) { _, value in
                     SettingsStorage.shared.selectedBrowserSessionID = value
                     browserOpenError = nil
                 }
                 .disabled(service.isProcessing)
             }
-            HStack {
+            ViewThatFits(in: .horizontal) {
+                HStack { recoveryActions }.fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading) { recoveryActions }
+            }
+            .controlSize(.small)
+            if let browserOpenError {
+                Text(browserOpenError).font(.caption).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .font(.caption)
+        .onAppear {
+            if browserSessions.isEmpty { refreshBrowserSessions() }
+        }
+    }
+
+    @ViewBuilder
+    private var recoveryActions: some View {
                 Button("Open YouTube") {
                     guard let session = selectedSession, let source = item.remoteSource else { return }
                     isOpeningBrowser = true
@@ -118,22 +137,16 @@ struct BatchTranscriptionStatusView: View {
                 }
                 .help("Refresh browser profiles")
                 .accessibilityLabel("Refresh browser profiles")
-            }
-            .controlSize(.small)
-            if let browserOpenError {
-                Text(browserOpenError).font(.caption).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .font(.caption)
-        .onAppear {
-            if browserSessions.isEmpty { refreshBrowserSessions() }
-        }
     }
 
     private func refreshBrowserSessions() {
         browserSessions = BrowserSessionStore.discover()
-        if selectedSession == nil { selectedSessionID = browserSessions.first?.selectionID ?? "" }
+        if selectedSession == nil {
+            selectedSessionID = BrowserSessionStore.selected(
+                from: browserSessions, selectionID: selectedSessionID,
+                legacyChromeProfileID: SettingsStorage.shared.selectedChromeProfileID
+            )?.selectionID ?? ""
+        }
     }
 
     private var visibleErrorMessage: String? {
