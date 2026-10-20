@@ -1,6 +1,7 @@
 @testable import Diduny
 import XCTest
 import AppKit
+import SwiftUI
 
 @MainActor final class CalendarConnectionTests: XCTestCase {
     func testDueFullscreenReminderStaysAboveOtherAppsAndDismissesBeforeJoinWork() async {
@@ -110,6 +111,96 @@ import AppKit
         XCTAssertNil(scopes.first!)
         XCTAssertEqual(scopes.last!, Set<String>())
         connection.disconnect()
+    }
+
+    func testMenuSelectionRefreshesUnavailableSnapshotAndOpensTheSelectedOccurrence() async {
+        let defaults = UserDefaults(suiteName: "CalendarMenu-\(UUID())")!
+        let event = CalendarMeeting(id: "menu", calendarID: "work", title: "Review",
+                                    start: Date(), end: Date().addingTimeInterval(600),
+                                    meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))
+        let snapshot = ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: [event])
+        var failRead = false
+        var reads = 0
+        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in
+            reads += 1
+            if failRead { throw URLError(.notConnectedToInternet) }
+            return snapshot
+        })
+        defer { connection.disconnect() }
+        await connection.connect()
+        // The native menu retains its selected row while a background refresh fails.
+        failRead = true
+        await connection.refresh()
+        XCTAssertNil(connection.fetchedAt)
+        failRead = false
+        var opened: [URL] = []
+        connection.onJoin = { meeting, record, _ in
+            XCTAssertFalse(record, "Opening a link must preserve the recording opt-out")
+            if let url = meeting.meetingURL { opened.append(url) }
+        }
+        await connection.joinFromMenu(event)
+        XCTAssertEqual(reads, 3)
+        XCTAssertEqual(opened, [event.meetingURL!])
+    }
+
+    func testMenuSelectionReportsRefreshFailureAndChangedMeetingWithoutOpeningOldLink() async {
+        let defaults = UserDefaults(suiteName: "CalendarMenuFailure-\(UUID())")!
+        let event = CalendarMeeting(id: "menu", calendarID: "work", title: "Review",
+                                    start: Date(), end: Date().addingTimeInterval(600),
+                                    meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))
+        var latest = event
+        var failRead = false
+        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in
+            if failRead { throw URLError(.notConnectedToInternet) }
+            return ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: [latest])
+        })
+        defer { connection.disconnect() }
+        await connection.connect()
+        connection.onJoin = { _, _, _ in XCTFail("Never open a stale or changed link") }
+        failRead = true
+        await connection.refresh()
+        let unavailable = await connection.joinFromMenu(event)
+        XCTAssertEqual(unavailable, String(localized: "Calendar access could not be refreshed. Open Calendar settings and try again."))
+        failRead = false
+        latest.meetingURL = URL(string: "https://meet.google.com/xyz-abcd-efg")
+        let changed = await connection.joinFromMenu(event)
+        XCTAssertEqual(changed, String(localized: "This meeting changed or is no longer available. Reopen Upcoming meetings and select it again."))
+    }
+
+    func testNativeUpcomingMenuDispatchesSelectedURLThroughAppDelegateWithoutRecording() async throws {
+        guard #available(macOS 14.4, *) else { throw XCTSkip("NSHostingMenu requires macOS 14.4") }
+        let defaults = UserDefaults(suiteName: "CalendarNativeMenu-\(UUID())")!
+        let event = CalendarMeeting(id: "menu", calendarID: "work", title: "Synthetic menu meeting",
+                                    start: Date(), end: Date().addingTimeInterval(600),
+                                    meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))
+        var failRead = false
+        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in
+            if failRead { throw URLError(.notConnectedToInternet) }
+            return ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: [event])
+        })
+        defer { connection.disconnect() }
+        await connection.connect()
+        let delegate = AppDelegate()
+        let opened = expectation(description: "Selected meeting reaches the system URL opening boundary")
+        connection.onJoin = { meeting, record, local in
+            XCTAssertFalse(record)
+            delegate.joinCalendarMeeting(meeting, record: record, local: local, openURL: { url in
+                XCTAssertEqual(url, event.meetingURL)
+                opened.fulfill()
+                return true
+            })
+        }
+        let menu = NSHostingMenu(rootView: CalendarMenuItems(connection: connection))
+        menu.update()
+        let upcoming = try XCTUnwrap(menu.items.first(where: { $0.submenu != nil })?.submenu)
+        upcoming.update()
+        let index = try XCTUnwrap(upcoming.items.firstIndex(where: { $0.title.contains(event.title) }))
+        XCTAssertTrue(upcoming.items[index].isEnabled)
+        failRead = true
+        await connection.refresh()
+        failRead = false
+        upcoming.performActionForItem(at: index)
+        await fulfillment(of: [opened], timeout: 3)
     }
 
     func testDisconnectRejectsLateReadAndDoesNotRestoreClearedConsent() async {
