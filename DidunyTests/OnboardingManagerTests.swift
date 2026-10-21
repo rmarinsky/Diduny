@@ -19,6 +19,11 @@ final class OnboardingManagerTests: XCTestCase {
         super.tearDown()
     }
 
+    func test_confirmedEmailLeadsToSharedPlansBeforeCaptureSetup() {
+        XCTAssertEqual(OnboardingScreen.signIn.next, .plans)
+        XCTAssertEqual(OnboardingScreen.plans.next, .capturePanel)
+    }
+
     func test_legacyStepRawValuesRemainStable() {
         XCTAssertEqual(OnboardingStep.welcome.rawValue, 0)
         XCTAssertEqual(OnboardingStep.microphonePermission.rawValue, 1)

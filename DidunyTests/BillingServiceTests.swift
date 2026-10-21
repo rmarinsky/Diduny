@@ -4,6 +4,17 @@ import Testing
 
 @MainActor
 struct BillingServiceTests {
+    @Test("Changing a pending plan first abandons its unpaid checkout on the server")
+    func abandonCheckout() async {
+        let service = BillingService(baseURL: { "https://proxy.example" }) { request in
+            #expect(request.url?.path == "/api/v1/billing/abandon")
+            #expect(request.httpMethod == "POST")
+            return (Data(#"{"plan":"free","status":"free","cancelAtPeriodEnd":false,"plans":[]}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        #expect(await service.abandonCheckout())
+        #expect(service.state?.pendingOrderReference == nil)
+    }
+
     @Test("Website billing links preserve supported plans and reject invalid purchases")
     func websiteSelection() throws {
         let support =

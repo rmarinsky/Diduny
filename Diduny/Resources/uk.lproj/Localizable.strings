@@ -1206,3 +1206,25 @@
 "Imported media currently uses local models" = "Імпортовані медіа зараз обробляються локальними моделями";
 
 "Pro is a separate purchase. Starting its checkout stops Support renewal. Pro begins after payment confirmation; the current Support payment is not credited." = "Pro купується окремо. Початок оформлення зупиняє поновлення Підтримки. Pro діє після підтвердження оплати; поточна оплата Підтримки не зараховується в його вартість.";
+
+"Change plan" = "Змінити план";
+
+"Cancel this unpaid checkout?" = "Скасувати це неоплачене оформлення?";
+
+"The server checks payment status first. Payments already processing must finish. Close the old payment tab before choosing another plan." = "Сервер спочатку перевірить статус оплати. Якщо платіж уже обробляється, потрібно дочекатися результату. Закрий попередню вкладку оплати перед вибором іншого плану.";
+
+"Choose a plan" = "Вибір плану";
+
+"Included" = "Включено";
+
+"Cloud processing" = "Хмарна обробка";
+
+"2 shared hours / month" = "2 спільні години / місяць";
+
+"Within cloud allowance" = "У межах хмарної квоти";
+
+"Live voice and meeting translation" = "Переклад голосу й зустрічей наживо";
+
+"Invitation pending" = "Запрошення готується";
+
+"Continue with current plan" = "Продовжити з поточним планом";

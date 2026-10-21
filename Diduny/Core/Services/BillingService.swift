@@ -143,6 +143,20 @@ final class BillingService {
         } catch { if current == generation { record(error) }; return nil }
     }
 
+    func abandonCheckout() async -> Bool {
+        guard !isLoading else { return false }
+        isLoading = true
+        let current = generation
+        defer { if current == generation { isLoading = false } }
+        do {
+            let data = try await request("abandon", method: "POST")
+            let fetched = try JSONDecoder().decode(BillingState.self, from: data)
+            guard current == generation else { return false }
+            state = fetched; errorMessage = nil
+            return fetched.pendingOrderReference == nil
+        } catch { if current == generation { record(error) }; return false }
+    }
+
     @discardableResult
     func setRenewal(enabled: Bool) async -> URL? {
         guard !isLoading else { return nil }

@@ -1206,3 +1206,25 @@
 "Imported media currently uses local models" = "Imported media currently uses local models";
 
 "Pro is a separate purchase. Starting its checkout stops Support renewal. Pro begins after payment confirmation; the current Support payment is not credited." = "Pro is a separate purchase. Starting its checkout stops Support renewal. Pro begins after payment confirmation; the current Support payment is not credited.";
+
+"Change plan" = "Change plan";
+
+"Cancel this unpaid checkout?" = "Cancel this unpaid checkout?";
+
+"The server checks payment status first. Payments already processing must finish. Close the old payment tab before choosing another plan." = "The server checks payment status first. Payments already processing must finish. Close the old payment tab before choosing another plan.";
+
+"Choose a plan" = "Choose a plan";
+
+"Included" = "Included";
+
+"Cloud processing" = "Cloud processing";
+
+"2 shared hours / month" = "2 shared hours / month";
+
+"Within cloud allowance" = "Within cloud allowance";
+
+"Live voice and meeting translation" = "Live voice and meeting translation";
+
+"Invitation pending" = "Invitation pending";
+
+"Continue with current plan" = "Continue with current plan";
