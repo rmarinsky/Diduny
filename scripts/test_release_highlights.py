@@ -33,10 +33,10 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             expected = (
-                "# Connected meetings, clearer choices\n\n"
-                "- Connect macOS calendars, see upcoming meetings and reminders, and link locally transcribed recordings to their events.\n"
-                "- Use Ukrainian or English and sign in with an email code. Local models stay free; cloud includes two free hours each month.\n"
-                "- Compare Pro plans, review payment and renewal terms, or buy one year without renewal. Usage statistics require a separate choice on every plan.\n"
+                "# Shortcut settings respond to every click\n\n"
+                "- Click anywhere on a shortcut field to record a new combination; the field waits until you press one or choose Cancel.\n"
+                "- A saved shortcut is confirmed right in the field.\n"
+                "- Trigger and tap options now react to clicks on the whole button, not just its label.\n"
             )
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
