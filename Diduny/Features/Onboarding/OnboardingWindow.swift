@@ -197,7 +197,7 @@ private struct OnboardingFlowView: View {
             signInScreen
         case .plans:
             Form { BillingSettingsSection(isLoggedIn: auth.isLoggedIn, billing: billing, navigation: billingNavigation) }
-                .formStyle(.grouped).frame(minHeight: 480)
+                .formStyle(.grouped).frame(minWidth: 930, minHeight: 480)
         case .practice:
             practiceScreen
         case .ready:
@@ -380,7 +380,7 @@ private struct OnboardingFlowView: View {
         case .signIn: "Continue"
         case .plans:
             switch billingNavigation.primaryAction {
-            case .compare: "Compare Free, Support and Pro"
+            case .compare: "Compare Free, Support, Cloud and Pro"
             case .continueFree: "Continue with current plan"
             case .checkout: "Continue to WayForPay"
             }

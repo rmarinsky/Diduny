@@ -1229,3 +1229,73 @@
 "Invitation pending" = "Запрошення готується";
 
 "Continue with current plan" = "Продовжити з поточним планом";
+
+"Diduny Cloud" = "Дідуня Cloud";
+
+"Diduny Cloud is active" = "Дідуня Cloud активна";
+
+"A higher plan is a separate purchase. Starting checkout stops the current renewal. Your new plan begins after payment confirmation; the previous payment is not credited." = "Вищий тариф оплачується окремо. Початок оплати зупиняє поточне автопоновлення. Новий тариф діє після підтвердження платежу; попередня оплата не зараховується.";
+
+"Compare Free, Support, Cloud and Pro" = "Порівняти Free, Підтримку, Cloud та Pro";
+
+"The period selector applies to Pro. Support and Cloud remain monthly." = "Період стосується Pro. Підтримка та Cloud залишаються щомісячними.";
+
+"Just ₴31 more per month for cloud without an hourly limit" = "Ще ₴31/міс. — і хмара без ліміту годин";
+
+"Annual Pro: ₴125 per month, billed ₴1500 yearly" = "Річний Pro: ₴125/міс., оплата ₴1500 за рік";
+
+"Cloud: ₴119 for 10 hours. Pro: ₴150 without an hourly quota." = "Cloud: ₴119 за 10 годин. Pro: ₴150 без погодинної квоти.";
+
+"₴6 more per month than Cloud in equivalent cost. Pay ₴1500 upfront for the year." = "На ₴6/міс. більше за Cloud у перерахунку. До сплати одразу ₴1500 за рік.";
+
+"No payment required" = "Оплата не потрібна";
+
+"All local processing is free." = "Усе локальне — безкоштовно.";
+
+"2 shared cloud hours / month" = "2 спільні години хмари / місяць";
+
+"Dictation, meetings and files" = "Диктування, зустрічі та файли";
+
+"Cloud features within 2 hours" = "Хмарні сценарії в межах 2 годин";
+
+"Billed monthly" = "Оплата щомісяця";
+
+"For people who have enough with local models." = "Для тих, кому вистачає локальних моделей.";
+
+"Community invitation pending" = "Спільнота: запрошення готується";
+
+"Cloud for occasional use." = "Хмара для нерегулярного використання.";
+
+"10 shared cloud hours / calendar month" = "10 спільних годин хмари / календарний місяць";
+
+"Live text and speech translation" = "Текст і переклад мовлення наживо";
+
+"10 hours shared by all cloud features" = "10 годин спільно на всі хмарні сценарії";
+
+"Choose Cloud" = "Обрати Cloud";
+
+"₴1500 billed yearly. Renews yearly." = "₴1500 за рік. Автопоновлення щороку.";
+
+"₴150 billed monthly. Renews monthly." = "₴150 щомісяця. Автопоновлення щомісяця.";
+
+"For everyday work with cloud models." = "Для щоденної роботи з хмарними моделями.";
+
+"Cloud without an hourly limit" = "Хмара без ліміту годин";
+
+"All Cloud features" = "Усі можливості Cloud";
+
+"No hourly quota" = "Без погодинної квоти";
+
+"No hourly limit" = "Без ліміту годин";
+
+"%@ billed yearly. Renews yearly." = "%@ за рік. Автопоновлення щороку.";
+
+"%@ billed monthly. Renews monthly." = "%@ щомісяця. Автопоновлення щомісяця.";
+
+"Just %@ more per month for cloud without an hourly limit" = "Ще %@/міс. — і хмара без ліміту годин";
+
+"Cloud: %@ for 10 hours. Pro: %@ without an hourly quota." = "Cloud: %@ за 10 годин. Pro: %@ без погодинної квоти.";
+
+"Annual Pro: %@ per month, billed %@ yearly" = "Річний Pro: %@/міс., оплата %@ за рік";
+
+"%@ more per month than Cloud in equivalent cost. Pay %@ upfront for the year." = "На %@/міс. більше за Cloud у перерахунку. До сплати одразу %@ за рік.";

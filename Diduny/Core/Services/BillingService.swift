@@ -1,7 +1,7 @@
 import Foundation
 
 nonisolated enum BillingProduct: String, Codable, Hashable {
-    case pro, support
+    case pro, support, cloud
 }
 
 nonisolated struct BillingCommunity: Decodable {
@@ -58,6 +58,7 @@ nonisolated struct BillingState: Decodable {
     var paymentMode: BillingPaymentMode? = nil
     var oneTimeAnnualPlan: BillingPlan? = nil
     var supportPlan: BillingPlan? = nil
+    var cloudPlan: BillingPlan? = nil
     var community: BillingCommunity? = nil
 
     var hasTwoMonthsFree: Bool {
@@ -203,7 +204,7 @@ final class BillingService {
             if ["checkout", "resume"].contains(path) {
                 body["language"] = Bundle.main.preferredLocalizations.first == "uk" ? "UA" : "EN"
             }
-            if product == .support { body["product"] = product.rawValue }
+            if product != .pro { body["product"] = product.rawValue }
             if paymentMode == .oneTime { body["paymentMode"] = paymentMode.rawValue }
             request.httpBody = try JSONEncoder().encode(body)
         }
@@ -268,7 +269,7 @@ nonisolated struct BillingSelection: Hashable {
         guard let product = BillingProduct(rawValue: value("product") ?? "pro"),
               let interval = BillingInterval(rawValue: value("interval") ?? "monthly"),
               let mode = BillingPaymentMode(rawValue: value("mode") ?? "recurring"),
-              product != .support || (interval == .monthly && mode == .recurring),
+              product == .pro || (interval == .monthly && mode == .recurring),
               mode != .oneTime || interval == .yearly else { return nil }
         self.product = product; self.interval = interval; paymentMode = mode
     }
