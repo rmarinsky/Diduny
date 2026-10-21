@@ -124,6 +124,8 @@ private struct OnboardingFlowView: View {
     @State private var screen: OnboardingScreen = .welcome
     @State private var onboarding = OnboardingManager.shared
     @State private var auth = AuthService.shared
+    @State private var billing = BillingService()
+    @State private var billingNavigation = BillingOfferNavigation()
     @State private var microphoneGranted = false
     @State private var accessibilityGranted = false
     @State private var screenRecordingGranted = false
@@ -194,7 +196,7 @@ private struct OnboardingFlowView: View {
         case .signIn:
             signInScreen
         case .plans:
-            Form { BillingSettingsSection(isLoggedIn: auth.isLoggedIn) }
+            Form { BillingSettingsSection(isLoggedIn: auth.isLoggedIn, billing: billing, navigation: billingNavigation) }
                 .formStyle(.grouped).frame(minHeight: 480)
         case .practice:
             practiceScreen
@@ -364,7 +366,7 @@ private struct OnboardingFlowView: View {
                 .buttonStyle(.bordered)
             }
 
-            OnboardingPrimaryButton(title: primaryButtonTitle, isEnabled: canContinue) {
+            DidunyPrimaryButton(title: primaryButtonTitle, isEnabled: canContinue) {
                 continueFlow()
             }
         }
@@ -376,7 +378,12 @@ private struct OnboardingFlowView: View {
         case .capturePanel: "Continue"
         case .permissions: "Continue"
         case .signIn: "Continue"
-        case .plans: "Continue with current plan"
+        case .plans:
+            switch billingNavigation.primaryAction {
+            case .compare: "Compare Free, Support and Pro"
+            case .continueFree: "Continue with current plan"
+            case .checkout: "Continue to WayForPay"
+            }
         case .practice: "Try a dictation"
         case .ready: "Open Diduny"
         }
@@ -385,7 +392,10 @@ private struct OnboardingFlowView: View {
     private var canContinue: Bool {
         switch screen {
         case .permissions: allPermissionsGranted
-        case .signIn, .plans: auth.isLoggedIn
+        case .signIn: auth.isLoggedIn
+        case .plans:
+            auth.isLoggedIn && !billing.isLoading && (billingNavigation.primaryAction != .checkout ||
+                (billing.checkoutAvailable && billing.state.map { billingNavigation.selectedPlan($0) != nil || $0.pendingOrderReference != nil } == true))
         case .practice:
             onboarding.canStartPractice(
                 isAuthenticated: auth.isLoggedIn,
@@ -412,7 +422,22 @@ private struct OnboardingFlowView: View {
         case .welcome: move(to: .signIn)
         case .capturePanel: move(to: .permissions)
         case .permissions: move(to: .practice)
-        case .signIn, .plans: move(to: screen.next)
+        case .signIn: move(to: screen.next)
+        case .plans:
+            switch billingNavigation.primaryAction {
+            case .compare: billingNavigation.comparePlans()
+            case .continueFree: move(to: screen.next)
+            case .checkout:
+                Task {
+                    guard let state = billing.state else { return }
+                    let selection = billingNavigation.purchaseSelection(state)
+                    if let url = await billing.checkout(selection.interval,
+                         paymentMode: selection.paymentMode,
+                         product: selection.product) {
+                        NSWorkspace.shared.open(url); await billing.refresh()
+                    }
+                }
+            }
         case .practice: startPractice()
         case .ready: onDismiss()
         }
@@ -496,7 +521,7 @@ private struct OnboardingHeading: View {
     }
 }
 
-private struct OnboardingPrimaryButton: View {
+struct DidunyPrimaryButton: View {
     let title: LocalizedStringKey
     let isEnabled: Bool
     let action: () -> Void

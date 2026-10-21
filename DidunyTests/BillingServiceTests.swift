@@ -4,6 +4,29 @@ import Testing
 
 @MainActor
 struct BillingServiceTests {
+    @Test("Annual comparison still purchases Support monthly from either action")
+    func normalizedSupportSelection() throws {
+        let state = try JSONDecoder().decode(BillingState.self, from: Data(#"{"plan":"free","status":"free","cancelAtPeriodEnd":false,"plans":[]}"#.utf8))
+        let flow = BillingOfferNavigation()
+        flow.interval = .yearly
+        flow.product = .support
+        let selected = flow.purchaseSelection(state)
+        #expect(selected.product == .support)
+        #expect(selected.interval == .monthly)
+        #expect(selected.paymentMode == .recurring)
+    }
+
+    @Test("Both onboarding actions compare plans before continuing to setup")
+    func sharedOfferNavigation() {
+        let flow = BillingOfferNavigation()
+        #expect(flow.primaryAction == .compare)
+        flow.comparePlans()
+        #expect(flow.showsPlans)
+        #expect(flow.primaryAction == .continueFree)
+        flow.reviewing = true
+        #expect(flow.primaryAction == .checkout)
+    }
+
     @Test("Changing a pending plan first abandons its unpaid checkout on the server")
     func abandonCheckout() async {
         let service = BillingService(baseURL: { "https://proxy.example" }) { request in

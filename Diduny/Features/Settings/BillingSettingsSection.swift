@@ -2,21 +2,50 @@ import AppKit
 import SwiftUI
 import WebKit
 
+@Observable
+@MainActor
+final class BillingOfferNavigation {
+    enum PrimaryAction { case compare, continueFree, checkout }
+    var showsPlans = false
+    var reviewing = false
+    var interval: BillingInterval = .monthly
+    var product: BillingProduct = .pro
+    var paymentMode: BillingPaymentMode = .recurring
+    var primaryAction: PrimaryAction { reviewing ? .checkout : showsPlans ? .continueFree : .compare }
+    func comparePlans() { showsPlans = true; reviewing = false }
+    func purchaseSelection(_ state: BillingState) -> (product: BillingProduct, interval: BillingInterval, paymentMode: BillingPaymentMode) {
+        if state.pendingOrderReference != nil {
+            return (state.pendingPlan?.product ?? .pro,
+                    state.pendingPlan?.billingInterval ?? state.pendingBillingInterval ?? interval,
+                    state.pendingPlan?.paymentMode ?? .recurring)
+        }
+        return (product, product == .support ? .monthly : interval, product == .support ? .recurring : paymentMode)
+    }
+    func selectedPlan(_ state: BillingState) -> BillingPlan? {
+        if let pending = state.pendingPlan, state.pendingOrderReference != nil { return pending }
+        let selection = purchaseSelection(state)
+        if selection.product == .support { return state.supportPlan }
+        if selection.paymentMode == .oneTime { return state.oneTimeAnnualPlan }
+        return state.plans.first { $0.billingInterval == selection.interval }
+    }
+
+}
+
 @MainActor
 struct BillingSettingsSection: View {
     let isLoggedIn: Bool
     @Environment(AppState.self) private var appState
     @State private var billing = BillingService()
-    @State private var interval: BillingInterval = .monthly
+    @State private var navigation: BillingOfferNavigation
     @State private var confirmsCancellation = false
     @State private var showsPolicies = false
     @State private var showsUpgrade = false
     @State private var confirmsPlanChange = false
-    @Environment(\.openURL) private var openURL
 
-    init(isLoggedIn: Bool, billing: BillingService? = nil) {
+    init(isLoggedIn: Bool, billing: BillingService? = nil, navigation: BillingOfferNavigation? = nil) {
         self.isLoggedIn = isLoggedIn
         _billing = State(initialValue: billing ?? BillingService())
+        _navigation = State(initialValue: navigation ?? BillingOfferNavigation())
     }
 
     var body: some View {
@@ -29,13 +58,13 @@ struct BillingSettingsSection: View {
                     if state.pendingOrderReference != nil {
                         Button("Change plan") { confirmsPlanChange = true }.disabled(billing.isLoading)
                     }
-                    BillingOfferView(state: state, interval: $interval,
+                    BillingOfferView(state: state, interval: Binding(get: { navigation.interval }, set: { navigation.interval = $0 }),
                                          checkoutAvailable: billing.checkoutAvailable,
-                                         isLoading: billing.isLoading, initialSelection: appState.billingSelection)
+                                         isLoading: billing.isLoading, initialSelection: appState.billingSelection, navigation: navigation)
                         { chosen, mode, product in
                             Task {
                                 if let url = await billing.checkout(chosen, paymentMode: mode, product: product) {
-                                    openURL(url)
+                                    NSWorkspace.shared.open(url)
                                     await billing.refresh()
                                 }
                             }
@@ -73,7 +102,16 @@ struct BillingSettingsSection: View {
         }
         .sheet(isPresented: $showsPolicies) { BillingPolicySheet() }
         .onChange(of: billing.state?.pendingBillingInterval) { _, pending in
-            if let pending { interval = pending }
+            if let pending { navigation.interval = pending }
+        }
+        .onChange(of: billing.state?.pendingOrderReference) { _, pending in
+            if pending != nil { navigation.showsPlans = true; navigation.reviewing = true }
+            else { navigation.comparePlans() }
+        }
+        .onChange(of: billing.state?.plan) { _, plan in
+            if let plan, ["support", "pro"].contains(plan), billing.state?.pendingOrderReference == nil {
+                navigation.comparePlans()
+            }
         }
         .task(id: isLoggedIn) {
             billing.reset()
@@ -144,7 +182,7 @@ struct BillingSettingsSection: View {
             Button("Resume automatic renewal") {
                 Task {
                     if let url = await billing.setRenewal(enabled: true) {
-                        openURL(url)
+                        NSWorkspace.shared.open(url)
                         await billing.refresh()
                     }
                 }
@@ -178,32 +216,19 @@ struct BillingOfferView: View {
     let checkoutAvailable: Bool
     let isLoading: Bool
     var initialSelection: BillingSelection?
+    var navigation: BillingOfferNavigation = BillingOfferNavigation()
     let checkout: (BillingInterval, BillingPaymentMode, BillingProduct) -> Void
-    @State private var reviewing = false
-    @State private var showsPlans = false
-    @State private var paymentMode: BillingPaymentMode = .recurring
-    @State private var product: BillingProduct = .pro
+    private var reviewing: Bool { get { navigation.reviewing } nonmutating set { navigation.reviewing = newValue } }
+    private var showsPlans: Bool { get { navigation.showsPlans } nonmutating set { navigation.showsPlans = newValue } }
+    private var paymentMode: BillingPaymentMode { get { navigation.paymentMode } nonmutating set { navigation.paymentMode = newValue } }
+    private var product: BillingProduct { get { navigation.product } nonmutating set { navigation.product = newValue } }
     @State private var showsLifetime = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var selected: BillingPlan? {
-        if pending, let plan = state.pendingPlan { return plan }
-        if product == .support { return state.supportPlan }
-        if paymentMode == .oneTime { return state.oneTimeAnnualPlan }
-        return state.plans.first { $0.billingInterval == effectiveInterval }
-    }
-
-    private var effectiveProduct: BillingProduct {
-        pending ? state.pendingPlan?.product ?? .pro : product
-    }
-
-    private var effectiveMode: BillingPaymentMode {
-        pending ? state.pendingPlan?.paymentMode ?? .recurring : paymentMode
-    }
-
-    private var effectiveInterval: BillingInterval {
-        pending ? state.pendingBillingInterval ?? interval : product == .support ? .monthly : interval
-    }
+    private var selected: BillingPlan? { navigation.selectedPlan(state) }
+    private var effectiveProduct: BillingProduct { navigation.purchaseSelection(state).product }
+    private var effectiveMode: BillingPaymentMode { navigation.purchaseSelection(state).paymentMode }
+    private var effectiveInterval: BillingInterval { navigation.purchaseSelection(state).interval }
 
     private var pending: Bool {
         state.pendingOrderReference != nil
@@ -242,8 +267,8 @@ struct BillingOfferView: View {
                         "Local dictation, meetings, audio, video and YouTube transcription have no usage quota. Performance depends on your Mac and model."
                     )
                     .font(.callout).foregroundStyle(.secondary)
-                    Button("Compare Free, Support and Pro") { showsPlans = true }
-                        .buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("billing.explore")
+                    DidunyPrimaryButton(title: "Compare Free, Support and Pro", isEnabled: !isLoading) { navigation.comparePlans() }
+                        .accessibilityIdentifier("billing.explore")
                 }
             }
             if showsPlans || reviewing || pending || ["support", "pro"].contains(state.plan) {
@@ -363,10 +388,10 @@ struct BillingOfferView: View {
         ScrollView(.horizontal) {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 14) {
                 GridRow {
-                    Text("Feature").bold().frame(width: 210, alignment: .leading)
+                    Text("Feature").bold().frame(width: 190, alignment: .leading)
                     column("Free", price: String(localized: "Free"))
                     column("Support development", price: state.supportPlan?.formattedPrice ?? "—")
-                    column("Diduny Pro", price: state.plans.first { $0.billingInterval == interval }?.formattedPrice ?? "—")
+                    column("Diduny Pro", price: state.plans.first { $0.billingInterval == interval }?.formattedPrice ?? "—", highlighted: true)
                 }
                 comparisonRow("Unlimited local models", "Unlimited", "Unlimited", "Unlimited")
                 comparisonRow("Voice to text in your Mac apps", "Included", "Included", "Included")
@@ -379,12 +404,13 @@ struct BillingOfferView: View {
                 comparisonRow("Live voice and meeting translation", "Within cloud allowance", "Within cloud allowance", "Included")
                 comparisonRow("Community participation and feature discussions", "—", "Invitation pending", "Invitation pending")
                 GridRow {
-                    Text("Choose a plan").frame(width: 210, alignment: .leading)
-                    Button("Keep using Free") { showsPlans = false; reviewing = false }.frame(width: 145)
+                    Text("Choose a plan").frame(width: 190, alignment: .leading)
+                    Button("Keep using Free") { showsPlans = false; reviewing = false }.frame(width: 125)
                     Button("Choose Support") { product = .support; paymentMode = .recurring; reviewing = true }
-                        .frame(width: 145).disabled(isLoading || pending || state.supportPlan == nil || ["support","pro"].contains(state.plan))
+                        .frame(width: 125).disabled(isLoading || pending || state.supportPlan == nil || ["support","pro"].contains(state.plan))
                     Button("Choose Pro") { product = .pro; paymentMode = .recurring; reviewing = true }
-                        .frame(width: 145).disabled(isLoading || pending || state.plan == "pro")
+                        .buttonStyle(.borderedProminent).tint(.blue)
+                        .frame(width: 125).disabled(isLoading || pending || state.plan == "pro")
                 }
             }.padding(16)
         }
@@ -392,20 +418,23 @@ struct BillingOfferView: View {
         .accessibilityIdentifier("billing.planComparison")
     }
 
-    private func column(_ title: LocalizedStringKey, price: String) -> some View {
+    private func column(_ title: LocalizedStringKey, price: String, highlighted: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.headline)
             Text(price).font(.headline)
-        }.frame(width: 145, alignment: .leading)
+        }.padding(10).frame(width: 125, alignment: .leading)
+            .background(highlighted ? Color.blue.opacity(0.22) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(highlighted ? Color.blue.opacity(0.7) : Color.clear))
     }
 
     private func comparisonRow(_ title: LocalizedStringKey, _ free: LocalizedStringKey,
                                _ support: LocalizedStringKey, _ pro: LocalizedStringKey) -> some View {
         GridRow {
-            Text(title).frame(width: 210, alignment: .leading)
-            Text(free).frame(width: 145, alignment: .leading)
-            Text(support).frame(width: 145, alignment: .leading)
-            Text(pro).frame(width: 145, alignment: .leading)
+            Text(title).frame(width: 190, alignment: .leading)
+            Text(free).frame(width: 125, alignment: .leading)
+            Text(support).frame(width: 125, alignment: .leading)
+            Text(pro).padding(.vertical, 7).padding(.horizontal, 8).frame(width: 125, alignment: .leading)
+                .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
         }.font(.callout)
     }
 
