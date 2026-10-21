@@ -204,10 +204,6 @@ struct ShortcutsSettingsView: View {
                 }
 
                 Spacer(minLength: 8)
-
-                Text("edit")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(ShortcutStyle.accent)
             }
             .padding(.horizontal, 10)
             .frame(width: ShortcutLayout.shortcutInputWidth, height: 32)
@@ -217,11 +213,10 @@ struct ShortcutsSettingsView: View {
                     .stroke(ShortcutStyle.inputBorder, lineWidth: 1)
             }
 
-            KeyboardShortcuts.Recorder(for: shortcut) { _ in
+            ShortcutRecorderOverlay(name: shortcut) { _ in
                 shortcutDisplayRefresh += 1
             }
             .frame(width: ShortcutLayout.shortcutInputWidth, height: 32)
-            .opacity(0.01)
         }
         .frame(width: ShortcutLayout.shortcutInputWidth, height: 32, alignment: .leading)
     }
@@ -740,6 +735,7 @@ struct ShortcutsSettingsView: View {
                     isSelected ? ShortcutStyle.accent : Color.clear,
                     in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                 )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -838,6 +834,151 @@ extension Notification.Name {
 #Preview {
     ShortcutsSettingsView()
         .frame(width: 759, height: 666)
+}
+
+/// Click target laid over the styled shortcut field. It hosts an invisible
+/// `RecorderCocoa` and draws the field's right-hand control ("edit" / "Cancel")
+/// and the listening and saved states.
+///
+/// The recorder fills the whole field: it cancels recording on a mouse-up
+/// outside its own bounds, so a smaller recorder stopped listening as soon as
+/// the mouse was released over "edit".
+private struct ShortcutRecorderOverlay: NSViewRepresentable {
+    let name: KeyboardShortcuts.Name
+    let onChange: (KeyboardShortcuts.Shortcut?) -> Void
+
+    func makeNSView(context: Context) -> Container {
+        Container(name: name, onChange: onChange)
+    }
+
+    func updateNSView(_ nsView: Container, context: Context) {
+        nsView.recorder.shortcutName = name
+    }
+
+    final class Container: NSView {
+        private(set) var recorder: KeyboardShortcuts.RecorderCocoa!
+        private let statusLabel = Container.makeLabel(size: 11, weight: .semibold)
+        private let actionLabel = Container.makeLabel(size: 10, weight: .medium)
+        private(set) var isListening = false { didSet { updateAppearance() } }
+        private var isShowingSaved = false { didSet { updateAppearance() } }
+        private var savedResetWork: DispatchWorkItem?
+        private var endEditingObserver: NSObjectProtocol?
+        private static let cancelHitWidth: CGFloat = 80
+
+        init(name: KeyboardShortcuts.Name, onChange: @escaping (KeyboardShortcuts.Shortcut?) -> Void) {
+            super.init(frame: .zero)
+            recorder = KeyboardShortcuts.RecorderCocoa(for: name) { [weak self] shortcut in
+                self?.didRecord(shortcut)
+                onChange(shortcut)
+            }
+            recorder.alphaValue = 0.01
+            recorder.focusRingType = .none
+            wantsLayer = true
+            addSubview(recorder)
+            addSubview(statusLabel)
+            addSubview(actionLabel)
+            endEditingObserver = NotificationCenter.default.addObserver(
+                forName: NSControl.textDidEndEditingNotification,
+                object: recorder,
+                queue: .main
+            ) { [weak self] _ in
+                self?.isListening = false
+            }
+            updateAppearance()
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+        deinit {
+            if let endEditingObserver { NotificationCenter.default.removeObserver(endEditingObserver) }
+        }
+
+        override var mouseDownCanMoveWindow: Bool { false }
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            bounds.contains(convert(point, from: superview)) ? self : nil
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            let point = convert(event.locationInWindow, from: nil)
+            if isListening, point.x > bounds.width - Self.cancelHitWidth {
+                stopListening()
+            } else {
+                startListening()
+            }
+        }
+
+        private func startListening() {
+            isShowingSaved = false
+            savedResetWork?.cancel()
+            isListening = true
+            window?.makeFirstResponder(recorder)
+        }
+
+        private func stopListening() {
+            isListening = false
+            window?.makeFirstResponder(nil)
+        }
+
+        private func didRecord(_ shortcut: KeyboardShortcuts.Shortcut?) {
+            isListening = false
+            guard shortcut != nil else { return }
+            isShowingSaved = true
+            let reset = DispatchWorkItem { [weak self] in self?.isShowingSaved = false }
+            savedResetWork = reset
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: reset)
+        }
+
+        private func updateAppearance() {
+            let accent = NSColor(red: 1, green: 0.361, blue: 0.494, alpha: 1)
+            let listeningBackground = NSColor(red: 0.227, green: 0.129, blue: 0.161, alpha: 1)
+
+            if isListening {
+                statusLabel.stringValue = NSLocalizedString("Press new shortcut…", comment: "Shortcut field while listening")
+                statusLabel.textColor = NSColor(red: 1, green: 0.82, blue: 0.87, alpha: 1)
+                actionLabel.stringValue = NSLocalizedString("Cancel", comment: "Stops listening for a shortcut")
+                actionLabel.textColor = NSColor(white: 0.6, alpha: 1)
+            } else if isShowingSaved {
+                statusLabel.stringValue = "✓ " + NSLocalizedString("Saved", comment: "Shortcut was saved")
+                statusLabel.textColor = accent
+                actionLabel.stringValue = ""
+            } else {
+                statusLabel.stringValue = ""
+                actionLabel.stringValue = NSLocalizedString("edit", comment: "Starts editing a shortcut")
+                actionLabel.textColor = accent
+            }
+
+            layer?.cornerRadius = 8
+            layer?.cornerCurve = .continuous
+            layer?.backgroundColor = isListening ? listeningBackground.cgColor : nil
+            layer?.borderColor = isListening ? accent.cgColor : nil
+            layer?.borderWidth = isListening ? 1.5 : 0
+            needsLayout = true
+        }
+
+        override func setFrameSize(_ newSize: NSSize) {
+            super.setFrameSize(newSize)
+            needsLayout = true
+        }
+
+        override func layout() {
+            super.layout()
+            recorder.frame = bounds
+            statusLabel.sizeToFit()
+            actionLabel.sizeToFit()
+            statusLabel.setFrameOrigin(NSPoint(x: 10, y: (bounds.height - statusLabel.frame.height) / 2))
+            actionLabel.setFrameOrigin(NSPoint(
+                x: bounds.width - 10 - actionLabel.frame.width,
+                y: (bounds.height - actionLabel.frame.height) / 2
+            ))
+        }
+
+        private static func makeLabel(size: CGFloat, weight: NSFont.Weight) -> NSTextField {
+            let label = NSTextField(labelWithString: "")
+            label.font = .systemFont(ofSize: size, weight: weight)
+            return label
+        }
+    }
 }
 
 /// Marks its region as non-window-draggable. The settings window uses
