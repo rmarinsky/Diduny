@@ -33,10 +33,10 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             expected = (
-                "# Recover YouTube access and open meetings\n\n"
-                "- Choose a browser profile beside a paused YouTube import, open the video in that profile, and check access to continue.\n"
-                "- See specific explanations for YouTube sign-in, browser cookie access, verification, and unavailable videos.\n"
-                "- Open meeting links from Upcoming meetings in the menu bar.\n"
+                "# Shortcut settings respond to every click\n\n"
+                "- Click anywhere on a shortcut field to record a new combination; the field waits until you press one or choose Cancel.\n"
+                "- A saved shortcut is confirmed right in the field.\n"
+                "- Trigger and tap options now react to clicks on the whole button, not just its label.\n"
             )
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 

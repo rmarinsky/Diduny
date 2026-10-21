@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "headline": "Recover YouTube access and open meetings",
+  "headline": "Shortcut settings respond to every click",
   "highlights": [
-    "Choose a browser profile beside a paused YouTube import, open the video in that profile, and check access to continue.",
-    "See specific explanations for YouTube sign-in, browser cookie access, verification, and unavailable videos.",
-    "Open meeting links from Upcoming meetings in the menu bar."
+    "Click anywhere on a shortcut field to record a new combination; the field waits until you press one or choose Cancel.",
+    "A saved shortcut is confirmed right in the field.",
+    "Trigger and tap options now react to clicks on the whole button, not just its label."
   ]
 }
