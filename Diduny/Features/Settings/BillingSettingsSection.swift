@@ -391,7 +391,7 @@ struct BillingOfferView: View {
                     Text("Feature").bold().frame(width: 190, alignment: .leading)
                     column("Free", price: String(localized: "Free"))
                     column("Support development", price: state.supportPlan?.formattedPrice ?? "—")
-                    column("Diduny Pro", price: state.plans.first { $0.billingInterval == interval }?.formattedPrice ?? "—", highlighted: true)
+                    column("Diduny Pro", price: state.plans.first { $0.billingInterval == interval }?.formattedPrice ?? "—")
                 }
                 comparisonRow("Unlimited local models", "Unlimited", "Unlimited", "Unlimited")
                 comparisonRow("Voice to text in your Mac apps", "Included", "Included", "Included")
@@ -412,19 +412,25 @@ struct BillingOfferView: View {
                         .buttonStyle(.borderedProminent).tint(.blue)
                         .frame(width: 125).disabled(isLoading || pending || state.plan == "pro")
                 }
-            }.padding(16)
+            }
+            .background(alignment: .trailing) {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.blue.opacity(0.16))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.blue.opacity(0.65)))
+                    .frame(width: 125)
+                    .accessibilityHidden(true)
+            }
+            .padding(16)
         }
         .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("billing.planComparison")
     }
 
-    private func column(_ title: LocalizedStringKey, price: String, highlighted: Bool = false) -> some View {
+    private func column(_ title: LocalizedStringKey, price: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.headline)
             Text(price).font(.headline)
         }.padding(10).frame(width: 125, alignment: .leading)
-            .background(highlighted ? Color.blue.opacity(0.22) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(highlighted ? Color.blue.opacity(0.7) : Color.clear))
     }
 
     private func comparisonRow(_ title: LocalizedStringKey, _ free: LocalizedStringKey,
@@ -434,7 +440,6 @@ struct BillingOfferView: View {
             Text(free).frame(width: 125, alignment: .leading)
             Text(support).frame(width: 125, alignment: .leading)
             Text(pro).padding(.vertical, 7).padding(.horizontal, 8).frame(width: 125, alignment: .leading)
-                .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
         }.font(.callout)
     }
 
