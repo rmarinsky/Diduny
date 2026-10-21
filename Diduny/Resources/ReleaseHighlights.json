@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "headline": "Connected meetings, clearer choices",
+  "headline": "Shortcut settings respond to every click",
   "highlights": [
-    "Connect macOS calendars, see upcoming meetings and reminders, and link locally transcribed recordings to their events.",
-    "Use Ukrainian or English and sign in with an email code. Local models stay free; cloud includes two free hours each month.",
-    "Compare Pro plans, review payment and renewal terms, or buy one year without renewal. Usage statistics require a separate choice on every plan."
+    "Click anywhere on a shortcut field to record a new combination; the field waits until you press one or choose Cancel.",
+    "A saved shortcut is confirmed right in the field.",
+    "Trigger and tap options now react to clicks on the whole button, not just its label."
   ]
 }
