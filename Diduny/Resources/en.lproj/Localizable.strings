@@ -1113,3 +1113,191 @@
 "Birthdays" = "Birthdays";
 
 "Audio settings" = "Audio settings";
+
+"Calendar access could not be refreshed. Open Calendar settings and try again." = "Calendar access could not be refreshed. Open Calendar settings and try again.";
+
+"This meeting changed or is no longer available. Reopen Upcoming meetings and select it again." = "This meeting changed or is no longer available. Reopen Upcoming meetings and select it again.";
+
+"YouTube requires sign-in. Open the video in the selected browser profile, sign in, then check access." = "YouTube requires sign-in. Open the video in the selected browser profile, sign in, then check access.";
+
+"Diduny cannot read this browser profile’s cookies. Choose another profile, or close the browser and check access again." = "Diduny cannot read this browser profile’s cookies. Choose another profile, or close the browser and check access again.";
+
+"YouTube requires a verification check. Open the video in the selected browser profile, complete the check, then check access again." = "YouTube requires a verification check. Open the video in the selected browser profile, complete the check, then check access again.";
+
+"This video is private, removed, or unavailable in your region. Open YouTube to check whether the selected profile can play it." = "This video is private, removed, or unavailable in your region. Open YouTube to check whether the selected profile can play it.";
+
+"This browser is no longer available. Select another browser profile." = "This browser is no longer available. Select another browser profile.";
+
+"Close Firefox or Zen before opening a specific profile, then try Open YouTube again." = "Close Firefox or Zen before opening a specific profile, then try Open YouTube again.";
+
+"No supported browser was found. Install or open a browser, then refresh the list." = "No supported browser was found. Install or open a browser, then refresh the list.";
+
+"Browser and profile" = "Browser and profile";
+
+"Open YouTube" = "Open YouTube";
+
+"Check access" = "Check access";
+
+"Refresh browser profiles" = "Refresh browser profiles";
+
+"The meeting is open. Sign in to Diduny in Account settings before starting a recording." = "The meeting is open. Sign in to Diduny in Account settings before starting a recording.";
+
+/* Staged subscription offer and Support membership */
+"Plans & billing" = "Plans & billing";
+"Dictate. Follow meetings. Translate live." = "Dictate. Follow meetings. Translate live.";
+"Thank you for supporting Diduny" = "Thank you for supporting Diduny";
+"The renewal payment has not been confirmed. Your paid membership remains available during a short grace period. Check payment status below or contact support." = "The renewal payment has not been confirmed. Your paid membership remains available during a short grace period. Check payment status below or contact support.";
+"Join the supporter community" = "Join the supporter community";
+"Your community invitation is being prepared." = "Your community invitation is being prepared.";
+"Suggest a feature" = "Suggest a feature";
+"All local processing is free and unlimited. Pro includes unlimited cloud processing." = "All local processing is free and unlimited. Pro includes unlimited cloud processing.";
+"Words appear as you speak" = "Words appear as you speak";
+"Dictate into the app you use and follow the cloud transcript while recording." = "Dictate into the app you use and follow the cloud transcript while recording.";
+"Follow the conversation live" = "Follow the conversation live";
+"See a live meeting transcript and return to your recording later." = "See a live meeting transcript and return to your recording later.";
+"Translate while you talk" = "Translate while you talk";
+"Read live voice and meeting translations for languages supported by the cloud model." = "Read live voice and meeting translations for languages supported by the cloud model.";
+"Local dictation, meetings, audio, video and YouTube transcription have no usage quota. Performance depends on your Mac and model." = "Local dictation, meetings, audio, video and YouTube transcription have no usage quota. Performance depends on your Mac and model.";
+"Compare Free, Support and Pro" = "Compare Free, Support and Pro";
+"Lifetime · concept" = "Lifetime · concept";
+"Lifetime is being considered" = "Lifetime is being considered";
+"The price and cloud allowance for a one-time lifetime license are not approved. This is not an available payment plan." = "The price and cloud allowance for a one-time lifetime license are not approved. This is not an available payment plan.";
+"The period selector applies to Pro. Support remains monthly." = "The period selector applies to Pro. Support remains monthly.";
+"Free and Support include two shared cloud hours per calendar month for dictation, meeting transcription and speech translation." = "Free and Support include two shared cloud hours per calendar month for dictation, meeting transcription and speech translation.";
+"Compare local and cloud processing" = "Compare local and cloud processing";
+"Prefer no automatic renewal?" = "Prefer no automatic renewal?";
+"One-time annual Pro. No automatic renewal." = "One-time annual Pro. No automatic renewal.";
+"Plan" = "Plan";
+"Support development" = "Support development";
+"By continuing, you accept the terms for this plan and acknowledge the Privacy Policy. Optional usage statistics stay off unless you separately enable them in Account. Payment opens in your browser. Return here after payment to check your access." = "By continuing, you accept the terms for this plan and acknowledge the Privacy Policy. Optional usage statistics stay off unless you separately enable them in Account. Payment opens in your browser. Return here after payment to check your access.";
+"Unlimited local models" = "Unlimited local models";
+"Voice to text in your Mac apps" = "Voice to text in your Mac apps";
+"Meeting recordings and local live preview" = "Meeting recordings and local live preview";
+"Local audio, video and YouTube transcription" = "Local audio, video and YouTube transcription";
+"Local speech translation into English" = "Local speech translation into English";
+"Message formatting and transcript cleanup" = "Message formatting and transcript cleanup";
+"2 shared cloud hours per calendar month" = "2 shared cloud hours per calendar month";
+"month" = "month";
+"year" = "year";
+"Everything in Free" = "Everything in Free";
+"Support independent development" = "Support independent development";
+"Community participation and feature discussions" = "Community participation and feature discussions";
+"Suggest and discuss new features" = "Suggest and discuss new features";
+"Unlimited cloud processing" = "Unlimited cloud processing";
+"Dictation with text as you speak" = "Dictation with text as you speak";
+"Live meeting transcription" = "Live meeting transcription";
+"Live voice translation" = "Live voice translation";
+"Live meeting translation" = "Live meeting translation";
+"Choose Pro" = "Choose Pro";
+"Keep using Free" = "Keep using Free";
+"Choose Support" = "Choose Support";
+"Feature" = "Feature";
+"Local models" = "Local models";
+"Cloud models" = "Cloud models";
+"Unlimited local processing" = "Unlimited local processing";
+"Live text as you speak" = "Live text as you speak";
+"Recording and optional live preview" = "Recording and optional live preview";
+"Voice translation" = "Voice translation";
+"Into English with multilingual Whisper" = "Into English with multilingual Whisper";
+"Live translation for supported languages" = "Live translation for supported languages";
+"Meeting translation" = "Meeting translation";
+"Cloud processing required for live translation" = "Cloud processing required for live translation";
+"Audio, video and YouTube" = "Audio, video and YouTube";
+"Local processing without a usage quota" = "Local processing without a usage quota";
+"Imported media currently uses local models" = "Imported media currently uses local models";
+
+"Pro is a separate purchase. Starting its checkout stops Support renewal. Pro begins after payment confirmation; the current Support payment is not credited." = "Pro is a separate purchase. Starting its checkout stops Support renewal. Pro begins after payment confirmation; the current Support payment is not credited.";
+
+"Change plan" = "Change plan";
+
+"Cancel this unpaid checkout?" = "Cancel this unpaid checkout?";
+
+"The server checks payment status first. Payments already processing must finish. Close the old payment tab before choosing another plan." = "The server checks payment status first. Payments already processing must finish. Close the old payment tab before choosing another plan.";
+
+"Choose a plan" = "Choose a plan";
+
+"Included" = "Included";
+
+"Cloud processing" = "Cloud processing";
+
+"2 shared hours / month" = "2 shared hours / month";
+
+"Within cloud allowance" = "Within cloud allowance";
+
+"Live voice and meeting translation" = "Live voice and meeting translation";
+
+"Invitation pending" = "Invitation pending";
+
+"Continue with current plan" = "Continue with current plan";
+
+"Diduny Cloud" = "Diduny Cloud";
+
+"Diduny Cloud is active" = "Diduny Cloud is active";
+
+"A higher plan is a separate purchase. Starting checkout stops the current renewal. Your new plan begins after payment confirmation; the previous payment is not credited." = "A higher plan is a separate purchase. Starting checkout stops the current renewal. Your new plan begins after payment confirmation; the previous payment is not credited.";
+
+"Compare Free, Support, Cloud and Pro" = "Compare Free, Support, Cloud and Pro";
+
+"The period selector applies to Pro. Support and Cloud remain monthly." = "The period selector applies to Pro. Support and Cloud remain monthly.";
+
+"Just ₴31 more per month for cloud without an hourly limit" = "Just ₴31 more per month for cloud without an hourly limit";
+
+"Annual Pro: ₴125 per month, billed ₴1500 yearly" = "Annual Pro: ₴125 per month, billed ₴1500 yearly";
+
+"Cloud: ₴119 for 10 hours. Pro: ₴150 without an hourly quota." = "Cloud: ₴119 for 10 hours. Pro: ₴150 without an hourly quota.";
+
+"₴6 more per month than Cloud in equivalent cost. Pay ₴1500 upfront for the year." = "₴6 more per month than Cloud in equivalent cost. Pay ₴1500 upfront for the year.";
+
+"No payment required" = "No payment required";
+
+"All local processing is free." = "All local processing is free.";
+
+"2 shared cloud hours / month" = "2 shared cloud hours / month";
+
+"Dictation, meetings and files" = "Dictation, meetings and files";
+
+"Cloud features within 2 hours" = "Cloud features within 2 hours";
+
+"Billed monthly" = "Billed monthly";
+
+"For people who have enough with local models." = "For people who have enough with local models.";
+
+"Community invitation pending" = "Community invitation pending";
+
+"Cloud for occasional use." = "Cloud for occasional use.";
+
+"10 shared cloud hours / calendar month" = "10 shared cloud hours / calendar month";
+
+"Live text and speech translation" = "Live text and speech translation";
+
+"10 hours shared by all cloud features" = "10 hours shared by all cloud features";
+
+"Choose Cloud" = "Choose Cloud";
+
+"₴1500 billed yearly. Renews yearly." = "₴1500 billed yearly. Renews yearly.";
+
+"₴150 billed monthly. Renews monthly." = "₴150 billed monthly. Renews monthly.";
+
+"For everyday work with cloud models." = "For everyday work with cloud models.";
+
+"Cloud without an hourly limit" = "Cloud without an hourly limit";
+
+"All Cloud features" = "All Cloud features";
+
+"No hourly quota" = "No hourly quota";
+
+"No hourly limit" = "No hourly limit";
+
+"%@ billed yearly. Renews yearly." = "%@ billed yearly. Renews yearly.";
+
+"%@ billed monthly. Renews monthly." = "%@ billed monthly. Renews monthly.";
+
+"Just %@ more per month for cloud without an hourly limit" = "Just %@ more per month for cloud without an hourly limit";
+
+"Cloud: %@ for 10 hours. Pro: %@ without an hourly quota." = "Cloud: %@ for 10 hours. Pro: %@ without an hourly quota.";
+
+"Annual Pro: %@ per month, billed %@ yearly" = "Annual Pro: %@ per month, billed %@ yearly";
+
+"%@ more per month than Cloud in equivalent cost. Pay %@ upfront for the year." = "%@ more per month than Cloud in equivalent cost. Pay %@ upfront for the year.";
+
+"Support" = "Support";

@@ -75,13 +75,15 @@ extension CalendarMeeting {
 }
 
 enum CalendarJoinDecision: Equatable {
-    case joinOnly, startRecording, linkExisting, recordingUnavailable, openFailed, signInRequired
-    static func resolve(record: Bool, openingSucceeded: Bool, alreadyRecording: Bool, busy: Bool, isSignedIn: Bool = true) -> Self {
+    case joinOnly, recordingUnavailable, openFailed
+    case startRecording(showLibrary: Bool), linkExisting(showLibrary: Bool), signInRequired(showAccount: Bool)
+    static func resolve(record: Bool, openingSucceeded: Bool, alreadyRecording: Bool, busy: Bool,
+                        isSignedIn: Bool = true, hasMeetingURL: Bool = true) -> Self {
         guard openingSucceeded else { return .openFailed }
         guard record else { return .joinOnly }
-        guard isSignedIn else { return .signInRequired }
-        if alreadyRecording { return .linkExisting }
-        return busy ? .recordingUnavailable : .startRecording
+        guard isSignedIn else { return .signInRequired(showAccount: !hasMeetingURL) }
+        if alreadyRecording { return .linkExisting(showLibrary: !hasMeetingURL) }
+        return busy ? .recordingUnavailable : .startRecording(showLibrary: !hasMeetingURL)
     }
 }
 

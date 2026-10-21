@@ -201,14 +201,22 @@ struct CalendarSettingsSection: View {
 }
 
 struct CalendarMenuItems: View {
-    @State private var connection = CalendarConnection.shared
+    @State private var connection: CalendarConnection
+
+    init(connection: CalendarConnection = .shared) {
+        _connection = State(initialValue: connection)
+    }
     var body: some View {
         if connection.configuration.connected {
             Menu("Upcoming meetings") {
                 if connection.currentMeetings.isEmpty { Text("No upcoming meetings") }
                 ForEach(connection.currentMeetings.prefix(15)) { event in
                     Button((event.meetingURL == nil ? String(localized: "Record meeting") + " · " : "") + event.start.formatted(date: .omitted, time: .shortened) + " · " + event.title) {
-                        connection.join(event, record: event.meetingURL == nil || connection.configuration.recordOnJoin)
+                        Task {
+                            if let message = await connection.joinFromMenu(event) {
+                                DictationOverlayController.shared.showInfo(message: message, duration: 5)
+                            }
+                        }
                     }
                 }
                 Divider()

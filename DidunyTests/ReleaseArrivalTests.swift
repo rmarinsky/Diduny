@@ -45,13 +45,13 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Connected meetings, clearer choices")
+        XCTAssertEqual(highlights.headline, "Recover YouTube access and open meetings")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Connect macOS calendars, see upcoming meetings and reminders, and link locally transcribed recordings to their events.",
-                "Use Ukrainian or English and sign in with an email code. Local models stay free; cloud includes two free hours each month.",
-                "Compare Pro plans, review payment and renewal terms, or buy one year without renewal. Usage statistics require a separate choice on every plan.",
+                "Choose a browser profile beside a paused YouTube import, open the video in that profile, and check access to continue.",
+                "See specific explanations for YouTube sign-in, browser cookie access, verification, and unavailable videos.",
+                "Open meeting links from Upcoming meetings in the menu bar.",
             ]
         )
     }

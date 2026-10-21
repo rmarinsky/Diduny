@@ -21,11 +21,12 @@ extension AppDelegate {
         }
     }
 
-    func joinCalendarMeeting(_ meeting: CalendarMeeting, record: Bool, local: Bool) {
+    func joinCalendarMeeting(_ meeting: CalendarMeeting, record: Bool, local: Bool,
+                             openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }) {
         let opened: Bool
         if let url = meeting.meetingURL {
             guard CalendarMeeting.isJoinURL(url) else { return }
-            opened = NSWorkspace.shared.open(url)
+            opened = openURL(url)
         } else {
             guard record else { return }
             opened = true
@@ -35,24 +36,28 @@ extension AppDelegate {
             appState.recordingState == .recording || appState.recordingState == .processing ||
             appState.translationRecordingState == .recording || appState.translationRecordingState == .processing ||
             appState.meetingTranslationRecordingState == .recording || appState.meetingTranslationRecordingState == .processing
-        switch CalendarJoinDecision.resolve(record: record, openingSucceeded: opened, alreadyRecording: alreadyRecording, busy: busy, isSignedIn: AuthService.shared.isLoggedIn) {
+        switch CalendarJoinDecision.resolve(record: record, openingSucceeded: opened, alreadyRecording: alreadyRecording, busy: busy, isSignedIn: AuthService.shared.isLoggedIn, hasMeetingURL: meeting.meetingURL != nil) {
         case .joinOnly: break
-        case .signInRequired:
-            openSettings(tab: .account)
+        case let .signInRequired(showAccount):
+            if showAccount {
+                openSettings(tab: .account)
+            } else {
+                DictationOverlayController.shared.showInfo(message: String(localized: "The meeting is open. Sign in to Diduny in Account settings before starting a recording."), duration: 5)
+            }
         case .openFailed:
             DictationOverlayController.shared.showInfo(message: String(localized: "The meeting link could not be opened. Recording has not started."))
         case .recordingUnavailable:
             DictationOverlayController.shared.showInfo(message: String(localized: "The meeting is open. Finish the current recording task before starting another."))
-        case .linkExisting:
+        case let .linkExisting(showLibrary):
             if let id = meetingRecorderService.currentRecordingId,
                RecordingsLibraryStorage.shared.linkCalendarMeeting(id: id, meeting: meeting) {
-                openMainWindow(section: .recordings)
+                if showLibrary { openMainWindow(section: .recordings) }
             } else {
                 DictationOverlayController.shared.showInfo(message: String(localized: "The current recording could not be linked. An existing meeting link was kept."))
             }
-        case .startRecording:
+        case let .startRecording(showLibrary):
             toggleMeetingRecording(provider: local ? .local : .cloud, calendarMeeting: meeting)
-            openMainWindow(section: .recordings)
+            if showLibrary { openMainWindow(section: .recordings) }
         }
     }
 }

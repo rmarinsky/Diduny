@@ -157,17 +157,39 @@ struct CalendarConfiguration: Codable, Equatable {
         }
     }
 
+    private var hasFreshSnapshot: Bool {
+        guard configuration.connected, let fetchedAt else { return false }
+        return (0...300).contains(Date().timeIntervalSince(fetchedAt))
+    }
+
     var currentMeetings: [CalendarMeeting] {
-        guard configuration.connected, let fetchedAt, Date().timeIntervalSince(fetchedAt) >= 0, Date().timeIntervalSince(fetchedAt) <= 300 else { return [] }
+        guard hasFreshSnapshot else { return [] }
         return meetings.filter { configuration.selected.contains($0.calendarID) && $0.canRemind && $0.end > Date() }
             .sorted { $0.start < $1.start }
     }
 
-    func join(_ meeting: CalendarMeeting, record: Bool) {
+    @discardableResult
+    func join(_ meeting: CalendarMeeting, record: Bool) -> Bool {
         guard let current = currentMeetings.first(where: { $0.id == meeting.id }),
               current.start == meeting.start, current.meetingURL == meeting.meetingURL,
-              current.meetingURL.map(CalendarMeeting.isJoinURL) ?? record else { return }
-        onJoin?(current, record, configuration.localRecording)
+              current.meetingURL.map(CalendarMeeting.isJoinURL) ?? record,
+              let onJoin else { return false }
+        onJoin(current, record, configuration.localRecording)
+        return true
+    }
+
+    @discardableResult
+    func joinFromMenu(_ meeting: CalendarMeeting) async -> String? {
+        if !hasFreshSnapshot {
+            await refresh()
+        }
+        guard hasFreshSnapshot else {
+            return String(localized: "Calendar access could not be refreshed. Open Calendar settings and try again.")
+        }
+        guard join(meeting, record: meeting.meetingURL == nil || configuration.recordOnJoin) else {
+            return String(localized: "This meeting changed or is no longer available. Reopen Upcoming meetings and select it again.")
+        }
+        return nil
     }
 
     func start() {

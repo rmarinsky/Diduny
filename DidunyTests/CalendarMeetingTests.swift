@@ -88,24 +88,33 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertTrue(fresh.due([event], selected: ["work"], now: now, fetchedAt: now, leadMinutes: 0).isEmpty)
     }
 
-    func testCalendarRecordingKeepsSignInAsTheDestinationWhenSignedOut() {
+    func testCalendarJoinKeepsMeetingInFrontAndOnlyShowsAccountForInPersonRecording() {
         XCTAssertEqual(CalendarJoinDecision.resolve(record: true, openingSucceeded: true,
-                       alreadyRecording: false, busy: false, isSignedIn: false), .signInRequired)
+                       alreadyRecording: false, busy: false, isSignedIn: false), .signInRequired(showAccount: false))
+        XCTAssertEqual(CalendarJoinDecision.resolve(record: true, openingSucceeded: true,
+                       alreadyRecording: false, busy: false, isSignedIn: false, hasMeetingURL: false), .signInRequired(showAccount: true))
         XCTAssertEqual(CalendarJoinDecision.resolve(record: false, openingSucceeded: true,
                        alreadyRecording: false, busy: false, isSignedIn: false), .joinOnly)
+    }
+
+    func testInPersonCalendarRecordingStillOpensTheLibrary() {
+        XCTAssertEqual(CalendarJoinDecision.resolve(record: true, openingSucceeded: true,
+                        alreadyRecording: false, busy: false, hasMeetingURL: false), .startRecording(showLibrary: true))
+        XCTAssertEqual(CalendarJoinDecision.resolve(record: true, openingSucceeded: true,
+                        alreadyRecording: true, busy: false, hasMeetingURL: false), .linkExisting(showLibrary: true))
     }
 
     func testJoinDoesNotToggleAnActiveRecordingAndNeverRecordsIfOpeningFails() {
         XCTAssertEqual(CalendarJoinDecision.resolve(record: false, openingSucceeded: true,
                         alreadyRecording: false, busy: false), .joinOnly)
         XCTAssertEqual(CalendarJoinDecision.resolve(record: true, openingSucceeded: true,
-                        alreadyRecording: true, busy: false), .linkExisting)
+                        alreadyRecording: true, busy: false), .linkExisting(showLibrary: false))
         XCTAssertEqual(CalendarJoinDecision.resolve(record: true, openingSucceeded: true,
                         alreadyRecording: false, busy: true), .recordingUnavailable)
         XCTAssertEqual(CalendarJoinDecision.resolve(record: true, openingSucceeded: false,
                         alreadyRecording: false, busy: false), .openFailed)
         XCTAssertEqual(CalendarJoinDecision.resolve(record: true, openingSucceeded: true,
-                        alreadyRecording: false, busy: false), .startRecording)
+                        alreadyRecording: false, busy: false), .startRecording(showLibrary: false))
     }
 
 }

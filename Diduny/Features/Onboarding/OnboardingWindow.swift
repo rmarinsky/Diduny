@@ -30,19 +30,20 @@ final class OnboardingWindowController {
             appDelegate: appDelegate,
             onDismiss: { [weak self] in self?.finish() }
         )
+        .environment(appDelegate.appState)
         .preferredColorScheme(.dark)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 540),
-            styleMask: [.titled, .closable, .miniaturizable],
+            contentRect: NSRect(x: 0, y: 0, width: 1040, height: 700),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.identifier = NSUserInterfaceItemIdentifier("diduny.onboarding")
         window.title = String(localized: "Welcome to Diduny")
         window.contentView = NSHostingView(rootView: rootView)
-        window.contentMinSize = NSSize(width: 760, height: 540)
-        window.contentMaxSize = NSSize(width: 760, height: 540)
+        window.contentMinSize = NSSize(width: 900, height: 650)
+        window.contentMaxSize = NSSize(width: 1600, height: 1100)
         window.isReleasedWhenClosed = false
         window.center()
 
@@ -89,13 +90,24 @@ private final class OnboardingWindowDelegate: NSObject, NSWindowDelegate {
     }
 }
 
-private enum OnboardingScreen: Int, CaseIterable {
+enum OnboardingScreen: Int, CaseIterable {
     case welcome
     case signIn
+    case plans
     case capturePanel
     case permissions
     case practice
     case ready
+    var next: Self {
+        switch self {
+        case .welcome: .signIn
+        case .signIn: .plans
+        case .plans: .capturePanel
+        case .capturePanel: .permissions
+        case .permissions: .practice
+        case .practice, .ready: .ready
+        }
+    }
 }
 
 private enum OnboardingTheme {
@@ -112,6 +124,8 @@ private struct OnboardingFlowView: View {
     @State private var screen: OnboardingScreen = .welcome
     @State private var onboarding = OnboardingManager.shared
     @State private var auth = AuthService.shared
+    @State private var billing = BillingService()
+    @State private var billingNavigation = BillingOfferNavigation()
     @State private var microphoneGranted = false
     @State private var accessibilityGranted = false
     @State private var screenRecordingGranted = false
@@ -130,7 +144,7 @@ private struct OnboardingFlowView: View {
 
             ScrollView {
                 screenContent
-                    .frame(maxWidth: 620, minHeight: 390, alignment: .topLeading)
+                    .frame(maxWidth: screen == .plans ? .infinity : 620, minHeight: 390, alignment: .topLeading)
                     .padding(.horizontal, 36)
                     .padding(.vertical, 26)
             }
@@ -139,7 +153,7 @@ private struct OnboardingFlowView: View {
                 .padding(.horizontal, 36)
                 .padding(.bottom, 24)
         }
-        .frame(width: 760, height: 540)
+        .frame(minWidth: 900, minHeight: 650)
         .background(OnboardingTheme.background)
         .task { await refreshPermissions() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -181,6 +195,9 @@ private struct OnboardingFlowView: View {
             permissionsScreen
         case .signIn:
             signInScreen
+        case .plans:
+            Form { BillingSettingsSection(isLoggedIn: auth.isLoggedIn, billing: billing, navigation: billingNavigation) }
+                .formStyle(.grouped).frame(minWidth: 930, minHeight: 480)
         case .practice:
             practiceScreen
         case .ready:
@@ -349,7 +366,7 @@ private struct OnboardingFlowView: View {
                 .buttonStyle(.bordered)
             }
 
-            OnboardingPrimaryButton(title: primaryButtonTitle, isEnabled: canContinue) {
+            DidunyPrimaryButton(title: primaryButtonTitle, isEnabled: canContinue) {
                 continueFlow()
             }
         }
@@ -361,6 +378,12 @@ private struct OnboardingFlowView: View {
         case .capturePanel: "Continue"
         case .permissions: "Continue"
         case .signIn: "Continue"
+        case .plans:
+            switch billingNavigation.primaryAction {
+            case .compare: "Compare Free, Support, Cloud and Pro"
+            case .continueFree: "Continue with current plan"
+            case .checkout: "Continue to WayForPay"
+            }
         case .practice: "Try a dictation"
         case .ready: "Open Diduny"
         }
@@ -370,6 +393,9 @@ private struct OnboardingFlowView: View {
         switch screen {
         case .permissions: allPermissionsGranted
         case .signIn: auth.isLoggedIn
+        case .plans:
+            auth.isLoggedIn && !billing.isLoading && (billingNavigation.primaryAction != .checkout ||
+                (billing.checkoutAvailable && billing.state.map { billingNavigation.selectedPlan($0) != nil || $0.pendingOrderReference != nil } == true))
         case .practice:
             onboarding.canStartPractice(
                 isAuthenticated: auth.isLoggedIn,
@@ -396,7 +422,22 @@ private struct OnboardingFlowView: View {
         case .welcome: move(to: .signIn)
         case .capturePanel: move(to: .permissions)
         case .permissions: move(to: .practice)
-        case .signIn: move(to: .capturePanel)
+        case .signIn: move(to: screen.next)
+        case .plans:
+            switch billingNavigation.primaryAction {
+            case .compare: billingNavigation.comparePlans()
+            case .continueFree: move(to: screen.next)
+            case .checkout:
+                Task {
+                    guard let state = billing.state else { return }
+                    let selection = billingNavigation.purchaseSelection(state)
+                    if let url = await billing.checkout(selection.interval,
+                         paymentMode: selection.paymentMode,
+                         product: selection.product) {
+                        NSWorkspace.shared.open(url); await billing.refresh()
+                    }
+                }
+            }
         case .practice: startPractice()
         case .ready: onDismiss()
         }
@@ -480,7 +521,7 @@ private struct OnboardingHeading: View {
     }
 }
 
-private struct OnboardingPrimaryButton: View {
+struct DidunyPrimaryButton: View {
     let title: LocalizedStringKey
     let isEnabled: Bool
     let action: () -> Void
