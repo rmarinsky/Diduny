@@ -1,11 +1,26 @@
 import Foundation
 
-nonisolated enum BillingPaymentMode: String, Codable {
+nonisolated enum BillingProduct: String, Codable, Hashable {
+    case pro, support
+}
+
+nonisolated struct BillingCommunity: Decodable {
+    let eligible: Bool
+    let url: String?
+    var inviteURL: URL? {
+        guard eligible, let url, let value = URL(string: url), value.scheme == "https",
+              ["discord.gg", "discord.com", "t.me"].contains(value.host ?? ""),
+              value.user == nil, value.password == nil else { return nil }
+        return value
+    }
+}
+
+nonisolated enum BillingPaymentMode: String, Codable, Hashable {
     case recurring
     case oneTime = "one_time"
 }
 
-nonisolated enum BillingInterval: String, Codable, CaseIterable, Identifiable {
+nonisolated enum BillingInterval: String, Codable, Hashable, CaseIterable, Identifiable {
     case monthly, yearly
     var id: String {
         rawValue
@@ -18,6 +33,7 @@ nonisolated struct BillingPlan: Decodable, Identifiable {
     let currency: String
     let productName: String
     var paymentMode: BillingPaymentMode? = nil
+    var product: BillingProduct? = nil
     var id: BillingInterval {
         billingInterval
     }
@@ -41,6 +57,8 @@ nonisolated struct BillingState: Decodable {
     let pendingPlan: BillingPlan?
     var paymentMode: BillingPaymentMode? = nil
     var oneTimeAnnualPlan: BillingPlan? = nil
+    var supportPlan: BillingPlan? = nil
+    var community: BillingCommunity? = nil
 
     var hasTwoMonthsFree: Bool {
         guard let monthly = plans.first(where: { $0.billingInterval == .monthly }),
@@ -100,13 +118,23 @@ final class BillingService {
         } catch { if current == generation { record(error) } }
     }
 
-    func checkout(_ interval: BillingInterval, paymentMode: BillingPaymentMode = .recurring) async -> URL? {
+    func checkout(
+        _ interval: BillingInterval,
+        paymentMode: BillingPaymentMode = .recurring,
+        product: BillingProduct = .pro
+    ) async -> URL? {
         guard !isLoading else { return nil }
         isLoading = true
         let current = generation
         defer { if current == generation { isLoading = false } }
         do {
-            let data = try await request("checkout", method: "POST", interval: interval, paymentMode: paymentMode)
+            let data = try await request(
+                "checkout",
+                method: "POST",
+                interval: interval,
+                paymentMode: paymentMode,
+                product: product
+            )
             let checkout = try JSONDecoder().decode(BillingCheckout.self, from: data)
             let url = try validatedPaymentURL(checkout.paymentUrl)
             guard current == generation else { return nil }
@@ -147,7 +175,8 @@ final class BillingService {
         _ path: String,
         method: String,
         interval: BillingInterval? = nil,
-        paymentMode: BillingPaymentMode = .recurring
+        paymentMode: BillingPaymentMode = .recurring,
+        product: BillingProduct = .pro
     ) async throws -> Data {
         let base = baseURL().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: "\(base)/api/v1/billing/\(path)") else { throw BillingError.invalidURL }
@@ -157,6 +186,10 @@ final class BillingService {
         if method == "POST" {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             var body = interval.map { ["billingInterval": $0.rawValue] } ?? [:]
+            if ["checkout", "resume"].contains(path) {
+                body["language"] = Bundle.main.preferredLocalizations.first == "uk" ? "UA" : "EN"
+            }
+            if product == .support { body["product"] = product.rawValue }
             if paymentMode == .oneTime { body["paymentMode"] = paymentMode.rawValue }
             request.httpBody = try JSONEncoder().encode(body)
         }
@@ -204,4 +237,25 @@ private enum BillingError: LocalizedError {
 
 private struct BillingCheckout: Decodable {
     let paymentUrl: String
+}
+
+/// An external link selects an offer only. Authentication, server pricing and payment confirmation remain required.
+nonisolated struct BillingSelection: Hashable {
+    let product: BillingProduct
+    let interval: BillingInterval
+    let paymentMode: BillingPaymentMode
+    init?(url: URL) {
+        guard url.scheme == "diduny", url.host == "billing", url.path.isEmpty,
+              url.user == nil, url.password == nil, url.port == nil,
+              let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        let items = parts.queryItems ?? []
+        guard Set(items.map(\.name)).count == items.count else { return nil }
+        let value = { (name: String) in items.first { $0.name == name }?.value }
+        guard let product = BillingProduct(rawValue: value("product") ?? "pro"),
+              let interval = BillingInterval(rawValue: value("interval") ?? "monthly"),
+              let mode = BillingPaymentMode(rawValue: value("mode") ?? "recurring"),
+              product != .support || (interval == .monthly && mode == .recurring),
+              mode != .oneTime || interval == .yearly else { return nil }
+        self.product = product; self.interval = interval; paymentMode = mode
+    }
 }

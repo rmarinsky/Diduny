@@ -5,10 +5,12 @@ import WebKit
 @MainActor
 struct BillingSettingsSection: View {
     let isLoggedIn: Bool
+    @Environment(AppState.self) private var appState
     @State private var billing = BillingService()
-    @State private var interval: BillingInterval = .yearly
+    @State private var interval: BillingInterval = .monthly
     @State private var confirmsCancellation = false
     @State private var showsPolicies = false
+    @State private var showsUpgrade = false
     @Environment(\.openURL) private var openURL
 
     init(isLoggedIn: Bool, billing: BillingService? = nil) {
@@ -17,18 +19,18 @@ struct BillingSettingsSection: View {
     }
 
     var body: some View {
-        Section("Diduny Pro") {
+        Section("Plans & billing") {
             VStack(alignment: .leading, spacing: 18) {
                 if isLoggedIn, let state = billing.state {
-                    if state.plan == "pro" {
+                    if state.pendingOrderReference == nil && (state.plan == "pro" || (state.plan == "support" && !showsUpgrade)) {
                         subscription(state)
                     } else {
                         BillingOfferView(state: state, interval: $interval,
                                          checkoutAvailable: billing.checkoutAvailable,
-                                         isLoading: billing.isLoading)
-                        { chosen, mode in
+                                         isLoading: billing.isLoading, initialSelection: appState.billingSelection)
+                        { chosen, mode, product in
                             Task {
-                                if let url = await billing.checkout(chosen, paymentMode: mode) {
+                                if let url = await billing.checkout(chosen, paymentMode: mode, product: product) {
                                     openURL(url)
                                     await billing.refresh()
                                 }
@@ -40,7 +42,7 @@ struct BillingSettingsSection: View {
                           systemImage: "cloud")
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("More room for your voice").font(.title3.weight(.semibold))
+                    Text("Dictate. Follow meetings. Translate live.").font(.title3.weight(.semibold))
                     Text("Sign in to view subscription prices and upgrade.").foregroundStyle(.secondary)
                 }
 
@@ -87,16 +89,35 @@ struct BillingSettingsSection: View {
     }
 
     @ViewBuilder private func subscription(_ state: BillingState) -> some View {
-        Label(state.status == "past_due" ? "Your renewal needs attention" : "Diduny Pro is active",
-              systemImage: state.status == "past_due" ? "exclamationmark.circle" : "checkmark.circle.fill")
-            .font(.title3.weight(.semibold))
-            .foregroundStyle(state.status == "past_due" ? Color.orange : Color.green)
+        Label(
+            state.status == "past_due" ? "Your renewal needs attention" : state
+                .plan == "support" ? "Thank you for supporting Diduny" : "Diduny Pro is active",
+            systemImage: state.status == "past_due" ? "exclamationmark.circle" : "checkmark.circle.fill"
+        )
+        .font(.title3.weight(.semibold))
+        .foregroundStyle(state.status == "past_due" ? Color.orange : Color.green)
         if state.status == "past_due" {
             Text(
-                "The renewal payment has not been confirmed. Pro remains available during a short grace period. Check payment status below or contact support."
+                "The renewal payment has not been confirmed. Your paid membership remains available during a short grace period. Check payment status below or contact support."
             )
             .font(.callout).foregroundStyle(.secondary)
             Link("Contact support", destination: URL(string: "mailto:roman@rmarinsky.com.ua")!)
+        }
+        if state.plan == "support" {
+            Text("Pro is a separate purchase. Starting its checkout stops Support renewal. Pro begins after payment confirmation; the current Support payment is not credited.")
+                .font(.callout).foregroundStyle(.secondary)
+            Button("Explore Pro plans") { showsUpgrade = true }
+        }
+        if state.community?.eligible == true {
+            if let url = state.community?.inviteURL {
+                Link("Join the supporter community", destination: url)
+            } else {
+                Text("Your community invitation is being prepared.").font(.callout).foregroundStyle(.secondary)
+            }
+            Link(
+                "Suggest a feature",
+                destination: URL(string: "mailto:roman@rmarinsky.com.ua?subject=Diduny%20feature%20suggestion")!
+            )
         }
         LabeledContent(
             "Subscription",
@@ -148,16 +169,24 @@ struct BillingOfferView: View {
     @Binding var interval: BillingInterval
     let checkoutAvailable: Bool
     let isLoading: Bool
-    let checkout: (BillingInterval, BillingPaymentMode) -> Void
+    var initialSelection: BillingSelection?
+    let checkout: (BillingInterval, BillingPaymentMode, BillingProduct) -> Void
     @State private var reviewing = false
     @State private var showsPlans = false
     @State private var paymentMode: BillingPaymentMode = .recurring
+    @State private var product: BillingProduct = .pro
+    @State private var showsLifetime = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var selected: BillingPlan? {
         if pending, let plan = state.pendingPlan { return plan }
+        if product == .support { return state.supportPlan }
         if paymentMode == .oneTime { return state.oneTimeAnnualPlan }
         return state.plans.first { $0.billingInterval == effectiveInterval }
+    }
+
+    private var effectiveProduct: BillingProduct {
+        pending ? state.pendingPlan?.product ?? .pro : product
     }
 
     private var effectiveMode: BillingPaymentMode {
@@ -165,7 +194,7 @@ struct BillingOfferView: View {
     }
 
     private var effectiveInterval: BillingInterval {
-        pending ? state.pendingBillingInterval ?? interval : interval
+        pending ? state.pendingBillingInterval ?? interval : product == .support ? .monthly : interval
     }
 
     private var pending: Bool {
@@ -176,121 +205,88 @@ struct BillingOfferView: View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(reviewing ? "Review your purchase" : pending ? "Finish your payment" :
-                    "More room for your voice")
+                    "Dictate. Follow meetings. Translate live.")
                     .font(.title2.weight(.semibold))
                 Text(pending ? "Your payment has not been confirmed. Continue the original checkout or check its status below."
-                    : "Choose Pro for cloud transcription beyond the free allowance.")
+                    : "All local processing is free and unlimited. Pro includes unlimited cloud processing.")
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if !showsPlans, !pending {
                 VStack(alignment: .leading, spacing: 18) {
-                    Image(systemName: "waveform.circle.fill")
-                        .font(.system(size: 52)).foregroundStyle(Color.accentColor.gradient)
-                        .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
-                        .accessibilityHidden(true)
                     benefit(
-                        "Keep your train of thought",
-                        "Dictate longer without the free cloud allowance interrupting you.",
+                        "Words appear as you speak",
+                        "Dictate into the app you use and follow the cloud transcript while recording.",
                         icon: "text.cursor"
                     )
                     benefit(
-                        "Make conversations useful",
-                        "Turn meeting recordings and audio files into text with cloud transcription.",
+                        "Follow the conversation live",
+                        "See a live meeting transcript and return to your recording later.",
                         icon: "text.bubble"
                     )
                     benefit(
-                        "Choose the way you work",
-                        "Pro removes the cloud time limit. Local models remain free and unlimited.",
-                        icon: "cloud"
+                        "Translate while you talk",
+                        "Read live voice and meeting translations for languages supported by the cloud model.",
+                        icon: "character.bubble"
                     )
                     Text(
-                        "Occasional use? Your 2 free cloud hours each month may be enough. Choose Pro when you need more."
+                        "Local dictation, meetings, audio, video and YouTube transcription have no usage quota. Performance depends on your Mac and model."
                     )
                     .font(.callout).foregroundStyle(.secondary)
-                    Button("Explore Pro plans") { showsPlans = true }
-                        .buttonStyle(.borderedProminent).controlSize(.large)
-                        .accessibilityIdentifier("billing.explore")
+                    Button("Compare Free, Support and Pro") { showsPlans = true }
+                        .buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("billing.explore")
                 }
-                .transition(.opacity.combined(with: .move(edge: .trailing)))
             }
             if showsPlans, !reviewing, !pending {
                 Button("Back to benefits") { showsPlans = false }.buttonStyle(.link)
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(state.plans) { plan in
-                        Button { paymentMode = .recurring; interval = plan.billingInterval } label: {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text(plan.billingInterval == .yearly ? "Annual" : "Monthly").font(.headline)
-                                    Spacer(minLength: 4)
-                                    Image(systemName: paymentMode == .recurring && interval == plan
-                                        .billingInterval ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(paymentMode == .recurring && interval == plan
-                                            .billingInterval ? Color
-                                            .accentColor : .secondary)
-                                }
-                                Text(plan.formattedPrice).font(.title2.weight(.semibold))
-                                Text(plan.billingInterval == .yearly ? "Billed once per year" : "Billed every month")
-                                    .font(.callout).foregroundStyle(.secondary)
-                                if plan.billingInterval == .yearly, state.hasTwoMonthsFree {
-                                    Text("2 months free").font(.callout.weight(.medium))
-                                        .foregroundStyle(Color.accentColor)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(16)
-                            .background(
-                                paymentMode == .recurring && interval == plan.billingInterval ? Color.accentColor
-                                    .opacity(0.08) : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 10)
-                            )
-                            .overlay(RoundedRectangle(cornerRadius: 10)
-                                .strokeBorder(
-                                    paymentMode == .recurring && interval == plan.billingInterval ? Color
-                                        .accentColor : Color.secondary.opacity(0.3),
-                                    lineWidth: paymentMode == .recurring && interval == plan.billingInterval ? 2 : 1
-                                ))
-                            .contentShape(RoundedRectangle(cornerRadius: 10))
-                        }.buttonStyle(.plain)
-                            .accessibilityLabel(
-                                "\(plan.billingInterval == .yearly ? String(localized: "Annual") : String(localized: "Monthly")), \(plan.formattedPrice), \(plan.billingInterval == .yearly ? String(localized: "per year") : String(localized: "per month"))"
-                            )
-                            .accessibilityAddTraits(paymentMode == .recurring && interval == plan
-                                .billingInterval ? .isSelected : [])
-                            .accessibilityIdentifier("billing.plan.\(plan.billingInterval.rawValue)")
-                            .disabled(isLoading)
-                    }
-                }
-            }
-            if showsPlans, !reviewing, !pending, let annual = state.oneTimeAnnualPlan {
-                Button { interval = .yearly; paymentMode = .oneTime } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("One year, no renewal").font(.headline)
-                            Text("\(annual.formattedPrice) once · 12 months of Pro").font(.callout)
-                            Text("More payment methods, including up to 3 bank payments where available.")
-                                .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Picker("Payment period", selection: $interval) {
+                        Text("Monthly").tag(BillingInterval.monthly)
+                        Text("Annual").tag(BillingInterval.yearly)
+                    }.pickerStyle(.segmented)
+                    Button("Lifetime · concept") { showsLifetime = true }
+                        .popover(isPresented: $showsLifetime) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Lifetime is being considered").font(.headline)
+                                Text(
+                                    "The price and cloud allowance for a one-time lifetime license are not approved. This is not an available payment plan."
+                                )
+                            }.padding().frame(width: 300)
                         }
-                        Spacer()
-                        Image(systemName: paymentMode == .oneTime ? "checkmark.circle.fill" : "circle")
-                    }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            Color.accentColor.opacity(paymentMode == .oneTime ? 0.08 : 0),
-                            in: RoundedRectangle(cornerRadius: 10)
-                        )
-                        .overlay(RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(paymentMode == .oneTime ? Color.accentColor : Color.secondary.opacity(0.3)))
-                }.buttonStyle(.plain).disabled(isLoading)
-                    .accessibilityIdentifier("billing.plan.one_time")
-                    .accessibilityAddTraits(paymentMode == .oneTime ? .isSelected : [])
+                }
+                if state.hasTwoMonthsFree,
+                   interval == .yearly { Text("2 months free").foregroundStyle(Color.accentColor) }
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 12) { planCards }
+                    VStack(alignment: .leading, spacing: 12) { planCards }
+                }
+                Text("The period selector applies to Pro. Support remains monthly.").font(.caption)
+                    .foregroundStyle(.secondary)
                 Text(
-                    "Monthly for flexibility. Annual for regular use. One-time annual if you prefer to decide again next year."
+                    "Free and Support include two shared cloud hours per calendar month for dictation, meeting transcription and speech translation."
                 )
                 .font(.callout).foregroundStyle(.secondary)
+                DisclosureGroup("Compare local and cloud processing") {
+                    comparison
+                }
+                if let oneTime = state.oneTimeAnnualPlan {
+                    DisclosureGroup("Prefer no automatic renewal?") {
+                        Text("One-time annual Pro. No automatic renewal.").font(.callout)
+                        Button(oneTime.formattedPrice) {
+                            product = .pro; interval = .yearly; paymentMode = .oneTime; reviewing = true
+                        }.accessibilityIdentifier("billing.plan.one_time").disabled(isLoading)
+                    }
+                }
             }
             if showsPlans || pending {
                 if let selected {
                     if reviewing || pending {
+                        LabeledContent(
+                            "Plan",
+                            value: effectiveProduct == .support ? String(localized: "Support development") :
+                                String(localized: "Diduny Pro")
+                        )
                         LabeledContent(
                             "Payment period",
                             value: effectiveInterval == .yearly ? String(localized: "12 months") :
@@ -318,7 +314,7 @@ struct BillingOfferView: View {
                     }
                     if reviewing {
                         Text(
-                            "By continuing, you accept the Diduny Pro terms for this plan and acknowledge the Privacy Policy. Optional usage statistics stay off unless you separately enable them in Account. Payment opens in your browser. Return here after payment to check your access."
+                            "By continuing, you accept the terms for this plan and acknowledge the Privacy Policy. Optional usage statistics stay off unless you separately enable them in Account. Payment opens in your browser. Return here after payment to check your access."
                         )
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
@@ -327,7 +323,7 @@ struct BillingOfferView: View {
                             Button(reviewing || pending ? "Continue to WayForPay" :
                                 (interval == .yearly ? "Review annual plan" : "Review monthly plan"))
                             {
-                                if reviewing || pending { checkout(effectiveInterval, effectiveMode) }
+                                if reviewing || pending { checkout(effectiveInterval, effectiveMode, effectiveProduct) }
                                 else { reviewing = true }
                             }.buttonStyle(.borderedProminent).controlSize(.large)
                                 .accessibilityIdentifier("billing.continue").disabled(isLoading)
@@ -351,7 +347,90 @@ struct BillingOfferView: View {
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: showsPlans)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: reviewing)
-        .onChange(of: interval) { _, _ in reviewing = false }
+        .task(id: initialSelection) {
+            guard !pending, let selection = initialSelection else { return }
+            product = selection.product; interval = selection.interval; paymentMode = selection.paymentMode
+            showsPlans = true; reviewing = true
+        }
+    }
+
+    @ViewBuilder private var planCards: some View {
+        planCard("Free", price: String(localized: "Free"), details: [
+            "Unlimited local models", "Voice to text in your Mac apps", "Meeting recordings and local live preview",
+            "Local audio, video and YouTube transcription", "Local speech translation into English",
+            "Message formatting and transcript cleanup", "2 shared cloud hours per calendar month"
+        ], highlighted: false) { showsPlans = false }
+        if let support = state.supportPlan {
+            planCard(
+                "Support development",
+                price: support.formattedPrice + " / " + String(localized: "month"),
+                details: [
+                    "Everything in Free", "Support independent development",
+                    "Community participation and feature discussions",
+                    "Suggest and discuss new features", "2 shared cloud hours per calendar month"
+                ],
+                highlighted: false
+            ) { product = .support; paymentMode = .recurring; reviewing = true }
+        }
+        if let pro = state.plans.first(where: { $0.billingInterval == interval }) {
+            planCard(
+                "Diduny Pro",
+                price: pro.formattedPrice + " / " + String(localized: interval == .yearly ? "year" : "month"),
+                details: [
+                    "Everything in Free", "Unlimited cloud processing", "Dictation with text as you speak",
+                    "Live meeting transcription", "Live voice translation", "Live meeting translation",
+                    "Community participation and feature discussions", "Suggest and discuss new features"
+                ],
+                highlighted: true
+            ) { product = .pro; paymentMode = .recurring; reviewing = true }
+        }
+    }
+
+    private func planCard(_ title: LocalizedStringKey, price: String, details: [String], highlighted: Bool,
+                          choose: @escaping () -> Void) -> some View
+    {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.headline)
+            Text(price).font(.title3.weight(.semibold))
+            Divider()
+            ForEach(details, id: \.self) { item in
+                Label { Text(LocalizedStringKey(item)).fixedSize(horizontal: false, vertical: true) }
+                    icon: { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
+                    .font(.callout)
+            }
+            Button(highlighted ? "Choose Pro" : title == "Free" ? "Keep using Free" : "Choose Support", action: choose)
+                .buttonStyle(.bordered).disabled(isLoading || (title != "Free" && !checkoutAvailable))
+        }.frame(minWidth: 175, maxWidth: .infinity, alignment: .leading).padding(14)
+            .background(
+                highlighted ? Color.accentColor.opacity(0.09) : Color.secondary.opacity(0.05),
+                in: RoundedRectangle(cornerRadius: 10)
+            )
+            .overlay(RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(highlighted ? Color.accentColor : Color.secondary.opacity(0.2)))
+    }
+
+    private var comparison: some View {
+        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 10) {
+            GridRow { Text("Feature").bold(); Text("Local models").bold(); Text("Cloud models").bold() }
+            GridRow { Text("Transcription"); Text("Unlimited local processing"); Text("Live text as you speak") }
+            GridRow { Text("Meetings"); Text("Recording and optional live preview"); Text("Live meeting transcription")
+            }
+            GridRow {
+                Text("Voice translation"); Text("Into English with multilingual Whisper"); Text(
+                    "Live translation for supported languages"
+                )
+            }
+            GridRow {
+                Text("Meeting translation"); Text("Cloud processing required for live translation"); Text(
+                    "Live meeting translation"
+                )
+            }
+            GridRow {
+                Text("Audio, video and YouTube"); Text("Local processing without a usage quota"); Text(
+                    "Imported media currently uses local models"
+                )
+            }
+        }.font(.caption).padding(.vertical, 10)
     }
 
     private func benefit(_ title: LocalizedStringKey, _ detail: LocalizedStringKey, icon: String) -> some View {

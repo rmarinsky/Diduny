@@ -1224,6 +1224,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Settings
 
+    func application(_: NSApplication, open urls: [URL]) {
+        guard let selection = urls.compactMap({ BillingSelection(url: $0) }).first else { return }
+        appState.billingSelection = selection
+        openMainWindow(section: .account)
+    }
+
     func openMainWindow(section: MainSection = .overview) {
         MainWindowController.shared.showWindow(section: section)
     }

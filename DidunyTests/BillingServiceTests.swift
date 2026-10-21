@@ -4,6 +4,38 @@ import Testing
 
 @MainActor
 struct BillingServiceTests {
+    @Test("Website billing links preserve supported plans and reject invalid purchases")
+    func websiteSelection() throws {
+        let support =
+            try BillingSelection(url: #require(URL(string: "diduny://billing?product=support&interval=monthly")))
+        #expect(support?.product == .support)
+        #expect(support?.interval == .monthly)
+        #expect(try BillingSelection(url: #require(URL(string: "diduny://billing?product=support&interval=yearly"))) ==
+            nil)
+        #expect(try BillingSelection(url: #require(URL(string: "diduny://billing?product=lifetime&interval=yearly"))) ==
+            nil)
+        #expect(try BillingSelection(url: #require(URL(string: "https://billing?product=pro&interval=yearly"))) == nil)
+        let annual =
+            try BillingSelection(
+                url: #require(URL(string: "diduny://billing?product=pro&interval=yearly&mode=one_time"))
+            )
+        #expect(annual?.paymentMode == .oneTime)
+    }
+
+    @Test("Support checkout sends its product and never a client price")
+    func supportCheckout() async {
+        let service = BillingService(baseURL: { "https://proxy.example" }) { request in
+            let body = try JSONDecoder().decode([String: String].self, from: request.httpBody ?? Data())
+            #expect(body["product"] == "support")
+            #expect(body["language"] == "EN")
+            #expect(body["billingInterval"] == "monthly")
+            #expect(body["amount"] == nil)
+            return (Data(#"{"paymentUrl":"https://proxy.example/billing/checkout/support"}"#.utf8),
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        #expect(await service.checkout(.monthly, product: .support) != nil)
+    }
+
     @Test("One-time annual checkout explicitly opts out of renewal")
     func oneTimeCheckout() async {
         let service = BillingService(baseURL: { "https://proxy.example" }) { request in
@@ -21,7 +53,9 @@ struct BillingServiceTests {
         let service = BillingService(baseURL: { "https://proxy.example" }) { request in
             #expect(request.url?.path == "/api/v1/billing/checkout")
             #expect(request.httpMethod == "POST")
-            #expect(String(data: request.httpBody ?? Data(), encoding: .utf8) == #"{"billingInterval":"yearly"}"#)
+            let body = try JSONDecoder().decode([String: String].self, from: request.httpBody ?? Data())
+            #expect(body["billingInterval"] == "yearly")
+            #expect(body["language"] == "EN")
             return (Data(#"{"paymentUrl":"https://proxy.example/billing/checkout/test"}"#.utf8),
                     HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }

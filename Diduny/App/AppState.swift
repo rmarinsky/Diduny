@@ -23,6 +23,7 @@ enum RecordingState: Equatable, CustomStringConvertible {
 @Observable
 @MainActor
 final class AppState {
+    var billingSelection: BillingSelection?
     var recordingState: RecordingState = .idle {
         didSet {
             Log.app.debug("recordingState changed: \(oldValue.description) -> \(self.recordingState.description)")
