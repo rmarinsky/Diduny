@@ -1299,3 +1299,5 @@
 "Annual Pro: %@ per month, billed %@ yearly" = "Річний Pro: %@/міс., оплата %@ за рік";
 
 "%@ more per month than Cloud in equivalent cost. Pay %@ upfront for the year." = "На %@/міс. більше за Cloud у перерахунку. До сплати одразу %@ за рік.";
+
+"Support" = "Підтримка";

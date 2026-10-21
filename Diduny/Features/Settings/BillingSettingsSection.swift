@@ -392,7 +392,7 @@ struct BillingOfferView: View {
                         detail: "All local processing is free.", quota: "2 shared cloud hours / month",
                         items: ["Unlimited local models", "Dictation, meetings and files", "Cloud features within 2 hours"],
                         action: "Keep using Free", chosen: nil)
-                    offerCard(title: "Support development", price: state.supportPlan?.formattedPrice ?? "—", bill: "Billed monthly",
+                    offerCard(title: "Support", price: state.supportPlan?.formattedPrice ?? "—", bill: "Billed monthly",
                         detail: "For people who have enough with local models.", quota: "2 shared cloud hours / month",
                         items: ["Everything in Free", "Support independent development", "Community invitation pending", "Suggest and discuss new features"],
                         action: "Choose Support", chosen: .support)
