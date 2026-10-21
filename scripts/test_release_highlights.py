@@ -32,7 +32,7 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
             )
 
             self.run_script("render", str(PAYLOAD), str(markdown))
-            expected = '# Choose Free, Support, Cloud or Pro\n\n- Compare four plans before checkout: Free, Support at UAH69/month, Cloud at UAH119/month for ten shared cloud hours, and Pro at UAH150/month or UAH1500/year.\n- Keep local models unlimited. Review the full charge and renewal period before paying securely through WayForPay.\n- Use the same staged plan selection during setup and in Account, with Ukrainian and English localization.\n- Recover YouTube access using your browser profile and open upcoming meeting links from the menu bar.\n'
+            expected = '# Choose Free, Support, Cloud or Pro\n\n- Compare Free, Support at UAH69/month, Cloud at UAH119/month for ten shared cloud hours, and Pro at UAH150/month or UAH1500/year.\n- Keep local models unlimited. Review the full charge and renewal period in Ukrainian or English before paying securely through WayForPay.\n- Recover YouTube access using your browser profile and open upcoming meeting links from the menu bar.\n'
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
             arguments = (
