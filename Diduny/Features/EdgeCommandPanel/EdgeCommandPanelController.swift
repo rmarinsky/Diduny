@@ -950,6 +950,7 @@ final class EdgeCommandPanelController: NSObject {
             onStop: { DictationOverlayController.shared.requestStop() },
             onDismissLive: { DictationOverlayController.shared.dismiss() },
             onMinimizeLive: { [weak self] in self?.minimizeLiveFeedback() },
+            onSelectOutput: { DictationOverlayController.shared.selectOutput($0) },
             onStartMeetingSuggestion: { [weak self] id in
                 self?.startMeetingRecording(fromSuggestionID: id)
             },
@@ -1252,6 +1253,7 @@ struct EdgeCommandExpandedView: View {
     let onStop: () -> Void
     let onDismissLive: () -> Void
     let onMinimizeLive: () -> Void
+    let onSelectOutput: (DictationOutput) -> Void
     let onStartMeetingSuggestion: (UUID) -> Void
     let onDismissMeetingSuggestion: (UUID) -> Void
     let onMeetingSuggestionsEnabled: (Bool) -> Void
@@ -1279,6 +1281,7 @@ struct EdgeCommandExpandedView: View {
                     onStop: onStop,
                     onDismiss: onDismissLive,
                     onMinimize: onMinimizeLive,
+                    onSelectOutput: onSelectOutput,
                     onDrag: onDrag,
                     onDragEnd: onDragEnd
                 )

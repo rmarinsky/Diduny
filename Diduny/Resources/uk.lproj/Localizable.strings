@@ -1301,3 +1301,11 @@
 "%@ more per month than Cloud in equivalent cost. Pay %@ upfront for the year." = "На %@/міс. більше за Cloud у перерахунку. До сплати одразу %@ за рік.";
 
 "Support" = "Підтримка";
+
+"Original" = "Оригінал";
+
+"More languages" = "Інші мови";
+
+"Output language" = "Мова результату";
+
+"Output for this recording. Applies to everything said so far." = "Результат цього запису. Застосовується до всього, що вже сказано.";

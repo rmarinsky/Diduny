@@ -31,6 +31,69 @@ private struct TranslationResponse: Decodable {
     let src: String?
 }
 
+// MARK: - Translation API
+
+/// Text translation through the proxy (`GET /api/v1/translations`).
+enum TextTranslationClient {
+    static func requestTranslation(
+        sourceText: String,
+        sourceLanguage: String,
+        targetLanguage: String
+    ) async throws -> String {
+        let settings = SettingsStorage.shared
+        let proxyBase = settings.proxyBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let translateURL = "\(proxyBase)/api/v1/translations"
+
+        guard var components = URLComponents(string: translateURL) else {
+            throw TranslationError.invalidRequest
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "q", value: sourceText),
+            URLQueryItem(name: "tl", value: targetLanguage),
+            URLQueryItem(name: "sl", value: normalizedSourceLanguage(sourceLanguage))
+        ]
+
+        guard let url = components.url else {
+            throw TranslationError.invalidRequest
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 20
+
+        await AuthService.shared.authenticatedRequest(&request)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw TranslationError.requestFailed("invalid response")
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "status \(httpResponse.statusCode)"
+            throw TranslationError.requestFailed(errorBody)
+        }
+
+        let payload = try JSONDecoder().decode(TranslationResponse.self, from: data)
+        let translatedText = payload.sentences
+            .compactMap(\.trans)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !translatedText.isEmpty else {
+            throw TranslationError.emptyResult
+        }
+
+        return translatedText
+    }
+
+    private static func normalizedSourceLanguage(_ code: String) -> String {
+        if code == "auto" { return "auto" }
+        return SettingsStorage.normalizedLanguageCode(code) ?? "auto"
+    }
+}
+
 // MARK: - View Model
 
 @MainActor
@@ -72,7 +135,7 @@ final class TextTranslationViewModel: ObservableObject {
         translationTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let result = try await Self.requestTranslation(
+                let result = try await TextTranslationClient.requestTranslation(
                     sourceText: sourceText,
                     sourceLanguage: sourceLanguageCode,
                     targetLanguage: targetLanguageCode
@@ -158,66 +221,6 @@ final class TextTranslationViewModel: ObservableObject {
         return SupportedLanguage.language(for: code)?.name
             ?? Locale.current.localizedString(forLanguageCode: code)?.capitalized
             ?? code.uppercased()
-    }
-
-    // MARK: - Translation API
-
-    private static func requestTranslation(
-        sourceText: String,
-        sourceLanguage: String,
-        targetLanguage: String
-    ) async throws -> String {
-        let settings = SettingsStorage.shared
-        let proxyBase = settings.proxyBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let translateURL = "\(proxyBase)/api/v1/translations"
-
-        guard var components = URLComponents(string: translateURL) else {
-            throw TranslationError.invalidRequest
-        }
-
-        components.queryItems = [
-            URLQueryItem(name: "q", value: sourceText),
-            URLQueryItem(name: "tl", value: targetLanguage),
-            URLQueryItem(name: "sl", value: normalizedSourceLanguage(sourceLanguage))
-        ]
-
-        guard let url = components.url else {
-            throw TranslationError.invalidRequest
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 20
-
-        await AuthService.shared.authenticatedRequest(&request)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw TranslationError.requestFailed("invalid response")
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "status \(httpResponse.statusCode)"
-            throw TranslationError.requestFailed(errorBody)
-        }
-
-        let payload = try JSONDecoder().decode(TranslationResponse.self, from: data)
-        let translatedText = payload.sentences
-            .compactMap(\.trans)
-            .joined()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !translatedText.isEmpty else {
-            throw TranslationError.emptyResult
-        }
-
-        return translatedText
-    }
-
-    private static func normalizedSourceLanguage(_ code: String) -> String {
-        if code == "auto" { return "auto" }
-        return SettingsStorage.normalizedLanguageCode(code) ?? "auto"
     }
 }
 

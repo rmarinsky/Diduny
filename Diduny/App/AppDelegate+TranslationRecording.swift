@@ -6,6 +6,8 @@ actor RealtimeTranslationAccumulator {
     private let targetLanguage: String
     private var finalTranslatedText: String = ""
     private var provisionalTranslatedText: String = ""
+    private var finalOriginalText: String = ""
+    private var provisionalOriginalText: String = ""
 
     init(targetLanguage: String) {
         self.targetLanguage = targetLanguage
@@ -13,8 +15,18 @@ actor RealtimeTranslationAccumulator {
 
     func process(tokens: [RealtimeToken]) {
         var latestProvisionalTranslatedText = ""
+        var latestProvisionalOriginalText = ""
         for token in tokens where !token.text.isEmpty {
             let status = token.translationStatus?.lowercased()
+            // Spoken words, kept so the output can switch mid-recording
+            // without reconnecting the stream.
+            if status != "translation" {
+                if token.isFinal {
+                    finalOriginalText += token.text
+                } else {
+                    latestProvisionalOriginalText += token.text
+                }
+            }
             // Soniox does not translate speech already in the target language.
             // Keep those tokens alongside translations, in provider order.
             guard token.language == nil || token.language == targetLanguage,
@@ -30,6 +42,11 @@ actor RealtimeTranslationAccumulator {
         }
 
         provisionalTranslatedText = latestProvisionalTranslatedText
+        provisionalOriginalText = latestProvisionalOriginalText
+    }
+
+    func originalText() -> String {
+        (finalOriginalText + provisionalOriginalText).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func markSegmentBoundary() {
@@ -322,6 +339,10 @@ extension AppDelegate {
                 appState.translationRecordingState = .recording
                 appState.translationRecordingStartTime = Date()
                 handleTranslationStateChange(.recording)
+                configureRecordingFeedbackOutput(
+                    native: .translation(targetLanguage: targetLanguage),
+                    provider: SettingsStorage.shared.effectiveTranslationProvider
+                )
 
                 // Pipe audio level to the selected recording feedback surface.
                 let feedbackMode: RecordingMode = .translation(targetLanguage: translationPairLabel)
@@ -411,6 +432,7 @@ extension AppDelegate {
         let recordingStartTime = appState.translationRecordingStartTime
         let pair = activeTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
         let targetLanguage = activeTranslationTargetLanguage ?? pair.languageB
+        let output = await selectedRecordingFeedbackOutput()
 
         // Capture stop time immediately for accurate duration
         let stopTime = Date()
@@ -436,9 +458,19 @@ extension AppDelegate {
             capturedAudioData = audioData
 
             let realtimeResult = await realtimeStopTask.value
+            let switchedText = try await switchedOutputText(
+                output,
+                native: .translation(targetLanguage: targetLanguage),
+                nativeText: realtimeResult.text,
+                originalText: realtimeResult.originalText,
+                audioData: audioData,
+                languageHints: SettingsStorage.shared.translationLanguageHints(for: pair)
+            )
 
             let rawText: String
-            if !realtimeResult.text.isEmpty {
+            if let switchedText {
+                rawText = switchedText
+            } else if !realtimeResult.text.isEmpty {
                 rawText = realtimeResult.text
                 Log.app.info("stopTranslationRecording: Using realtime translation (\(rawText.count) chars)")
             } else if SettingsStorage.shared.effectiveTranslationProvider == .local {
@@ -456,7 +488,7 @@ extension AppDelegate {
                 )
                 Log.app.info("stopTranslationRecording: HTTP cloud translation (\(rawText.count) chars)")
             }
-            let cleanedRawText: String = if !realtimeResult.text.isEmpty {
+            let cleanedRawText: String = if switchedText == nil, !realtimeResult.text.isEmpty {
                 await cleanRealtimeResultText(
                     rawText,
                     realtimeResult: realtimeResult,
@@ -518,11 +550,11 @@ extension AppDelegate {
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
                 audioData: compressedData,
-                type: .translation,
+                type: output == .original ? .voice : .translation,
                 duration: duration,
                 transcriptionText: text,
                 sourceDevice: sourceDevice,
-                translationTargetLanguageCode: targetLanguage
+                translationTargetLanguageCode: output.targetLanguage
             )
 
             if SettingsStorage.shared.playSoundOnCompletion {
@@ -769,12 +801,14 @@ extension AppDelegate {
             "Translation RT stop: finalizeProfile=\(finalizeResult.profileName), finished=\(finalizeResult.didReceiveFinishedSignal), timedOut=\(finalizeResult.timedOut), durationMs=\(finalizeResult.durationMs), tokensAfterFinalize=\(finalizeResult.tokensAfterFinalize), charsAfterFinalize=\(finalizeResult.charactersAfterFinalize), textChangedAfterFinalize=\(textChangedAfterFinalize), charsDelta=\(text.count - preFinalizeTrimmed.count), optimisticCleanupReused=\(optimisticCleanedText != nil)"
         )
 
-        return RealtimeSessionStopResult(
+        var result = RealtimeSessionStopResult(
             text: text,
             preFinalizeText: preFinalizeTrimmed,
             optimisticCleanedText: optimisticCleanedText,
             finalizeResult: finalizeResult
         )
+        result.originalText = await accumulator?.originalText() ?? ""
+        return result
     }
 
     // MARK: - Escape Cancel Handler

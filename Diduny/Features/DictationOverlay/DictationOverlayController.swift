@@ -6,6 +6,7 @@ final class DictationOverlayController {
 
     let store = LiveDictationOverlayStore()
     private var autoHideTask: Task<Void, Never>?
+    private var outputPreviewTask: Task<Void, Never>?
     private var onStopRequested: (@MainActor () async -> Void)?
 
     /// Surface captured when a feedback session starts. A recording finishes
@@ -30,6 +31,7 @@ final class DictationOverlayController {
     func begin(mode: RecordingMode) {
         autoHideTask?.cancel()
         beginSurfaceSession()
+        cancelOutputPreview()
         store.reset(mode: mode)
         store.phase = .starting
         if usesNotch {
@@ -199,6 +201,59 @@ final class DictationOverlayController {
         guard !usesNotch else { return }
         guard !tokens.isEmpty else { return }
         store.processTokens(tokens)
+        scheduleOutputPreview()
+    }
+
+    func configureOutput(native: DictationOutput, options: [DictationOutput]) {
+        cancelOutputPreview()
+        store.configureOutput(native: native, options: options)
+    }
+
+    func selectOutput(_ output: DictationOutput) {
+        guard store.selectedOutput != output else { return }
+        store.selectedOutput = output
+        cancelOutputPreview()
+        scheduleOutputPreview(delay: .zero)
+    }
+
+    /// Text-translates the spoken words so the panel previews the selected
+    /// output. Throttled to one request in flight; the paste result is
+    /// produced again at Stop from the final text.
+    private func scheduleOutputPreview(delay: Duration = .milliseconds(600)) {
+        guard outputPreviewTask == nil, needsOutputPreview else { return }
+        outputPreviewTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            let output = store.selectedOutput
+            guard needsOutputPreview, let target = output.targetLanguage,
+                  let source = store.outputSourceText
+            else {
+                outputPreviewTask = nil
+                return
+            }
+            let text = try? await TextTranslationClient.requestTranslation(
+                sourceText: source,
+                sourceLanguage: "auto",
+                targetLanguage: target
+            )
+            guard !Task.isCancelled else { return }
+            outputPreviewTask = nil
+            guard let text else { return }
+            store.convertedPreview = (output: output, source: source, text: text)
+            // Catch up with words spoken while the request was in flight.
+            scheduleOutputPreview()
+        }
+    }
+
+    private var needsOutputPreview: Bool {
+        guard store.selectedOutput.targetLanguage != nil, let source = store.outputSourceText else { return false }
+        guard let preview = store.convertedPreview else { return true }
+        return preview.output != store.selectedOutput || preview.source != source
+    }
+
+    private func cancelOutputPreview() {
+        outputPreviewTask?.cancel()
+        outputPreviewTask = nil
     }
 
     func markSegmentBoundary() {

@@ -330,6 +330,7 @@ extension AppDelegate {
                 appState.recordingState = .recording
                 appState.recordingStartTime = Date()
                 handleRecordingStateChange(.recording)
+                configureRecordingFeedbackOutput(native: .original, provider: voiceTranscriptionProvider)
 
                 // Pipe audio level to the selected recording feedback surface.
                 audioLevelCancellable = audioRecorder.$audioLevel
@@ -410,6 +411,7 @@ extension AppDelegate {
 
         // Capture recording start time for duration calculation
         let recordingStartTime = appState.recordingStartTime
+        let output = await selectedRecordingFeedbackOutput()
 
         // Capture stop time immediately for accurate duration
         let stopTime = Date()
@@ -446,10 +448,20 @@ extension AppDelegate {
             capturedAudioData = audioData
 
             let realtimeResult = await realtimeStopTask.value
+            let switchedText = try await switchedOutputText(
+                output,
+                native: .original,
+                nativeText: realtimeResult.text,
+                originalText: realtimeResult.text,
+                audioData: audioData,
+                languageHints: SettingsStorage.shared.speechLanguageHints
+            )
 
             let rawText: String
             var transcriptSegments: [TimedTranscriptSegment]?
-            if !realtimeResult.text.isEmpty {
+            if let switchedText {
+                rawText = switchedText
+            } else if !realtimeResult.text.isEmpty {
                 rawText = realtimeResult.text
                 Log.app.info("stopRecording: Using realtime transcription (\(rawText.count) chars)")
             } else if voiceTranscriptionProvider == .local {
@@ -462,7 +474,7 @@ extension AppDelegate {
                 rawText = try await transcriptionService.transcribe(audioData: audioData)
                 Log.app.info("stopRecording: HTTP cloud transcription (\(rawText.count) chars)")
             }
-            let cleanedRawText: String = if !realtimeResult.text.isEmpty {
+            let cleanedRawText: String = if switchedText == nil, !realtimeResult.text.isEmpty {
                 await cleanRealtimeResultText(
                     rawText,
                     realtimeResult: realtimeResult,
@@ -518,10 +530,11 @@ extension AppDelegate {
             let savedRecordingID = RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
                 audioData: compressedData,
-                type: .voice,
+                type: output == .original ? .voice : .translation,
                 duration: duration,
                 transcriptionText: text,
                 sourceDevice: sourceDevice,
+                translationTargetLanguageCode: output.targetLanguage,
                 transcriptSegments: transcriptSegments?.isEmpty == false ? transcriptSegments : nil,
                 forceSave: shouldCompleteSetup
             )
@@ -995,6 +1008,65 @@ extension AppDelegate {
             fillerWords: SettingsStorage.shared.fillerWords,
             timeoutInterval: timeoutInterval
         )
+    }
+
+    // MARK: - Output Switching
+
+    /// Offers the output picker for cloud sessions only: switching a local
+    /// session would send its text to the cloud translation endpoint.
+    func configureRecordingFeedbackOutput(native: DictationOutput, provider: TranscriptionProvider) {
+        let options = provider == .cloud
+            ? DictationOutput.options(pairs: SettingsStorage.shared.translationLanguagePairs, native: native)
+            : []
+        DictationOverlayController.shared.configureOutput(native: native, options: options)
+    }
+
+    func selectedRecordingFeedbackOutput() async -> DictationOutput {
+        await MainActor.run { DictationOverlayController.shared.store.selectedOutput }
+    }
+
+    /// Text for an output picked mid-recording, or nil when the session's own
+    /// result stands. Derives it from the spoken words; falls back to the
+    /// recorded audio when there are none or text translation fails.
+    func switchedOutputText(
+        _ output: DictationOutput,
+        native: DictationOutput,
+        nativeText: String,
+        originalText: String,
+        audioData: Data,
+        languageHints: [String]
+    ) async throws -> String? {
+        guard output != native else { return nil }
+        Log.app.info("Output switched mid-recording to \(output.targetLanguage ?? "original")")
+
+        switch output.plan(native: native, nativeText: nativeText, originalText: originalText) {
+        case let .useAsIs(text):
+            return text
+        case let .translate(text, targetLanguage):
+            do {
+                return try await TextTranslationClient.requestTranslation(
+                    sourceText: text,
+                    sourceLanguage: "auto",
+                    targetLanguage: targetLanguage
+                )
+            } catch {
+                Log.app.warning("Text translation failed, translating audio: \(error.localizedDescription)")
+            }
+        case nil:
+            break
+        }
+
+        try Task.checkCancellation()
+        return switch output {
+        case .original:
+            try await transcriptionService.transcribe(audioData: audioData)
+        case let .translation(targetLanguage):
+            try await transcriptionService.translateAndTranscribe(
+                audioData: audioData,
+                targetLanguage: targetLanguage,
+                languageHints: languageHints
+            )
+        }
     }
 
     // MARK: - Escape Cancel Handler

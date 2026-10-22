@@ -23,12 +23,25 @@ final class LiveDictationOverlayStore {
     var finalText = ""
     var provisionalText = ""
     var copiedAt: Date?
+    /// What the live STT stream produces for this session.
+    private(set) var nativeOutput: DictationOutput = .original
+    /// Output picked in the panel; applies to the whole recording at Stop.
+    var selectedOutput: DictationOutput = .original
+    /// Empty hides the output picker.
+    private(set) var outputOptions: [DictationOutput] = []
+    /// Latest text-translated preview of the spoken words.
+    var convertedPreview: (output: DictationOutput, source: String, text: String)?
 
     private var fallbackFinalText = ""
     private var fallbackProvisionalText = ""
     private let meetingTranscript = LiveTranscriptStore()
 
     var title: String {
+        if !outputOptions.isEmpty {
+            return selectedOutput == .original
+                ? String(localized: "Transcribing")
+                : String(localized: "Translating")
+        }
         switch mode {
         case .voice:
             String(localized: "Transcribing")
@@ -74,7 +87,27 @@ final class LiveDictationOverlayStore {
     }
 
     var visibleText: String {
-        bestText(includeProvisional: true)
+        // The pasted result replaces the live text once processing completes.
+        guard selectedOutput != nativeOutput, phase != .pasted else { return bestText(includeProvisional: true) }
+        if selectedOutput == .original {
+            return spokenText
+        }
+        guard let convertedPreview, convertedPreview.output == selectedOutput else { return spokenText }
+        return convertedPreview.text
+    }
+
+    /// Spoken words still waiting for a text-translated preview, or nil when
+    /// the stream already produces the selected output.
+    var outputSourceText: String? {
+        guard selectedOutput != nativeOutput, selectedOutput != .original else { return nil }
+        let text = spokenText
+        return text.isEmpty ? nil : text
+    }
+
+    private var spokenText: String {
+        nativeOutput == .original
+            ? bestText(includeProvisional: true)
+            : composedText(final: fallbackFinalText, provisional: fallbackProvisionalText)
     }
 
     var displayText: String {
@@ -160,6 +193,9 @@ final class LiveDictationOverlayStore {
     }
 
     var targetLabel: String? {
+        if !outputOptions.isEmpty {
+            return selectedOutput.targetLanguage.map { _ in selectedOutput.label }
+        }
         switch mode {
         case let .translation(targetLanguage):
             targetLanguage
@@ -182,6 +218,17 @@ final class LiveDictationOverlayStore {
         fallbackProvisionalText = ""
         meetingTranscript.reset()
         copiedAt = nil
+        nativeOutput = .original
+        selectedOutput = .original
+        outputOptions = []
+        convertedPreview = nil
+    }
+
+    func configureOutput(native: DictationOutput, options: [DictationOutput]) {
+        nativeOutput = native
+        selectedOutput = native
+        outputOptions = options
+        convertedPreview = nil
     }
 
     func processTokens(_ tokens: [RealtimeToken]) {

@@ -136,6 +136,8 @@ struct RealtimeSessionStopResult: Equatable {
     let preFinalizeText: String
     let optimisticCleanedText: String?
     let finalizeResult: RealtimeFinalizeResult
+    /// Spoken words of a translation session, used when the output is switched.
+    var originalText = ""
 
     var didReceiveFinalization: Bool {
         finalizeResult.didReceiveFinishedSignal
