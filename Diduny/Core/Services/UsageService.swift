@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import os
 
@@ -219,22 +220,65 @@ final class AnalyticsService {
               duration.isFinite, duration > 0, duration <= 86400,
               ["local", "cloud"].contains(mode),
               ["dictation", "meeting", "file", "translation"].contains(scenario) else { return }
+        struct Event: Encodable {
+            let id: UUID; let revision: String; let durationMs: Int; let mode: String; let scenario: String
+        }
+        await post(path: "events", Event(
+            id: UUID(),
+            revision: revision,
+            durationMs: max(1, Int(duration * 1000)),
+            mode: mode,
+            scenario: scenario
+        ))
+    }
+
+    func recordLaunch(_ launch: AppLaunch, appVersion: String, osVersion: String) async {
+        guard enabled, owner == account(), owner != nil, let revision else { return }
+        struct Launch: Encodable {
+            let id: String; let revision: String; let appSessionId: String; let bootId: String
+            let previousExit: AppPreviousExit; let previousSessionMs: Int?; let rebootedSinceLast: Bool
+            let appVersion: String; let osVersion: String
+
+            enum CodingKeys: String, CodingKey {
+                case id, revision, appSessionId, bootId, previousExit, previousSessionMs, rebootedSinceLast
+                case appVersion, osVersion
+            }
+
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(id, forKey: .id)
+                try container.encode(revision, forKey: .revision)
+                try container.encode(appSessionId, forKey: .appSessionId)
+                try container.encode(bootId, forKey: .bootId)
+                try container.encode(previousExit, forKey: .previousExit)
+                // The backend requires the key; null means "unknown" (first run or unclean exit).
+                try container.encode(previousSessionMs, forKey: .previousSessionMs)
+                try container.encode(rebootedSinceLast, forKey: .rebootedSinceLast)
+                try container.encode(appVersion, forKey: .appVersion)
+                try container.encode(osVersion, forKey: .osVersion)
+            }
+        }
+        await post(path: "launches", Launch(
+            id: UUID().uuidString.lowercased(),
+            revision: revision,
+            appSessionId: launch.sessionID.uuidString.lowercased(),
+            bootId: launch.bootID,
+            previousExit: launch.previousExit,
+            previousSessionMs: launch.previousSessionMs,
+            rebootedSinceLast: launch.rebootedSinceLast,
+            appVersion: appVersion,
+            osVersion: osVersion
+        ))
+    }
+
+    private func post(path: String, _ body: some Encodable) async {
         let current = generation
         do {
-            struct Event: Encodable {
-                let id: UUID; let revision: String; let durationMs: Int; let mode: String; let scenario: String
-            }
-            var request = try request(path: "events")
+            var request = try request(path: path)
             request.httpMethod = "POST"
-            request.httpBody = try JSONEncoder().encode(Event(
-                id: UUID(),
-                revision: revision,
-                durationMs: max(1, Int(duration * 1000)),
-                mode: mode,
-                scenario: scenario
-            ))
+            request.httpBody = try JSONEncoder().encode(body)
             let (_, response) = try await transport(request)
-            if current == generation, response.statusCode == 403 { enabled = false; self.revision = nil }
+            if current == generation, response.statusCode == 403 { enabled = false; revision = nil }
         } catch {
             // Best-effort analytics must never block work or retain offline events.
         }
@@ -248,5 +292,111 @@ final class AnalyticsService {
         request.timeoutInterval = 10
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         return request
+    }
+}
+
+// MARK: - App launch lifecycle
+
+/// How the previous app process ended, as far as this Mac can tell.
+enum AppPreviousExit: String, Encodable {
+    case firstRun = "first_run"
+    case clean
+    /// Crash, force quit, kill or power loss: the process never reached `applicationWillTerminate`.
+    case unclean
+}
+
+struct AppLaunch: Equatable {
+    let sessionID: UUID
+    /// HMAC-SHA256 of `kern.bootsessionuuid` keyed by a per-install salt; the raw OS
+    /// identifier never leaves the Mac and the value can't be joined across apps.
+    let bootID: String
+    let previousExit: AppPreviousExit
+    let previousSessionMs: Int?
+    let rebootedSinceLast: Bool
+}
+
+/// Remembers only the previous process (id, start, boot, clean-exit time) so each
+/// launch can report restarts and unclean exits. Nothing is queued for upload.
+@MainActor
+final class AppLaunchTracker {
+    static let shared = AppLaunchTracker()
+
+    private struct Record: Codable {
+        let sessionID: UUID
+        let startedAt: Date
+        let bootID: String
+        var endedAt: Date?
+    }
+
+    private let defaults: UserDefaults
+    private let bootID: () -> String
+    private let now: () -> Date
+    private(set) var current: AppLaunch?
+
+    init(defaults: UserDefaults = .standard,
+         bootID: (() -> String)? = nil,
+         now: @escaping () -> Date = Date.init)
+    {
+        self.defaults = defaults
+        self.bootID = bootID ?? { Self.hashedBootSessionID(salt: Self.installSalt(in: defaults)) }
+        self.now = now
+    }
+
+    private static let recordKey = "appLaunch.previousSession"
+    private static let saltKey = "appLaunch.bootSalt"
+
+    @discardableResult
+    func begin() -> AppLaunch {
+        let previous = defaults.data(forKey: Self.recordKey)
+            .flatMap { try? JSONDecoder().decode(Record.self, from: $0) }
+        let started = now()
+        let boot = bootID()
+        let previousExit: AppPreviousExit = switch previous {
+        case nil: .firstRun
+        case let record? where record.endedAt != nil: .clean
+        default: .unclean
+        }
+        let previousSessionMs = previous.flatMap { record in
+            record.endedAt.map { min(2_592_000_000, max(1, Int($0.timeIntervalSince(record.startedAt) * 1000))) }
+        }
+        let launch = AppLaunch(sessionID: UUID(), bootID: boot, previousExit: previousExit,
+                               previousSessionMs: previousSessionMs,
+                               rebootedSinceLast: previous.map { $0.bootID != boot } ?? false)
+        current = launch
+        save(Record(sessionID: launch.sessionID, startedAt: started, bootID: boot, endedAt: nil))
+        return launch
+    }
+
+    /// Call from `applicationWillTerminate`; a launch without it reports `.unclean`.
+    func markCleanExit() {
+        guard let current else { return }
+        let record = defaults.data(forKey: Self.recordKey)
+            .flatMap { try? JSONDecoder().decode(Record.self, from: $0) }
+        guard var record, record.sessionID == current.sessionID else { return }
+        record.endedAt = now()
+        save(record)
+    }
+
+    private func save(_ record: Record) {
+        guard let data = try? JSONEncoder().encode(record) else { return }
+        defaults.set(data, forKey: Self.recordKey)
+    }
+
+    private nonisolated static func installSalt(in defaults: UserDefaults) -> Data {
+        if let salt = defaults.data(forKey: saltKey), salt.count == 32 { return salt }
+        let salt = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
+        defaults.set(salt, forKey: saltKey)
+        return salt
+    }
+
+    nonisolated static func hashedBootSessionID(salt: Data) -> String {
+        var size = 0
+        sysctlbyname("kern.bootsessionuuid", nil, &size, nil, 0)
+        var buffer = [CChar](repeating: 0, count: max(size, 1))
+        let raw = sysctlbyname("kern.bootsessionuuid", &buffer, &size, nil, 0) == 0
+            ? String(cString: buffer)
+            : "unknown-boot"
+        return HMAC<SHA256>.authenticationCode(for: Data(raw.utf8), using: SymmetricKey(data: salt))
+            .map { String(format: "%02x", $0) }.joined()
     }
 }

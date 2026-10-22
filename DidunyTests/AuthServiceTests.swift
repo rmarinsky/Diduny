@@ -455,3 +455,96 @@ final class OptionalAnalyticsTests: XCTestCase {
         XCTAssertFalse(service.enabled)
     }
 }
+
+@MainActor
+final class AppLaunchLifecycleTests: XCTestCase {
+    private func isolatedDefaults() -> UserDefaults {
+        let suite = "AppLaunchLifecycleTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        return defaults
+    }
+
+    private func ok(_ request: URLRequest, _ body: String) -> (Data, HTTPURLResponse) {
+        (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+    }
+
+    func test_launchesReportFirstRunCleanRestartAndUncleanExitAcrossReboot() {
+        let defaults = isolatedDefaults()
+        var clock = Date(timeIntervalSince1970: 1_800_000_000)
+        var boot = "boot-a"
+        func tracker() -> AppLaunchTracker { AppLaunchTracker(defaults: defaults, bootID: { boot }, now: { clock }) }
+
+        let firstProcess = tracker()
+        let first = firstProcess.begin()
+        XCTAssertEqual(first.previousExit, .firstRun)
+        XCTAssertNil(first.previousSessionMs)
+        XCTAssertFalse(first.rebootedSinceLast)
+        XCTAssertEqual(firstProcess.current, first)
+
+        clock += 90
+        firstProcess.markCleanExit()
+        clock += 5
+        let second = tracker().begin()
+        XCTAssertEqual(second.previousExit, .clean)
+        XCTAssertEqual(second.previousSessionMs, 90000)
+        XCTAssertFalse(second.rebootedSinceLast)
+        XCTAssertNotEqual(second.sessionID, first.sessionID)
+
+        // Second process crashes (no markCleanExit), then the Mac reboots.
+        clock += 600
+        boot = "boot-b"
+        let third = tracker().begin()
+        XCTAssertEqual(third.previousExit, .unclean)
+        XCTAssertNil(third.previousSessionMs)
+        XCTAssertTrue(third.rebootedSinceLast)
+        XCTAssertEqual(third.bootID, "boot-b")
+    }
+
+    func test_bootIDIsASaltedHexDigestStablePerInstall() {
+        let salt = Data(repeating: 1, count: 32)
+        let id = AppLaunchTracker.hashedBootSessionID(salt: salt)
+        XCTAssertEqual(id.count, 64)
+        XCTAssertTrue(id.allSatisfy { "0123456789abcdef".contains($0) })
+        XCTAssertEqual(id, AppLaunchTracker.hashedBootSessionID(salt: salt))
+        XCTAssertNotEqual(id, AppLaunchTracker.hashedBootSessionID(salt: Data(repeating: 2, count: 32)))
+
+        let defaults = isolatedDefaults()
+        XCTAssertEqual(AppLaunchTracker(defaults: defaults).begin().bootID,
+                       AppLaunchTracker(defaults: defaults).begin().bootID,
+                       "The salt persists, so launches in one boot share a boot id")
+    }
+
+    func test_launchCarriesTheAppSessionOnlyWithConsent() async throws {
+        let sessionID = UUID()
+        var bodies: [String: [String: Any]] = [:]
+        let service = AnalyticsService(baseURL: { "https://test.example" }, account: { "a@example.test" }) { request in
+            let path = request.url!.lastPathComponent
+            if path == "consent" {
+                let enabled = String(data: request.httpBody ?? Data(), encoding: .utf8)?.contains("true") == true
+                return self.ok(request, "{\"enabled\":\(enabled),\"revision\":\"rev-1\"}")
+            }
+            bodies[path] = try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any]
+            return self.ok(request, "{\"accepted\":true}")
+        }
+        let launch = AppLaunch(sessionID: sessionID, bootID: String(repeating: "a", count: 64),
+                               previousExit: .clean, previousSessionMs: 1234, rebootedSinceLast: false)
+
+        await service.recordLaunch(launch, appVersion: "1.15.0", osVersion: "15.1")
+        XCTAssertTrue(bodies.isEmpty, "Nothing is sent before consent")
+
+        await service.setEnabled(true)
+        await service.recordLaunch(launch, appVersion: "1.15.0", osVersion: "15.1")
+        await service.record(duration: 3, mode: "cloud", scenario: "dictation")
+
+        let sent = try XCTUnwrap(bodies["launches"])
+        XCTAssertEqual(Set(sent.keys), ["id", "revision", "appSessionId", "bootId", "previousExit",
+                                        "previousSessionMs", "rebootedSinceLast", "appVersion", "osVersion"])
+        XCTAssertEqual(sent["revision"] as? String, "rev-1")
+        XCTAssertEqual(sent["appSessionId"] as? String, sessionID.uuidString.lowercased())
+        XCTAssertEqual(sent["previousExit"] as? String, "clean")
+        XCTAssertEqual(sent["previousSessionMs"] as? Int, 1234)
+        XCTAssertEqual(sent["rebootedSinceLast"] as? Bool, false)
+        XCTAssertNil(bodies["events"]?["appSessionId"], "Usage events keep the shipped schema")
+    }
+}

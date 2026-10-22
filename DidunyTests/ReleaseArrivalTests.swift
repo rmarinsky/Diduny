@@ -45,13 +45,13 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Recover YouTube access and open meetings")
+        XCTAssertEqual(highlights.headline, "Switch output while you speak")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Choose a browser profile beside a paused YouTube import, open the video in that profile, and check access to continue.",
-                "See specific explanations for YouTube sign-in, browser cookie access, verification, and unavailable videos.",
-                "Open meeting links from Upcoming meetings in the menu bar.",
+                "Change the output language from the live panel during dictation or translation, without stopping the recording.",
+                "The new output applies to everything you have already said; switch back to Original to paste your own words.",
+                "Preview the translated text live before you stop.",
             ]
         )
     }

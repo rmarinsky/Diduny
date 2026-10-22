@@ -130,6 +130,13 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
             throw AudioError.recordingFailed(error.localizedDescription)
         }
 
+        // cancelRecording() (or a newer start) may have run during the await above.
+        // Starting this engine now would leave the mic on with nothing able to stop it.
+        guard audioEngine === engine else {
+            Log.audio.warning("startRecording: canceled during engine initialization")
+            throw CancellationError()
+        }
+
         if let device {
             Log.audio.info(
                 "startRecording: Resolved device = \(device.name), transport=\(device.transportType.rawValue), sampleRate=\(Int(device.sampleRate)), uid=\(device.uid), explicitBinding=\(shouldBindExplicitDevice)"
