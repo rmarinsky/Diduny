@@ -5,6 +5,8 @@ import XCTest
 final class OnboardingUITests: DidunyUITestCase {
     private var onboardingWindow: XCUIElement { app.windows["Welcome to Diduny"] }
     private var primaryButton: XCUIElement { onboardingWindow.buttons["onboarding.primary"] }
+    /// The step text ("Step 1 of 7") is a value on a non-control element, which
+    /// macOS doesn't expose to XCUI; steps are proven by heading and Back instead.
     private var progress: XCUIElement { onboardingWindow.descendants(matching: .any)["onboarding.progress"] }
     private var emailField: XCUIElement { onboardingWindow.textFields["account.email"] }
 
@@ -29,7 +31,7 @@ final class OnboardingUITests: DidunyUITestCase {
         XCTAssertTrue(primaryButton.isEnabled)
         XCTAssertTrue(onboardingWindow.buttons["onboarding.setUpLater"].exists)
         XCTAssertFalse(onboardingWindow.buttons["onboarding.back"].exists, "Welcome is the first step; Back must be hidden")
-        waitForElement(progress, toMatch: "value == 'Step 1 of 7'")
+        waitForElement(progress, toMatch: "label == 'Onboarding progress'")
         XCTAssertFalse(app.windows["Diduny"].exists, "Main window must wait until setup is finished or skipped")
     }
 
@@ -41,7 +43,7 @@ final class OnboardingUITests: DidunyUITestCase {
         XCTAssertEqual(primaryButton.label, "Continue")
         XCTAssertFalse(primaryButton.isEnabled, "Continue must stay disabled until the user signs in")
         XCTAssertTrue(onboardingWindow.buttons["onboarding.back"].exists)
-        waitForElement(progress, toMatch: "value == 'Step 2 of 7'")
+        waitForElement(progress, toMatch: "label == 'Onboarding progress'")
     }
 
     func test_backFromSignInReturnsToWelcome() {
@@ -53,7 +55,7 @@ final class OnboardingUITests: DidunyUITestCase {
         waitForElement(heading("Meet Diduny"))
         waitForDisappearance(heading("Sign in"))
         waitForDisappearance(onboardingWindow.buttons["onboarding.back"])
-        waitForElement(progress, toMatch: "value == 'Step 1 of 7'")
+        waitForElement(progress, toMatch: "label == 'Onboarding progress'")
     }
 
     func test_sendCodeIsEnabledOnlyForAValidEmail() {
