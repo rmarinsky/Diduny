@@ -1,0 +1,54 @@
+name: Tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Generate Xcode project (XcodeGen)
+        run: |
+          brew install xcodegen
+          xcodegen generate --quiet
+
+      # Ad-hoc signing: CI has no Developer ID certificate. The Test config
+      # skips bundling the remote media runtime (SKIP_REMOTE_MEDIA_RUNTIME).
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild test \
+            -project Diduny.xcodeproj \
+            -scheme "Diduny DEV" \
+            -destination "platform=macOS,arch=arm64" \
+            -resultBundlePath build/TestResults.xcresult \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM= \
+            ONLY_ACTIVE_ARCH=YES \
+            | tee build/xcodebuild-test.log | grep -E "error:|warning: .*failed|Test Case .*(failed|passed)|Executed|\*\* TEST" || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" build/xcodebuild-test.log
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            build/TestResults.xcresult
+            build/xcodebuild-test.log
+          if-no-files-found: ignore
