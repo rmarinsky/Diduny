@@ -136,6 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Pipeline Tasks (stored so cancel can abort them)
     var voicePipelineTask: Task<Void, Never>?
+    /// True while `startRecording()` runs (permission prompt, device and engine setup).
+    var isStartingVoiceRecording = false
     /// A stop (push-to-talk release) arrived while the start was still in flight.
     var voiceStopRequestedDuringStart = false
     var translationPipelineTask: Task<Void, Never>?
@@ -200,7 +202,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_: Notification) {
-        Task { if AuthService.shared.isLoggedIn { await AnalyticsService.shared.refresh() } }
+        let launch = AppLaunchTracker.shared.begin()
+        NSLog(
+            "[Diduny] app session %@ previousExit=%@ rebootedSinceLast=%d",
+            launch.sessionID.uuidString,
+            launch.previousExit.rawValue,
+            launch.rebootedSinceLast ? 1 : 0
+        )
+        Task {
+            guard AuthService.shared.isLoggedIn else { return }
+            await AnalyticsService.shared.refresh()
+            let os = ProcessInfo.processInfo.operatingSystemVersion
+            await AnalyticsService.shared.recordLaunch(
+                launch,
+                appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0",
+                osVersion: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
+            )
+        }
         launchedAtLogin = LaunchAtLogin.wasLaunchedAtLogin
         NSLog("[Diduny] applicationDidFinishLaunching: launchedAtLogin=%d", launchedAtLogin ? 1 : 0)
 
@@ -490,7 +508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.app.info("[Sleep] SleepFlushCoordinator registered for willSleep / didWake")
     }
 
-    private func releaseMeetingSleepActivityTokens() {
+    func releaseMeetingSleepActivityTokens() {
         if let token = meetingActivityToken {
             ProcessInfo.processInfo.endActivity(token)
             meetingActivityToken = nil
@@ -508,36 +526,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             message: "Recording stopped. Open Recordings to recover audio.",
             duration: 5.0
         )
-        // Transition recording states to idle so the UI is consistent.
-        // Promote the live library row to needs-recovery; keep InProgressRecordings.
+        // Transition recording states to idle so the UI is consistent, then release
+        // the recorder: promote the live row to needs-recovery and keep InProgressRecordings.
         let endedAt = Date()
+        var abandonedStart: Date??
         if appState.meetingRecordingState == .recording {
-            if let id = meetingRecorderService.currentRecordingId {
-                let start = appState.meetingRecordingStartTime
-                let duration = Self.recoveryDuration(startedAt: start, endedAt: endedAt)
-                _ = RecordingsLibraryStorage.shared.markNeedsRecovery(
-                    id: id,
-                    endedAt: endedAt,
-                    durationSeconds: duration
-                )
-            }
+            abandonedStart = .some(appState.meetingRecordingStartTime)
             appState.meetingRecordingState = .idle
             appState.meetingRecordingStartTime = nil
             handleMeetingStateChange(.idle)
         }
         if appState.meetingTranslationRecordingState == .recording {
-            if let id = meetingRecorderService.currentRecordingId {
-                let start = appState.meetingTranslationRecordingStartTime
-                let duration = Self.recoveryDuration(startedAt: start, endedAt: endedAt)
-                _ = RecordingsLibraryStorage.shared.markNeedsRecovery(
-                    id: id,
-                    endedAt: endedAt,
-                    durationSeconds: duration
-                )
-            }
+            abandonedStart = .some(appState.meetingTranslationRecordingStartTime)
             appState.meetingTranslationRecordingState = .idle
             appState.meetingTranslationRecordingStartTime = nil
             handleMeetingTranslationStateChange(.idle)
+        }
+        if let abandonedStart {
+            Task { await self.abandonMeetingForRecovery(startedAt: abandonedStart, endedAt: endedAt) }
         }
     }
 
@@ -698,6 +704,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_: Notification) {
+        AppLaunchTracker.shared.markCleanExit()
         CalendarConnection.shared.stop()
         BrowserCalendarConnection.shared.stop()
         calendarReminderController.dismiss()
@@ -876,17 +883,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.appState.liveTranscriptStore?.isActive = false
                 self.appState.liveTranscriptStore = nil
 
+                var abandonedStart: Date??
                 if self.isStateInProgress(self.appState.meetingTranslationRecordingState) {
+                    abandonedStart = .some(self.appState.meetingTranslationRecordingStartTime)
                     self.appState.meetingTranslationRecordingState = .error
                     self.appState.meetingTranslationRecordingStartTime = nil
                     self.handleMeetingTranslationStateChange(.error)
                 } else if self.isStateInProgress(self.appState.meetingRecordingState) {
+                    abandonedStart = .some(self.appState.meetingRecordingStartTime)
                     self.appState.meetingRecordingState = .error
                     self.appState.meetingRecordingStartTime = nil
                     self.handleMeetingStateChange(.error)
                 }
 
                 DictationOverlayController.shared.showError(message: error.localizedDescription)
+                if let abandonedStart {
+                    await self.abandonMeetingForRecovery(startedAt: abandonedStart)
+                }
             }
         }
     }
@@ -1040,6 +1053,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try await audioRecorder.startRecording(device: initialDevice)
             return initialDevice
         } catch let error as AudioTimeoutError {
+            throw error
+        } catch let error as CancellationError {
             throw error
         } catch {
             let fallbackDevices = recordingFallbackDevices(afterFailing: initialDevice)

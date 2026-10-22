@@ -200,10 +200,33 @@ extension AppDelegate {
     /// Releases a meeting recording that died mid-session (capture error or
     /// system sleep) while keeping its audio on disk for recovery.
     func abandonMeetingForRecovery(
+        startedAt: Date?,
         endedAt: Date = Date(),
         library: RecordingsLibraryStorage = .shared,
         releaseRecorder: (() async -> UUID?)? = nil
-    ) async {}
+    ) async {
+        Log.app.info("abandonMeetingForRecovery: releasing recorder, keeping audio for recovery")
+        hotkeyService.unregisterChapterHotkey()
+        EscapeCancelService.shared.deactivate()
+        _ = await stopMeetingLiveTranscription()
+
+        let releasedID: UUID? = if let releaseRecorder {
+            await releaseRecorder()
+        } else {
+            await meetingRecorderService.releaseForRecovery()
+        }
+        if let releasedID {
+            library.markNeedsRecovery(
+                id: releasedID,
+                endedAt: endedAt,
+                durationSeconds: Self.recoveryDuration(startedAt: startedAt, endedAt: endedAt)
+            )
+        }
+
+        releaseMeetingSleepActivityTokens()
+        activeMeetingTranscriptionSessionID = nil
+        activeMeetingTranscriptionProvider = nil
+    }
 
     nonisolated static func resolveMeetingTranscriptionProvider(
         requestedProvider: TranscriptionProvider,

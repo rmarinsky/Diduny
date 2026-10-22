@@ -281,14 +281,6 @@ extension AppDelegate {
             handleTranslationStateChange(.processing)
         }
 
-        // Ensure App Nap prevention is cleaned up on every early return.
-        defer {
-            if let token = translationActivityToken {
-                ProcessInfo.processInfo.endActivity(token)
-                translationActivityToken = nil
-            }
-        }
-
         do {
             // Set up realtime callback BEFORE starting recorder (AudioRecorderService
             // snapshots onRealtimeAudioData at start time). WebSocket connects in background.
@@ -338,6 +330,17 @@ extension AppDelegate {
             await MainActor.run {
                 setupTranslationEscapeCancelHandler()
             }
+        } catch is CancellationError {
+            // Canceled while the engine was initializing; the canceller owns the state.
+            Log.app.info("startTranslationRecording: canceled during audio initialization")
+            _ = await stopTranslationRealtimeSession(finalize: false)
+            if let token = translationActivityToken {
+                ProcessInfo.processInfo.endActivity(token)
+                translationActivityToken = nil
+            }
+            activeTranslationLanguagePair = nil
+            activeTranslationTargetLanguage = nil
+            return
         } catch let error as AudioTimeoutError {
             // Audio hardware timed out - likely coreaudiod is unresponsive or device is unavailable
             Log.app.error("startTranslationRecording: TIMEOUT - \(error.localizedDescription)")

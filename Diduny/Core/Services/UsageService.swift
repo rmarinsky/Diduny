@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import os
 
@@ -222,28 +223,66 @@ final class AnalyticsService {
               duration.isFinite, duration > 0, duration <= 86400,
               ["local", "cloud"].contains(mode),
               ["dictation", "meeting", "file", "translation"].contains(scenario) else { return }
+        struct Event: Encodable {
+            let id: UUID; let revision: String; let durationMs: Int; let mode: String; let scenario: String
+            let appSessionId: String?
+        }
+        await post(path: "events", Event(
+            id: UUID(),
+            revision: revision,
+            durationMs: max(1, Int(duration * 1000)),
+            mode: mode,
+            scenario: scenario,
+            appSessionId: sessionID()?.uuidString.lowercased()
+        ))
+    }
+
+    func recordLaunch(_ launch: AppLaunch, appVersion: String, osVersion: String) async {
+        guard enabled, owner == account(), owner != nil, let revision else { return }
+        struct Launch: Encodable {
+            let id: String; let revision: String; let appSessionId: String; let bootId: String
+            let previousExit: AppPreviousExit; let previousSessionMs: Int?; let rebootedSinceLast: Bool
+            let appVersion: String; let osVersion: String
+
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(id, forKey: .id)
+                try container.encode(revision, forKey: .revision)
+                try container.encode(appSessionId, forKey: .appSessionId)
+                try container.encode(bootId, forKey: .bootId)
+                try container.encode(previousExit, forKey: .previousExit)
+                // The backend requires the key; null means "unknown" (first run or unclean exit).
+                try container.encode(previousSessionMs, forKey: .previousSessionMs)
+                try container.encode(rebootedSinceLast, forKey: .rebootedSinceLast)
+                try container.encode(appVersion, forKey: .appVersion)
+                try container.encode(osVersion, forKey: .osVersion)
+            }
+        }
+        await post(path: "launches", Launch(
+            id: UUID().uuidString.lowercased(),
+            revision: revision,
+            appSessionId: launch.sessionID.uuidString.lowercased(),
+            bootId: launch.bootID,
+            previousExit: launch.previousExit,
+            previousSessionMs: launch.previousSessionMs,
+            rebootedSinceLast: launch.rebootedSinceLast,
+            appVersion: appVersion,
+            osVersion: osVersion
+        ))
+    }
+
+    private func post(path: String, _ body: some Encodable) async {
         let current = generation
         do {
-            struct Event: Encodable {
-                let id: UUID; let revision: String; let durationMs: Int; let mode: String; let scenario: String
-            }
-            var request = try request(path: "events")
+            var request = try request(path: path)
             request.httpMethod = "POST"
-            request.httpBody = try JSONEncoder().encode(Event(
-                id: UUID(),
-                revision: revision,
-                durationMs: max(1, Int(duration * 1000)),
-                mode: mode,
-                scenario: scenario
-            ))
+            request.httpBody = try JSONEncoder().encode(body)
             let (_, response) = try await transport(request)
-            if current == generation, response.statusCode == 403 { enabled = false; self.revision = nil }
+            if current == generation, response.statusCode == 403 { enabled = false; revision = nil }
         } catch {
             // Best-effort analytics must never block work or retain offline events.
         }
     }
-
-    func recordLaunch(_ launch: AppLaunch, appVersion: String, osVersion: String) async {}
 
     private func request(path: String) throws -> URLRequest {
         guard let url = URL(string: baseURL()
@@ -302,17 +341,52 @@ final class AppLaunchTracker {
         self.now = now
     }
 
+    private static let recordKey = "appLaunch.previousSession"
+
     @discardableResult
     func begin() -> AppLaunch {
-        let launch = AppLaunch(sessionID: UUID(), bootID: bootID(), previousExit: .firstRun,
-                               previousSessionMs: nil, rebootedSinceLast: false)
+        let previous = defaults.data(forKey: Self.recordKey)
+            .flatMap { try? JSONDecoder().decode(Record.self, from: $0) }
+        let started = now()
+        let boot = bootID()
+        let previousExit: AppPreviousExit = switch previous {
+        case nil: .firstRun
+        case let record? where record.endedAt != nil: .clean
+        default: .unclean
+        }
+        let previousSessionMs = previous.flatMap { record in
+            record.endedAt.map { min(2_592_000_000, max(1, Int($0.timeIntervalSince(record.startedAt) * 1000))) }
+        }
+        let launch = AppLaunch(sessionID: UUID(), bootID: boot, previousExit: previousExit,
+                               previousSessionMs: previousSessionMs,
+                               rebootedSinceLast: previous.map { $0.bootID != boot } ?? false)
         current = launch
+        save(Record(sessionID: launch.sessionID, startedAt: started, bootID: boot, endedAt: nil))
         return launch
     }
 
-    func markCleanExit() {}
+    /// Call from `applicationWillTerminate`; a launch without it reports `.unclean`.
+    func markCleanExit() {
+        guard let current else { return }
+        let record = defaults.data(forKey: Self.recordKey)
+            .flatMap { try? JSONDecoder().decode(Record.self, from: $0) }
+        guard var record, record.sessionID == current.sessionID else { return }
+        record.endedAt = now()
+        save(record)
+    }
+
+    private func save(_ record: Record) {
+        guard let data = try? JSONEncoder().encode(record) else { return }
+        defaults.set(data, forKey: Self.recordKey)
+    }
 
     nonisolated static func hashedBootSessionID() -> String {
-        ""
+        var size = 0
+        sysctlbyname("kern.bootsessionuuid", nil, &size, nil, 0)
+        var buffer = [CChar](repeating: 0, count: max(size, 1))
+        let raw = sysctlbyname("kern.bootsessionuuid", &buffer, &size, nil, 0) == 0
+            ? String(cString: buffer)
+            : "unknown-boot"
+        return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }

@@ -92,7 +92,6 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         let id = UUID()
         XCTAssertNotNil(storage.beginMeetingRecording(id: id, type: .meeting))
         delegate.appState.meetingRecordingState = .error
-        delegate.appState.meetingRecordingStartTime = Date().addingTimeInterval(-90)
         delegate.meetingActivityToken = ProcessInfo.processInfo.beginActivity(
             options: .idleSystemSleepDisabled,
             reason: "test"
@@ -100,7 +99,7 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         delegate.activeMeetingTranscriptionSessionID = UUID()
         var releaseCount = 0
 
-        await delegate.abandonMeetingForRecovery(library: storage) {
+        await delegate.abandonMeetingForRecovery(startedAt: Date().addingTimeInterval(-90), library: storage) {
             releaseCount += 1
             return id
         }
