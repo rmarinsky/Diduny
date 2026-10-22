@@ -49,7 +49,7 @@ final class ReleaseHighlightsTests: XCTestCase {
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Push-to-talk stops when you let go, even if the microphone was still starting.",
+                "Push-to-talk dictation stops when you let go, even if the microphone was still starting.",
                 "Canceling a dictation no longer pastes it, and a meeting interrupted by an error or sleep no longer blocks the next one.",
                 "If you share usage statistics, Diduny now also reports app launches and unexpected exits to help find crashes.",
             ]

@@ -402,6 +402,12 @@ extension AppDelegate {
 
     func stopTranslationRecording() async {
         Log.app.info("stopTranslationRecording: BEGIN")
+        defer {
+            if let token = translationActivityToken {
+                ProcessInfo.processInfo.endActivity(token)
+                translationActivityToken = nil
+            }
+        }
 
         // Stop audio level piping
         audioLevelCancellable?.cancel()

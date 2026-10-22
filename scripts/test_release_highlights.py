@@ -32,7 +32,7 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
             )
 
             self.run_script("render", str(PAYLOAD), str(markdown))
-            expected = '# More reliable recording\n\n- Push-to-talk stops when you let go, even if the microphone was still starting.\n- Canceling a dictation no longer pastes it, and a meeting interrupted by an error or sleep no longer blocks the next one.\n- If you share usage statistics, Diduny now also reports app launches and unexpected exits to help find crashes.\n'
+            expected = '# More reliable recording\n\n- Push-to-talk dictation stops when you let go, even if the microphone was still starting.\n- Canceling a dictation no longer pastes it, and a meeting interrupted by an error or sleep no longer blocks the next one.\n- If you share usage statistics, Diduny now also reports app launches and unexpected exits to help find crashes.\n'
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
             arguments = (

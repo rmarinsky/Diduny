@@ -176,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let calendarReminderController = CalendarReminderController()
     var calendarStoreObserver: NSObjectProtocol?
     var calendarWakeObserver: NSObjectProtocol?
+    private var powerOffObserver: NSObjectProtocol?
     lazy var realtimeTranscriptionService = CloudRealtimeService()
     var localVoiceStreamingService: LocalWhisperStreamingService?
     var localMeetingStreamingService: LocalWhisperStreamingService?
@@ -203,6 +204,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_: Notification) {
         let launch = AppLaunchTracker.shared.begin()
+        // Sudden termination can end the process at logout/shutdown without
+        // applicationWillTerminate; those exits are clean, not crashes.
+        powerOffObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willPowerOffNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { AppLaunchTracker.shared.markCleanExit() }
+        }
         NSLog(
             "[Diduny] app session %@ previousExit=%@ rebootedSinceLast=%d",
             launch.sessionID.uuidString,
@@ -526,24 +536,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             message: "Recording stopped. Open Recordings to recover audio.",
             duration: 5.0
         )
-        // Transition recording states to idle so the UI is consistent, then release
-        // the recorder: promote the live row to needs-recovery and keep InProgressRecordings.
+        // Release the recorder first (promote the live row to needs-recovery, keep
+        // InProgressRecordings), then go idle: a meeting started in between would
+        // otherwise hit the still-recording recorder and capture nothing.
         let endedAt = Date()
-        var abandonedStart: Date??
-        if appState.meetingRecordingState == .recording {
-            abandonedStart = .some(appState.meetingRecordingStartTime)
-            appState.meetingRecordingState = .idle
-            appState.meetingRecordingStartTime = nil
-            handleMeetingStateChange(.idle)
-        }
-        if appState.meetingTranslationRecordingState == .recording {
-            abandonedStart = .some(appState.meetingTranslationRecordingStartTime)
-            appState.meetingTranslationRecordingState = .idle
-            appState.meetingTranslationRecordingStartTime = nil
-            handleMeetingTranslationStateChange(.idle)
-        }
-        if let abandonedStart {
-            Task { await self.abandonMeetingForRecovery(startedAt: abandonedStart, endedAt: endedAt) }
+        let meetingWasRecording = appState.meetingRecordingState == .recording
+        let translationWasRecording = appState.meetingTranslationRecordingState == .recording
+        guard meetingWasRecording || translationWasRecording else { return }
+        let startedAt = meetingWasRecording
+            ? appState.meetingRecordingStartTime
+            : appState.meetingTranslationRecordingStartTime
+        Task {
+            await self.abandonMeetingForRecovery(startedAt: startedAt, endedAt: endedAt)
+            if meetingWasRecording, self.appState.meetingRecordingState == .recording {
+                self.appState.meetingRecordingState = .idle
+                self.appState.meetingRecordingStartTime = nil
+                self.handleMeetingStateChange(.idle)
+            }
+            if translationWasRecording, self.appState.meetingTranslationRecordingState == .recording {
+                self.appState.meetingTranslationRecordingState = .idle
+                self.appState.meetingTranslationRecordingStartTime = nil
+                self.handleMeetingTranslationStateChange(.idle)
+            }
         }
     }
 
@@ -883,14 +897,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.appState.liveTranscriptStore?.isActive = false
                 self.appState.liveTranscriptStore = nil
 
+                // Only a live recording is released here; a start or stop still in
+                // `.processing` owns its own teardown.
                 var abandonedStart: Date??
                 if self.isStateInProgress(self.appState.meetingTranslationRecordingState) {
-                    abandonedStart = .some(self.appState.meetingTranslationRecordingStartTime)
+                    if self.appState.meetingTranslationRecordingState == .recording {
+                        abandonedStart = .some(self.appState.meetingTranslationRecordingStartTime)
+                    }
                     self.appState.meetingTranslationRecordingState = .error
                     self.appState.meetingTranslationRecordingStartTime = nil
                     self.handleMeetingTranslationStateChange(.error)
                 } else if self.isStateInProgress(self.appState.meetingRecordingState) {
-                    abandonedStart = .some(self.appState.meetingRecordingStartTime)
+                    if self.appState.meetingRecordingState == .recording {
+                        abandonedStart = .some(self.appState.meetingRecordingStartTime)
+                    }
                     self.appState.meetingRecordingState = .error
                     self.appState.meetingRecordingStartTime = nil
                     self.handleMeetingStateChange(.error)
@@ -1076,6 +1096,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return fallbackDevice
                 } catch let timeout as AudioTimeoutError {
                     throw timeout
+                } catch let cancellation as CancellationError {
+                    throw cancellation
                 } catch {
                     lastError = error
                 }
