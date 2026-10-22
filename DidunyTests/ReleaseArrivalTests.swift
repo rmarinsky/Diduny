@@ -45,13 +45,12 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Switch output while you speak")
+        XCTAssertEqual(highlights.headline, "Checked before every update")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Change the output language from the live panel during dictation or translation, without stopping the recording.",
-                "The new output applies to everything you have already said; switch back to Original to paste your own words.",
-                "Preview the translated text live before you stop.",
+                "Each update now passes automated checks of the setup guide and main window on macOS 26 before release.",
+                "Output switching from the live panel is unchanged; this update only adds release checks.",
             ]
         )
     }
