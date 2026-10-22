@@ -7,6 +7,7 @@ final class DictationOverlayController {
     let store = LiveDictationOverlayStore()
     private var autoHideTask: Task<Void, Never>?
     private var outputPreviewTask: Task<Void, Never>?
+    private static let maxPreviewSourceBytes = 1500
     private var onStopRequested: (@MainActor () async -> Void)?
 
     /// Surface captured when a feedback session starts. A recording finishes
@@ -107,6 +108,7 @@ final class DictationOverlayController {
 
     func showError(message: String) {
         autoHideTask?.cancel()
+        cancelOutputPreview()
         store.phase = .error(message)
         store.audioLevel = 0
         if usesNotch {
@@ -126,6 +128,7 @@ final class DictationOverlayController {
             return
         }
         autoHideTask?.cancel()
+        cancelOutputPreview()
         store.phase = .info(message)
         store.audioLevel = 0
         if usesNotch {
@@ -177,6 +180,7 @@ final class DictationOverlayController {
 
     func dismiss() {
         autoHideTask?.cancel()
+        cancelOutputPreview()
         autoHideTask = nil
         store.audioLevel = 0
         if usesNotch {
@@ -254,8 +258,11 @@ final class DictationOverlayController {
     }
 
     private var needsOutputPreview: Bool {
+        // The GET endpoint carries the text in the URL; past this the preview
+        // stays on the spoken words and Stop translates the final text.
         guard store.canStop, store.selectedOutput.targetLanguage != nil,
-              let source = store.outputSourceText
+              let source = store.outputSourceText,
+              source.utf8.count <= Self.maxPreviewSourceBytes
         else { return false }
         guard let preview = store.convertedPreview else { return true }
         return preview.output != store.selectedOutput || preview.source != source
