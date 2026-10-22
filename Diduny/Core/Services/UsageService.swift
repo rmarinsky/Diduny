@@ -127,18 +127,15 @@ final class AnalyticsService {
     private var operationID: UUID?
     private let baseURL: @MainActor () -> String
     private let account: @MainActor () -> String?
-    private let sessionID: @MainActor () -> UUID?
     private let transport: BillingService.Transport
 
     init(baseURL: @escaping @MainActor () -> String = { SettingsStorage.shared.proxyBaseURL },
          account: @escaping @MainActor ()
              -> String? = { AuthService.shared.isLoggedIn ? AuthService.shared.userEmail : nil },
-         sessionID: @escaping @MainActor () -> UUID? = { AppLaunchTracker.shared.current?.sessionID },
          transport: @escaping BillingService.Transport = { try await AuthService.shared.performWithAuth($0) })
     {
         self.baseURL = baseURL
         self.account = account
-        self.sessionID = sessionID
         self.transport = transport
     }
 
@@ -225,15 +222,13 @@ final class AnalyticsService {
               ["dictation", "meeting", "file", "translation"].contains(scenario) else { return }
         struct Event: Encodable {
             let id: UUID; let revision: String; let durationMs: Int; let mode: String; let scenario: String
-            let appSessionId: String?
         }
         await post(path: "events", Event(
             id: UUID(),
             revision: revision,
             durationMs: max(1, Int(duration * 1000)),
             mode: mode,
-            scenario: scenario,
-            appSessionId: sessionID()?.uuidString.lowercased()
+            scenario: scenario
         ))
     }
 
@@ -307,7 +302,8 @@ enum AppPreviousExit: String, Encodable {
 
 struct AppLaunch: Equatable {
     let sessionID: UUID
-    /// SHA-256 of `kern.bootsessionuuid`; the raw OS identifier never leaves the Mac.
+    /// HMAC-SHA256 of `kern.bootsessionuuid` keyed by a per-install salt; the raw OS
+    /// identifier never leaves the Mac and the value can't be joined across apps.
     let bootID: String
     let previousExit: AppPreviousExit
     let previousSessionMs: Int?
@@ -333,15 +329,16 @@ final class AppLaunchTracker {
     private(set) var current: AppLaunch?
 
     init(defaults: UserDefaults = .standard,
-         bootID: @escaping () -> String = AppLaunchTracker.hashedBootSessionID,
+         bootID: (() -> String)? = nil,
          now: @escaping () -> Date = Date.init)
     {
         self.defaults = defaults
-        self.bootID = bootID
+        self.bootID = bootID ?? { Self.hashedBootSessionID(salt: Self.installSalt(in: defaults)) }
         self.now = now
     }
 
     private static let recordKey = "appLaunch.previousSession"
+    private static let saltKey = "appLaunch.bootSalt"
 
     @discardableResult
     func begin() -> AppLaunch {
@@ -380,13 +377,21 @@ final class AppLaunchTracker {
         defaults.set(data, forKey: Self.recordKey)
     }
 
-    nonisolated static func hashedBootSessionID() -> String {
+    private nonisolated static func installSalt(in defaults: UserDefaults) -> Data {
+        if let salt = defaults.data(forKey: saltKey), salt.count == 32 { return salt }
+        let salt = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
+        defaults.set(salt, forKey: saltKey)
+        return salt
+    }
+
+    nonisolated static func hashedBootSessionID(salt: Data) -> String {
         var size = 0
         sysctlbyname("kern.bootsessionuuid", nil, &size, nil, 0)
         var buffer = [CChar](repeating: 0, count: max(size, 1))
         let raw = sysctlbyname("kern.bootsessionuuid", &buffer, &size, nil, 0) == 0
             ? String(cString: buffer)
             : "unknown-boot"
-        return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
+        return HMAC<SHA256>.authenticationCode(for: Data(raw.utf8), using: SymmetricKey(data: salt))
+            .map { String(format: "%02x", $0) }.joined()
     }
 }

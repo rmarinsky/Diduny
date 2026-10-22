@@ -501,18 +501,24 @@ final class AppLaunchLifecycleTests: XCTestCase {
         XCTAssertEqual(third.bootID, "boot-b")
     }
 
-    func test_bootIDIsAStableSha256HexDigestNotTheRawOSValue() {
-        let id = AppLaunchTracker.hashedBootSessionID()
+    func test_bootIDIsASaltedHexDigestStablePerInstall() {
+        let salt = Data(repeating: 1, count: 32)
+        let id = AppLaunchTracker.hashedBootSessionID(salt: salt)
         XCTAssertEqual(id.count, 64)
         XCTAssertTrue(id.allSatisfy { "0123456789abcdef".contains($0) })
-        XCTAssertEqual(id, AppLaunchTracker.hashedBootSessionID())
+        XCTAssertEqual(id, AppLaunchTracker.hashedBootSessionID(salt: salt))
+        XCTAssertNotEqual(id, AppLaunchTracker.hashedBootSessionID(salt: Data(repeating: 2, count: 32)))
+
+        let defaults = isolatedDefaults()
+        XCTAssertEqual(AppLaunchTracker(defaults: defaults).begin().bootID,
+                       AppLaunchTracker(defaults: defaults).begin().bootID,
+                       "The salt persists, so launches in one boot share a boot id")
     }
 
-    func test_launchAndUsageEventsCarryTheAppSessionOnlyWithConsent() async throws {
+    func test_launchCarriesTheAppSessionOnlyWithConsent() async throws {
         let sessionID = UUID()
         var bodies: [String: [String: Any]] = [:]
-        let service = AnalyticsService(baseURL: { "https://test.example" }, account: { "a@example.test" },
-                                       sessionID: { sessionID }) { request in
+        let service = AnalyticsService(baseURL: { "https://test.example" }, account: { "a@example.test" }) { request in
             let path = request.url!.lastPathComponent
             if path == "consent" {
                 let enabled = String(data: request.httpBody ?? Data(), encoding: .utf8)?.contains("true") == true
@@ -539,6 +545,6 @@ final class AppLaunchLifecycleTests: XCTestCase {
         XCTAssertEqual(sent["previousExit"] as? String, "clean")
         XCTAssertEqual(sent["previousSessionMs"] as? Int, 1234)
         XCTAssertEqual(sent["rebootedSinceLast"] as? Bool, false)
-        XCTAssertEqual(bodies["events"]?["appSessionId"] as? String, sessionID.uuidString.lowercased())
+        XCTAssertNil(bodies["events"]?["appSessionId"], "Usage events keep the shipped schema")
     }
 }
