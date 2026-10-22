@@ -135,8 +135,20 @@ jobs:
         if: always()
         run: |
           mkdir -p build/ui-screenshots
-          [ -d build/UITestResults.xcresult ] && xcrun xcresulttool export attachments \
-            --path build/UITestResults.xcresult --output-path build/ui-screenshots || true
+          if [ -d build/UITestResults.xcresult ] && ! xcrun xcresulttool export attachments \
+            --path build/UITestResults.xcresult --output-path build/ui-export; then
+            echo "::warning::Screenshot export failed; continuing without screenshots"
+          fi
+          # Keep only the screenshots, named after their test (export uses UUIDs).
+          [ -f build/ui-export/manifest.json ] && python3 - <<'PY' || true
+          import json, os, re, shutil
+          for test in json.load(open("build/ui-export/manifest.json")):
+              for item in test["attachments"]:
+                  name = item["exportedFileName"]
+                  if name.endswith(".png"):
+                      suite_test = test["testIdentifier"].replace("/", "-").rstrip("()")
+                      shutil.copy(f"build/ui-export/{name}", f"build/ui-screenshots/{re.sub(r'[^A-Za-z0-9_.-]', '_', suite_test)}.png")
+          PY
 
       - name: Test summary
         if: always()
@@ -155,7 +167,11 @@ jobs:
             fi
             echo
             echo "$(grep -E 'Executed [0-9]+ tests' build/xcodebuild-uitest.log | tail -1 | sed 's/^[[:space:]]*//')"
-            echo "Screenshots of every test's final state are in the \`ui-screenshots\` artifact."
+            if find build/ui-screenshots -type f -name '*.png' -print -quit | grep -q .; then
+              echo "Screenshots of every test's final state are in the \`ui-screenshots\` artifact."
+            else
+              echo "No screenshots were exported."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload screenshots
