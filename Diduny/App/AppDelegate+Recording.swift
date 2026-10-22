@@ -457,6 +457,7 @@ extension AppDelegate {
                 languageHints: SettingsStorage.shared.speechLanguageHints
             )
 
+            let producedOutput: DictationOutput = switchedText == nil ? .original : output
             let rawText: String
             var transcriptSegments: [TimedTranscriptSegment]?
             if let switchedText {
@@ -530,11 +531,11 @@ extension AppDelegate {
             let savedRecordingID = RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
                 audioData: compressedData,
-                type: output == .original ? .voice : .translation,
+                type: producedOutput == .original ? .voice : .translation,
                 duration: duration,
                 transcriptionText: text,
                 sourceDevice: sourceDevice,
-                translationTargetLanguageCode: output.targetLanguage,
+                translationTargetLanguageCode: producedOutput.targetLanguage,
                 transcriptSegments: transcriptSegments?.isEmpty == false ? transcriptSegments : nil,
                 forceSave: shouldCompleteSetup
             )
@@ -1027,7 +1028,8 @@ extension AppDelegate {
 
     /// Text for an output picked mid-recording, or nil when the session's own
     /// result stands. Derives it from the spoken words; falls back to the
-    /// recorded audio when there are none or text translation fails.
+    /// recorded audio when there are none or text translation fails. If that
+    /// fails too, returns nil so the session's own result is still pasted.
     func switchedOutputText(
         _ output: DictationOutput,
         native: DictationOutput,
@@ -1057,15 +1059,23 @@ extension AppDelegate {
         }
 
         try Task.checkCancellation()
-        return switch output {
-        case .original:
-            try await transcriptionService.transcribe(audioData: audioData)
-        case let .translation(targetLanguage):
-            try await transcriptionService.translateAndTranscribe(
-                audioData: audioData,
-                targetLanguage: targetLanguage,
-                languageHints: languageHints
-            )
+        do {
+            return switch output {
+            case .original:
+                try await transcriptionService.transcribe(audioData: audioData)
+            case let .translation(targetLanguage):
+                try await transcriptionService.translateAndTranscribe(
+                    audioData: audioData,
+                    targetLanguage: targetLanguage,
+                    languageHints: languageHints
+                )
+            }
+        } catch let error as CancellationError {
+            throw error
+        } catch {
+            try Task.checkCancellation()
+            Log.app.warning("Switched output failed, keeping session result: \(error.localizedDescription)")
+            return nil
         }
     }
 

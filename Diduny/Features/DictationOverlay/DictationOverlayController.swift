@@ -60,6 +60,7 @@ final class DictationOverlayController {
         if store.mode != mode {
             store.mode = mode
         }
+        cancelOutputPreview()
         store.phase = .finalizing
         store.audioLevel = 0
         if usesNotch {
@@ -74,6 +75,7 @@ final class DictationOverlayController {
         if store.mode != mode {
             store.mode = mode
         }
+        cancelOutputPreview()
         store.phase = .processing
         store.audioLevel = 0
         if usesNotch {
@@ -237,8 +239,14 @@ final class DictationOverlayController {
                 targetLanguage: target
             )
             guard !Task.isCancelled else { return }
+            guard let text else {
+                // Back off so a failing endpoint is not hit on every token batch.
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+                outputPreviewTask = nil
+                return
+            }
             outputPreviewTask = nil
-            guard let text else { return }
             store.convertedPreview = (output: output, source: source, text: text)
             // Catch up with words spoken while the request was in flight.
             scheduleOutputPreview()
@@ -246,7 +254,9 @@ final class DictationOverlayController {
     }
 
     private var needsOutputPreview: Bool {
-        guard store.selectedOutput.targetLanguage != nil, let source = store.outputSourceText else { return false }
+        guard store.canStop, store.selectedOutput.targetLanguage != nil,
+              let source = store.outputSourceText
+        else { return false }
         guard let preview = store.convertedPreview else { return true }
         return preview.output != store.selectedOutput || preview.source != source
     }

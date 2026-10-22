@@ -88,6 +88,18 @@ final class VoiceTranslationTests: XCTestCase {
         XCTAssertEqual(original, "Ready. Я обираю режим")
     }
 
+    func test_accumulatorSpokenWordsExcludeEveryTranslationStatusThePanelHides() async {
+        let accumulator = RealtimeTranslationAccumulator(targetLanguage: "en")
+        await accumulator.process(tokens: [
+            RealtimeToken(text: "Привіт", isFinal: true, language: "uk", translationStatus: "original"),
+            RealtimeToken(text: " Hello", isFinal: true, language: "en", translationStatus: "translated"),
+            RealtimeToken(text: " Hi", isFinal: true, language: "en", translationStatus: "target")
+        ])
+
+        let original = await accumulator.originalText()
+        XCTAssertEqual(original, "Привіт")
+    }
+
     func test_outputPlanKeepsNativeResultWhenSelectionIsUnchanged() {
         let plan = DictationOutput.translation(targetLanguage: "en").plan(
             native: .translation(targetLanguage: "en"),

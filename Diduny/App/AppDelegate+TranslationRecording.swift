@@ -20,7 +20,7 @@ actor RealtimeTranslationAccumulator {
             let status = token.translationStatus?.lowercased()
             // Spoken words, kept so the output can switch mid-recording
             // without reconnecting the stream.
-            if status != "translation" {
+            if !token.isTranslationOutput {
                 if token.isFinal {
                     finalOriginalText += token.text
                 } else {
@@ -467,6 +467,9 @@ extension AppDelegate {
                 languageHints: SettingsStorage.shared.translationLanguageHints(for: pair)
             )
 
+            let producedOutput: DictationOutput = switchedText == nil
+                ? .translation(targetLanguage: targetLanguage)
+                : output
             let rawText: String
             if let switchedText {
                 rawText = switchedText
@@ -550,11 +553,11 @@ extension AppDelegate {
             RecordingsLibraryStorage.shared.saveRecording(
                 id: recordingId,
                 audioData: compressedData,
-                type: output == .original ? .voice : .translation,
+                type: producedOutput == .original ? .voice : .translation,
                 duration: duration,
                 transcriptionText: text,
                 sourceDevice: sourceDevice,
-                translationTargetLanguageCode: output.targetLanguage
+                translationTargetLanguageCode: producedOutput.targetLanguage
             )
 
             if SettingsStorage.shared.playSoundOnCompletion {

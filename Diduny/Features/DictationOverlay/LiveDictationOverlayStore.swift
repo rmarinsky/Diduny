@@ -319,14 +319,3 @@ final class LiveDictationOverlayStore {
         pressCount > 1 ? "\(shortcut) ×\(pressCount)" : shortcut
     }
 }
-
-private extension RealtimeToken {
-    var isTranslationOutput: Bool {
-        switch translationStatus?.lowercased() {
-        case "translation", "translated", "target":
-            true
-        default:
-            false
-        }
-    }
-}
