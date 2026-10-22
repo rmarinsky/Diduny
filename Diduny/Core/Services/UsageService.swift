@@ -239,6 +239,11 @@ final class AnalyticsService {
             let previousExit: AppPreviousExit; let previousSessionMs: Int?; let rebootedSinceLast: Bool
             let appVersion: String; let osVersion: String
 
+            enum CodingKeys: String, CodingKey {
+                case id, revision, appSessionId, bootId, previousExit, previousSessionMs, rebootedSinceLast
+                case appVersion, osVersion
+            }
+
             func encode(to encoder: Encoder) throws {
                 var container = encoder.container(keyedBy: CodingKeys.self)
                 try container.encode(id, forKey: .id)
