@@ -45,13 +45,13 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Recover YouTube access and open meetings")
+        XCTAssertEqual(highlights.headline, "More reliable recording")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Choose a browser profile beside a paused YouTube import, open the video in that profile, and check access to continue.",
-                "See specific explanations for YouTube sign-in, browser cookie access, verification, and unavailable videos.",
-                "Open meeting links from Upcoming meetings in the menu bar.",
+                "Push-to-talk stops when you let go, even if the microphone was still starting.",
+                "Canceling a dictation no longer pastes it, and a meeting interrupted by an error or sleep no longer blocks the next one.",
+                "If you share usage statistics, Diduny now also reports app launches and unexpected exits to help find crashes.",
             ]
         )
     }
