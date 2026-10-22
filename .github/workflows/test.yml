@@ -93,3 +93,85 @@ jobs:
             build/TestResults.xcresult
             build/xcodebuild-test.log
           if-no-files-found: ignore
+
+  ui-tests:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      # Lets the UI test runner drive the app without an authorization prompt.
+      - name: Enable UI automation
+        run: sudo automationmodetool enable-automationmode-without-authentication || true
+
+      - name: Generate Xcode project (XcodeGen)
+        run: |
+          brew install xcodegen
+          xcodegen generate --quiet
+
+      - name: Run UI tests
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild test \
+            -project Diduny.xcodeproj \
+            -scheme "Diduny UI Tests" \
+            -destination "platform=macOS,arch=arm64" \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/UITestResults.xcresult \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM= \
+            ONLY_ACTIVE_ARCH=YES \
+            | tee build/xcodebuild-uitest.log | grep -E "error:|Test Case .*(failed|passed)|Executed|\*\* TEST" || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" build/xcodebuild-uitest.log
+
+      - name: Export screenshots
+        if: always()
+        run: |
+          mkdir -p build/ui-screenshots
+          [ -d build/UITestResults.xcresult ] && xcrun xcresulttool export attachments \
+            --path build/UITestResults.xcresult --output-path build/ui-screenshots || true
+
+      - name: Test summary
+        if: always()
+        run: |
+          {
+            echo "## UI tests (macOS 26)"
+            grep -E "Test Case .*(passed|failed)" build/xcodebuild-uitest.log \
+              | sed -E "s/.*-\[DidunyUITests\.([A-Za-z]+) ([A-Za-z_]+)\]' (passed|failed).*/| \1 | \2 | \3 |/" \
+              | sort -u > build/ui-rows.txt || true
+            if [ -s build/ui-rows.txt ]; then
+              echo "| Suite | Test | Result |"
+              echo "|---|---|---|"
+              sed -e 's/| passed |/| ✅ passed |/' -e 's/| failed |/| ❌ failed |/' build/ui-rows.txt
+            else
+              echo "No UI test results; see the build log artifact."
+            fi
+            echo
+            echo "$(grep -E 'Executed [0-9]+ tests' build/xcodebuild-uitest.log | tail -1 | sed 's/^[[:space:]]*//')"
+            echo "Screenshots of every test's final state are in the \`ui-screenshots\` artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: build/ui-screenshots
+          if-no-files-found: ignore
+
+      - name: Upload UI test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results
+          path: |
+            build/UITestResults.xcresult
+            build/xcodebuild-uitest.log
+          if-no-files-found: ignore

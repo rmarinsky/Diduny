@@ -39,9 +39,11 @@ struct AccountSignInView: View {
                         .focused($focusedField, equals: .email)
                         .onSubmit(sendOtp)
                         .accessibilityLabel("Email address")
+                        .accessibilityIdentifier("account.email")
 
                     Button("Send Code", action: sendOtp)
                         .buttonStyle(.bordered)
+                        .accessibilityIdentifier("account.sendCode")
                         .disabled(!AuthService.isValidEmail(email) || isLoading)
                 }
 
@@ -60,8 +62,10 @@ struct AccountSignInView: View {
                         .onSubmit(verifyOtp)
                         .autocorrectionDisabled()
                         .accessibilityLabel("One-time code")
+                        .accessibilityIdentifier("account.otp")
 
                     Button("Verify", action: verifyOtp)
+                        .accessibilityIdentifier("account.verify")
                         .buttonStyle(.borderedProminent)
                         .disabled(otpCode.count != 6 || isLoading)
 
@@ -102,6 +106,7 @@ struct AccountSignInView: View {
                 Text(errorMessage)
                     .font(.caption)
                     .foregroundColor(.red)
+                    .accessibilityIdentifier("account.error")
             }
         }
         .onAppear(perform: focusCurrentField)

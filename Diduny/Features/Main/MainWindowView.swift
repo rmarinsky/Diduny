@@ -32,6 +32,8 @@ struct MainWindowView: View {
                 .frame(width: 0.5)
 
             detailView
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("section.\(selectedSection.rawValue)")
                 .padding(.top, MainWindowLayout.detailTopInset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(Color(.windowBackgroundColor))
