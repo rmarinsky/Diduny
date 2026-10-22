@@ -30,9 +30,12 @@ jobs:
       - name: Run unit tests
         run: |
           set -o pipefail
-          mkdir -p build
+          mkdir -p build/screenshots
+          # TEST_RUNNER_ variables reach the test process without the prefix.
+          TEST_RUNNER_SCREENSHOT_DIR="$PWD/build/screenshots" \
           xcodebuild test \
             -project Diduny.xcodeproj \
+            -derivedDataPath build/DerivedData \
             -scheme "Diduny DEV" \
             -destination "platform=macOS,arch=arm64" \
             -resultBundlePath build/TestResults.xcresult \
@@ -42,6 +45,42 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             | tee build/xcodebuild-test.log | grep -E "error:|warning: .*failed|Test Case .*(failed|passed)|Executed|\*\* TEST" || true
           grep -q "\*\* TEST SUCCEEDED \*\*" build/xcodebuild-test.log
+
+      - name: Test summary
+        if: always()
+        run: |
+          {
+            echo "## Unit tests"
+            echo "- XCTest: $(grep -E 'Executed [0-9]+ tests' build/xcodebuild-test.log | tail -1 | sed 's/^[[:space:]]*//')"
+            echo "- Swift Testing: $(grep -E 'Test run with [0-9]+ tests' build/xcodebuild-test.log | tail -1 | sed 's/^[^T]*//')"
+            if grep -q "Failing tests:" build/xcodebuild-test.log; then
+              echo "### Failing tests"
+              sed -n '/^Failing tests:/,/^\*\* TEST/p' build/xcodebuild-test.log | grep -vE "Failing tests:|\*\* TEST|^$" | sed 's/^[[:space:]]*/- /'
+            fi
+            echo "Screenshots and the ad-hoc signed Diduny DEV.app are attached as run artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package Diduny DEV.app
+        if: always()
+        run: |
+          app=$(find build/DerivedData/Build/Products -maxdepth 2 -name "Diduny DEV.app" -type d | head -1)
+          [ -n "$app" ] && ditto -c -k --keepParent "$app" "build/Diduny-DEV.zip" || true
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: build/screenshots
+          if-no-files-found: ignore
+
+      - name: Upload Diduny DEV.app
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Diduny-DEV-app
+          path: build/Diduny-DEV.zip
+          if-no-files-found: ignore
 
       - name: Upload test results
         if: always()

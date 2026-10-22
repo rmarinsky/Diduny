@@ -1,4 +1,5 @@
 @testable import Diduny
+import SwiftUI
 import XCTest
 
 final class VoiceTranslationTests: XCTestCase {
@@ -202,5 +203,79 @@ final class VoiceTranslationTests: XCTestCase {
         store.finalText = "Привіт!"
         store.phase = .pasted
         XCTAssertEqual(store.displayText, "Привіт!")
+    }
+
+    /// Renders the live panel in each output-switching state, light and dark,
+    /// so reviewers can see the panel without a local build. Attached to the
+    /// result bundle and, when SCREENSHOT_DIR is set (CI), written as PNGs.
+    @MainActor
+    func test_overlayOutputSwitchingScreenshots() throws {
+        let english = DictationOutput.translation(targetLanguage: "en")
+        let dictation: @MainActor (LiveDictationOverlayStore) -> Void = { store in
+            store.reset(mode: .voice)
+            store.configureOutput(native: .original, options: [.original, english])
+            store.phase = .recording
+            store.connectionStatus = .connected
+            store.processTokens([RealtimeToken(text: "Привіт, це тест перемикання мови під час диктування", isFinal: true)])
+        }
+        let states: [(name: String, expectedText: String, setUp: @MainActor (LiveDictationOverlayStore) -> Void)] = [
+            ("1-dictation-original", "Привіт, це тест перемикання мови під час диктування", dictation),
+            ("2-dictation-switched-to-english", "Hi, this is a test of switching language while dictating", { store in
+                dictation(store)
+                store.selectedOutput = english
+                store.convertedPreview = (
+                    output: english,
+                    source: "Привіт, це тест перемикання мови під час диктування",
+                    text: "Hi, this is a test of switching language while dictating"
+                )
+            }),
+            ("3-translation-switched-to-original", "Привіт", { store in
+                store.reset(mode: .translation(targetLanguage: "→ EN"))
+                store.configureOutput(native: english, options: [.original, english])
+                store.phase = .recording
+                store.connectionStatus = .connected
+                store.processTokens([
+                    RealtimeToken(text: "Привіт", isFinal: true, language: "uk", translationStatus: "original"),
+                    RealtimeToken(text: "Hello", isFinal: true, language: "en", translationStatus: "translation")
+                ])
+                store.selectedOutput = .original
+            })
+        ]
+        let outputDirectory = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"].map { URL(fileURLWithPath: $0) }
+        if let outputDirectory {
+            try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        }
+
+        for state in states {
+            let store = LiveDictationOverlayStore()
+            state.setUp(store)
+            XCTAssertEqual(store.displayText, state.expectedText, state.name)
+
+            for (appearanceName, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+                let panel = LiveDictationOverlayView(
+                    store: store, onCopy: {}, onStop: {}, onDismiss: {}, onMinimize: {},
+                    onSelectOutput: { _ in }, onDrag: {}, onDragEnd: {}
+                )
+                .frame(width: 310, height: 310)
+                .background(Color(nsColor: .windowBackgroundColor))
+                let host = NSHostingView(rootView: panel)
+                host.appearance = NSAppearance(named: appearance)
+                host.frame = CGRect(x: 0, y: 0, width: 310, height: 310)
+                host.layoutSubtreeIfNeeded()
+                let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+
+                let name = "\(state.name)-\(appearanceName)"
+                let capture = NSImage(size: host.bounds.size)
+                capture.addRepresentation(bitmap)
+                let attachment = XCTAttachment(image: capture)
+                attachment.name = "Live panel - \(name)"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                if let outputDirectory, let png = bitmap.representation(using: .png, properties: [:]) {
+                    try png.write(to: outputDirectory.appendingPathComponent("\(name).png"))
+                }
+            }
+        }
     }
 }
