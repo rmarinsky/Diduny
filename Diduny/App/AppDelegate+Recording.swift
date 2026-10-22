@@ -138,6 +138,7 @@ extension AppDelegate {
             voicePipelineTask?.cancel()
         }
         voicePipelineTask = nil
+        voiceStopRequestedDuringStart = false
 
         let recordingStartTime = appState.recordingStartTime
         let stopTime = Date()
@@ -205,6 +206,13 @@ extension AppDelegate {
     }
 
     func stopRecordingIfRecording() async {
+        let isStarting = isStartingVoiceRecording
+            || (appState.recordingState == .processing && appState.recordingStartTime == nil)
+        if isStarting {
+            Log.app.info("stopRecordingIfRecording: Start in flight, stopping once recording begins")
+            voiceStopRequestedDuringStart = true
+            return
+        }
         guard appState.recordingState == .recording else {
             Log.app.info("stopRecordingIfRecording: Not recording, ignoring")
             return
@@ -212,7 +220,57 @@ extension AppDelegate {
         await stopRecording()
     }
 
+    /// Runs a stop that was requested while the start was still in flight.
+    @discardableResult
+    func honorVoiceStopRequestedDuringStart(stop: (() async -> Void)? = nil) async -> Bool {
+        guard voiceStopRequestedDuringStart else { return false }
+        voiceStopRequestedDuringStart = false
+        if let stop {
+            await stop()
+        } else {
+            await stopRecordingIfRecording()
+        }
+        return true
+    }
+
+    /// Copies (and optionally pastes) a finished dictation, unless the user
+    /// canceled while it was processing.
+    func deliverVoiceTranscript(
+        _ text: String,
+        autoPaste: Bool,
+        copy: (String) -> Void,
+        paste: () async throws -> Void
+    ) async -> Bool {
+        let processingState = appState.recordingState
+        guard processingState == .processing, !Task.isCancelled else {
+            Log.app.warning("stopRecording: state changed during processing (now \(processingState)), dropping result")
+            return false
+        }
+        copy(text)
+        Log.app.info("stopRecording: Text copied to clipboard")
+
+        guard autoPaste else { return true }
+        Log.app.info("stopRecording: Auto-pasting")
+        do {
+            try await paste()
+        } catch ClipboardError.accessibilityNotGranted {
+            Log.app.warning("stopRecording: Accessibility permission needed")
+            PermissionManager.shared.showPermissionAlert(for: .accessibility)
+        } catch {
+            Log.app.error("stopRecording: Paste failed - \(error.localizedDescription)")
+        }
+        return true
+    }
+
     func startRecording() async {
+        voiceStopRequestedDuringStart = false
+        isStartingVoiceRecording = true
+        await beginVoiceRecording()
+        isStartingVoiceRecording = false
+        await honorVoiceStopRequestedDuringStart()
+    }
+
+    private func beginVoiceRecording() async {
         Log.app.info("startRecording: BEGIN")
 
         guard canStartRecording(kind: .voice) else {
@@ -345,6 +403,15 @@ extension AppDelegate {
             await MainActor.run {
                 setupEscapeCancelHandler()
             }
+        } catch is CancellationError {
+            // Canceled while the engine was initializing; the canceller owns the state.
+            Log.app.info("startRecording: canceled during audio initialization")
+            _ = await stopVoiceRealtimeSession(finalize: false)
+            if let token = recordingActivityToken {
+                ProcessInfo.processInfo.endActivity(token)
+                recordingActivityToken = nil
+            }
+            return
         } catch let error as AudioTimeoutError {
             // Audio hardware timed out - likely coreaudiod is unresponsive or device is unavailable
             Log.app.error("startRecording: TIMEOUT - \(error.localizedDescription)")
@@ -479,20 +546,12 @@ extension AppDelegate {
             )
             Log.app.info("stopRecording: Transcription received (\(text.count) chars)")
 
-            clipboardService.copy(text: text, behavior: .raw)
-            Log.app.info("stopRecording: Text copied to clipboard")
-
-            if SettingsStorage.shared.autoPaste {
-                Log.app.info("stopRecording: Auto-pasting")
-                do {
-                    try await clipboardService.paste()
-                } catch ClipboardError.accessibilityNotGranted {
-                    Log.app.warning("stopRecording: Accessibility permission needed")
-                    PermissionManager.shared.showPermissionAlert(for: .accessibility)
-                } catch {
-                    Log.app.error("stopRecording: Paste failed - \(error.localizedDescription)")
-                }
-            }
+            guard await deliverVoiceTranscript(
+                text,
+                autoPaste: SettingsStorage.shared.autoPaste,
+                copy: { self.clipboardService.copy(text: $0, behavior: .raw) },
+                paste: { try await self.clipboardService.paste() }
+            ) else { return }
 
             let processingState = appState.recordingState
             guard processingState == .processing else {

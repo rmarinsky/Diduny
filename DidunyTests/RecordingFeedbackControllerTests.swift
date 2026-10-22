@@ -24,6 +24,72 @@ struct RecordingFeedbackControllerTests {
         #expect(delegate.appState.recordingState == .processing)
     }
 
+    @Test("Push-to-talk release while the engine is starting stops once recording begins")
+    func holdReleaseDuringStartIsHonoredAfterStart() async {
+        let delegate = AppDelegate()
+        delegate.appState.recordingState = .processing
+
+        await delegate.stopRecordingIfRecording()
+
+        #expect(delegate.voiceStopRequestedDuringStart)
+        var stops = 0
+        let honored = await delegate.honorVoiceStopRequestedDuringStart { stops += 1 }
+        #expect(honored)
+        #expect(stops == 1)
+        #expect(!delegate.voiceStopRequestedDuringStart)
+        delegate.appState.recordingState = .idle
+    }
+
+    @Test("Push-to-talk release while finalizing does not queue another stop")
+    func holdReleaseWhileFinalizingIsIgnored() async {
+        let delegate = AppDelegate()
+        delegate.appState.recordingState = .processing
+        delegate.appState.recordingStartTime = Date()
+
+        await delegate.stopRecordingIfRecording()
+
+        #expect(!delegate.voiceStopRequestedDuringStart)
+        var stops = 0
+        let honored = await delegate.honorVoiceStopRequestedDuringStart { stops += 1 }
+        #expect(!honored)
+        #expect(stops == 0)
+        delegate.appState.recordingState = .idle
+        delegate.appState.recordingStartTime = nil
+    }
+
+    @Test("Canceled dictation never reaches the clipboard or the front app")
+    func canceledDictationIsNotCopiedOrPasted() async {
+        let delegate = AppDelegate()
+        delegate.appState.recordingState = .idle
+        var copied: [String] = []
+        var pastes = 0
+
+        let delivered = await delegate.deliverVoiceTranscript(
+            "private text", autoPaste: true, copy: { copied.append($0) }, paste: { pastes += 1 }
+        )
+
+        #expect(!delivered)
+        #expect(copied.isEmpty)
+        #expect(pastes == 0)
+    }
+
+    @Test("Finished dictation is copied, then pasted when auto-paste is on")
+    func finishedDictationIsCopiedAndPasted() async {
+        let delegate = AppDelegate()
+        delegate.appState.recordingState = .processing
+        var copied: [String] = []
+        var pastes = 0
+
+        let delivered = await delegate.deliverVoiceTranscript(
+            "hello", autoPaste: true, copy: { copied.append($0) }, paste: { pastes += 1 }
+        )
+
+        #expect(delivered)
+        #expect(copied == ["hello"])
+        #expect(pastes == 1)
+        delegate.appState.recordingState = .idle
+    }
+
     @Test("Dynamic Notch surface never feeds the live transcript")
     func notchSurfaceSkipsLiveTranscriptTokens() {
         let previousSurface = SettingsStorage.shared.recordingFeedbackSurface

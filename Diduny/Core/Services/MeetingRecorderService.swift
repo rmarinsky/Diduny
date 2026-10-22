@@ -311,6 +311,24 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         return url
     }
 
+    /// Stops capture after a mid-session error or system sleep without deleting
+    /// the in-progress chunks, so the meeting stays recoverable. Returns its id.
+    func releaseForRecovery() async -> UUID? {
+        guard isRecording else { return nil }
+
+        let recordingId = currentRecordingId
+        _ = try? await systemAudioService?.stopCapture()
+        systemAudioService = nil
+        outputURL = nil
+        isRecording = false
+        startTime = nil
+        currentRecordingId = nil
+        inProgressDirectoryURL = nil
+        chunkURLs = []
+        Log.recording.info("Meeting recording released for recovery")
+        return recordingId
+    }
+
     // MARK: - Cancel Recording
 
     func cancelRecording() async {
