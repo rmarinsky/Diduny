@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "headline": "More reliable recording",
+  "headline": "Switch output while you speak",
   "highlights": [
-    "Push-to-talk dictation stops when you let go, even if the microphone was still starting.",
-    "Canceling a dictation no longer pastes it, and a meeting interrupted by an error or sleep no longer blocks the next one.",
-    "If you share usage statistics, Diduny now also reports app launches and unexpected exits to help find crashes."
+    "Change the output language from the live panel during dictation or translation, without stopping the recording.",
+    "The new output applies to everything you have already said; switch back to Original to paste your own words.",
+    "Preview the translated text live before you stop."
   ]
 }

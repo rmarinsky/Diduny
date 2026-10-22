@@ -131,11 +131,25 @@ struct RealtimeFinalizeResult: Equatable {
     )
 }
 
+extension RealtimeToken {
+    /// Translated output rather than spoken words.
+    var isTranslationOutput: Bool {
+        switch translationStatus?.lowercased() {
+        case "translation", "translated", "target":
+            true
+        default:
+            false
+        }
+    }
+}
+
 struct RealtimeSessionStopResult: Equatable {
     let text: String
     let preFinalizeText: String
     let optimisticCleanedText: String?
     let finalizeResult: RealtimeFinalizeResult
+    /// Spoken words of a translation session, used when the output is switched.
+    var originalText = ""
 
     var didReceiveFinalization: Bool {
         finalizeResult.didReceiveFinishedSignal

@@ -39,7 +39,15 @@ struct ShortcutsSettingsHitTestingTests {
                 defer: false
             )
             window.contentView = hostingView
+            // The bugs are about clicks in a settings window the user is already in.
+            // If the window isn't key (headless CI host), AppKit spends the first click
+            // activating it and text fields never receive it.
+            NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
+            let deadline = Date().addingTimeInterval(2)
+            while !window.isKeyWindow, Date() < deadline {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            }
             settle()
         }
 
@@ -138,8 +146,9 @@ struct ShortcutsSettingsHitTestingTests {
     // MARK: - Shortcut recorder
 
     @Test("Clicking the shortcut field's 'edit' label starts recording")
-    func clickingEditStartsRecording() {
+    func clickingEditStartsRecording() throws {
         let harness = Harness()
+        try #require(harness.window.isKeyWindow, "test window must be key, or the first click only activates it")
 
         harness.click(Point.dictationEditLabel)
 
@@ -147,8 +156,9 @@ struct ShortcutsSettingsHitTestingTests {
     }
 
     @Test("Clicking the middle of the recorder control itself starts recording (control)")
-    func clickingRecorderCenterStartsRecording() {
+    func clickingRecorderCenterStartsRecording() throws {
         let harness = Harness()
+        try #require(harness.window.isKeyWindow, "test window must be key, or the first click only activates it")
 
         harness.click(NSPoint(x: 364, y: 124))
 
@@ -156,8 +166,9 @@ struct ShortcutsSettingsHitTestingTests {
     }
 
     @Test("Clicking the body of the shortcut field starts recording")
-    func clickingFieldBodyStartsRecording() {
+    func clickingFieldBodyStartsRecording() throws {
         let harness = Harness()
+        try #require(harness.window.isKeyWindow, "test window must be key, or the first click only activates it")
 
         harness.click(Point.dictationFieldBody)
 

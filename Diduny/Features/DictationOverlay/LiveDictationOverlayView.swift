@@ -6,6 +6,7 @@ struct LiveDictationOverlayView: View {
     let onStop: () -> Void
     let onDismiss: () -> Void
     let onMinimize: () -> Void
+    let onSelectOutput: (DictationOutput) -> Void
     let onDrag: () -> Void
     let onDragEnd: () -> Void
     @State private var autoPaste = SettingsStorage.shared.autoPaste
@@ -95,9 +96,63 @@ struct LiveDictationOverlayView: View {
                     statusBadge(store.providerLabel)
                     statusBadge(store.sourceLabel)
                 }
-                if let target = store.targetLabel {
+                if !store.outputOptions.isEmpty, store.canStop {
+                    outputPicker
+                } else if let target = store.targetLabel {
                     statusBadge("→ \(target)")
                 }
+            }
+        }
+    }
+
+    /// Switches the output for the whole recording without restarting it.
+    private var outputPicker: some View {
+        Menu {
+            ForEach(store.outputOptions, id: \.self) { output in
+                outputButton(output)
+                if output == .original {
+                    Divider()
+                }
+            }
+            Menu("More languages") {
+                ForEach(SupportedLanguage.cloudLanguages) { language in
+                    outputButton(.translation(targetLanguage: language.code))
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text(outputPickerTitle)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+            }
+            .font(.system(size: 9.5, weight: .medium))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .frame(height: 20)
+            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Output for this recording. Applies to everything said so far.")
+        .accessibilityLabel("Output language")
+        .accessibilityValue(store.selectedOutput.label)
+    }
+
+    private var outputPickerTitle: String {
+        let label = store.selectedOutput.label
+        return store.selectedOutput == .original ? label : "→ \(label)"
+    }
+
+    private func outputButton(_ output: DictationOutput) -> some View {
+        Button {
+            onSelectOutput(output)
+        } label: {
+            if output == store.selectedOutput {
+                Label(output.label, systemImage: "checkmark")
+            } else {
+                Text(output.label)
             }
         }
     }
