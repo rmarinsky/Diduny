@@ -57,14 +57,16 @@ jobs:
               echo "### Failing tests"
               sed -n '/^Failing tests:/,/^\*\* TEST/p' build/xcodebuild-test.log | grep -vE "Failing tests:|\*\* TEST|^$" | sed 's/^[[:space:]]*/- /'
             fi
-            echo "Screenshots and the ad-hoc signed Diduny DEV.app are attached as run artifacts."
+            echo "Screenshots and the ad-hoc signed app are attached as run artifacts."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Package Diduny DEV.app
+      # The test action builds the Test configuration, so the app is "Diduny TEST.app".
+      - name: Package the app
         if: always()
         run: |
-          app=$(find build/DerivedData/Build/Products -maxdepth 2 -name "Diduny DEV.app" -type d | head -1)
-          [ -n "$app" ] && ditto -c -k --keepParent "$app" "build/Diduny-DEV.zip" || true
+          app=$(find build/DerivedData/Build/Products -maxdepth 2 -name "Diduny*.app" -type d | head -1)
+          echo "Packaging: ${app:-none found}"
+          [ -n "$app" ] && ditto -c -k --keepParent "$app" "build/Diduny-app.zip" || true
 
       - name: Upload screenshots
         if: always()
@@ -74,12 +76,12 @@ jobs:
           path: build/screenshots
           if-no-files-found: ignore
 
-      - name: Upload Diduny DEV.app
+      - name: Upload the app
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Diduny-DEV-app
-          path: build/Diduny-DEV.zip
+          name: Diduny-app
+          path: build/Diduny-app.zip
           if-no-files-found: ignore
 
       - name: Upload test results
