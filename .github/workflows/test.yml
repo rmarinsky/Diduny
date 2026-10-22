@@ -144,7 +144,7 @@ jobs:
           {
             echo "## UI tests (macOS 26)"
             grep -E "Test Case .*(passed|failed)" build/xcodebuild-uitest.log \
-              | sed -E "s/.*-\[DidunyUITests\.([A-Za-z]+) ([A-Za-z_]+)\]' (passed|failed).*/| \1 | \2 | \3 |/" \
+              | sed -E "s/.*-\[DidunyUITests\.([A-Za-z0-9]+) ([A-Za-z0-9_]+)\]' (passed|failed).*/| \1 | \2 | \3 |/" \
               | sort -u > build/ui-rows.txt || true
             if [ -s build/ui-rows.txt ]; then
               echo "| Suite | Test | Result |"

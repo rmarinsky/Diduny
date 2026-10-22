@@ -176,6 +176,7 @@ private struct OnboardingFlowView: View {
             }
         }
         .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("onboarding.progress")
         .accessibilityLabel("Onboarding progress")
         .accessibilityValue(String(
             format: String(localized: "Step %d of %d"),

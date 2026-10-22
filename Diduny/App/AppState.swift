@@ -120,6 +120,9 @@ final class AppState {
     }
 
     init() {
+        #if DEBUG || TEST_BUILD
+            UITestLaunchState.applyIfRequested()
+        #endif
         let settings = SettingsStorage.shared
         preferredDeviceUID = settings.preferredDeviceUID
         Log.app

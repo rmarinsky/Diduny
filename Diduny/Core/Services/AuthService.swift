@@ -16,13 +16,15 @@ final class AuthService {
         UserDefaults.standard.bool(forKey: Keys.sessionPresent)
     }
 
-    /// Forgets the signed-in session without a network call (UI test reset).
-    nonisolated static func removeStoredSession(tokenStore: any AuthTokenStore = KeychainManager.shared) {
-        for key in [Keys.accessToken, Keys.refreshToken, Keys.accessTokenExpiresAt, Keys.userEmail] {
-            tokenStore.delete(key: key)
+    #if DEBUG || TEST_BUILD
+        /// Forgets the signed-in session without a network call (UI test reset).
+        nonisolated static func removeStoredSession(tokenStore: any AuthTokenStore = KeychainManager.shared) {
+            for key in [Keys.accessToken, Keys.refreshToken, Keys.accessTokenExpiresAt, Keys.userEmail] {
+                tokenStore.delete(key: key)
+            }
+            UserDefaults.standard.removeObject(forKey: Keys.sessionPresent)
         }
-        UserDefaults.standard.removeObject(forKey: Keys.sessionPresent)
-    }
+    #endif
 
     enum AuthState: Equatable {
         case loggedOut

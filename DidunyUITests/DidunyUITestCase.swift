@@ -38,6 +38,8 @@ class DidunyUITestCase: XCTestCase {
             "-AppleLanguages", "(en)",
             "-AppleLocale", "en_US",
             "-proxyBaseURL", proxyURL,
+            // An update alert would cover windows and take focus.
+            "-SUEnableAutomaticChecks", "NO",
         ]
         if freshInstall {
             app.launchArguments.append("--ui-testing-reset")
@@ -81,14 +83,10 @@ class DidunyUITestCase: XCTestCase {
         line: UInt = #line
     ) {
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: predicate), object: element)
-        let result = XCTWaiter().wait(for: [expectation], timeout: timeout)
-        XCTAssertEqual(
-            result,
-            .completed,
-            "\(element) never matched \(predicate); label=\(element.label), value=\(String(describing: element.value))",
-            file: file,
-            line: line
-        )
+        guard XCTWaiter().wait(for: [expectation], timeout: timeout) != .completed else { return }
+        // Read attributes only when the element is there; a missing element would raise a second error.
+        let state = element.exists ? "label=\(element.label), value=\(String(describing: element.value))" : "element missing"
+        XCTFail("\(element) never matched \(predicate); \(state)", file: file, line: line)
     }
 
     /// Fails the test unless `element` disappears within `timeout`.
@@ -101,7 +99,11 @@ class DidunyUITestCase: XCTestCase {
         waitForElement(element, toMatch: "exists == false", timeout: timeout, file: file, line: line)
     }
 
-    func element(_ identifier: String) -> XCUIElement {
-        app.descendants(matching: .any)[identifier]
+    /// The static text with `identifier` showing `text`. SwiftUI on macOS exposes
+    /// a Text's string as the element's value, not its label.
+    func text(_ text: String, identifier: String, in container: XCUIElement) -> XCUIElement {
+        container.staticTexts
+            .matching(NSPredicate(format: "identifier == %@ AND value == %@", identifier, text))
+            .firstMatch
     }
 }
