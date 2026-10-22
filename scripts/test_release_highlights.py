@@ -32,7 +32,7 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
             )
 
             self.run_script("render", str(PAYLOAD), str(markdown))
-            expected = '# Choose Free, Support, Cloud or Pro\n\n- Compare Free, Support at UAH69/month, Cloud at UAH119/month for ten shared cloud hours, and Pro at UAH150/month or UAH1500/year.\n- Keep local models unlimited. Review the full charge and renewal period in Ukrainian or English before paying securely through WayForPay.\n- Recover YouTube access using your browser profile and open upcoming meeting links from the menu bar.\n'
+            expected = '# More reliable recording\n\n- Push-to-talk stops when you let go, even if the microphone was still starting.\n- Canceling a dictation no longer pastes it, and a meeting interrupted by an error or sleep no longer blocks the next one.\n- If you share usage statistics, Diduny now also reports app launches and unexpected exits to help find crashes.\n'
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
             arguments = (
