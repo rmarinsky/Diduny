@@ -42,7 +42,7 @@ final class LiveDictationOverlayStore {
                 ? String(localized: "Transcribing")
                 : String(localized: "Translating")
         }
-        switch mode {
+        return switch mode {
         case .voice:
             String(localized: "Transcribing")
         case .translation:
@@ -196,7 +196,7 @@ final class LiveDictationOverlayStore {
         if !outputOptions.isEmpty {
             return selectedOutput.targetLanguage.map { _ in selectedOutput.label }
         }
-        switch mode {
+        return switch mode {
         case let .translation(targetLanguage):
             targetLanguage
         case .meetingTranslation:
