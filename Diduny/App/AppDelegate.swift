@@ -136,6 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Pipeline Tasks (stored so cancel can abort them)
     var voicePipelineTask: Task<Void, Never>?
+    /// A stop (push-to-talk release) arrived while the start was still in flight.
+    var voiceStopRequestedDuringStart = false
     var translationPipelineTask: Task<Void, Never>?
     var meetingPipelineTask: Task<Void, Never>?
     var meetingPipelineGeneration: UInt64 = 0

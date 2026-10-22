@@ -87,6 +87,33 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         delegate.appState.meetingRecordingState = .idle
     }
 
+    func test_abandonMeetingForRecovery_releasesRecorderSleepTokenAndKeepsRowRecoverable() async throws {
+        let delegate = AppDelegate()
+        let id = UUID()
+        XCTAssertNotNil(storage.beginMeetingRecording(id: id, type: .meeting))
+        delegate.appState.meetingRecordingState = .error
+        delegate.appState.meetingRecordingStartTime = Date().addingTimeInterval(-90)
+        delegate.meetingActivityToken = ProcessInfo.processInfo.beginActivity(
+            options: .idleSystemSleepDisabled,
+            reason: "test"
+        )
+        delegate.activeMeetingTranscriptionSessionID = UUID()
+        var releaseCount = 0
+
+        await delegate.abandonMeetingForRecovery(library: storage) {
+            releaseCount += 1
+            return id
+        }
+
+        XCTAssertEqual(releaseCount, 1, "The recorder must stop so the next meeting is not silently ignored")
+        XCTAssertNil(delegate.meetingActivityToken, "Idle-sleep assertion must be released")
+        XCTAssertNil(delegate.activeMeetingTranscriptionSessionID)
+        let row = try XCTUnwrap(storage.recordings.first(where: { $0.id == id }))
+        XCTAssertEqual(row.status, .needsRecovery)
+        XCTAssertEqual(row.durationSeconds, 90, accuracy: 2)
+        XCTAssertEqual(delegate.appState.meetingRecordingState, .error, "Error stays visible until its auto-reset")
+    }
+
     func test_finalizeInProgressRecording_attachesAudioAndEndedAt() throws {
         let id = UUID()
         _ = storage.beginMeetingRecording(id: id, type: .meeting)

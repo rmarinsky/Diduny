@@ -126,15 +126,18 @@ final class AnalyticsService {
     private var operationID: UUID?
     private let baseURL: @MainActor () -> String
     private let account: @MainActor () -> String?
+    private let sessionID: @MainActor () -> UUID?
     private let transport: BillingService.Transport
 
     init(baseURL: @escaping @MainActor () -> String = { SettingsStorage.shared.proxyBaseURL },
          account: @escaping @MainActor ()
              -> String? = { AuthService.shared.isLoggedIn ? AuthService.shared.userEmail : nil },
+         sessionID: @escaping @MainActor () -> UUID? = { AppLaunchTracker.shared.current?.sessionID },
          transport: @escaping BillingService.Transport = { try await AuthService.shared.performWithAuth($0) })
     {
         self.baseURL = baseURL
         self.account = account
+        self.sessionID = sessionID
         self.transport = transport
     }
 
@@ -240,6 +243,8 @@ final class AnalyticsService {
         }
     }
 
+    func recordLaunch(_ launch: AppLaunch, appVersion: String, osVersion: String) async {}
+
     private func request(path: String) throws -> URLRequest {
         guard let url = URL(string: baseURL()
             .trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/v1/analytics/" + path)
@@ -248,5 +253,66 @@ final class AnalyticsService {
         request.timeoutInterval = 10
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         return request
+    }
+}
+
+// MARK: - App launch lifecycle
+
+/// How the previous app process ended, as far as this Mac can tell.
+enum AppPreviousExit: String, Encodable {
+    case firstRun = "first_run"
+    case clean
+    /// Crash, force quit, kill or power loss: the process never reached `applicationWillTerminate`.
+    case unclean
+}
+
+struct AppLaunch: Equatable {
+    let sessionID: UUID
+    /// SHA-256 of `kern.bootsessionuuid`; the raw OS identifier never leaves the Mac.
+    let bootID: String
+    let previousExit: AppPreviousExit
+    let previousSessionMs: Int?
+    let rebootedSinceLast: Bool
+}
+
+/// Remembers only the previous process (id, start, boot, clean-exit time) so each
+/// launch can report restarts and unclean exits. Nothing is queued for upload.
+@MainActor
+final class AppLaunchTracker {
+    static let shared = AppLaunchTracker()
+
+    private struct Record: Codable {
+        let sessionID: UUID
+        let startedAt: Date
+        let bootID: String
+        var endedAt: Date?
+    }
+
+    private let defaults: UserDefaults
+    private let bootID: () -> String
+    private let now: () -> Date
+    private(set) var current: AppLaunch?
+
+    init(defaults: UserDefaults = .standard,
+         bootID: @escaping () -> String = AppLaunchTracker.hashedBootSessionID,
+         now: @escaping () -> Date = Date.init)
+    {
+        self.defaults = defaults
+        self.bootID = bootID
+        self.now = now
+    }
+
+    @discardableResult
+    func begin() -> AppLaunch {
+        let launch = AppLaunch(sessionID: UUID(), bootID: bootID(), previousExit: .firstRun,
+                               previousSessionMs: nil, rebootedSinceLast: false)
+        current = launch
+        return launch
+    }
+
+    func markCleanExit() {}
+
+    nonisolated static func hashedBootSessionID() -> String {
+        ""
     }
 }

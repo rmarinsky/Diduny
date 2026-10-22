@@ -212,6 +212,25 @@ extension AppDelegate {
         await stopRecording()
     }
 
+    /// Runs a stop that was requested while the start was still in flight.
+    @discardableResult
+    func honorVoiceStopRequestedDuringStart(stop: (() async -> Void)? = nil) async -> Bool {
+        false
+    }
+
+    /// Copies (and optionally pastes) a finished dictation, unless the user
+    /// canceled while it was processing.
+    func deliverVoiceTranscript(
+        _ text: String,
+        autoPaste: Bool,
+        copy: (String) -> Void,
+        paste: () async throws -> Void
+    ) async -> Bool {
+        copy(text)
+        if autoPaste { try? await paste() }
+        return appState.recordingState == .processing
+    }
+
     func startRecording() async {
         Log.app.info("startRecording: BEGIN")
 

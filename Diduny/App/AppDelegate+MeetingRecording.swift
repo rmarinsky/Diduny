@@ -197,6 +197,14 @@ extension AppDelegate {
         Log.app.info("cancelMeetingRecording: END")
     }
 
+    /// Releases a meeting recording that died mid-session (capture error or
+    /// system sleep) while keeping its audio on disk for recovery.
+    func abandonMeetingForRecovery(
+        endedAt: Date = Date(),
+        library: RecordingsLibraryStorage = .shared,
+        releaseRecorder: (() async -> UUID?)? = nil
+    ) async {}
+
     nonisolated static func resolveMeetingTranscriptionProvider(
         requestedProvider: TranscriptionProvider,
         hasStoredSession: Bool,
