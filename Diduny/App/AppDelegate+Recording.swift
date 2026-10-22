@@ -132,6 +132,8 @@ extension AppDelegate {
 
     func cancelRecording(cancelTask: Bool = true, forceDiscardAudio: Bool = false) async {
         Log.app.info("cancelRecording: BEGIN")
+        // Before the async cleanup below, while the panel still reads as recording.
+        DictationOverlayController.shared.cancelOutputPreview()
 
         // Cancel any in-flight pipeline task (skip when called from within the task itself)
         if cancelTask {

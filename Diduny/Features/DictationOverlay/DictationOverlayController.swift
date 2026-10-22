@@ -268,7 +268,7 @@ final class DictationOverlayController {
         return preview.output != store.selectedOutput || preview.source != source
     }
 
-    private func cancelOutputPreview() {
+    func cancelOutputPreview() {
         outputPreviewTask?.cancel()
         outputPreviewTask = nil
     }
