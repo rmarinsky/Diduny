@@ -19,6 +19,9 @@ APP_PATH="$BUILD_DIR/Build/Products/${CONFIG}/${APP_NAME}.app"
 INSTALL_PATH="/Applications/${APP_NAME}.app"
 DESTINATION="platform=macOS,arch=$(uname -m)"
 PBXPROJ_PATH="$PROJECT_DIR/${PROJECT_NAME}.xcodeproj/project.pbxproj"
+# project.yml's MARKETING_VERSION is a placeholder; show the latest release tag instead.
+MARKETING_VERSION="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo v0.0.0)"
+MARKETING_VERSION="${MARKETING_VERSION#v}"
 
 echo "=== Clean Install: $APP_NAME ==="
 echo ""
@@ -76,13 +79,14 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
 # Build the app
-echo "Building $APP_NAME ($CONFIG)..."
+echo "Building $APP_NAME ($CONFIG, version $MARKETING_VERSION)..."
 if ! xcodebuild \
     -project "$PROJECT_DIR/${PROJECT_NAME}.xcodeproj" \
     -scheme "$SCHEME" \
     -configuration "$CONFIG" \
     -destination "$DESTINATION" \
     -derivedDataPath "$BUILD_DIR" \
+    MARKETING_VERSION="$MARKETING_VERSION" \
     clean build \
     | tee "$BUILD_DIR/xcodebuild.log"; then
     echo ""
