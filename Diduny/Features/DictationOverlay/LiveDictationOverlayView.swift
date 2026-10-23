@@ -91,11 +91,18 @@ struct LiveDictationOverlayView: View {
         HStack(spacing: 9) {
             OverlayStatusIcon(store: store, statusColor: statusColor, iconName: iconName)
 
-            HStack(spacing: 5) {
-                statusBadge(store.providerLabel)
-                statusBadge(store.sourceLabel)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 5) {
+                    statusBadge(store.providerLabel)
+                    statusBadge(store.sourceLabel)
+                }
                 if !store.outputOptions.isEmpty, store.canStop {
-                    outputPicker
+                    HStack(spacing: 5) {
+                        Text("Mode:")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        outputPicker
+                    }
                 } else if let target = store.targetLabel {
                     statusBadge("→ \(target)")
                 }
@@ -119,16 +126,16 @@ struct LiveDictationOverlayView: View {
             }
         } label: {
             HStack(spacing: 3) {
-                Text(outputPickerTitle)
+                Text(store.selectedOutput.label)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 7, weight: .bold))
             }
-            .font(.system(size: 9.5, weight: .medium))
-            .foregroundStyle(.secondary)
+            .font(.system(size: 9.5, weight: .semibold))
+            .foregroundStyle(statusColor)
             .lineLimit(1)
             .padding(.horizontal, 6)
             .frame(height: 20)
-            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .background(statusColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         // .borderlessButton redraws the label in the system font; .button + .plain keeps the chip styling.
         .menuStyle(.button)
@@ -138,11 +145,6 @@ struct LiveDictationOverlayView: View {
         .help("Output for this recording. Applies to everything said so far.")
         .accessibilityLabel("Output language")
         .accessibilityValue(store.selectedOutput.label)
-    }
-
-    private var outputPickerTitle: String {
-        let label = store.selectedOutput.label
-        return store.selectedOutput == .original ? label : "→ \(label)"
     }
 
     private func outputButton(_ output: DictationOutput) -> some View {
