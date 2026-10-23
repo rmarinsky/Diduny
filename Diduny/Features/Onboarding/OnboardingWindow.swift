@@ -176,6 +176,7 @@ private struct OnboardingFlowView: View {
             }
         }
         .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("onboarding.progress")
         .accessibilityLabel("Onboarding progress")
         .accessibilityValue(String(
             format: String(localized: "Step %d of %d"),
@@ -224,6 +225,7 @@ private struct OnboardingFlowView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Meet Diduny")
                     .font(.largeTitle.bold())
+                    .accessibilityIdentifier("onboarding.heading")
                 Text("The voice-first assistant that turns speech into finished work.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
@@ -355,6 +357,7 @@ private struct OnboardingFlowView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     .accessibilityHint(String(localized: "Closes setup for this launch without marking it complete"))
+                    .accessibilityIdentifier("onboarding.setUpLater")
             }
 
             Spacer()
@@ -364,11 +367,13 @@ private struct OnboardingFlowView: View {
                     move(to: OnboardingScreen(rawValue: screen.rawValue - 1) ?? .welcome)
                 }
                 .buttonStyle(.bordered)
+                .accessibilityIdentifier("onboarding.back")
             }
 
             DidunyPrimaryButton(title: primaryButtonTitle, isEnabled: canContinue) {
                 continueFlow()
             }
+            .accessibilityIdentifier("onboarding.primary")
         }
     }
 
@@ -513,6 +518,7 @@ private struct OnboardingHeading: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.title2.bold())
+                .accessibilityIdentifier("onboarding.heading")
             Text(subtitle)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

@@ -1298,3 +1298,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openMainWindow(section: tab)
     }
 }
+
+#if DEBUG || TEST_BUILD
+    /// Lets UI tests start from a fresh install. Never compiled into Release.
+    enum UITestLaunchState {
+        /// Wipes this build's settings, sign-in and library before launch.
+        static let resetArgument = "--ui-testing-reset"
+        private nonisolated(unsafe) static var didApply = false
+
+        /// Runs from AppState.init, before settings are first read.
+        static func applyIfRequested(arguments: [String] = ProcessInfo.processInfo.arguments) {
+            guard !didApply else { return }
+            didApply = true
+            guard arguments.contains(resetArgument), let bundleID = Bundle.main.bundleIdentifier else { return }
+            NSLog("[Diduny] UI testing: resetting state for %@", bundleID)
+            UserDefaults.standard.removePersistentDomain(forName: bundleID)
+            AuthService.removeStoredSession()
+            if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+                try? FileManager.default.removeItem(at: appSupport.appendingPathComponent(bundleID))
+            }
+        }
+    }
+#endif

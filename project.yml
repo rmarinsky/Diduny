@@ -66,6 +66,23 @@ targets:
           BUNDLE_LOADER: "$(TEST_HOST)"
           PRODUCT_BUNDLE_IDENTIFIER: ua.com.rmarinsky.diduny.test.tests
 
+  DidunyUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: DidunyUITests
+    dependencies:
+      - target: Diduny
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Diduny
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: ua.com.rmarinsky.diduny.dev.uitests
+        Test:
+          PRODUCT_BUNDLE_IDENTIFIER: ua.com.rmarinsky.diduny.test.uitests
+
   Diduny:
     type: application
     platform: macOS
@@ -143,6 +160,18 @@ schemes:
         - DidunyTests
     archive:
       config: Debug
+
+  Diduny UI Tests:
+    build:
+      targets:
+        Diduny: all
+        DidunyUITests: [test]
+    run:
+      config: Test
+    test:
+      config: Test
+      targets:
+        - DidunyUITests
 
   Diduny TEST:
     build:
