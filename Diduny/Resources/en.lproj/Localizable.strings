@@ -1309,3 +1309,8 @@
 "Output language" = "Output language";
 
 "Output for this recording. Applies to everything said so far." = "Output for this recording. Applies to everything said so far.";
+"Today (%@)" = "Today (%@)";
+"Tomorrow (%@)" = "Tomorrow (%@)";
+"Today's meetings timeline" = "Today's meetings timeline";
+"Join and record" = "Join and record";
+"Copy meeting link" = "Copy meeting link";

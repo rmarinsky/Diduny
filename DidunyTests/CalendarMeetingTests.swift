@@ -117,4 +117,58 @@ final class CalendarMeetingTests: XCTestCase {
                         alreadyRecording: false, busy: false), .startRecording(showLibrary: false))
     }
 
+    func testAgendaShowsAllOfTodayIncludingEndedMeetingsThenTomorrowWithoutDuplicates() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Europe/Kyiv"))
+        let at = { (day: Int, hour: Int, minute: Int) in
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute))!
+        }
+        let now = at(23, 12, 53)
+        let event = { (id: String, start: Date, end: Date) in
+            CalendarMeeting(id: id, calendarID: "work", title: id, start: start, end: end)
+        }
+        let ended = event("tennis", at(23, 9, 0), at(23, 10, 0))
+        let next = event("ba", at(23, 16, 0), at(23, 16, 30))
+        let overnight = event("release", at(23, 23, 30), at(24, 0, 30))
+        let tomorrow = event("standup", at(24, 10, 0), at(24, 10, 15))
+        var declined = event("declined", at(23, 14, 0), at(23, 15, 0)); declined.declined = true
+        var allDay = event("holiday", at(23, 0, 0), at(24, 0, 0)); allDay.allDay = true
+        let later = event("later", at(25, 10, 0), at(25, 11, 0))
+
+        let agenda = CalendarMeeting.agenda([tomorrow, later, next, overnight, declined, allDay, ended],
+                                            now: now, calendar: calendar)
+        XCTAssertEqual(agenda.map(\.day), [at(23, 0, 0), at(24, 0, 0)])
+        XCTAssertEqual(agenda.map { $0.meetings.map(\.id) }, [["tennis", "ba", "release"], ["standup"]])
+        XCTAssertEqual(ended.phase(at: now), .past)
+        XCTAssertEqual(next.phase(at: now), .upcoming)
+        XCTAssertEqual(event("now", at(23, 12, 30), at(23, 13, 0)).phase(at: now), .current)
+        XCTAssertTrue(CalendarMeeting.agenda([later, ended], now: at(26, 8, 0), calendar: calendar).isEmpty)
+    }
+
+    func testTimelineShowsEightHoursFromTwoHoursBeforeNowAndClipsMeetingsToIt() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Europe/Kyiv"))
+        let at = { (hour: Int, minute: Int) in
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: hour, minute: minute))!
+        }
+        let event = { (id: String, start: Date, end: Date) in
+            CalendarMeeting(id: id, calendarID: "work", title: id, start: start, end: end)
+        }
+        var cancelled = event("cancelled", at(15, 0), at(15, 30)); cancelled.cancelled = true
+        let timeline = CalendarTimeline(meetings: [
+            event("qa", at(17, 0), at(19, 0)), event("tennis", at(9, 0), at(10, 30)),
+            event("sync", at(11, 30), at(11, 45)), event("current", at(12, 30), at(13, 30)),
+            event("tomorrow", at(19, 0), at(20, 0)), cancelled
+        ], now: at(12, 53), calendar: calendar)
+
+        XCTAssertEqual(timeline.hours.map(\.hour), Array(10...18))
+        XCTAssertEqual(timeline.hours.first?.position, 0)
+        XCTAssertEqual(timeline.hours.last?.position, 1)
+        XCTAssertEqual(timeline.now, (2 * 60 + 53) / 480.0, accuracy: 0.0001)
+        XCTAssertEqual(timeline.segments.map(\.id), ["tennis", "sync", "current", "qa"])
+        XCTAssertEqual(timeline.segments.map(\.phase), [.past, .past, .current, .upcoming])
+        XCTAssertEqual(timeline.segments.first?.from, 0, "Meetings before the window are clipped")
+        XCTAssertEqual(timeline.segments.last?.to, 1, "Meetings after the window are clipped")
+        XCTAssertEqual(timeline.segments[1].from, 90 / 480.0, accuracy: 0.0001)
+    }
 }

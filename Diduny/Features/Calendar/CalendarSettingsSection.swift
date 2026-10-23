@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct CalendarSettingsSection: View {
@@ -208,22 +209,120 @@ struct CalendarMenuItems: View {
     }
     var body: some View {
         if connection.configuration.connected {
-            Menu("Upcoming meetings") {
-                if connection.currentMeetings.isEmpty { Text("No upcoming meetings") }
-                ForEach(connection.currentMeetings.prefix(15)) { event in
-                    Button((event.meetingURL == nil ? String(localized: "Record meeting") + " · " : "") + event.start.formatted(date: .omitted, time: .shortened) + " · " + event.title) {
-                        Task {
-                            if let message = await connection.joinFromMenu(event) {
-                                DictationOverlayController.shared.showInfo(message: message, duration: 5)
-                            }
-                        }
-                    }
+            let now = connection.menuClock
+            let meetings = connection.agendaMeetings
+            if let timeline = CalendarTimelineView.image(CalendarTimeline(meetings: meetings, now: now),
+                                                         appearance: NSApp?.effectiveAppearance) {
+                Button { MainWindowController.shared.showWindow(section: .meetings) } label: {
+                    Image(nsImage: timeline).renderingMode(.original)
                 }
-                Divider()
-                Button("Calendar settings…") { MainWindowController.shared.showWindow(section: .meetings) }
+                .accessibilityLabel(Text("Today's meetings timeline"))
+            }
+            let agenda = CalendarMeeting.agenda(meetings, now: now)
+            if agenda.isEmpty { Text("No upcoming meetings") }
+            ForEach(agenda) { day in
+                Section(dayTitle(day.day, now: now)) {
+                    ForEach(day.meetings) { row($0, now: now) }
+                }
             }
             Divider()
+            Button("Calendar settings…") { MainWindowController.shared.showWindow(section: .meetings) }
+            Divider()
         }
+    }
+
+    private func row(_ event: CalendarMeeting, now: Date) -> some View {
+        let title = event.title.count > 40 ? String(event.title.prefix(39)) + "…" : event.title
+        return Menu {
+            if let url = event.meetingURL {
+                Button("Join") { join(event, record: connection.configuration.recordOnJoin) }
+                if !connection.configuration.recordOnJoin {
+                    Button("Join and record") { join(event, record: true) }
+                }
+                Divider()
+                Button("Copy meeting link") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                }
+            } else {
+                Button("Record meeting") { join(event, record: true) }
+            }
+        } label: {
+            Label {
+                Text(verbatim: event.start.formatted(date: .omitted, time: .shortened) + " – " +
+                    event.end.formatted(date: .omitted, time: .shortened) + "   " + title)
+            } icon: {
+                Image(systemName: event.meetingURL == nil ? "person.2.fill" : "video.fill")
+            }
+        }
+        .disabled(event.phase(at: now) == .past)
+    }
+
+    private func dayTitle(_ day: Date, now: Date) -> String {
+        let date = day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+        return Calendar.current.isDate(day, inSameDayAs: now)
+            ? String(localized: "Today (\(date))") : String(localized: "Tomorrow (\(date))")
+    }
+
+    private func join(_ event: CalendarMeeting, record: Bool) {
+        Task {
+            if let message = await connection.joinFromMenu(event, record: record) {
+                DictationOverlayController.shared.showInfo(message: message, duration: 5)
+            }
+        }
+    }
+}
+
+/// The menu cannot host custom views, so the timeline reaches it as a rendered image.
+struct CalendarTimelineView: View {
+    static let size = CGSize(width: 300, height: 44)
+    private static let inset: CGFloat = 12
+    let timeline: CalendarTimeline
+
+    @MainActor static func image(_ timeline: CalendarTimeline, appearance: NSAppearance?) -> NSImage? {
+        let dark = appearance?.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let renderer = ImageRenderer(content: CalendarTimelineView(timeline: timeline)
+            .environment(\.colorScheme, dark ? .dark : .light))
+        renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
+        return renderer.nsImage
+    }
+
+    var body: some View {
+        let x = { (position: Double) in Self.inset + position * (Self.size.width - 2 * Self.inset) }
+        ZStack(alignment: .topLeading) {
+            ForEach(timeline.hours, id: \.position) { hour in
+                Text(verbatim: String(hour.hour))
+                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .position(x: x(hour.position), y: 8)
+                Rectangle().fill(Color.secondary.opacity(0.3))
+                    .frame(width: 1, height: 22)
+                    .position(x: x(hour.position), y: 30)
+            }
+            ForEach(timeline.segments) { segment in
+                let width = max(6, x(segment.to) - x(segment.from) - 2)
+                Capsule().fill(fill(segment.phase))
+                    .overlay(Capsule().strokeBorder(stroke(segment.phase), lineWidth: 1.5))
+                    .frame(width: width, height: 14)
+                    .position(x: x(segment.from) + 1 + width / 2, y: 30)
+            }
+            Capsule().fill(Color.primary)
+                .frame(width: 2.5, height: 26)
+                .position(x: x(timeline.now), y: 30)
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+    }
+
+    private func fill(_ phase: CalendarTimeline.Phase) -> Color {
+        switch phase {
+        case .past: .clear
+        case .current: Color("BrandAccentDeep")
+        case .upcoming: Color("BrandTintSoft")
+        }
+    }
+
+    private func stroke(_ phase: CalendarTimeline.Phase) -> Color {
+        phase == .past ? Color.secondary.opacity(0.45) : Color("BrandAccentDeep")
     }
 }
 

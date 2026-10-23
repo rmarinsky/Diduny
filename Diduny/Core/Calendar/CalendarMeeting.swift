@@ -74,6 +74,53 @@ extension CalendarMeeting {
     }
 }
 
+struct CalendarAgendaDay: Identifiable, Equatable {
+    let day: Date
+    let meetings: [CalendarMeeting]
+    var id: Date { day }
+}
+
+/// Positions are fractions of an eight-hour window starting two hours before the current hour.
+struct CalendarTimeline: Equatable {
+    enum Phase: Equatable { case past, current, upcoming }
+    struct Hour: Equatable { let hour: Int; let position: Double }
+    struct Segment: Equatable, Identifiable { let id: String; let from: Double; let to: Double; let phase: Phase }
+
+    let hours: [Hour]
+    let now: Double
+    let segments: [Segment]
+
+    init(meetings: [CalendarMeeting], now: Date, calendar: Calendar = .current) {
+        let start = (calendar.dateInterval(of: .hour, for: now)?.start ?? now).addingTimeInterval(-2 * 3600)
+        let span: TimeInterval = 8 * 3600
+        let position = { (date: Date) in min(1, max(0, date.timeIntervalSince(start) / span)) }
+        hours = (0...8).map { Hour(hour: calendar.component(.hour, from: start.addingTimeInterval(Double($0) * 3600)),
+                                   position: Double($0) / 8) }
+        self.now = position(now)
+        segments = meetings.filter { $0.canRemind && $0.end > start && $0.start < start.addingTimeInterval(span) }
+            .sorted { $0.start < $1.start }
+            .map { Segment(id: $0.id, from: position($0.start), to: position($0.end), phase: $0.phase(at: now)) }
+    }
+}
+
+extension CalendarMeeting {
+    func phase(at now: Date) -> CalendarTimeline.Phase {
+        end <= now ? .past : start <= now ? .current : .upcoming
+    }
+
+    /// Today keeps its ended meetings for context; tomorrow lists only meetings that start on it.
+    static func agenda(_ meetings: [Self], now: Date, calendar: Calendar = .current) -> [CalendarAgendaDay] {
+        let today = calendar.startOfDay(for: now)
+        return (0..<2).compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset, to: today),
+                  let next = calendar.date(byAdding: .day, value: 1, to: day) else { return nil }
+            let items = meetings.filter { $0.canRemind && $0.start < next && $0.end > day && (offset == 0 || $0.start >= day) }
+                .sorted { $0.start < $1.start }
+            return items.isEmpty ? nil : CalendarAgendaDay(day: day, meetings: items)
+        }
+    }
+}
+
 enum CalendarJoinDecision: Equatable {
     case joinOnly, recordingUnavailable, openFailed
     case startRecording(showLibrary: Bool), linkExisting(showLibrary: Bool), signInRequired(showAccount: Bool)

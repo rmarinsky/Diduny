@@ -138,7 +138,7 @@ import SwiftUI
             XCTAssertFalse(record, "Opening a link must preserve the recording opt-out")
             if let url = meeting.meetingURL { opened.append(url) }
         }
-        await connection.joinFromMenu(event)
+        await connection.joinFromMenu(event, record: false)
         XCTAssertEqual(reads, 3)
         XCTAssertEqual(opened, [event.meetingURL!])
     }
@@ -159,11 +159,11 @@ import SwiftUI
         connection.onJoin = { _, _, _ in XCTFail("Never open a stale or changed link") }
         failRead = true
         await connection.refresh()
-        let unavailable = await connection.joinFromMenu(event)
+        let unavailable = await connection.joinFromMenu(event, record: false)
         XCTAssertEqual(unavailable, String(localized: "Calendar access could not be refreshed. Open Calendar settings and try again."))
         failRead = false
         latest.meetingURL = URL(string: "https://meet.google.com/xyz-abcd-efg")
-        let changed = await connection.joinFromMenu(event)
+        let changed = await connection.joinFromMenu(event, record: false)
         XCTAssertEqual(changed, String(localized: "This meeting changed or is no longer available. Reopen Upcoming meetings and select it again."))
     }
 
@@ -173,10 +173,12 @@ import SwiftUI
         let event = CalendarMeeting(id: "menu", calendarID: "work", title: "Synthetic menu meeting",
                                     start: Date(), end: Date().addingTimeInterval(600),
                                     meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))
+        let ended = CalendarMeeting(id: "ended", calendarID: "work", title: "Synthetic ended meeting",
+                                    start: Date().addingTimeInterval(-60), end: Date().addingTimeInterval(-1))
         var failRead = false
         let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in
             if failRead { throw URLError(.notConnectedToInternet) }
-            return ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: [event])
+            return ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: [event, ended])
         })
         defer { connection.disconnect() }
         await connection.connect()
@@ -192,15 +194,49 @@ import SwiftUI
         }
         let menu = NSHostingMenu(rootView: CalendarMenuItems(connection: connection))
         menu.update()
-        let upcoming = try XCTUnwrap(menu.items.first(where: { $0.submenu != nil })?.submenu)
-        upcoming.update()
-        let index = try XCTUnwrap(upcoming.items.firstIndex(where: { $0.title.contains(event.title) }))
-        XCTAssertTrue(upcoming.items[index].isEnabled)
+        let timeline = try XCTUnwrap(menu.items.first?.image, "The day timeline leads the meetings menu")
+        XCTAssertFalse(timeline.isTemplate, "Brand colours must survive menu rendering")
+        XCTAssertEqual(timeline.size, CalendarTimelineView.size)
+        XCTAssertTrue(menu.items.contains { $0.title.hasPrefix(String(localized: "Today")) })
+        XCTAssertFalse(try XCTUnwrap(menu.items.first { $0.title.contains(ended.title) }).isEnabled,
+                       "Ended meetings stay visible but cannot be joined")
+        let actions = try XCTUnwrap(menu.items.first { $0.title.contains(event.title) }?.submenu)
+        actions.update()
+        XCTAssertTrue(actions.items.contains { $0.title == String(localized: "Join and record") })
+        let index = try XCTUnwrap(actions.items.firstIndex { $0.title == String(localized: "Join") })
+        XCTAssertTrue(actions.items[index].isEnabled)
         failRead = true
         await connection.refresh()
         failRead = false
-        upcoming.performActionForItem(at: index)
+        actions.performActionForItem(at: index)
         await fulfillment(of: [opened], timeout: 3)
+    }
+
+    /// Writes the menu timeline in light and dark so reviewers can see it without a local build.
+    func testMenuTimelineScreenshots() throws {
+        let now = Date()
+        let hour = Calendar.current.dateInterval(of: .hour, for: now)!.start
+        let event = { (id: String, from: Double, to: Double) in
+            CalendarMeeting(id: id, calendarID: "work", title: id,
+                            start: hour.addingTimeInterval(from * 3600), end: hour.addingTimeInterval(to * 3600))
+        }
+        let timeline = CalendarTimeline(meetings: [event("past", -1.5, -1.25), event("current", 0, 1),
+                                                   event("a", 3, 3.5), event("b", 3.5, 4), event("c", 4, 4.5)], now: now)
+        let outputDirectory = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"].map { URL(fileURLWithPath: $0) }
+        if let outputDirectory {
+            try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        }
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+            let image = try XCTUnwrap(CalendarTimelineView.image(timeline, appearance: NSAppearance(named: appearance)))
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "Menu timeline - \(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            if let outputDirectory, let tiff = image.tiffRepresentation,
+               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                try png.write(to: outputDirectory.appendingPathComponent("menu-timeline-\(name).png"))
+            }
+        }
     }
 
     func testDisconnectRejectsLateReadAndDoesNotRestoreClearedConsent() async {

@@ -32,7 +32,7 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
             )
 
             self.run_script("render", str(PAYLOAD), str(markdown))
-            expected = '# Switch output while you speak\n\n- Change the output language from the live panel during dictation or translation, without stopping the recording.\n- The new output applies to everything you have already said; switch back to Original to paste your own words.\n- Preview the translated text live before you stop.\n'
+            expected = "# Your day at a glance in the menu bar\n\n- A timeline of today's meetings opens the menu bar menu, with the current time and meeting highlighted in Diduny colours.\n- Today and tomorrow are listed with start and end times; ended meetings stay visible for context.\n- Each meeting offers Join, Join and record, or Copy meeting link.\n"
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
             arguments = (

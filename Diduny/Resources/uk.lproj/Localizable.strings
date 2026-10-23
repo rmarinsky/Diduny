@@ -1309,3 +1309,8 @@
 "Output language" = "Мова результату";
 
 "Output for this recording. Applies to everything said so far." = "Результат цього запису. Застосовується до всього, що вже сказано.";
+"Today (%@)" = "Сьогодні (%@)";
+"Tomorrow (%@)" = "Завтра (%@)";
+"Today's meetings timeline" = "Шкала сьогоднішніх зустрічей";
+"Join and record" = "Приєднатися й записати";
+"Copy meeting link" = "Скопіювати посилання на зустріч";

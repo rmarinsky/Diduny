@@ -168,6 +168,12 @@ struct CalendarConfiguration: Codable, Equatable {
             .sorted { $0.start < $1.start }
     }
 
+    /// Unlike `currentMeetings`, keeps ended meetings so the menu can show the whole day.
+    var agendaMeetings: [CalendarMeeting] {
+        guard hasFreshSnapshot else { return [] }
+        return meetings.filter { configuration.selected.contains($0.calendarID) && $0.canRemind }
+    }
+
     @discardableResult
     func join(_ meeting: CalendarMeeting, record: Bool) -> Bool {
         guard let current = currentMeetings.first(where: { $0.id == meeting.id }),
@@ -179,14 +185,14 @@ struct CalendarConfiguration: Codable, Equatable {
     }
 
     @discardableResult
-    func joinFromMenu(_ meeting: CalendarMeeting) async -> String? {
+    func joinFromMenu(_ meeting: CalendarMeeting, record: Bool) async -> String? {
         if !hasFreshSnapshot {
             await refresh()
         }
         guard hasFreshSnapshot else {
             return String(localized: "Calendar access could not be refreshed. Open Calendar settings and try again.")
         }
-        guard join(meeting, record: meeting.meetingURL == nil || configuration.recordOnJoin) else {
+        guard join(meeting, record: meeting.meetingURL == nil || record) else {
             return String(localized: "This meeting changed or is no longer available. Reopen Upcoming meetings and select it again.")
         }
         return nil
