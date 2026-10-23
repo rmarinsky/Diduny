@@ -277,7 +277,7 @@ struct CalendarMenuLabel: View {
         if let event = connection.currentMeetings.first,
            event.start.timeIntervalSince(connection.menuClock) <= Double(connection.configuration.displayMinutes * 60) {
             let title = connection.configuration.hideNames ? String(localized: "Meeting") : String(event.title.prefix(32))
-            Text(title + " · " + (event.start <= connection.menuClock ? String(localized: "Now") : "\(Int(ceil(event.start.timeIntervalSince(connection.menuClock) / 60)))m"))
+            Text(title + " · " + event.shortCountdown(now: connection.menuClock))
         }
     }
 }
@@ -310,10 +310,13 @@ struct NextMeetingCard: View {
                 Text(meeting.scheduleLine).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if meeting.meetingURL != nil {
-                Button("Join") { join(recordOnJoin) }
-            } else {
-                Button("Record meeting") { join(true) }
+            // Nothing to join days ahead: the button appears ten minutes before the start.
+            if meeting.isJoinable(now: now) {
+                if meeting.meetingURL != nil {
+                    Button("Join") { join(recordOnJoin) }
+                } else {
+                    Button("Record meeting") { join(true) }
+                }
             }
         }
         .buttonStyle(.borderedProminent)

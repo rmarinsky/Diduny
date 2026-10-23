@@ -350,4 +350,35 @@ final class CalendarMeetingTests: XCTestCase {
                        "Recordings without a calendar event have no end to compare")
         XCTAssertFalse(CalendarMeeting.stopPromptDue(meeting: meeting, recordingID: nil, offered: [], now: end.addingTimeInterval(600)))
     }
+
+    func testStartsInUsesTheRightUnitForTheDistance() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Europe/Kyiv"))
+        let at = { (day: Int, hour: Int, minute: Int) in
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute))!
+        }
+        let now = at(23, 22, 30) // Friday evening
+        let meeting = { (start: Date) in CalendarMeeting(id: "m", calendarID: "w", title: "M", start: start, end: start.addingTimeInterval(3600)) }
+        let time = { (date: Date) in date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: calendar.timeZone)) }
+        XCTAssertEqual(meeting(at(23, 22, 42)).statusLine(now: now, calendar: calendar), String(localized: "Starts in \(12) min"))
+        XCTAssertEqual(meeting(at(23, 23, 50)).statusLine(now: now, calendar: calendar), String(localized: "Starts in \(1) h \(20) min"))
+        XCTAssertEqual(meeting(at(24, 9, 0)).statusLine(now: now, calendar: calendar), String(localized: "Tomorrow at \(time(at(24, 9, 0)))"))
+        let monday = at(26, 9, 0)
+        XCTAssertEqual(meeting(monday).statusLine(now: now, calendar: calendar),
+                       String(localized: "\(monday.formatted(Date.FormatStyle(timeZone: calendar.timeZone).weekday(.wide))) at \(time(monday))"))
+        let later = at(31, 9, 0)
+        XCTAssertEqual(meeting(later).statusLine(now: now, calendar: calendar),
+                       String(localized: "\(later.formatted(Date.FormatStyle(timeZone: calendar.timeZone).day().month(.abbreviated))) at \(time(later))"))
+    }
+
+    func testJoinIsOfferedFromTenMinutesBeforeTheStartUntilTheEnd() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let meeting = CalendarMeeting(id: "m", calendarID: "w", title: "M", start: start, end: start.addingTimeInterval(1800),
+                                      meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))
+        XCTAssertFalse(meeting.isJoinable(now: start.addingTimeInterval(-3 * 86400)), "Three days ahead there is nothing to join")
+        XCTAssertFalse(meeting.isJoinable(now: start.addingTimeInterval(-601)))
+        XCTAssertTrue(meeting.isJoinable(now: start.addingTimeInterval(-600)))
+        XCTAssertTrue(meeting.isJoinable(now: start.addingTimeInterval(900)))
+        XCTAssertFalse(meeting.isJoinable(now: start.addingTimeInterval(1800)))
+    }
 }

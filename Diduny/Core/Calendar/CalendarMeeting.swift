@@ -152,13 +152,40 @@ extension CalendarMeeting {
             }.first
     }
 
-    /// "Starts in 4 min", "Starting now" or "Started 6 min ago · ends 16:30".
-    func statusLine(now: Date) -> String {
+    /// The unit follows the distance: "Starts in 12 min", "Starts in 1 h 20 min", "Today at 18:00",
+    /// "Tomorrow at 9:00", "Monday at 9:00", "31 Oct at 9:00"; while running "Started 6 min ago · ends 16:30".
+    func statusLine(now: Date, calendar: Calendar = .current) -> String {
+        let time = { (date: Date) in date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: calendar.timeZone)) }
         let seconds = start.timeIntervalSince(now)
-        if seconds >= 60 { return String(localized: "Starts in \(Int((seconds / 60).rounded(.up))) min") }
-        if seconds > -60 { return String(localized: "Starting now") }
-        let minutes = Int((-seconds / 60).rounded(.down))
-        return String(localized: "Started \(minutes) min ago · ends \(end.formatted(date: .omitted, time: .shortened))")
+        if abs(seconds) < 60 { return String(localized: "Starting now") }
+        if seconds < 0 {
+            return String(localized: "Started \(Int((-seconds / 60).rounded(.down))) min ago · ends \(time(end))")
+        }
+        let minutes = Int((seconds / 60).rounded(.up))
+        if minutes < 60 { return String(localized: "Starts in \(minutes) min") }
+        if minutes < 180 {
+            return minutes % 60 == 0 ? String(localized: "Starts in \(minutes / 60) h")
+                : String(localized: "Starts in \(minutes / 60) h \(minutes % 60) min")
+        }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: start)).day ?? 0
+        switch days {
+        case 0: return String(localized: "Today at \(time(start))")
+        case 1: return String(localized: "Tomorrow at \(time(start))")
+        case 2..<7: return String(localized: "\(start.formatted(Date.FormatStyle(timeZone: calendar.timeZone).weekday(.wide))) at \(time(start))")
+        default: return String(localized: "\(start.formatted(Date.FormatStyle(timeZone: calendar.timeZone).day().month(.abbreviated))) at \(time(start))")
+        }
+    }
+
+    /// Joining makes sense from ten minutes before the start until the end.
+    func isJoinable(now: Date) -> Bool {
+        start.timeIntervalSince(now) <= 600 && end > now
+    }
+
+    /// The menu-bar countdown: "Now", "12m", "1h 20m".
+    func shortCountdown(now: Date) -> String {
+        guard start > now else { return String(localized: "Now") }
+        let minutes = Int((start.timeIntervalSince(now) / 60).rounded(.up))
+        return minutes < 60 ? "\(minutes)m" : minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h \(minutes % 60)m"
     }
 
     /// "Google Meet · 16:00 – 16:30 (30 min)"
