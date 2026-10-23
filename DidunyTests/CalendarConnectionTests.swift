@@ -256,10 +256,21 @@ import SwiftUI
                             start: hour.addingTimeInterval(from * 3600), end: hour.addingTimeInterval(to * 3600),
                             meetingURL: link.flatMap(URL.init(string:)))
         }
+        var review = event("review", "Design review: meetings menu", 0, 1, "https://meet.google.com/abc-defg-hij")
+        review.calendarTitle = "Work"
+        review.calendarColorRGB = 0x4285F4
+        review.location = "Room 4 · Kyiv office"
+        review.notes = "1. Meeting-now screen: what it shows and when\n2. Menu and settings simplification\n3. Linking recordings to calendar events"
+        review.attendees = [
+            CalendarAttendee(name: "Roman Marinsky", email: "roman@example.com", response: .accepted, isOrganizer: true, isCurrentUser: true),
+            CalendarAttendee(name: "Olena Kovalenko", email: "olena@example.com", response: .accepted),
+            CalendarAttendee(name: "Taras Bondar", email: "taras@example.com", response: .tentative),
+            CalendarAttendee(name: nil, email: "qa-team@example.com", response: .pending),
+        ]
         let meetings = [
             event("tennis", "Tennis", -3, -2, nil),
             event("sync", "Team velocity sync", -1, -0.75, "https://teams.microsoft.com/l/meetup-join/19%3ameeting"),
-            event("review", "Design review: meetings menu", 0, 1, "https://meet.google.com/abc-defg-hij"),
+            review,
             event("ba", "Neovolta: BA AI Automation", 3, 3.5, "https://meet.google.com/abc-defg-hij"),
             event("qa", "Neovolta: QA AI Automation", 4, 4.5, "https://zoom.us/j/123456789"),
         ]
@@ -290,10 +301,10 @@ import SwiftUI
         for (appearanceName, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             // Rendered without presenting a window: a screen-saver-level panel would take key
             // focus from UI tests that click into their own windows while this runs.
-            for (name, size) in [("popup", CGSize(width: 480, height: 400)), ("fullscreen", CGSize(width: 1280, height: 800))] {
+            for (name, size) in [("popup", CGSize(width: 560, height: 620)), ("fullscreen", CGSize(width: 1280, height: 800))] {
                 let reminder = NSHostingView(rootView: CalendarReminderView(
-                    meetings: [meetings[2], meetings[3]], connection: connection,
-                    presentation: CalendarReminderPresentation(), dismiss: {}, join: { _, _ in }))
+                    meetings: [meetings[2], meetings[3]], connection: connection, fullScreen: name == "fullscreen",
+                    dismiss: {}, snooze: { _ in }, join: { _, _ in }))
                 reminder.appearance = NSAppearance(named: appearance)
                 reminder.frame = CGRect(origin: .zero, size: size)
                 try write(reminder, "reference-reminder-\(name)-\(appearanceName)")
@@ -334,6 +345,32 @@ import SwiftUI
                                                         atomically: true, encoding: .utf8)
             }
         }
+    }
+
+    func testDismissedOrDetectedMeetingIsNotOfferedAgainAfterWake() async {
+        let defaults = UserDefaults(suiteName: "CalendarAcknowledge-\(UUID())")!
+        let event = CalendarMeeting(id: "running", calendarID: "work", title: "Running",
+                                    start: Date().addingTimeInterval(-900), end: Date().addingTimeInterval(900),
+                                    meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))
+        let other = CalendarMeeting(id: "other", calendarID: "work", title: "Other",
+                                    start: Date().addingTimeInterval(-60), end: Date().addingTimeInterval(1800))
+        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in
+            ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: [event, other])
+        })
+        defer { connection.disconnect() }
+        var shown: [[String]] = []
+        connection.onReminder = { shown.append($0.map(\.id)) }
+        await connection.connect()
+        XCTAssertEqual(shown, [["running", "other"]], "Running meetings are offered by default")
+
+        connection.acknowledge([event]) // Dismiss on the meeting-now screen
+        connection.acknowledgeMeetingsInProgress() // The call detector saw a call
+        connection.resetReminderSession()
+        XCTAssertEqual(shown.count, 1, "Dismissed and detected meetings are not offered again after wake")
+
+        connection.setScreenLocked(true)
+        connection.setScreenLocked(false)
+        XCTAssertEqual(shown.count, 1)
     }
 
     func testDisconnectRejectsLateReadAndDoesNotRestoreClearedConsent() async {

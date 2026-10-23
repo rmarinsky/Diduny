@@ -60,17 +60,6 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertEqual(CalendarMeeting.pendingReminders(existing: [a], incoming: [b], current: [b]), [b])
     }
 
-    @MainActor func testIncomingReminderKeepsExplicitRecordingOptOut() {
-        let state = CalendarReminderPresentation()
-        state.prepare(defaultRecord: true, replacingVisible: false)
-        XCTAssertTrue(state.record)
-        state.record = false
-        state.prepare(defaultRecord: true, replacingVisible: true)
-        XCTAssertFalse(state.record)
-        state.prepare(defaultRecord: true, replacingVisible: false)
-        XCTAssertTrue(state.record)
-    }
-
     func testDeliveredReminderSurvivesRestartAndIgnoresAllDayDeclinedAndEnded() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         var event = CalendarMeeting(id: "event", calendarID: "work", title: "Review",
@@ -207,5 +196,75 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertEqual(restored, meeting)
         XCTAssertEqual(restored.organizer?.displayName, "Olena Kovalenko")
         XCTAssertEqual(restored.attendees?.last?.displayName, "mark@neovolta.com")
+    }
+
+    func testRunningMeetingIsShownAgainUntilJoinedOrDismissedAndSnoozeDelaysIt() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var meeting = CalendarMeeting(id: "m", calendarID: "work", title: "Review",
+                                      start: now.addingTimeInterval(-600), end: now.addingTimeInterval(1200))
+        var ledger = CalendarReminderLedger()
+        let due = { (ledger: inout CalendarReminderLedger, at: Date) in
+            ledger.due([meeting], selected: ["work"], now: at, fetchedAt: at, leadMinutes: 0, repeatDuringMeeting: true).map(\.id)
+        }
+        XCTAssertTrue(ledger.due([meeting], selected: ["work"], now: now, fetchedAt: now, leadMinutes: 0).isEmpty,
+                      "Without the setting a meeting that started 10 minutes ago is not shown")
+        XCTAssertEqual(due(&ledger, now), ["m"])
+        XCTAssertEqual(due(&ledger, now), [], "Shown once per session")
+        var restored = try JSONDecoder().decode(CalendarReminderLedger.self, from: JSONEncoder().encode(ledger))
+        XCTAssertEqual(due(&restored, now), ["m"], "Shown again after relaunch while not joined or dismissed")
+        ledger.resetSession()
+        XCTAssertEqual(due(&ledger, now), ["m"], "Shown again after wake or unlock")
+
+        ledger.snooze(meeting, until: now.addingTimeInterval(60))
+        XCTAssertEqual(due(&ledger, now.addingTimeInterval(30)), [])
+        XCTAssertEqual(due(&ledger, now.addingTimeInterval(61)), ["m"])
+
+        ledger.acknowledge(meeting, at: now)
+        ledger.resetSession()
+        XCTAssertEqual(due(&ledger, now.addingTimeInterval(90)), [], "Joined or dismissed meetings stay quiet")
+        restored = try JSONDecoder().decode(CalendarReminderLedger.self, from: JSONEncoder().encode(ledger))
+        XCTAssertEqual(due(&restored, now.addingTimeInterval(90)), [])
+        meeting.lastModified = now
+        XCTAssertEqual(due(&ledger, now.addingTimeInterval(90)), ["m"], "Editing the event re-arms it")
+    }
+
+    func testSavedCalendarSettingsWithoutNewKeysKeepTheirValues() throws {
+        let saved = #"{"version":1,"connected":true,"selected":["work"],"displayMinutes":15,"reminderMinutes":5,"popup":true,"fullScreen":false,"recordOnJoin":true,"localRecording":false,"ledger":{"delivered":{}}}"#
+        let configuration = try JSONDecoder().decode(CalendarConfiguration.self, from: Data(saved.utf8))
+        XCTAssertTrue(configuration.connected)
+        XCTAssertEqual(configuration.selected, ["work"])
+        XCTAssertEqual(configuration.reminderMinutes, 5)
+        XCTAssertEqual(configuration.reminderStyle, .window)
+        XCTAssertTrue(configuration.recordOnJoin)
+        XCTAssertTrue(configuration.repeatDuringMeeting)
+        let fresh = CalendarConfiguration()
+        XCTAssertEqual(fresh.reminderStyle, .fullScreen)
+        XCTAssertEqual(fresh.reminderMinutes, 0)
+    }
+
+    func testMeetingServiceNamesComeFromTheJoinLink() {
+        let name = { (link: String) in CalendarMeeting.serviceName(for: URL(string: link)) }
+        XCTAssertEqual(name("https://meet.google.com/abc-defg-hij"), "Google Meet")
+        XCTAssertEqual(name("https://teams.microsoft.com/l/meetup-join/x"), "Microsoft Teams")
+        XCTAssertEqual(name("https://acme.zoom.us/j/123"), "Zoom")
+        XCTAssertEqual(name("https://acme.webex.com/meet/x"), "Webex")
+        XCTAssertNil(name("https://example.com/x"))
+    }
+
+    func testMeetingNowStatusAndAttendeeSummary() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let meeting = CalendarMeeting(id: "m", calendarID: "work", title: "Review", start: start, end: start.addingTimeInterval(1800),
+                                      meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))
+        XCTAssertEqual(meeting.statusLine(now: start.addingTimeInterval(-170)), String(localized: "Starts in \(3) min"))
+        XCTAssertEqual(meeting.statusLine(now: start.addingTimeInterval(20)), String(localized: "Starting now"))
+        XCTAssertEqual(meeting.statusLine(now: start.addingTimeInterval(400)), String(localized: "Started \(6) min ago · ends \(meeting.end.formatted(date: .omitted, time: .shortened))"))
+        XCTAssertTrue(meeting.scheduleLine.hasPrefix("Google Meet · "))
+        XCTAssertTrue(meeting.scheduleLine.hasSuffix(" " + String(localized: "(\(30) min)")))
+        XCTAssertEqual(CalendarMeeting.attendeeSummary([
+            CalendarAttendee(name: "A", response: .accepted), CalendarAttendee(name: "B", response: .accepted),
+            CalendarAttendee(name: "C", response: .declined), CalendarAttendee(name: "D", response: .pending),
+            CalendarAttendee(name: "E"),
+        ]), [String(localized: "\(5) people"), String(localized: "\(2) accepted"), String(localized: "\(1) declined"),
+            String(localized: "\(2) no response")].joined(separator: " · "))
     }
 }

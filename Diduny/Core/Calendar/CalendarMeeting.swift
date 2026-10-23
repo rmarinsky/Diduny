@@ -1,5 +1,5 @@
+import AppKit
 import Foundation
-import Observation
 
 struct CalendarAttendee: Codable, Equatable, Hashable, Sendable {
     enum Response: String, Codable, Sendable { case accepted, declined, tentative, pending, unknown }
@@ -38,24 +38,66 @@ struct CalendarMeeting: Identifiable, Codable, Equatable, Sendable {
     var canRemind: Bool { !cancelled && !declined && !allDay && end > start }
 }
 
+/// Which meeting occurrences were reminded, joined, dismissed or snoozed.
+/// `shown` is per app session, so a running meeting is offered again after relaunch, wake or unlock.
 struct CalendarReminderLedger: Codable, Equatable {
     private var delivered: [String: Date] = [:]
+    private var acknowledged: [String: Date] = [:]
+    private var snoozed: [String: Date] = [:]
+    private var shown: Set<String> = []
+
+    private enum CodingKeys: String, CodingKey { case delivered, acknowledged, snoozed }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        delivered = try container.decodeIfPresent([String: Date].self, forKey: .delivered) ?? [:]
+        acknowledged = try container.decodeIfPresent([String: Date].self, forKey: .acknowledged) ?? [:]
+        snoozed = try container.decodeIfPresent([String: Date].self, forKey: .snoozed) ?? [:]
+    }
+
+    /// Editing the event in Calendar changes the key, so a dismissed meeting is offered again.
+    static func acknowledgementKey(_ meeting: CalendarMeeting) -> String {
+        meeting.reminderKey + "|" + (meeting.lastModified.map { String($0.timeIntervalSince1970) } ?? "")
+    }
+
+    func isAcknowledged(_ meeting: CalendarMeeting) -> Bool { acknowledged[Self.acknowledgementKey(meeting)] != nil }
+    mutating func acknowledge(_ meeting: CalendarMeeting, at now: Date) { acknowledged[Self.acknowledgementKey(meeting)] = now }
+    mutating func snooze(_ meeting: CalendarMeeting, until date: Date) {
+        let key = Self.acknowledgementKey(meeting)
+        snoozed[key] = date
+        shown.remove(key)
+    }
+    mutating func resetSession() { shown = [] }
 
     mutating func due(_ meetings: [CalendarMeeting], selected: Set<String>, now: Date,
-                      fetchedAt: Date?, leadMinutes: Int) -> [CalendarMeeting] {
-        delivered = delivered.filter { $0.value > now.addingTimeInterval(-86400) }
+                      fetchedAt: Date?, leadMinutes: Int, repeatDuringMeeting: Bool = false) -> [CalendarMeeting] {
+        let dayAgo = now.addingTimeInterval(-86400)
+        delivered = delivered.filter { $0.value > dayAgo }
+        acknowledged = acknowledged.filter { $0.value > dayAgo }
+        snoozed = snoozed.filter { $0.value > dayAgo }
         guard let fetchedAt, now.timeIntervalSince(fetchedAt) >= 0,
               now.timeIntervalSince(fetchedAt) <= 300 else { return [] }
-        let upcoming = meetings.filter {
-            selected.contains($0.calendarID) && $0.canRemind && $0.end > now &&
-                $0.start >= now.addingTimeInterval(-300) &&
-                $0.start <= now.addingTimeInterval(TimeInterval(max(0, leadMinutes) * 60))
-        }.sorted { $0.start < $1.start }
-        return upcoming.filter {
-            guard delivered[$0.reminderKey] == nil else { return false }
-            delivered[$0.reminderKey] = now
-            return true
-        }
+        let lead = now.addingTimeInterval(TimeInterval(max(0, leadMinutes) * 60))
+        return meetings.filter { selected.contains($0.calendarID) && $0.canRemind && $0.end > now }
+            .sorted { $0.start < $1.start }
+            .filter { meeting in
+                let key = Self.acknowledgementKey(meeting)
+                guard acknowledged[key] == nil, !shown.contains(key) else { return false }
+                if let until = snoozed[key] {
+                    guard until <= now else { return false }
+                    snoozed[key] = nil
+                } else {
+                    let upcoming = meeting.start >= now.addingTimeInterval(-300) && meeting.start <= lead
+                        && delivered[meeting.reminderKey] == nil
+                    let running = repeatDuringMeeting && meeting.start <= now
+                    guard upcoming || running else { return false }
+                }
+                delivered[meeting.reminderKey] = now
+                shown.insert(key)
+                return true
+            }
     }
 }
 
@@ -105,6 +147,49 @@ extension CalendarMeeting {
                 guard let clean = URL(string: String(value[..<suffix.lowerBound])), isJoinURL(clean) else { return nil }
                 return clean
             }.first
+    }
+
+    /// "Starts in 4 min", "Starting now" or "Started 6 min ago · ends 16:30".
+    func statusLine(now: Date) -> String {
+        let seconds = start.timeIntervalSince(now)
+        if seconds >= 60 { return String(localized: "Starts in \(Int((seconds / 60).rounded(.up))) min") }
+        if seconds > -60 { return String(localized: "Starting now") }
+        let minutes = Int((-seconds / 60).rounded(.down))
+        return String(localized: "Started \(minutes) min ago · ends \(end.formatted(date: .omitted, time: .shortened))")
+    }
+
+    /// "Google Meet · 16:00 – 16:30 (30 min)"
+    var scheduleLine: String {
+        let minutes = Int((end.timeIntervalSince(start) / 60).rounded())
+        let time = start.formatted(date: .omitted, time: .shortened) + " – " + end.formatted(date: .omitted, time: .shortened)
+            + " " + String(localized: "(\(minutes) min)")
+        return [Self.serviceName(for: meetingURL), time].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    static func attendeeSummary(_ attendees: [CalendarAttendee]) -> String {
+        let count = { (response: CalendarAttendee.Response) in attendees.filter { $0.response == response }.count }
+        let waiting = count(.pending) + count(.unknown)
+        return ([String(localized: "\(attendees.count) people")]
+            + (count(.accepted) > 0 ? [String(localized: "\(count(.accepted)) accepted")] : [])
+            + (count(.tentative) > 0 ? [String(localized: "\(count(.tentative)) maybe")] : [])
+            + (count(.declined) > 0 ? [String(localized: "\(count(.declined)) declined")] : [])
+            + (waiting > 0 ? [String(localized: "\(waiting) no response")] : []))
+            .joined(separator: " · ")
+    }
+
+    static func copyLink(_ url: URL) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+    }
+
+    static func serviceName(for url: URL?) -> String? {
+        guard let host = url?.host?.lowercased() else { return nil }
+        if host == "meet.google.com" { return "Google Meet" }
+        if host.hasPrefix("teams.") { return "Microsoft Teams" }
+        if host == "zoom.us" || host.hasSuffix(".zoom.us") { return "Zoom" }
+        if host == "webex.com" || host.hasSuffix(".webex.com") { return "Webex" }
+        if host == "meet.jit.si" { return "Jitsi Meet" }
+        return nil
     }
 
     static func isJoinURL(_ url: URL) -> Bool {
@@ -190,12 +275,5 @@ extension CalendarMeeting {
     static func pendingReminders(existing: [Self], incoming: [Self], current: [Self]) -> [Self] {
         let keys = Set((existing + incoming).map(\.reminderKey))
         return current.filter { keys.contains($0.reminderKey) }.sorted { $0.start < $1.start }
-    }
-}
-
-@MainActor @Observable final class CalendarReminderPresentation {
-    var record = false
-    func prepare(defaultRecord: Bool, replacingVisible: Bool) {
-        if !replacingVisible { record = defaultRecord }
     }
 }

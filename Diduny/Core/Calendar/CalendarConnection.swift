@@ -56,16 +56,57 @@ struct ScheduledCalendarSnapshot: Sendable {
 }
 
 struct CalendarConfiguration: Codable, Equatable {
+    enum ReminderStyle: String, CaseIterable { case fullScreen, window, off }
+
     var version = 1
     var connected = false
     var selected: Set<String> = []
     var displayMinutes = 60
-    var reminderMinutes = 5
-    var popup = true
-    var fullScreen = false
+    var reminderMinutes = 0
+    var popup = false
+    var fullScreen = true
     var recordOnJoin = false
     var localRecording = true
+    var repeatDuringMeeting = true
+    /// nil opens meeting links with the system's default browser.
+    var browserBundleID: String? = nil
+    var openInApps = false
+    var hideNames = false
+    var showTomorrow = true
+    var showWithoutLink = true
     var ledger = CalendarReminderLedger()
+
+    var reminderStyle: ReminderStyle {
+        get { fullScreen ? .fullScreen : popup ? .window : .off }
+        set { fullScreen = newValue == .fullScreen; popup = newValue == .window }
+    }
+
+    init() {}
+
+    /// Saved settings from older releases lack newer keys; each missing key keeps its default.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) throws -> T {
+            try container.decodeIfPresent(T.self, forKey: key) ?? fallback
+        }
+        let defaults = Self()
+        version = try value(.version, defaults.version)
+        connected = try value(.connected, defaults.connected)
+        selected = try value(.selected, defaults.selected)
+        displayMinutes = try value(.displayMinutes, defaults.displayMinutes)
+        reminderMinutes = try value(.reminderMinutes, defaults.reminderMinutes)
+        popup = try value(.popup, defaults.popup)
+        fullScreen = try value(.fullScreen, defaults.fullScreen)
+        recordOnJoin = try value(.recordOnJoin, defaults.recordOnJoin)
+        localRecording = try value(.localRecording, defaults.localRecording)
+        repeatDuringMeeting = try value(.repeatDuringMeeting, defaults.repeatDuringMeeting)
+        browserBundleID = try container.decodeIfPresent(String.self, forKey: .browserBundleID)
+        openInApps = try value(.openInApps, defaults.openInApps)
+        hideNames = try value(.hideNames, defaults.hideNames)
+        showTomorrow = try value(.showTomorrow, defaults.showTomorrow)
+        showWithoutLink = try value(.showWithoutLink, defaults.showWithoutLink)
+        ledger = try value(.ledger, defaults.ledger)
+    }
 }
 
 @MainActor @Observable final class CalendarConnection {
@@ -180,8 +221,41 @@ struct CalendarConfiguration: Codable, Equatable {
               current.start == meeting.start, current.meetingURL == meeting.meetingURL,
               current.meetingURL.map(CalendarMeeting.isJoinURL) ?? record,
               let onJoin else { return false }
+        acknowledge([current])
         onJoin(current, record, configuration.localRecording)
         return true
+    }
+
+    /// Joined or dismissed: the meeting-now screen is not offered again for this occurrence.
+    func acknowledge(_ meetings: [CalendarMeeting]) {
+        guard !meetings.isEmpty else { return }
+        for meeting in meetings { configuration.ledger.acknowledge(meeting, at: Date()) }
+        persist()
+    }
+
+    func snooze(_ meetings: [CalendarMeeting], minutes: Int) {
+        let until = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        for meeting in meetings { configuration.ledger.snooze(meeting, until: until) }
+        persist()
+    }
+
+    /// The call detector saw a call: meetings running now or starting within five minutes count as joined.
+    func acknowledgeMeetingsInProgress(now: Date = Date()) {
+        acknowledge(currentMeetings.filter { $0.start <= now.addingTimeInterval(300) && $0.end > now })
+    }
+
+    /// After wake or unlock a meeting that is still running and not joined is offered again.
+    func resetReminderSession() {
+        configuration.ledger.resetSession()
+        deliverReminders()
+    }
+
+    private(set) var isScreenLocked = false
+
+    func setScreenLocked(_ locked: Bool) {
+        let unlocked = isScreenLocked && !locked
+        isScreenLocked = locked
+        if unlocked { resetReminderSession() }
     }
 
     @discardableResult
@@ -214,9 +288,10 @@ struct CalendarConfiguration: Codable, Equatable {
     func stop() { polling?.cancel(); polling = nil; generation = UUID(); busy = false }
 
     private func deliverReminders() {
-        guard let onReminder, configuration.popup || configuration.fullScreen else { return }
+        guard let onReminder, configuration.reminderStyle != .off, !isScreenLocked else { return }
         let due = configuration.ledger.due(meetings, selected: configuration.selected, now: Date(),
-                                          fetchedAt: fetchedAt, leadMinutes: configuration.reminderMinutes)
+                                          fetchedAt: fetchedAt, leadMinutes: configuration.reminderMinutes,
+                                          repeatDuringMeeting: configuration.repeatDuringMeeting)
         guard !due.isEmpty else { return }
         persist()
         onReminder(due)

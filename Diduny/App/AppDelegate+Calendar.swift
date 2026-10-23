@@ -17,7 +17,16 @@ extension AppDelegate {
             Task { @MainActor in await CalendarConnection.shared.refresh() }
         }
         calendarWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
-            Task { @MainActor in await CalendarConnection.shared.refresh() }
+            Task { @MainActor in
+                CalendarConnection.shared.resetReminderSession()
+                await CalendarConnection.shared.refresh()
+            }
+        }
+        // Reminders wait while the screen is locked; a meeting still running is offered after unlock.
+        calendarLockObservers = [("com.apple.screenIsLocked", true), ("com.apple.screenIsUnlocked", false)].map { name, locked in
+            DistributedNotificationCenter.default().addObserver(forName: Notification.Name(name), object: nil, queue: .main) { _ in
+                Task { @MainActor in CalendarConnection.shared.setScreenLocked(locked) }
+            }
         }
     }
 

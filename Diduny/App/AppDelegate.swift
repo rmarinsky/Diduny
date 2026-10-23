@@ -176,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let calendarReminderController = CalendarReminderController()
     var calendarStoreObserver: NSObjectProtocol?
     var calendarWakeObserver: NSObjectProtocol?
+    var calendarLockObservers: [NSObjectProtocol] = []
     private var powerOffObserver: NSObjectProtocol?
     lazy var realtimeTranscriptionService = CloudRealtimeService()
     var localVoiceStreamingService: LocalWhisperStreamingService?
@@ -391,6 +392,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleMeetingPresenceEvent(_ event: MeetingPresenceEvent) {
         switch event {
         case let .joined(meeting):
+            // In the call already: the meeting-now screen is not needed for it.
+            CalendarConnection.shared.acknowledgeMeetingsInProgress()
+            if calendarReminderController.window != nil { calendarReminderController.dismiss() }
             guard !hasAnyRecordingInProgress else { return }
             EdgeCommandPanelController.shared.showMeetingSuggestion(meeting)
         case let .ended(meeting):
@@ -724,6 +728,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         calendarReminderController.dismiss()
         if let calendarStoreObserver { NotificationCenter.default.removeObserver(calendarStoreObserver) }
         if let calendarWakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(calendarWakeObserver) }
+        calendarLockObservers.forEach { DistributedNotificationCenter.default().removeObserver($0) }
         meetingJoinMonitor.stop()
         hotkeyService.unregisterAll()
         pushToTalkService.stop()
