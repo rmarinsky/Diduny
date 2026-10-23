@@ -90,7 +90,7 @@
 "Allow" = "Дозволити";
 "Allow Accessibility in System Settings…" = "Дозволити універсальний доступ у параметрах системи…";
 "Allow Diduny Accessibility access in System Settings, then retry reading." = "Надайте Diduny доступ до доступності в системних параметрах і повторіть читання.";
-"Allow Diduny to read event titles, times and meeting links from calendars on this Mac, including after restart, until you disconnect. Choose the calendars after connecting." = "Дозвольте Diduny читати назви, час і посилання подій із календарів на цьому Mac, зокрема після перезапуску, доки ви не від’єднаєте їх. Виберіть календарі після підключення.";
+"Allow Diduny to read event titles, times, meeting links, descriptions, locations and attendees from calendars on this Mac, including after restart, until you disconnect. Choose the calendars after connecting." = "Дозвольте Diduny читати назви, час, посилання, описи, місця та учасників подій із календарів на цьому Mac, зокрема після перезапуску, доки ви не відключите календарі. Календарі можна вибрати після підключення.";
 "Allow Diduny to read titles, dates, times and meeting links from this window every minute, including after restart, until you disconnect. This includes accounts you switch to in this window. The browser must remain open with the calendar tab selected." = "Дозвольте Diduny щохвилини читати назви, дати, час і посилання зустрічей у цьому вікні, зокрема після перезапуску, доки ви не від’єднаєте його. Це також стосується облікових записів, на які ви перемикаєтеся в цьому вікні. Браузер має залишатися відкритим із вибраною вкладкою календаря.";
 "Allow Diduny to work with you" = "Дозвольте Diduny працювати разом із вами";
 "Allowed" = "Дозволено";
@@ -155,7 +155,7 @@
 "CANCEL RECORDING" = "СКАСУВАННЯ ЗАПИСУ";
 "Calendar" = "Календар";
 "Calendar access was not granted. You can change it in System Settings." = "Доступ до календаря не надано. Ви можете змінити це в системних параметрах.";
-"Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When you record a meeting, its calendar reference is saved with the local recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization." = "Події календаря залишаються в пам’яті. Налаштування підключення й історія нагадувань зберігаються на цьому Mac. Якщо ви записуєте зустріч, посилання на подію зберігається з локальним записом. Diduny не надсилає ваш календар на сервер. Облікові записи календарів продовжують звичайну синхронізацію зі своїми провайдерами.";
+"Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When a recording is linked to a meeting, the meeting's title, time, calendar, agenda, location and attendees (names and emails) are saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization." = "Події календаря залишаються в пам'яті. Налаштування підключення та історія нагадувань зберігаються на цьому Mac. Коли запис пов'язано із зустріччю, її назва, час, календар, порядок денний, місце та учасники (імена й адреси email) зберігаються разом із цим локальним записом, залишаються після відключення календарів і видаляються разом із записом. Diduny не надсилає ваш календар на сервер. Ваші облікові записи календарів синхронізуються як зазвичай.";
 "Calendar meeting" = "Зустріч у календарі";
 "Calendar reminders" = "Нагадування про зустрічі";
 "Calendar settings…" = "Налаштування календарів…";
@@ -1315,3 +1315,4 @@
 "Today's meetings timeline" = "Шкала сьогоднішніх зустрічей";
 "Join and record" = "Приєднатися й записати";
 "Copy meeting link" = "Скопіювати посилання на зустріч";
+"Unknown attendee" = "Невідомий учасник";

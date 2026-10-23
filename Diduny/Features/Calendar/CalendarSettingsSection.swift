@@ -61,8 +61,8 @@ struct CalendarSettingsSection: View {
         .sheet(isPresented: $showConsent) {
             VStack(alignment: .leading, spacing: 18) {
                 Label("Connect your calendars", systemImage: "hand.raised").font(.title2.bold())
-                Text("Allow Diduny to read event titles, times and meeting links from calendars on this Mac, including after restart, until you disconnect. Choose the calendars after connecting.")
-                Text("Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When you record a meeting, its calendar reference is saved with the local recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization.")
+                Text("Allow Diduny to read event titles, times, meeting links, descriptions, locations and attendees from calendars on this Mac, including after restart, until you disconnect. Choose the calendars after connecting.")
+                Text("Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When a recording is linked to a meeting, the meeting's title, time, calendar, agenda, location and attendees (names and emails) are saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization.")
                 Text("macOS requests full calendar access; Diduny only reads calendar data. Recording requires a separate action. Local transcription is the default for calendar recordings.").foregroundStyle(.secondary)
                 Toggle("I am allowed to access these calendars and approve ongoing local reading.", isOn: $approved)
                 HStack {

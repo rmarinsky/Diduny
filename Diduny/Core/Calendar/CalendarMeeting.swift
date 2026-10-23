@@ -1,6 +1,17 @@
 import Foundation
 import Observation
 
+struct CalendarAttendee: Codable, Equatable, Hashable, Sendable {
+    enum Response: String, Codable, Sendable { case accepted, declined, tentative, pending, unknown }
+    var name: String?
+    var email: String?
+    var response: Response = .unknown
+    var isOrganizer = false
+    var isCurrentUser = false
+
+    var displayName: String { name?.nilIfBlank ?? email ?? String(localized: "Unknown attendee") }
+}
+
 struct CalendarMeeting: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let calendarID: String
@@ -11,6 +22,17 @@ struct CalendarMeeting: Identifiable, Codable, Equatable, Sendable {
     var cancelled = false
     var declined = false
     var allDay = false
+    // Event details. Optional so meetings stored by older releases still decode.
+    var notes: String? = nil
+    var location: String? = nil
+    var attendees: [CalendarAttendee]? = nil
+    var calendarTitle: String? = nil
+    var calendarColorRGB: UInt32? = nil
+    var eventIdentifier: String? = nil
+    var lastModified: Date? = nil
+    var myResponse: CalendarAttendee.Response? = nil
+
+    var organizer: CalendarAttendee? { attendees?.first(where: \.isOrganizer) }
 
     var reminderKey: String { id + "|" + String(start.timeIntervalSince1970) }
     var canRemind: Bool { !cancelled && !declined && !allDay && end > start }
@@ -37,7 +59,37 @@ struct CalendarReminderLedger: Codable, Equatable {
     }
 }
 
+extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 extension CalendarMeeting {
+    /// Event description as an agenda: markup removed and the provider's join block cut off.
+    static func cleanedNotes(_ notes: String?) -> String? {
+        guard var text = notes else { return nil }
+        text = text.replacingOccurrences(of: #"(?i)<br\s*/?>|</p>|</div>|</li>"#, with: "\n", options: .regularExpression)
+            .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
+        for (entity, value) in [("&nbsp;", " "), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&#39;", "'"), ("&amp;", "&")] {
+            text = text.replacingOccurrences(of: entity, with: value)
+        }
+        let boilerplate = ["microsoft teams meeting", "join zoom meeting", "join with google meet", "join on your computer",
+                           "-::~:~::~", "click here to join the meeting"]
+        var kept: [String] = []
+        for line in text.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let lower = trimmed.lowercased()
+            if boilerplate.contains(where: { lower.hasPrefix($0) }) || trimmed.range(of: #"^[_\-─━=]{10,}$"#, options: .regularExpression) != nil {
+                break
+            }
+            kept.append(trimmed)
+        }
+        let joined = kept.joined(separator: "\n").replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+        return joined.nilIfBlank
+    }
+
     static func joinURL(in text: String) -> URL? {
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
         return detector.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap(\.url)

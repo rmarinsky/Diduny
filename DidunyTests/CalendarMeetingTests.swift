@@ -171,4 +171,41 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertEqual(timeline.segments.last?.to, 1, "Meetings after the window are clipped")
         XCTAssertEqual(timeline.segments[1].from, 90 / 480.0, accuracy: 0.0001)
     }
+
+    func testAgendaNotesDropMarkupAndJoinBoilerplate() {
+        let notes = """
+        <p>Agenda:<br>1. Pilot scope<br/>2. Metrics &amp; owners</p>
+        ________________________________________________________________________________
+        Microsoft Teams meeting
+        Join on your computer, mobile app or room device
+        """
+        XCTAssertEqual(CalendarMeeting.cleanedNotes(notes), "Agenda:\n1. Pilot scope\n2. Metrics & owners")
+        XCTAssertEqual(CalendarMeeting.cleanedNotes("Review\n\n\n\nJoin Zoom Meeting\nhttps://zoom.us/j/1"), "Review")
+        XCTAssertEqual(CalendarMeeting.cleanedNotes("Notes\n-::~:~::~:~:~::~:~::-\nJoin with Google Meet"), "Notes")
+        XCTAssertNil(CalendarMeeting.cleanedNotes("  \n<br>  "))
+        XCTAssertNil(CalendarMeeting.cleanedNotes(nil))
+    }
+
+    func testStoredMeetingsWithoutEventDetailsStillDecodeAndDetailsRoundTrip() throws {
+        let legacy = #"{"id":"a","calendarID":"work","title":"Review","start":0,"end":600,"cancelled":false,"declined":false,"allDay":false}"#
+        let decoded = try JSONDecoder().decode(CalendarMeeting.self, from: Data(legacy.utf8))
+        XCTAssertEqual(decoded.title, "Review")
+        XCTAssertNil(decoded.attendees)
+        XCTAssertNil(decoded.notes)
+
+        var meeting = decoded
+        meeting.notes = "Agenda"
+        meeting.location = "Room 4"
+        meeting.calendarTitle = "Work"
+        meeting.calendarColorRGB = 0x4285F4
+        meeting.myResponse = .tentative
+        meeting.attendees = [
+            CalendarAttendee(name: "Olena Kovalenko", email: "olena.k@neovolta.com", response: .accepted, isOrganizer: true),
+            CalendarAttendee(name: nil, email: "mark@neovolta.com", response: .declined),
+        ]
+        let restored = try JSONDecoder().decode(CalendarMeeting.self, from: JSONEncoder().encode(meeting))
+        XCTAssertEqual(restored, meeting)
+        XCTAssertEqual(restored.organizer?.displayName, "Olena Kovalenko")
+        XCTAssertEqual(restored.attendees?.last?.displayName, "mark@neovolta.com")
+    }
 }

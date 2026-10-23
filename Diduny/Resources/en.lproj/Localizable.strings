@@ -90,7 +90,7 @@
 "Allow" = "Allow";
 "Allow Accessibility in System Settings…" = "Allow Accessibility in System Settings…";
 "Allow Diduny Accessibility access in System Settings, then retry reading." = "Allow Diduny Accessibility access in System Settings, then retry reading.";
-"Allow Diduny to read event titles, times and meeting links from calendars on this Mac, including after restart, until you disconnect. Choose the calendars after connecting." = "Allow Diduny to read event titles, times and meeting links from calendars on this Mac, including after restart, until you disconnect. Choose the calendars after connecting.";
+"Allow Diduny to read event titles, times, meeting links, descriptions, locations and attendees from calendars on this Mac, including after restart, until you disconnect. Choose the calendars after connecting." = "Allow Diduny to read event titles, times, meeting links, descriptions, locations and attendees from calendars on this Mac, including after restart, until you disconnect. Choose the calendars after connecting.";
 "Allow Diduny to read titles, dates, times and meeting links from this window every minute, including after restart, until you disconnect. This includes accounts you switch to in this window. The browser must remain open with the calendar tab selected." = "Allow Diduny to read titles, dates, times and meeting links from this window every minute, including after restart, until you disconnect. This includes accounts you switch to in this window. The browser must remain open with the calendar tab selected.";
 "Allow Diduny to work with you" = "Allow Diduny to work with you";
 "Allowed" = "Allowed";
@@ -155,7 +155,7 @@
 "CANCEL RECORDING" = "CANCEL RECORDING";
 "Calendar" = "Calendar";
 "Calendar access was not granted. You can change it in System Settings." = "Calendar access was not granted. You can change it in System Settings.";
-"Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When you record a meeting, its calendar reference is saved with the local recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization." = "Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When you record a meeting, its calendar reference is saved with the local recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization.";
+"Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When a recording is linked to a meeting, the meeting's title, time, calendar, agenda, location and attendees (names and emails) are saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization." = "Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When a recording is linked to a meeting, the meeting's title, time, calendar, agenda, location and attendees (names and emails) are saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization.";
 "Calendar meeting" = "Calendar meeting";
 "Calendar reminders" = "Calendar reminders";
 "Calendar settings…" = "Calendar settings…";
@@ -1315,3 +1315,4 @@
 "Today's meetings timeline" = "Today's meetings timeline";
 "Join and record" = "Join and record";
 "Copy meeting link" = "Copy meeting link";
+"Unknown attendee" = "Unknown attendee";
