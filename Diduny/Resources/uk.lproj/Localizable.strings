@@ -1387,3 +1387,5 @@
 "Allow agendas and people" = "Дозволити порядок денний і учасників";
 "Diduny is starting the meeting recording." = "Diduny починає запис зустрічі.";
 "%@" = "%@";
+"Now · ends %@" = "Зараз · до %@";
+"Next" = "Далі";

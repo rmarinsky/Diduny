@@ -293,18 +293,25 @@ struct NextMeetingCard: View {
     let recordOnJoin: Bool
     let join: (_ record: Bool) -> Void
 
+    /// One short line: "Now · ends 12:00" or "Next · Starts in 4 min".
+    private var headline: String {
+        meeting.phase(at: now) == .current
+            ? String(localized: "Now · ends \(meeting.end.formatted(date: .omitted, time: .shortened))")
+            : String(localized: "Next") + " · " + meeting.statusLine(now: now)
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: (meeting.phase(at: now) == .current ? String(localized: "Current meeting") : String(localized: "Next meeting"))
-                    + " · " + meeting.statusLine(now: now))
+                Text(verbatim: headline)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Color("BrandAccentDeep"))
+                    .lineLimit(1)
                 Text(hideNames ? String(localized: "Meeting") : meeting.title)
                     .font(.system(size: 13, weight: .semibold)).lineLimit(1)
                 Text(meeting.scheduleLine).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
-            Spacer(minLength: 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
             if meeting.meetingURL != nil {
                 Button("Join") { join(recordOnJoin) }
             } else {
