@@ -32,7 +32,7 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
             )
 
             self.run_script("render", str(PAYLOAD), str(markdown))
-            expected = '# Switch output while you speak\n\n- Change the output language from the live panel during dictation or translation, without stopping the recording.\n- The new output applies to everything you have already said; switch back to Original to paste your own words.\n- Preview the translated text live before you stop.\n'
+            expected = '# Switch output while you speak\n\n- Pick the output from the Mode chip in the live panel during dictation or translation, without stopping the recording.\n- The new output applies to everything you have already said; switch back to Original to paste your own words.\n- Preview the translated text live before you stop.\n'
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
             arguments = (
