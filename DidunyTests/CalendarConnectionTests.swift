@@ -304,6 +304,11 @@ import SwiftUI
             audio.appearance = NSAppearance(named: appearance)
             audio.frame = CGRect(x: 0, y: 0, width: 640, height: 900)
             try write(audio, "reference-meeting-audio-settings-\(appearanceName)")
+            let library = NSHostingView(rootView: RecordingsLibraryView().environment(AudioDeviceManager())
+                .frame(width: 900, height: 640))
+            library.appearance = NSAppearance(named: appearance)
+            library.frame = CGRect(x: 0, y: 0, width: 900, height: 640)
+            try write(library, "reference-recordings-library-\(appearanceName)")
         }
 
         if #available(macOS 14.4, *) {
