@@ -193,7 +193,7 @@ struct CalendarConfiguration: Codable, Equatable {
             return String(localized: "Calendar access could not be refreshed. Open Calendar settings and try again.")
         }
         guard join(meeting, record: meeting.meetingURL == nil || record) else {
-            return String(localized: "This meeting changed or is no longer available. Reopen Upcoming meetings and select it again.")
+            return String(localized: "This meeting changed or is no longer available. Reopen the Diduny menu and select it again.")
         }
         return nil
     }

@@ -231,31 +231,34 @@ struct CalendarMenuItems: View {
         }
     }
 
-    private func row(_ event: CalendarMeeting, now: Date) -> some View {
+    /// Ended meetings are plain disabled items: AppKit enables any item that has a submenu.
+    @ViewBuilder private func row(_ event: CalendarMeeting, now: Date) -> some View {
         let title = event.title.count > 40 ? String(event.title.prefix(39)) + "…" : event.title
-        return Menu {
-            if let url = event.meetingURL {
-                Button("Join") { join(event, record: connection.configuration.recordOnJoin) }
-                if !connection.configuration.recordOnJoin {
-                    Button("Join and record") { join(event, record: true) }
-                }
-                Divider()
-                Button("Copy meeting link") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                }
-            } else {
-                Button("Record meeting") { join(event, record: true) }
-            }
-        } label: {
-            Label {
-                Text(verbatim: event.start.formatted(date: .omitted, time: .shortened) + " – " +
-                    event.end.formatted(date: .omitted, time: .shortened) + "   " + title)
-            } icon: {
-                Image(systemName: event.meetingURL == nil ? "person.2.fill" : "video.fill")
-            }
+        let label = Label {
+            Text(verbatim: event.start.formatted(date: .omitted, time: .shortened) + " – " +
+                event.end.formatted(date: .omitted, time: .shortened) + "   " + title)
+        } icon: {
+            Image(systemName: event.meetingURL == nil ? "person.2.fill" : "video.fill")
         }
-        .disabled(event.phase(at: now) == .past)
+        if event.phase(at: now) == .past {
+            Button {} label: { label }.disabled(true)
+        } else {
+            Menu {
+                if let url = event.meetingURL {
+                    Button("Join") { join(event, record: connection.configuration.recordOnJoin) }
+                    if !connection.configuration.recordOnJoin {
+                        Button("Join and record") { join(event, record: true) }
+                    }
+                    Divider()
+                    Button("Copy meeting link") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                    }
+                } else {
+                    Button("Record meeting") { join(event, record: true) }
+                }
+            } label: { label }
+        }
     }
 
     private func dayTitle(_ day: Date, now: Date) -> String {

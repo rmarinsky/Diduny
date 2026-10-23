@@ -164,7 +164,7 @@ import SwiftUI
         failRead = false
         latest.meetingURL = URL(string: "https://meet.google.com/xyz-abcd-efg")
         let changed = await connection.joinFromMenu(event, record: false)
-        XCTAssertEqual(changed, String(localized: "This meeting changed or is no longer available. Reopen Upcoming meetings and select it again."))
+        XCTAssertEqual(changed, String(localized: "This meeting changed or is no longer available. Reopen the Diduny menu and select it again."))
     }
 
     func testNativeUpcomingMenuDispatchesSelectedURLThroughAppDelegateWithoutRecording() async throws {
@@ -198,8 +198,9 @@ import SwiftUI
         XCTAssertFalse(timeline.isTemplate, "Brand colours must survive menu rendering")
         XCTAssertEqual(timeline.size, CalendarTimelineView.size)
         XCTAssertTrue(menu.items.contains { $0.title.hasPrefix(String(localized: "Today")) })
-        XCTAssertFalse(try XCTUnwrap(menu.items.first { $0.title.contains(ended.title) }).isEnabled,
-                       "Ended meetings stay visible but cannot be joined")
+        let endedRow = try XCTUnwrap(menu.items.first { $0.title.contains(ended.title) })
+        XCTAssertFalse(endedRow.isEnabled, "Ended meetings stay visible but cannot be joined")
+        XCTAssertNil(endedRow.submenu)
         let actions = try XCTUnwrap(menu.items.first { $0.title.contains(event.title) }?.submenu)
         actions.update()
         XCTAssertTrue(actions.items.contains { $0.title == String(localized: "Join and record") })

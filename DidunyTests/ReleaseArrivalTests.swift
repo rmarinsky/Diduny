@@ -45,13 +45,13 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Switch output while you speak")
+        XCTAssertEqual(highlights.headline, "Your day at a glance in the menu bar")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Change the output language from the live panel during dictation or translation, without stopping the recording.",
-                "The new output applies to everything you have already said; switch back to Original to paste your own words.",
-                "Preview the translated text live before you stop.",
+                "A timeline of today's meetings opens the menu bar menu, with the current time and meeting highlighted in Diduny colours.",
+                "Today and tomorrow are listed with start and end times; ended meetings stay visible for context.",
+                "Each meeting offers Join, Join and record, or Copy meeting link.",
             ]
         )
     }
