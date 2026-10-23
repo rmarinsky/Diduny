@@ -313,7 +313,7 @@ import SwiftUI
             for (name, size) in [("popup", CGSize(width: 560, height: 620)), ("fullscreen", CGSize(width: 1280, height: 800))] {
                 let reminder = NSHostingView(rootView: CalendarReminderView(
                     meetings: [meetings[2], meetings[3]], connection: connection, fullScreen: name == "fullscreen",
-                    dismiss: {}, snooze: { _ in }, join: { _, _ in }))
+                    dismiss: {}, close: {}, snooze: { _ in }, join: { _, _ in }))
                 reminder.appearance = NSAppearance(named: appearance)
                 reminder.frame = CGRect(origin: .zero, size: size)
                 try write(reminder, "reference-reminder-\(name)-\(appearanceName)")
@@ -397,7 +397,8 @@ import SwiftUI
         XCTAssertNil(stripped.notes)
         XCTAssertNil(stripped.location)
         XCTAssertNil(stripped.attendees)
-        XCTAssertNil(try await connection.readMeetings(from: Date().addingTimeInterval(-60), to: Date()).first?.attendees)
+        let read = try await connection.readMeetings(from: Date().addingTimeInterval(-60), to: Date())
+        XCTAssertNil(read.first?.attendees)
 
         await connection.allowEventDetails()
         XCTAssertTrue(connection.configuration.detailsConsent)

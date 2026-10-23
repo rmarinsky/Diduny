@@ -96,8 +96,9 @@ struct CalendarConfiguration: Codable, Equatable {
         version = try value(.version, defaults.version)
         connected = try value(.connected, defaults.connected)
         selected = try value(.selected, defaults.selected)
-        displayMinutes = try value(.displayMinutes, defaults.displayMinutes)
-        reminderMinutes = try value(.reminderMinutes, defaults.reminderMinutes)
+        // Values outside the current pickers snap to the nearest choice instead of showing blank.
+        displayMinutes = Self.nearest(try value(.displayMinutes, defaults.displayMinutes), in: [15, 60, 1440])
+        reminderMinutes = Self.nearest(try value(.reminderMinutes, defaults.reminderMinutes), in: [0, 1, 5, 15, 60])
         popup = try value(.popup, defaults.popup)
         fullScreen = try value(.fullScreen, defaults.fullScreen)
         recordOnJoin = try value(.recordOnJoin, defaults.recordOnJoin)
@@ -110,6 +111,10 @@ struct CalendarConfiguration: Codable, Equatable {
         showWithoutLink = try value(.showWithoutLink, defaults.showWithoutLink)
         detailsConsent = try value(.detailsConsent, defaults.detailsConsent)
         ledger = try value(.ledger, defaults.ledger)
+    }
+
+    private static func nearest(_ value: Int, in choices: [Int]) -> Int {
+        choices.min { abs($0 - value) < abs($1 - value) } ?? value
     }
 }
 
@@ -210,7 +215,7 @@ struct CalendarConfiguration: Codable, Equatable {
         }
     }
 
-    private var hasFreshSnapshot: Bool {
+    var hasFreshSnapshot: Bool {
         guard configuration.connected, let fetchedAt else { return false }
         return (0...300).contains(Date().timeIntervalSince(fetchedAt))
     }

@@ -248,6 +248,10 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertEqual(configuration.reminderStyle, .window)
         XCTAssertTrue(configuration.recordOnJoin)
         XCTAssertTrue(configuration.repeatDuringMeeting)
+        let odd = #"{"connected":true,"reminderMinutes":30,"displayMinutes":120}"#
+        let snapped = try JSONDecoder().decode(CalendarConfiguration.self, from: Data(odd.utf8))
+        XCTAssertEqual(snapped.reminderMinutes, 15, "Older values outside the picker snap to the nearest choice")
+        XCTAssertEqual(snapped.displayMinutes, 60)
         let fresh = CalendarConfiguration()
         XCTAssertEqual(fresh.reminderStyle, .fullScreen)
         XCTAssertEqual(fresh.reminderMinutes, 0)

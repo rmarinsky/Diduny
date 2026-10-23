@@ -38,6 +38,8 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertEqual(restored.recordings.first(where: { $0.id == id })?.calendarMeeting, event)
         XCTAssertTrue(restored.linkCalendarMeeting(id: id, meeting: nil))
         XCTAssertNil(restored.recordings.first(where: { $0.id == id })?.calendarMeeting)
+        XCTAssertEqual(restored.recordings.first(where: { $0.id == id })?.calendarLinkDeclined, true,
+                       "An unlinked recording is not linked again automatically")
     }
 
     func testPastMeetingRecordingsLinkToCalendarEventsWithoutOverridingThePerson() async throws {
@@ -69,7 +71,7 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
                                                 reads += 1
                                                 XCTAssertEqual(selected, ["work"])
                                                 XCTAssertLessThanOrEqual(from, start.addingTimeInterval(-120))
-                                                XCTAssertGreaterThanOrEqual(to, start.addingTimeInterval(21000))
+                                                XCTAssertGreaterThanOrEqual(to, start.addingTimeInterval(10800))
                                                 return [review, first, second, unrelated]
                                             })
         defer { connection.disconnect() }
@@ -85,6 +87,27 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertEqual(restored.recordings.first { $0.id == double }?.calendarCandidates, [first, second])
         XCTAssertNil(restored.recordings.first { $0.id == double }?.calendarMeeting)
         XCTAssertNil(restored.recordings.first { $0.id == unlinked }?.calendarMeeting)
+
+        let later = UUID()
+        let laterStorage = restored
+        XCTAssertNotNil(laterStorage.beginMeetingRecording(id: later, type: .meeting, createdAt: start.addingTimeInterval(30000)))
+        let laterWav = directory.appendingPathComponent("later.wav")
+        try Data("RIFF....WAVEfmt ".utf8).write(to: laterWav)
+        XCTAssertTrue(laterStorage.finalizeInProgressRecording(id: later, audioURL: laterWav, duration: 600,
+                      endedAt: start.addingTimeInterval(30600), status: .unprocessed, forceSave: true))
+        var ranges: [(Date, Date)] = []
+        let rangeConnection = CalendarConnection(defaults: UserDefaults(suiteName: "CalendarLinkerRange-\(UUID())")!, authorize: { true },
+                                                 read: { _ in ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: []) },
+                                                 readRange: { _, from, to in ranges.append((from, to)); return [] })
+        defer { rangeConnection.disconnect() }
+        await rangeConnection.connect()
+        let laterLinker = CalendarRecordingLinker()
+        await laterLinker.run(storage: laterStorage, connection: rangeConnection)
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertGreaterThan(try XCTUnwrap(ranges.first).0, start.addingTimeInterval(20000),
+                           "Only the new recording's time is read, not back to the oldest recording")
+        await laterLinker.run(storage: laterStorage, connection: rangeConnection)
+        XCTAssertEqual(ranges.count, 1, "A recording that matched nothing is not read again")
 
         XCTAssertTrue(restored.chooseCalendarMeeting(id: double, meeting: second))
         XCTAssertEqual(restored.recordings.first { $0.id == double }?.calendarMeeting, second)

@@ -45,6 +45,8 @@ final class ActionMenuItem: NSMenuItem {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
     private let builder: () -> StatusMenuBuilder
+    /// Made once: KeyboardShortcuts observes each item it shows a shortcut on.
+    private lazy var recordingItems = builder().recordingItems()
 
     init(appState: AppState, builder: @escaping () -> StatusMenuBuilder) {
         self.builder = builder
@@ -63,11 +65,14 @@ final class ActionMenuItem: NSMenuItem {
             label.centerYAnchor.constraint(equalTo: button.centerYAnchor),
         ])
         button.setAccessibilityLabel("Diduny")
+        menuNeedsUpdate(menu)
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        builder().items().forEach(menu.addItem)
+        var menuBuilder = builder()
+        menuBuilder.reusedRecordingItems = recordingItems
+        menuBuilder.items().forEach(menu.addItem)
     }
 }
 
@@ -110,6 +115,8 @@ private struct StatusItemLabel: View {
     let actions: Actions
     var now = Date()
     var processingMode = MenuBarProcessingModeSelection()
+    /// Recording items made earlier; their titles and availability are refreshed instead of recreated.
+    var reusedRecordingItems: [NSMenuItem]?
 
     func items() -> [NSMenuItem] {
         var items = calendarItems()
@@ -257,19 +264,26 @@ private struct StatusItemLabel: View {
     // MARK: Recording
 
     func recordingItems() -> [NSMenuItem] {
-        [
-            shortcutItem(recordingTitle, .toggleRecording, enabled: !isBlocked(appState.recordingState, by: [appState.translationRecordingState, appState.meetingRecordingState, appState.meetingTranslationRecordingState]), action: actions.toggleRecording),
-            shortcutItem(translationTitle, .toggleTranslation, enabled: !isBlocked(appState.translationRecordingState, by: [appState.recordingState, appState.meetingRecordingState, appState.meetingTranslationRecordingState]), action: actions.toggleTranslation),
-            shortcutItem(meetingTitle, .toggleMeetingRecording, enabled: !isBlocked(appState.meetingRecordingState, by: [appState.recordingState, appState.translationRecordingState, appState.meetingTranslationRecordingState]), action: actions.toggleMeeting),
-            shortcutItem(meetingTranslationTitle, .toggleMeetingTranslation, enabled: !isBlocked(appState.meetingTranslationRecordingState, by: [appState.recordingState, appState.translationRecordingState, appState.meetingRecordingState]), action: actions.toggleMeetingTranslation),
+        let states = [appState.recordingState, appState.translationRecordingState,
+                      appState.meetingRecordingState, appState.meetingTranslationRecordingState]
+        let specs: [(title: String, shortcut: KeyboardShortcuts.Name, action: () -> Void)] = [
+            (recordingTitle, .toggleRecording, actions.toggleRecording),
+            (translationTitle, .toggleTranslation, actions.toggleTranslation),
+            (meetingTitle, .toggleMeetingRecording, actions.toggleMeeting),
+            (meetingTranslationTitle, .toggleMeetingTranslation, actions.toggleMeetingTranslation),
         ]
-    }
-
-    private func shortcutItem(_ title: String, _ shortcut: KeyboardShortcuts.Name, enabled: Bool, action: @escaping () -> Void) -> NSMenuItem {
-        let item = ActionMenuItem(title, handler: action)
-        item.setShortcut(for: shortcut)
-        item.isEnabled = enabled
-        return item
+        let items = reusedRecordingItems ?? specs.map { spec in
+            let item = ActionMenuItem(spec.title, handler: spec.action)
+            item.setShortcut(for: spec.shortcut)
+            return item
+        }
+        for (index, item) in items.enumerated() where index < specs.count {
+            item.title = specs[index].title
+            var others = states
+            others.remove(at: index)
+            item.isEnabled = !isBlocked(states[index], by: others)
+        }
+        return items
     }
 
     /// An idle mode is unavailable while another mode records or processes.

@@ -695,6 +695,9 @@ final class RecordingsLibraryStorage {
         let previous = recordings[index]
         guard meeting == nil || previous.calendarMeeting == nil || previous.calendarMeeting?.reminderKey == meeting?.reminderKey else { return false }
         recordings[index].calendarMeeting = meeting
+        recordings[index].calendarCandidates = nil
+        // Unlinking means "no calendar event": automatic linking must not undo it.
+        recordings[index].calendarLinkDeclined = meeting == nil ? true : nil
         guard saveMetadataSynchronously() else { recordings[index] = previous; return false }
         return true
     }

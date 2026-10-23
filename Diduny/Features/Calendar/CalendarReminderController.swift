@@ -31,6 +31,17 @@ private final class CalendarReminderWindow: NSPanel {
     }
 
     func join(_ meeting: CalendarMeeting, record: Bool, connection: CalendarConnection) {
+        guard connection.hasFreshSnapshot else {
+            // The panel may show a meeting from an older read: refresh first, keep the panel if it fails.
+            Task {
+                if let message = await connection.joinFromMenu(meeting, record: record) {
+                    DictationOverlayController.shared.showInfo(message: message, duration: 5)
+                } else {
+                    dismiss()
+                }
+            }
+            return
+        }
         dismiss()
         connection.join(meeting, record: record)
     }
@@ -55,6 +66,7 @@ private final class CalendarReminderWindow: NSPanel {
         panel.contentView = NSHostingView(rootView: CalendarReminderView(
             meetings: merged, connection: connection, fullScreen: fullScreen,
             dismiss: { [weak self] in self?.dismissByUser(connection: connection) },
+            close: { [weak self] in self?.dismiss() },
             snooze: { [weak self] minutes in self?.snooze(minutes: minutes, connection: connection) },
             join: { [weak self] meeting, record in self?.join(meeting, record: record, connection: connection) }))
         if fullScreen {
@@ -109,7 +121,10 @@ struct CalendarReminderView: View {
     let meetings: [CalendarMeeting]
     let connection: CalendarConnection
     let fullScreen: Bool
+    /// Dismissed by the person: not offered again for this occurrence.
     let dismiss: () -> Void
+    /// Closed because the meetings ended or changed: no acknowledgement.
+    let close: () -> Void
     let snooze: (Int) -> Void
     let join: (CalendarMeeting, Bool) -> Void
 
@@ -143,11 +158,13 @@ struct CalendarReminderView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.background)
-            .onChange(of: running.isEmpty) { _, ended in if ended { dismiss() } }
+            .onChange(of: running.isEmpty) { _, ended in if ended { close() } }
         }
         .tint(Color("BrandAccentDeep"))
         .onChange(of: connection.currentMeetings.map(\.reminderKey)) { _, keys in
-            if !meetings.contains(where: { keys.contains($0.reminderKey) }) { dismiss() }
+            // Only a fresh read can say the meetings were moved or removed; a failed read leaves keys empty.
+            guard connection.hasFreshSnapshot else { return }
+            if !meetings.contains(where: { keys.contains($0.reminderKey) }) { close() }
         }
     }
 

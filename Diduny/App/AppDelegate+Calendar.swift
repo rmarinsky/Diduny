@@ -40,7 +40,9 @@ extension AppDelegate {
     func offerStopIfLinkedMeetingEnded(now: Date = Date()) {
         guard appState.meetingRecordingState == .recording else { return }
         let recordingID = meetingRecorderService.currentRecordingId
-        let linked = recordingID.flatMap { id in RecordingsLibraryStorage.shared.recordings.first(where: { $0.id == id })?.calendarMeeting }
+        let stored = recordingID.flatMap { id in RecordingsLibraryStorage.shared.recordings.first(where: { $0.id == id })?.calendarMeeting }
+        // A meeting extended or moved in Calendar after linking ends when Calendar now says.
+        let linked = stored.map { stored in CalendarConnection.shared.meetings.first(where: { $0.id == stored.id }) ?? stored }
         guard CalendarMeeting.stopPromptDue(meeting: linked, recordingID: recordingID, offered: meetingEndPromptsOffered, now: now),
               let id = recordingID, let meeting = linked else { return }
         meetingEndPromptsOffered.insert(id)
@@ -111,41 +113,57 @@ extension AppDelegate {
 }
 
 /// Links meeting recordings, including ones made before the calendar was connected, to the
-/// calendar events they overlap. Runs after calendar reads, but only when the set of unlinked
-/// recordings or selected calendars changed.
+/// calendar events they overlap. Runs after calendar reads; each recording is tried once per
+/// calendar selection, reading only the time around it.
 @MainActor final class CalendarRecordingLinker {
-    private var signature = ""
+    private var attempted = Set<UUID>()
+    private var selection = ""
     private var running = false
 
     func run(storage: RecordingsLibraryStorage, connection: CalendarConnection) async {
         guard !running, connection.configuration.connected, connection.configuration.detailsConsent,
               !connection.configuration.selected.isEmpty else { return }
-        let pending = Self.pending(in: storage)
-        guard !pending.isEmpty, Self.signature(pending, connection) != signature,
-              let from = pending.map({ $0.start }).min(), let to = pending.map({ $0.end }).max() else { return }
+        let key = connection.configuration.selected.sorted().joined(separator: ",")
+        if key != selection { attempted = []; selection = key }
+        let pending = Self.pending(in: storage).filter { !attempted.contains($0.id) }
+        guard !pending.isEmpty else { return }
         running = true
         defer { running = false }
-        guard let events = try? await connection.readMeetings(from: from.addingTimeInterval(-86400), to: to.addingTimeInterval(86400)) else { return }
+        var events: [CalendarMeeting] = []
+        for window in Self.windows(pending) {
+            guard let found = try? await connection.readMeetings(from: window.start.addingTimeInterval(-3600),
+                                                                 to: window.end.addingTimeInterval(3600)) else { return }
+            events += found
+        }
         var matches: [UUID: CalendarRecordingMatch] = [:]
         for recording in pending {
             matches[recording.id] = CalendarMeeting.match(recordingStart: recording.start, recordingEnd: recording.end, events: events)
         }
-        // Remember what is still unlinked after saving, so unchanged leftovers are not read again.
-        if storage.applyCalendarMatches(matches) { signature = Self.signature(Self.pending(in: storage), connection) }
+        if storage.applyCalendarMatches(matches) { attempted.formUnion(pending.map { $0.id }) }
     }
 
+    /// Unlinked, finished meeting recordings that are not waiting for the person to choose an event.
     private static func pending(in storage: RecordingsLibraryStorage) -> [(id: UUID, start: Date, end: Date)] {
         storage.recordings.compactMap { recording in
             guard recording.type.isMeetingLike, recording.calendarMeeting == nil, recording.calendarLinkDeclined != true,
+                  recording.calendarCandidates?.isEmpty != false,
                   !recording.status.isInProgressCapture, let end = recording.resolvedEndedAt, end > recording.createdAt
             else { return nil }
             return (recording.id, recording.createdAt, end)
         }
     }
 
-    private static func signature(_ pending: [(id: UUID, start: Date, end: Date)], _ connection: CalendarConnection) -> String {
-        connection.configuration.selected.sorted().joined(separator: ",") + "|"
-            + pending.map { $0.id.uuidString }.sorted().joined(separator: ",")
+    /// Recordings less than a day apart share one calendar read.
+    private static func windows(_ recordings: [(id: UUID, start: Date, end: Date)]) -> [(start: Date, end: Date)] {
+        var windows: [(start: Date, end: Date)] = []
+        for recording in recordings.sorted(by: { $0.start < $1.start }) {
+            if let last = windows.last, recording.start.timeIntervalSince(last.end) < 86400 {
+                windows[windows.count - 1].end = max(last.end, recording.end)
+            } else {
+                windows.append((recording.start, recording.end))
+            }
+        }
+        return windows
     }
 }
 
@@ -157,6 +175,7 @@ struct JoinNextMeetingIntent: AppIntent {
 
     @MainActor func perform() async throws -> some IntentResult & ProvidesDialog {
         let connection = CalendarConnection.shared
+        if connection.currentMeetings.isEmpty { await connection.refresh() } // Shortcuts may have just launched Diduny.
         guard let meeting = connection.currentMeetings.first(where: {
             $0.meetingURL != nil && $0.start <= Date().addingTimeInterval(3600)
         }) else {
