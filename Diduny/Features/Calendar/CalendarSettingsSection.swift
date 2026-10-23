@@ -7,7 +7,7 @@ struct CalendarSettingsSection: View {
     @State private var approved = false
     @State private var showBrowser = false
     @State private var showCalendars = false
-    @State private var showUpcoming = false
+    @State private var browsers = InstalledBrowser.all()
 
     init(connection: CalendarConnection = .shared) {
         _connection = State(initialValue: connection)
@@ -74,52 +74,50 @@ struct CalendarSettingsSection: View {
             }.padding(28).frame(width: 540)
         }
         if connection.configuration.connected {
-            Section("Calendar reminders") {
+            Section("Meeting reminders") {
+                Picker("When a meeting starts", selection: preference(\.reminderStyle)) {
+                    Text("Full screen").tag(CalendarConfiguration.ReminderStyle.fullScreen)
+                    Text("Small window").tag(CalendarConfiguration.ReminderStyle.window)
+                    Text("Off").tag(CalendarConfiguration.ReminderStyle.off)
+                }
+                Picker("Remind me", selection: preference(\.reminderMinutes)) {
+                    Text("At start time").tag(0)
+                    Text("1 minute before").tag(1)
+                    Text("5 minutes before").tag(5)
+                    Text("15 minutes before").tag(15)
+                    Text("1 hour before").tag(60)
+                }
+                .disabled(connection.configuration.reminderStyle == .off)
+                Toggle("Show again while the meeting is running", isOn: preference(\.repeatDuringMeeting))
+                    .disabled(connection.configuration.reminderStyle == .off)
+                Text("Until you join or dismiss it, including after the Mac wakes or is unlocked. Full-screen reminders can always be dismissed with Escape.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Joining") {
+                Picker("Open meeting links in", selection: preference(\.browserBundleID)) {
+                    Text("Default browser").tag(String?.none)
+                    ForEach(browsers) { browser in
+                        Text(verbatim: browser.name).tag(String?.some(browser.id))
+                    }
+                }
+                Toggle("Open Zoom and Teams in their apps", isOn: preference(\.openInApps))
+                Toggle("Record when I choose Join", isOn: preference(\.recordOnJoin))
+                Toggle("Transcribe calendar recordings locally", isOn: preference(\.localRecording))
+                Text("Local mode saves audio if no model is ready; it never silently uploads it. To keep reminders running after login, use Launch at Login in General.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Menu bar") {
                 Picker("Show next meeting in menu bar", selection: preference(\.displayMinutes)) {
                     Text("15 minutes before").tag(15)
                     Text("1 hour before").tag(60)
                     Text("All day").tag(1440)
                 }
-                Picker("Remind me", selection: preference(\.reminderMinutes)) {
-                    Text("At start time").tag(0)
-                    Text("5 minutes before").tag(5)
-                    Text("15 minutes before").tag(15)
-                    Text("1 hour before").tag(60)
-                }
-                Toggle("Show a reminder pop-up", isOn: preference(\.popup))
-                Toggle("Show a full-screen reminder", isOn: preference(\.fullScreen))
-                Toggle("Record when I choose Join", isOn: preference(\.recordOnJoin))
-                Toggle("Transcribe calendar recordings locally", isOn: preference(\.localRecording))
-                Text("Full-screen reminders can always be dismissed with Escape. Local mode saves audio if no model is ready; it never silently uploads it. To keep reminders running after login, use Launch at Login in General.")
+                Toggle("Show tomorrow's meetings", isOn: preference(\.showTomorrow))
+                Toggle("Show meetings without a link", isOn: preference(\.showWithoutLink))
+                Toggle("Hide meeting names", isOn: preference(\.hideNames))
+                Text("Hides titles, people and agendas in the menu bar and reminders, for example while sharing your screen.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section {
-                DisclosureGroup("Upcoming meetings", isExpanded: $showUpcoming) {
-                    if connection.currentMeetings.isEmpty {
-                        Text("No upcoming timed events in the selected calendars.").foregroundStyle(.secondary)
-                    }
-                    ForEach(connection.currentMeetings.prefix(3)) { meeting in
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(meeting.title).lineLimit(1)
-                                Text(meeting.start.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button(meeting.meetingURL == nil ? "Record meeting" : "Join") {
-                                connection.join(meeting, record: meeting.meetingURL == nil || connection.configuration.recordOnJoin)
-                            }
-                            .buttonStyle(.link)
-                            .help(meeting.meetingURL?.absoluteString ?? meeting.title)
-                            .accessibilityLabel(Text("\(meeting.meetingURL == nil ? String(localized: "Record meeting") : String(localized: "Join")): \(meeting.title)"))
-                            .accessibilityHint(Text(meeting.meetingURL?.host ?? ""))
-                        }.padding(.vertical, 4)
-                    }
-                    Text("The next three meetings are shown here. More meetings are available in the menu bar.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-
         }
     }
 
@@ -340,5 +338,22 @@ struct CalendarMenuLabel: View {
            event.start.timeIntervalSince(connection.menuClock) <= Double(connection.configuration.displayMinutes * 60) {
             Text(String(event.title.prefix(32)) + " · " + (event.start <= connection.menuClock ? String(localized: "Now") : "\(Int(ceil(event.start.timeIntervalSince(connection.menuClock) / 60)))m"))
         }
+    }
+}
+
+/// Apps that open web links, for "Open meeting links in".
+struct InstalledBrowser: Identifiable, Equatable {
+    let id: String
+    let name: String
+
+    static func all() -> [InstalledBrowser] {
+        guard let probe = URL(string: "https://example.com") else { return [] }
+        var seen = Set<String>()
+        return NSWorkspace.shared.urlsForApplications(toOpen: probe).compactMap { url -> InstalledBrowser? in
+            guard let id = Bundle(url: url)?.bundleIdentifier, seen.insert(id).inserted else { return nil }
+            return InstalledBrowser(id: id, name: FileManager.default.displayName(atPath: url.path)
+                .replacingOccurrences(of: ".app", with: ""))
+        }
+        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 }

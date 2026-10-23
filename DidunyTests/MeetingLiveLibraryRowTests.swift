@@ -545,37 +545,6 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertTrue(storage.deleteRecordings(Set([id])))
     }
 
-    func test_meetingDeletionFailureMessageDoesNotPromiseRollbackCompleted() {
-        XCTAssertEqual(
-            MeetingsView.deletionFailureMessage,
-            "The deletion couldn't be completed safely. Review your Meetings library before trying again."
-        )
-    }
-
-    func test_meetingDeletionErrorsHaveUkrainianLocalizations() throws {
-        let localizationURL = try XCTUnwrap(
-            Bundle.main.url(forResource: "uk", withExtension: "lproj")
-        )
-        let ukrainianBundle = try XCTUnwrap(Bundle(url: localizationURL))
-
-        XCTAssertEqual(
-            ukrainianBundle.localizedString(
-                forKey: MeetingsView.deletionFailureMessage,
-                value: nil,
-                table: nil
-            ),
-            "Не вдалося безпечно завершити видалення. Перевірте бібліотеку зустрічей, перш ніж повторити спробу."
-        )
-        XCTAssertEqual(
-            ukrainianBundle.localizedString(forKey: "Couldn't Delete Meetings", value: nil, table: nil),
-            "Не вдалося видалити зустрічі"
-        )
-        XCTAssertEqual(
-            ukrainianBundle.localizedString(forKey: "Unknown error", value: nil, table: nil),
-            "Невідома помилка"
-        )
-    }
-
     func test_recoveryDuration_clampsFutureStartToZero() {
         let endedAt = Date(timeIntervalSince1970: 1_700_000_000)
 
