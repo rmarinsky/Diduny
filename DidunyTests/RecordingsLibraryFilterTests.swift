@@ -106,6 +106,44 @@ final class RecordingsLibraryFilterTests: XCTestCase {
         XCTAssertNil(selection.backDestination)
     }
 
+    func test_meetingSearchMatchesPeopleEmailsAgendaAndWordsSaid() {
+        var meeting = makeRecording(type: .meeting, remoteSource: nil)
+        meeting.transcriptionText = "we agreed to ship the pilot on Friday"
+        var event = CalendarMeeting(id: "e", calendarID: "work", title: "Neovolta: BA AI Automation",
+                                    start: Date(), end: Date().addingTimeInterval(1800))
+        event.calendarTitle = "Work"
+        event.notes = "Scope the automation pilot"
+        event.location = "Room 4"
+        event.attendees = [CalendarAttendee(name: "Olena Kovalenko", email: "olena.k@neovolta.com", response: .accepted)]
+        meeting.calendarMeeting = event
+        for query in ["olena", "KOVALENKO", "olena.k@neovolta", "neovolta: ba", "automation pilot", "room 4", "ship the pilot"] {
+            XCTAssertTrue(meeting.matchesSearch(query), query)
+        }
+        XCTAssertFalse(meeting.matchesSearch("taras"))
+        XCTAssertTrue(meeting.matchesSearch(""))
+    }
+
+    func test_calendarFilterListsCalendarsOfLinkedRecordingsAndNarrowsResults() {
+        let calendar = { (id: String, title: String) -> Recording in
+            var recording = self.makeRecording(type: .meeting, remoteSource: nil)
+            var event = CalendarMeeting(id: id + "-event", calendarID: id, title: title, start: Date(), end: Date().addingTimeInterval(600))
+            event.calendarTitle = title
+            event.calendarColorRGB = 0x112233
+            recording.calendarMeeting = event
+            return recording
+        }
+        let work = calendar("work", "Work"), training = calendar("training", "Training"), work2 = calendar("work", "Work")
+        let unlinked = makeRecording(type: .meeting, remoteSource: nil)
+        let options = Recording.calendarFilterOptions([work, training, unlinked, work2])
+        XCTAssertEqual(options.map(\.id), ["training", "work"], "Sorted by name, one per calendar")
+        XCTAssertEqual(options.first?.colorRGB, 0x112233)
+        XCTAssertTrue(work.matchesCalendars([]), "No calendar chosen shows everything")
+        XCTAssertTrue(unlinked.matchesCalendars([]))
+        XCTAssertTrue(work.matchesCalendars(["work"]))
+        XCTAssertFalse(training.matchesCalendars(["work"]))
+        XCTAssertFalse(unlinked.matchesCalendars(["work"]))
+    }
+
     private func makeRecording(
         type: Recording.RecordingType = .fileTranscription,
         remoteSource: RemoteMediaSourceMetadata?

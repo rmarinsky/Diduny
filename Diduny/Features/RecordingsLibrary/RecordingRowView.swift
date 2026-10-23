@@ -70,6 +70,9 @@ struct RecordingRowView: View {
                         .frame(width: 14, height: 14)
                 }
             }
+            if let meeting = recording.calendarMeeting {
+                calendarLine(meeting)
+            }
             Text(previewText)
                 .font(.system(size: 12))
                 .foregroundColor(previewColor)
@@ -166,6 +169,19 @@ struct RecordingRowView: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(Color.green.opacity(0.12), in: Capsule())
+    }
+
+    /// Calendar colour, calendar name and the people of the linked meeting.
+    private func calendarLine(_ meeting: CalendarMeeting) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(meeting.calendarColorRGB.map { Color(rgb: $0) } ?? Color.secondary)
+                .frame(width: 7, height: 7).accessibilityHidden(true)
+            Text(verbatim: [meeting.calendarTitle, meeting.attendees.map { CalendarMeeting.attendeeSummary($0) }]
+                .compactMap { $0 }.joined(separator: " · "))
+                .lineLimit(1)
+        }
+        .font(.system(size: 11))
+        .foregroundColor(.secondary)
     }
 
     private var actionButtons: some View {
