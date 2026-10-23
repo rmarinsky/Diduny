@@ -100,7 +100,9 @@ struct RecordingDetailView: View {
                 CalendarMeetingDetails(meeting: meeting, now: nil)
                 HStack {
                     if let url = meeting.meetingURL, CalendarMeeting.isJoinURL(url) {
-                        Button("Open meeting link") { _ = AppDelegate.openMeetingLink(url) }
+                        Button("Open meeting link") {
+                            _ = AppDelegate.openMeetingLink(url, configuration: CalendarConnection.shared.configuration)
+                        }
                     }
                     Button("Unlink calendar event") {
                         if !storage.chooseCalendarMeeting(id: currentRecording.id, meeting: nil) {
