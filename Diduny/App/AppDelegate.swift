@@ -179,6 +179,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var calendarLockObservers: [NSObjectProtocol] = []
     let calendarRecordingLinker = CalendarRecordingLinker()
     var statusMenuController: StatusMenuController?
+    var meetingEndPromptsOffered = Set<UUID>()
+    /// The running app's delegate. NSApp.delegate is SwiftUI's adaptor, not this class.
+    static weak var current: AppDelegate?
     private var powerOffObserver: NSObjectProtocol?
     lazy var realtimeTranscriptionService = CloudRealtimeService()
     var localVoiceStreamingService: LocalWhisperStreamingService?
@@ -206,6 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_: Notification) {
+        Self.current = self
         let launch = AppLaunchTracker.shared.begin()
         // Sudden termination can end the process at logout/shutdown without
         // applicationWillTerminate; those exits are clean, not crashes.

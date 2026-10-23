@@ -323,4 +323,16 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertEqual(CalendarMeeting.match(recordingStart: at(12, 0), recordingEnd: at(12, 30), events: [standup, sync]), .none)
         XCTAssertEqual(CalendarMeeting.match(recordingStart: at(10, 0), recordingEnd: at(10, 0), events: [standup]), .none)
     }
+
+    func testStopIsOfferedOnceAMinuteAfterTheLinkedMeetingEnds() {
+        let end = Date(timeIntervalSince1970: 1_800_000_000)
+        let meeting = CalendarMeeting(id: "m", calendarID: "work", title: "Review", start: end.addingTimeInterval(-1800), end: end)
+        let id = UUID()
+        XCTAssertFalse(CalendarMeeting.stopPromptDue(meeting: meeting, recordingID: id, offered: [], now: end.addingTimeInterval(30)))
+        XCTAssertTrue(CalendarMeeting.stopPromptDue(meeting: meeting, recordingID: id, offered: [], now: end.addingTimeInterval(60)))
+        XCTAssertFalse(CalendarMeeting.stopPromptDue(meeting: meeting, recordingID: id, offered: [id], now: end.addingTimeInterval(600)))
+        XCTAssertFalse(CalendarMeeting.stopPromptDue(meeting: nil, recordingID: id, offered: [], now: end.addingTimeInterval(600)),
+                       "Recordings without a calendar event have no end to compare")
+        XCTAssertFalse(CalendarMeeting.stopPromptDue(meeting: meeting, recordingID: nil, offered: [], now: end.addingTimeInterval(600)))
+    }
 }

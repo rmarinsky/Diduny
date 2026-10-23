@@ -75,6 +75,29 @@ private final class CalendarReminderWindow: NSPanel {
         panel.orderFrontRegardless()
     }
 
+    private var endedWindow: NSWindow?
+
+    /// A small floating prompt: the meeting being recorded has ended.
+    func showMeetingEnded(_ meeting: CalendarMeeting, hideNames: Bool, stop: @escaping () -> Void) {
+        endedWindow?.close()
+        let panel = CalendarReminderWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 150),
+                                           styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.title = String(localized: "Meeting ended")
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        let close: () -> Void = { [weak self] in self?.endedWindow?.close(); self?.endedWindow = nil }
+        panel.contentView = NSHostingView(rootView: MeetingEndedView(
+            title: hideNames ? String(localized: "Meeting") : meeting.title,
+            stop: { close(); stop() }, keep: close))
+        if let screen = Self.activeScreen() {
+            panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.maxX - 420, y: screen.visibleFrame.maxY - 170))
+        }
+        endedWindow = panel
+        panel.orderFrontRegardless()
+    }
+
     /// The display the person is working on: the one under the pointer.
     private static func activeScreen() -> NSScreen? {
         let mouse = NSEvent.mouseLocation
@@ -173,6 +196,27 @@ struct CalendarReminderView: View {
             Button("Dismiss", action: dismiss).keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, fullScreen ? 48 : 20).padding(.vertical, 14)
+    }
+}
+
+private struct MeetingEndedView: View {
+    let title: String
+    let stop: () -> Void
+    let keep: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("\(title) has ended").font(.headline).lineLimit(2)
+            Text("Diduny is still recording this meeting.").foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Keep recording", action: keep).keyboardShortcut(.cancelAction)
+                Button("Stop recording", action: stop).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(18)
+        .frame(width: 400, alignment: .leading)
+        .tint(Color("BrandAccentDeep"))
     }
 }
 

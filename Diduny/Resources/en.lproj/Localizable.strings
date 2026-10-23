@@ -1369,3 +1369,16 @@
 "Open in Calendar" = "Open in Calendar";
 "Current meeting" = "Current meeting";
 "Next meeting" = "Next meeting";
+"Meeting ended" = "Meeting ended";
+"%@ has ended" = "%@ has ended";
+"Diduny is still recording this meeting." = "Diduny is still recording this meeting.";
+"Keep recording" = "Keep recording";
+"Join Next Meeting" = "Join Next Meeting";
+"Opens the link of the meeting that is running or starts within the next hour." = "Opens the link of the meeting that is running or starts within the next hour.";
+"No meeting with a link starts within the next hour." = "No meeting with a link starts within the next hour.";
+"Joining %@." = "Joining %@.";
+"Record Current Meeting" = "Record Current Meeting";
+"Starts a meeting recording linked to the calendar meeting that is running now." = "Starts a meeting recording linked to the calendar meeting that is running now.";
+"Diduny is not ready yet." = "Diduny is not ready yet.";
+"A meeting recording is already running." = "A meeting recording is already running.";
+"Recording started." = "Recording started.";

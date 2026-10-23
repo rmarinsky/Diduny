@@ -1,3 +1,4 @@
+import AppIntents
 import AppKit
 import EventKit
 
@@ -15,6 +16,7 @@ extension AppDelegate {
             guard let self else { return }
             Task { @MainActor in await self.calendarRecordingLinker.run(storage: .shared, connection: .shared) }
         }
+        connection.onTick = { [weak self] in self?.offerStopIfLinkedMeetingEnded() }
         connection.start()
         _ = BrowserCalendarConnection.shared
         calendarStoreObserver = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { _ in
@@ -31,6 +33,21 @@ extension AppDelegate {
             DistributedNotificationCenter.default().addObserver(forName: Notification.Name(name), object: nil, queue: .main) { _ in
                 Task { @MainActor in CalendarConnection.shared.setScreenLocked(locked) }
             }
+        }
+    }
+
+    /// The calendar meeting being recorded has ended: offer to stop instead of recording on silently.
+    func offerStopIfLinkedMeetingEnded(now: Date = Date()) {
+        guard appState.meetingRecordingState == .recording else { return }
+        let recordingID = meetingRecorderService.currentRecordingId
+        let linked = recordingID.flatMap { id in RecordingsLibraryStorage.shared.recordings.first(where: { $0.id == id })?.calendarMeeting }
+        guard CalendarMeeting.stopPromptDue(meeting: linked, recordingID: recordingID, offered: meetingEndPromptsOffered, now: now),
+              let id = recordingID, let meeting = linked else { return }
+        meetingEndPromptsOffered.insert(id)
+        calendarReminderController.showMeetingEnded(meeting, hideNames: CalendarConnection.shared.configuration.hideNames) { [weak self] in
+            guard let self, self.appState.meetingRecordingState == .recording,
+                  self.meetingRecorderService.currentRecordingId == id else { return }
+            self.toggleMeetingRecording()
         }
     }
 
@@ -128,5 +145,42 @@ extension AppDelegate {
     private static func signature(_ pending: [(id: UUID, start: Date, end: Date)], _ connection: CalendarConnection) -> String {
         connection.configuration.selected.sorted().joined(separator: ",") + "|"
             + pending.map { $0.id.uuidString }.sorted().joined(separator: ",")
+    }
+}
+
+// MARK: - Shortcuts actions
+
+struct JoinNextMeetingIntent: AppIntent {
+    static let title: LocalizedStringResource = "Join Next Meeting"
+    static let description = IntentDescription("Opens the link of the meeting that is running or starts within the next hour.")
+
+    @MainActor func perform() async throws -> some IntentResult & ProvidesDialog {
+        let connection = CalendarConnection.shared
+        guard let meeting = connection.currentMeetings.first(where: {
+            $0.meetingURL != nil && $0.start <= Date().addingTimeInterval(3600)
+        }) else {
+            return .result(dialog: "No meeting with a link starts within the next hour.")
+        }
+        if let message = await connection.joinFromMenu(meeting, record: connection.configuration.recordOnJoin) {
+            return .result(dialog: "\(message)")
+        }
+        return .result(dialog: "Joining \(connection.configuration.hideNames ? String(localized: "Meeting") : meeting.title).")
+    }
+}
+
+struct RecordCurrentMeetingIntent: AppIntent {
+    static let title: LocalizedStringResource = "Record Current Meeting"
+    static let description = IntentDescription("Starts a meeting recording linked to the calendar meeting that is running now.")
+
+    @MainActor func perform() async throws -> some IntentResult & ProvidesDialog {
+        guard let delegate = AppDelegate.current else { return .result(dialog: "Diduny is not ready yet.") }
+        guard delegate.appState.meetingRecordingState == .idle else { return .result(dialog: "A meeting recording is already running.") }
+        let connection = CalendarConnection.shared
+        if let meeting = connection.currentMeetings.first(where: { $0.start <= Date().addingTimeInterval(300) }) {
+            delegate.toggleMeetingRecording(provider: connection.configuration.localRecording ? .local : .cloud, calendarMeeting: meeting)
+        } else {
+            delegate.toggleMeetingRecording()
+        }
+        return .result(dialog: "Recording started.")
     }
 }

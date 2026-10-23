@@ -125,6 +125,8 @@ struct CalendarConfiguration: Codable, Equatable {
     private let readRange: (Set<String>, Date, Date) async throws -> [CalendarMeeting]
     /// Called after each successful calendar read.
     var onRefresh: (() -> Void)?
+    /// Called every 15 seconds while the connection runs.
+    var onTick: (() -> Void)?
     private var generation = UUID()
     private var polling: Task<Void, Never>?
     private static let key = "calendar.connection.v1"
@@ -291,6 +293,7 @@ struct CalendarConfiguration: Codable, Equatable {
                     self.menuClock = Date()
                     if self.fetchedAt == nil || Date().timeIntervalSince(self.fetchedAt!) >= 60 { await self.refresh() }
                     self.deliverReminders()
+                    self.onTick?()
                 }
                 do { try await Task.sleep(for: .seconds(15)) } catch { return }
             }

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "headline": "Your day at a glance in the menu bar",
+  "headline": "Meetings, with your calendar",
   "highlights": [
-    "A timeline of today's meetings opens the menu bar menu, with the current time and meeting highlighted in Diduny colours.",
-    "Today and tomorrow are listed with start and end times; ended meetings stay visible for context.",
-    "Each meeting offers Join, Join and record, or Copy meeting link."
+    "A full-screen meeting-now screen at start time shows the agenda, people and place, with Join in your chosen browser or the Zoom or Teams app.",
+    "Meeting recordings link to their calendar events automatically, older ones too, and search finds them by person, email, agenda or words said.",
+    "The menu bar shows today's timeline, the next meeting with a Join button, and each meeting's details."
   ]
 }

@@ -183,6 +183,13 @@ extension CalendarMeeting {
         return URL(string: "ical://ekevent/\(identifier)?method=show&options=more")
     }
 
+    /// While a recording linked to this meeting continues, a minute after the meeting's end
+    /// Diduny offers to stop it, once per recording.
+    static func stopPromptDue(meeting: CalendarMeeting?, recordingID: UUID?, offered: Set<UUID>, now: Date) -> Bool {
+        guard let meeting, let recordingID, !offered.contains(recordingID) else { return false }
+        return now >= meeting.end.addingTimeInterval(60)
+    }
+
     static func copyLink(_ url: URL) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.absoluteString, forType: .string)

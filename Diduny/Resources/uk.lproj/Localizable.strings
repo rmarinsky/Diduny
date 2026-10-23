@@ -1369,3 +1369,16 @@
 "Open in Calendar" = "Відкрити в Календарі";
 "Current meeting" = "Поточна зустріч";
 "Next meeting" = "Наступна зустріч";
+"Meeting ended" = "Зустріч завершилася";
+"%@ has ended" = "«%@» завершилася";
+"Diduny is still recording this meeting." = "Diduny досі записує цю зустріч.";
+"Keep recording" = "Продовжити запис";
+"Join Next Meeting" = "Приєднатися до наступної зустрічі";
+"Opens the link of the meeting that is running or starts within the next hour." = "Відкриває посилання на зустріч, що триває або почнеться протягом години.";
+"No meeting with a link starts within the next hour." = "Протягом години не починається жодна зустріч із посиланням.";
+"Joining %@." = "Приєднання: %@.";
+"Record Current Meeting" = "Записати поточну зустріч";
+"Starts a meeting recording linked to the calendar meeting that is running now." = "Починає запис, пов'язаний із зустріччю з календаря, що триває зараз.";
+"Diduny is not ready yet." = "Diduny ще не готовий.";
+"A meeting recording is already running." = "Запис зустрічі вже триває.";
+"Recording started." = "Запис почався.";
