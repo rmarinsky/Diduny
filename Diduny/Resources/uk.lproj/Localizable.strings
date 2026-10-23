@@ -1338,3 +1338,10 @@
 "Declined" = "Відхилено";
 "Maybe" = "Можливо";
 "No response" = "Без відповіді";
+"Which meeting was this?" = "Яка це була зустріч?";
+"More than one calendar event fits this recording's time." = "Часу цього запису відповідає кілька подій календаря.";
+"None of these" = "Жодна з них";
+"No calendar event" = "Немає події календаря";
+"Find calendar event" = "Знайти подію календаря";
+"The calendar link could not be saved." = "Не вдалося зберегти зв'язок із календарем.";
+"No calendar event overlaps this recording." = "Жодна подія календаря не збігається за часом із цим записом.";

@@ -388,7 +388,9 @@ final class RecordingsLibraryStorage {
             description: previous.description,
             transcriptHistory: previous.transcriptHistory,
             trimRange: previous.trimRange,
-            calendarMeeting: previous.calendarMeeting
+            calendarMeeting: previous.calendarMeeting,
+            calendarCandidates: previous.calendarCandidates,
+            calendarLinkDeclined: previous.calendarLinkDeclined
         )
 
         if forceSave {
@@ -448,7 +450,9 @@ final class RecordingsLibraryStorage {
                 description: previous.description,
                 transcriptHistory: previous.transcriptHistory,
                 trimRange: previous.trimRange,
-            calendarMeeting: previous.calendarMeeting
+            calendarMeeting: previous.calendarMeeting,
+            calendarCandidates: previous.calendarCandidates,
+            calendarLinkDeclined: previous.calendarLinkDeclined
             )
         }
         guard saveMetadataSynchronously() else {
@@ -691,6 +695,57 @@ final class RecordingsLibraryStorage {
         let previous = recordings[index]
         guard meeting == nil || previous.calendarMeeting == nil || previous.calendarMeeting?.reminderKey == meeting?.reminderKey else { return false }
         recordings[index].calendarMeeting = meeting
+        guard saveMetadataSynchronously() else { recordings[index] = previous; return false }
+        return true
+    }
+
+    /// Saves automatic calendar matches. A recording the person linked, unlinked or is still
+    /// recording is left alone.
+    @discardableResult
+    func applyCalendarMatches(_ matches: [UUID: CalendarRecordingMatch]) -> Bool {
+        guard allowsLibraryMutation() else { return false }
+        let previous = recordings
+        var changed = false
+        for (id, match) in matches {
+            guard let index = recordings.firstIndex(where: { $0.id == id }), recordings[index].type.isMeetingLike,
+                  recordings[index].calendarMeeting == nil, recordings[index].calendarLinkDeclined != true else { continue }
+            switch match {
+            case .none:
+                continue
+            case let .linked(meeting):
+                recordings[index].calendarMeeting = meeting
+                recordings[index].calendarCandidates = nil
+            case let .ambiguous(candidates):
+                guard recordings[index].calendarCandidates != candidates else { continue }
+                recordings[index].calendarCandidates = candidates
+            }
+            changed = true
+        }
+        guard changed else { return true }
+        guard saveMetadataSynchronously() else { recordings = previous; return false }
+        return true
+    }
+
+    /// The person's choice: link this event, or (nil) keep the recording without one.
+    @discardableResult
+    func chooseCalendarMeeting(id: UUID, meeting: CalendarMeeting?) -> Bool {
+        guard allowsLibraryMutation(), let index = recordings.firstIndex(where: { $0.id == id }),
+              recordings[index].type.isMeetingLike else { return false }
+        let previous = recordings[index]
+        recordings[index].calendarMeeting = meeting
+        recordings[index].calendarCandidates = nil
+        recordings[index].calendarLinkDeclined = meeting == nil ? true : nil
+        guard saveMetadataSynchronously() else { recordings[index] = previous; return false }
+        return true
+    }
+
+    /// Events found by "Find calendar event" for the person to choose from.
+    @discardableResult
+    func setCalendarCandidates(id: UUID, candidates: [CalendarMeeting]) -> Bool {
+        guard allowsLibraryMutation(), let index = recordings.firstIndex(where: { $0.id == id }),
+              recordings[index].type.isMeetingLike else { return false }
+        let previous = recordings[index]
+        recordings[index].calendarCandidates = candidates.isEmpty ? nil : candidates
         guard saveMetadataSynchronously() else { recordings[index] = previous; return false }
         return true
     }
@@ -1136,7 +1191,9 @@ final class RecordingsLibraryStorage {
                     description: previous.description,
                     transcriptHistory: previous.transcriptHistory,
                     trimRange: previous.trimRange,
-            calendarMeeting: previous.calendarMeeting
+            calendarMeeting: previous.calendarMeeting,
+            calendarCandidates: previous.calendarCandidates,
+            calendarLinkDeclined: previous.calendarLinkDeclined
                 )
                 didReset = true
             default:
@@ -1278,7 +1335,9 @@ final class RecordingsLibraryStorage {
                 description: recording.description,
                 transcriptHistory: recording.transcriptHistory,
                 trimRange: recording.trimRange,
-                calendarMeeting: recording.calendarMeeting
+                calendarMeeting: recording.calendarMeeting,
+                calendarCandidates: recording.calendarCandidates,
+                calendarLinkDeclined: recording.calendarLinkDeclined
             )
             saveMetadata()
 

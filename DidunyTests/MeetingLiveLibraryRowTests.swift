@@ -40,6 +40,57 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertNil(restored.recordings.first(where: { $0.id == id })?.calendarMeeting)
     }
 
+    func testPastMeetingRecordingsLinkToCalendarEventsWithoutOverridingThePerson() async throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func record(_ id: UUID, from: TimeInterval, to: TimeInterval) throws {
+            XCTAssertNotNil(storage.beginMeetingRecording(id: id, type: .meeting, createdAt: start.addingTimeInterval(from)))
+            let wav = directory.appendingPathComponent("\(id).wav")
+            try Data("RIFF....WAVEfmt ".utf8).write(to: wav)
+            XCTAssertTrue(storage.finalizeInProgressRecording(id: id, audioURL: wav, duration: to - from,
+                          endedAt: start.addingTimeInterval(to), status: .unprocessed, forceSave: true))
+        }
+        let single = UUID(), double = UUID(), unlinked = UUID()
+        try record(single, from: -120, to: 1800)
+        try record(double, from: 7200, to: 10800)
+        try record(unlinked, from: 20000, to: 21000)
+        var review = CalendarMeeting(id: "review", calendarID: "work", title: "Design review",
+                                     start: start, end: start.addingTimeInterval(1800))
+        review.attendees = [CalendarAttendee(name: "Olena Kovalenko", email: "olena@example.com", response: .accepted)]
+        review.notes = "Pilot scope"
+        let first = CalendarMeeting(id: "a", calendarID: "work", title: "A", start: start.addingTimeInterval(7200), end: start.addingTimeInterval(9000))
+        let second = CalendarMeeting(id: "b", calendarID: "work", title: "B", start: start.addingTimeInterval(9000), end: start.addingTimeInterval(10800))
+        let unrelated = CalendarMeeting(id: "u", calendarID: "work", title: "U", start: start.addingTimeInterval(20000), end: start.addingTimeInterval(21000))
+        XCTAssertTrue(storage.chooseCalendarMeeting(id: unlinked, meeting: nil), "The person removed this link earlier")
+
+        var reads = 0
+        let connection = CalendarConnection(defaults: UserDefaults(suiteName: "CalendarLinker-\(UUID())")!, authorize: { true },
+                                            read: { _ in ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: []) },
+                                            readRange: { selected, from, to in
+                                                reads += 1
+                                                XCTAssertEqual(selected, ["work"])
+                                                XCTAssertLessThanOrEqual(from, start.addingTimeInterval(-120))
+                                                XCTAssertGreaterThanOrEqual(to, start.addingTimeInterval(21000))
+                                                return [review, first, second, unrelated]
+                                            })
+        defer { connection.disconnect() }
+        await connection.connect()
+        let linker = CalendarRecordingLinker()
+        await linker.run(storage: storage, connection: connection)
+        await linker.run(storage: storage, connection: connection)
+        XCTAssertEqual(reads, 1, "Nothing changed, so the calendar is not read again")
+
+        let restored = RecordingsLibraryStorage(baseDirectory: directory, batchStorage: try TranscriptionBatchStorage(baseDirectory: directory))
+        let linked = try XCTUnwrap(restored.recordings.first { $0.id == single })
+        XCTAssertEqual(linked.calendarMeeting, review, "The meeting details are kept with the recording")
+        XCTAssertEqual(restored.recordings.first { $0.id == double }?.calendarCandidates, [first, second])
+        XCTAssertNil(restored.recordings.first { $0.id == double }?.calendarMeeting)
+        XCTAssertNil(restored.recordings.first { $0.id == unlinked }?.calendarMeeting)
+
+        XCTAssertTrue(restored.chooseCalendarMeeting(id: double, meeting: second))
+        XCTAssertEqual(restored.recordings.first { $0.id == double }?.calendarMeeting, second)
+        XCTAssertNil(restored.recordings.first { $0.id == double }?.calendarCandidates)
+    }
+
     func test_beginMeetingRecording_createsRecordingStatusRowWithoutAudio() throws {
         let id = UUID()
         let started = Date(timeIntervalSince1970: 1_700_000_000)

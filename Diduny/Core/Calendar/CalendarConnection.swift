@@ -122,13 +122,17 @@ struct CalendarConfiguration: Codable, Equatable {
     private let defaults: UserDefaults
     private let authorize: () async throws -> Bool
     private let read: (Set<String>?) async throws -> ScheduledCalendarSnapshot
+    private let readRange: (Set<String>, Date, Date) async throws -> [CalendarMeeting]
+    /// Called after each successful calendar read.
+    var onRefresh: (() -> Void)?
     private var generation = UUID()
     private var polling: Task<Void, Never>?
     private static let key = "calendar.connection.v1"
 
     init(defaults: UserDefaults, authorize: @escaping () async throws -> Bool,
-         read: @escaping (Set<String>?) async throws -> ScheduledCalendarSnapshot) {
-        self.defaults = defaults; self.authorize = authorize; self.read = read
+         read: @escaping (Set<String>?) async throws -> ScheduledCalendarSnapshot,
+         readRange: @escaping (Set<String>, Date, Date) async throws -> [CalendarMeeting] = { _, _, _ in [] }) {
+        self.defaults = defaults; self.authorize = authorize; self.read = read; self.readRange = readRange
         if let data = defaults.data(forKey: Self.key) {
             if let saved = try? JSONDecoder().decode(CalendarConfiguration.self, from: data), saved.version == 1 {
                 configuration = saved
@@ -191,6 +195,7 @@ struct CalendarConfiguration: Codable, Equatable {
             }
             meetings = snapshot.meetings.filter { configuration.selected.contains($0.calendarID) }
             deliverReminders()
+            onRefresh?()
         } catch {
             guard request == generation else { return }
             busy = false; self.error = error.localizedDescription
@@ -207,6 +212,12 @@ struct CalendarConfiguration: Codable, Equatable {
         guard hasFreshSnapshot else { return [] }
         return meetings.filter { configuration.selected.contains($0.calendarID) && $0.canRemind && $0.end > Date() }
             .sorted { $0.start < $1.start }
+    }
+
+    /// Meetings of the selected calendars in any date range, e.g. to link past recordings.
+    func readMeetings(from: Date, to: Date) async throws -> [CalendarMeeting] {
+        guard configuration.connected else { return [] }
+        return try await readRange(configuration.selected, from, to)
     }
 
     /// Unlike `currentMeetings`, keeps ended meetings so the menu can show the whole day.

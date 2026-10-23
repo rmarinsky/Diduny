@@ -177,6 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var calendarStoreObserver: NSObjectProtocol?
     var calendarWakeObserver: NSObjectProtocol?
     var calendarLockObservers: [NSObjectProtocol] = []
+    let calendarRecordingLinker = CalendarRecordingLinker()
     private var powerOffObserver: NSObjectProtocol?
     lazy var realtimeTranscriptionService = CloudRealtimeService()
     var localVoiceStreamingService: LocalWhisperStreamingService?

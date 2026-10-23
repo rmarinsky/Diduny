@@ -303,6 +303,32 @@ extension CalendarMeeting {
     }
 }
 
+enum CalendarRecordingMatch: Equatable {
+    case none
+    case linked(CalendarMeeting)
+    case ambiguous([CalendarMeeting])
+}
+
+extension CalendarMeeting {
+    /// The event a recording belongs to. An event fits when it covers at least half of the recording
+    /// or the recording covers at least half of it; two fits within 20 points of each other are ambiguous.
+    static func match(recordingStart: Date, recordingEnd: Date, events: [CalendarMeeting]) -> CalendarRecordingMatch {
+        let length = recordingEnd.timeIntervalSince(recordingStart)
+        guard length > 0 else { return .none }
+        let scored = events.filter { !$0.allDay && !$0.cancelled && !$0.declined && $0.end > $0.start }
+            .compactMap { event -> (event: CalendarMeeting, score: Double)? in
+                let overlap = min(recordingEnd, event.end).timeIntervalSince(max(recordingStart, event.start))
+                guard overlap > 0 else { return nil }
+                let score = max(overlap / length, overlap / event.end.timeIntervalSince(event.start))
+                return score >= 0.5 ? (event, score) : nil
+            }
+            .sorted { $0.score > $1.score }
+        guard let best = scored.first else { return .none }
+        let close = scored.filter { best.score - $0.score < 0.2 }.map(\.event)
+        return close.count == 1 ? .linked(best.event) : .ambiguous(close.sorted { $0.start < $1.start })
+    }
+}
+
 enum CalendarJoinDecision: Equatable {
     case joinOnly, recordingUnavailable, openFailed
     case startRecording(showLibrary: Bool), linkExisting(showLibrary: Bool), signInRequired(showAccount: Bool)

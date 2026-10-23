@@ -123,6 +123,7 @@ extension CalendarConnection {
     static let shared: CalendarConnection = {
         let source = SystemCalendarSource()
         return CalendarConnection(defaults: .standard, authorize: { try await source.authorize() },
-                                  read: { try await source.read(selected: $0) })
+                                  read: { try await source.read(selected: $0) },
+                                  readRange: { try await source.readMeetings(selected: $0, from: $1, to: $2) })
     }()
 }

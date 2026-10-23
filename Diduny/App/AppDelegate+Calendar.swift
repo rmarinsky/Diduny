@@ -11,6 +11,10 @@ extension AppDelegate {
         connection.onJoin = { [weak self] meeting, record, local in
             self?.joinCalendarMeeting(meeting, record: record, local: local)
         }
+        connection.onRefresh = { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in await self.calendarRecordingLinker.run(storage: .shared, connection: .shared) }
+        }
         connection.start()
         _ = BrowserCalendarConnection.shared
         calendarStoreObserver = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { _ in
@@ -85,5 +89,43 @@ extension AppDelegate {
             toggleMeetingRecording(provider: local ? .local : .cloud, calendarMeeting: meeting)
             if showLibrary { openMainWindow(section: .recordings) }
         }
+    }
+}
+
+/// Links meeting recordings, including ones made before the calendar was connected, to the
+/// calendar events they overlap. Runs after calendar reads, but only when the set of unlinked
+/// recordings or selected calendars changed.
+@MainActor final class CalendarRecordingLinker {
+    private var signature = ""
+    private var running = false
+
+    func run(storage: RecordingsLibraryStorage, connection: CalendarConnection) async {
+        guard !running, connection.configuration.connected, !connection.configuration.selected.isEmpty else { return }
+        let pending = Self.pending(in: storage)
+        guard !pending.isEmpty, Self.signature(pending, connection) != signature,
+              let from = pending.map({ $0.start }).min(), let to = pending.map({ $0.end }).max() else { return }
+        running = true
+        defer { running = false }
+        guard let events = try? await connection.readMeetings(from: from.addingTimeInterval(-86400), to: to.addingTimeInterval(86400)) else { return }
+        var matches: [UUID: CalendarRecordingMatch] = [:]
+        for recording in pending {
+            matches[recording.id] = CalendarMeeting.match(recordingStart: recording.start, recordingEnd: recording.end, events: events)
+        }
+        // Remember what is still unlinked after saving, so unchanged leftovers are not read again.
+        if storage.applyCalendarMatches(matches) { signature = Self.signature(Self.pending(in: storage), connection) }
+    }
+
+    private static func pending(in storage: RecordingsLibraryStorage) -> [(id: UUID, start: Date, end: Date)] {
+        storage.recordings.compactMap { recording in
+            guard recording.type.isMeetingLike, recording.calendarMeeting == nil, recording.calendarLinkDeclined != true,
+                  !recording.status.isInProgressCapture, let end = recording.resolvedEndedAt, end > recording.createdAt
+            else { return nil }
+            return (recording.id, recording.createdAt, end)
+        }
+    }
+
+    private static func signature(_ pending: [(id: UUID, start: Date, end: Date)], _ connection: CalendarConnection) -> String {
+        connection.configuration.selected.sorted().joined(separator: ",") + "|"
+            + pending.map { $0.id.uuidString }.sorted().joined(separator: ",")
     }
 }

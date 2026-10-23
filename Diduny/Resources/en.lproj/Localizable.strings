@@ -1338,3 +1338,10 @@
 "Declined" = "Declined";
 "Maybe" = "Maybe";
 "No response" = "No response";
+"Which meeting was this?" = "Which meeting was this?";
+"More than one calendar event fits this recording's time." = "More than one calendar event fits this recording's time.";
+"None of these" = "None of these";
+"No calendar event" = "No calendar event";
+"Find calendar event" = "Find calendar event";
+"The calendar link could not be saved." = "The calendar link could not be saved.";
+"No calendar event overlaps this recording." = "No calendar event overlaps this recording.";

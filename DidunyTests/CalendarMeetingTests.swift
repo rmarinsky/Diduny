@@ -300,4 +300,27 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertEqual(CalendarMeeting.openTarget(for: zoom, configuration: configuration, appInstalled: { _ in false }),
                        .browser(zoom, bundleID: "com.google.Chrome"), "Without the Zoom app the chosen browser opens the link")
     }
+
+    func testRecordingMatchesTheEventItOverlapsAndAsksWhenTwoFit() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Europe/Kyiv"))
+        let at = { (hour: Int, minute: Int) in
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: hour, minute: minute))!
+        }
+        let event = { (id: String, from: Date, to: Date) in CalendarMeeting(id: id, calendarID: "work", title: id, start: from, end: to) }
+        let standup = event("standup", at(10, 0), at(10, 30))
+        let sync = event("sync", at(10, 30), at(11, 0))
+        let hour = event("hour", at(10, 0), at(11, 0))
+        let short = event("short", at(10, 40), at(10, 50))
+        var holiday = event("holiday", at(0, 0), at(23, 59)); holiday.allDay = true
+        var declined = event("declined", at(9, 58), at(10, 31)); declined.declined = true
+
+        XCTAssertEqual(CalendarMeeting.match(recordingStart: at(9, 58), recordingEnd: at(10, 31), events: [standup, holiday, declined]),
+                       .linked(standup), "Joining early and leaving late still links")
+        XCTAssertEqual(CalendarMeeting.match(recordingStart: at(10, 0), recordingEnd: at(11, 0), events: [sync, standup]),
+                       .ambiguous([standup, sync]), "Two back-to-back meetings in one recording: ask")
+        XCTAssertEqual(CalendarMeeting.match(recordingStart: at(10, 0), recordingEnd: at(10, 45), events: [hour, short]), .linked(hour))
+        XCTAssertEqual(CalendarMeeting.match(recordingStart: at(12, 0), recordingEnd: at(12, 30), events: [standup, sync]), .none)
+        XCTAssertEqual(CalendarMeeting.match(recordingStart: at(10, 0), recordingEnd: at(10, 0), events: [standup]), .none)
+    }
 }

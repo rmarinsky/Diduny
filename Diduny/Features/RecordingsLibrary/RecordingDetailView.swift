@@ -92,6 +92,66 @@ struct RecordingDetailView: View {
         currentRecording.status.isInProgressCapture
     }
 
+    @ViewBuilder private var calendarSection: some View {
+        if let meeting = currentRecording.calendarMeeting {
+            Divider()
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Calendar meeting", systemImage: "calendar").font(.headline)
+                CalendarMeetingDetails(meeting: meeting, now: nil)
+                HStack {
+                    if let url = meeting.meetingURL, CalendarMeeting.isJoinURL(url) {
+                        Button("Open meeting link") { _ = AppDelegate.openMeetingLink(url) }
+                    }
+                    Button("Unlink calendar event") {
+                        if !storage.chooseCalendarMeeting(id: currentRecording.id, meeting: nil) {
+                            operationErrorMessage = String(localized: "The calendar link could not be removed.")
+                        }
+                    }
+                }
+            }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        } else if let candidates = currentRecording.calendarCandidates, !candidates.isEmpty {
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Which meeting was this?", systemImage: "calendar.badge.questionmark").font(.headline)
+                Text("More than one calendar event fits this recording's time.").foregroundStyle(.secondary)
+                ForEach(candidates) { candidate in
+                    Button {
+                        if !storage.chooseCalendarMeeting(id: currentRecording.id, meeting: candidate) {
+                            operationErrorMessage = String(localized: "The calendar link could not be saved.")
+                        }
+                    } label: {
+                        Text(verbatim: candidate.title + " · " + candidate.scheduleLine)
+                    }
+                }
+                Button("None of these") { _ = storage.chooseCalendarMeeting(id: currentRecording.id, meeting: nil) }
+                    .buttonStyle(.link)
+            }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        } else if CalendarConnection.shared.configuration.connected, !currentRecording.status.isInProgressCapture {
+            Divider()
+            HStack {
+                Label("No calendar event", systemImage: "calendar").foregroundStyle(.secondary)
+                Spacer()
+                Button("Find calendar event") { findCalendarEvent() }
+            }.padding(16)
+        }
+    }
+
+    private func findCalendarEvent() {
+        let recording = currentRecording
+        let end = recording.resolvedEndedAt ?? recording.createdAt.addingTimeInterval(recording.durationSeconds)
+        Task {
+            let events = (try? await CalendarConnection.shared.readMeetings(from: recording.createdAt.addingTimeInterval(-3600),
+                                                                            to: end.addingTimeInterval(3600))) ?? []
+            let overlapping = events.filter { !$0.allDay && $0.end > recording.createdAt.addingTimeInterval(-900) && $0.start < end.addingTimeInterval(900) }
+                .sorted { $0.start < $1.start }
+            if overlapping.isEmpty {
+                operationErrorMessage = String(localized: "No calendar event overlaps this recording.")
+            } else {
+                storage.setCalendarCandidates(id: recording.id, candidates: overlapping)
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -104,22 +164,8 @@ struct RecordingDetailView: View {
                     detailsSection
                         .padding(16)
 
-                    if let meeting = currentRecording.calendarMeeting {
-                        Divider()
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Calendar meeting", systemImage: "calendar").font(.headline)
-                            Text(meeting.title)
-                            Text(meeting.start.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary)
-                            if let url = meeting.meetingURL, CalendarMeeting.isJoinURL(url) {
-                                Text(url.absoluteString).font(.caption).textSelection(.enabled)
-                                Button("Open meeting link") { NSWorkspace.shared.open(url) }
-                            }
-                            Button("Unlink calendar event") {
-                                if !storage.linkCalendarMeeting(id: currentRecording.id, meeting: nil) {
-                                    operationErrorMessage = String(localized: "The calendar link could not be removed.")
-                                }
-                            }
-                        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                    if currentRecording.type.isMeetingLike {
+                        calendarSection
                     }
 
                     if currentRecording.remoteSource != nil {

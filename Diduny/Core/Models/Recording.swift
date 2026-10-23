@@ -180,6 +180,10 @@ struct Recording: Identifiable, Codable, Equatable {
     var trimRange: AudioTrimRange? = nil
     /// Optional local calendar context. Older recordings decode without it.
     var calendarMeeting: CalendarMeeting? = nil
+    /// Events that fit equally well when linking automatically; the person picks one.
+    var calendarCandidates: [CalendarMeeting]? = nil
+    /// The person removed the link, so automatic linking leaves this recording alone.
+    var calendarLinkDeclined: Bool? = nil
 
     var effectiveDurationSeconds: TimeInterval {
         guard let trimRange, trimRange.isValid(for: durationSeconds) else { return durationSeconds }
