@@ -229,7 +229,7 @@ struct CalendarMenuItems: View {
                     ForEach(day.meetings) { row($0, now: now) }
                 }
             }
-            Divider()
+            if agenda.isEmpty { Divider() } // A section already ends with a separator.
             Button("Calendar settings…") { MainWindowController.shared.showWindow(section: .meetings) }
             Divider()
         }

@@ -198,6 +198,8 @@ import SwiftUI
         XCTAssertFalse(timeline.isTemplate, "Brand colours must survive menu rendering")
         XCTAssertEqual(timeline.size, CalendarTimelineView.size)
         XCTAssertTrue(menu.items.contains { $0.title.hasPrefix(String(localized: "Today")) })
+        XCTAssertFalse(zip(menu.items, menu.items.dropFirst()).contains { $0.isSeparatorItem && $1.isSeparatorItem },
+                       "Sections already end with a separator")
         let endedRow = try XCTUnwrap(menu.items.first { $0.title.contains(ended.title) })
         XCTAssertFalse(endedRow.isEnabled, "Ended meetings stay visible but cannot be joined")
         XCTAssertNil(endedRow.submenu)
@@ -286,14 +288,15 @@ import SwiftUI
         }
 
         for (appearanceName, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
-            for fullScreen in [false, true] {
-                connection.updatePreferences { $0.fullScreen = fullScreen }
-                let controller = CalendarReminderController()
-                controller.show([meetings[2], meetings[3]], connection: connection)
-                let content = try XCTUnwrap(controller.window?.contentView)
-                content.appearance = NSAppearance(named: appearance)
-                try write(content, "reference-reminder-\(fullScreen ? "fullscreen" : "popup")-\(appearanceName)")
-                controller.dismiss()
+            // Rendered without presenting a window: a screen-saver-level panel would take key
+            // focus from UI tests that click into their own windows while this runs.
+            for (name, size) in [("popup", CGSize(width: 480, height: 400)), ("fullscreen", CGSize(width: 1280, height: 800))] {
+                let reminder = NSHostingView(rootView: CalendarReminderView(
+                    meetings: [meetings[2], meetings[3]], connection: connection,
+                    presentation: CalendarReminderPresentation(), dismiss: {}, join: { _, _ in }))
+                reminder.appearance = NSAppearance(named: appearance)
+                reminder.frame = CGRect(origin: .zero, size: size)
+                try write(reminder, "reference-reminder-\(name)-\(appearanceName)")
             }
             let settings = NSHostingView(rootView: Form { CalendarSettingsSection(connection: connection) }
                 .formStyle(.grouped).frame(width: 640, height: 820))
@@ -304,11 +307,6 @@ import SwiftUI
             audio.appearance = NSAppearance(named: appearance)
             audio.frame = CGRect(x: 0, y: 0, width: 640, height: 900)
             try write(audio, "reference-meeting-audio-settings-\(appearanceName)")
-            let library = NSHostingView(rootView: RecordingsLibraryView().environment(AudioDeviceManager())
-                .frame(width: 900, height: 640))
-            library.appearance = NSAppearance(named: appearance)
-            library.frame = CGRect(x: 0, y: 0, width: 900, height: 640)
-            try write(library, "reference-recordings-library-\(appearanceName)")
         }
 
         if #available(macOS 14.4, *) {

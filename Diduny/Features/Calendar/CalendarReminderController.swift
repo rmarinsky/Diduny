@@ -48,7 +48,7 @@ private final class CalendarReminderWindow: NSPanel {
     }
 }
 
-private struct CalendarReminderView: View {
+struct CalendarReminderView: View {
     let meetings: [CalendarMeeting]
     let connection: CalendarConnection
     @Bindable var presentation: CalendarReminderPresentation
