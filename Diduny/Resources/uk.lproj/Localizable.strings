@@ -1364,3 +1364,8 @@
 "Show meetings without a link" = "Показувати зустрічі без посилання";
 "Hide meeting names" = "Приховати назви зустрічей";
 "Hides titles, people and agendas in the menu bar and reminders, for example while sharing your screen." = "Приховує назви, учасників і порядок денний у рядку меню та нагадуваннях, наприклад під час показу екрана.";
+"Settings…" = "Налаштування…";
+"Input: %@ · %@" = "Введення: %@ · %@";
+"Open in Calendar" = "Відкрити в Календарі";
+"Current meeting" = "Поточна зустріч";
+"Next meeting" = "Наступна зустріч";

@@ -7,7 +7,7 @@ struct CalendarSettingsSection: View {
     @State private var approved = false
     @State private var showBrowser = false
     @State private var showCalendars = false
-    @State private var browsers = InstalledBrowser.all()
+    @State private var browsers = InstalledBrowser.discover()
 
     init(connection: CalendarConnection = .shared) {
         _connection = State(initialValue: connection)
@@ -203,86 +203,13 @@ struct CalendarSettingsSection: View {
     }
 }
 
-struct CalendarMenuItems: View {
-    @State private var connection: CalendarConnection
-
-    init(connection: CalendarConnection = .shared) {
-        _connection = State(initialValue: connection)
-    }
-    var body: some View {
-        if connection.configuration.connected {
-            let now = connection.menuClock
-            let meetings = connection.agendaMeetings
-            if let timeline = CalendarTimelineView.image(CalendarTimeline(meetings: meetings, now: now),
-                                                         appearance: NSApp?.effectiveAppearance) {
-                Button { MainWindowController.shared.showWindow(section: .meetings) } label: {
-                    Image(nsImage: timeline).renderingMode(.original)
-                }
-                .accessibilityLabel(Text("Today's meetings timeline"))
-            }
-            let agenda = CalendarMeeting.agenda(meetings, now: now)
-            if agenda.isEmpty { Text("No upcoming meetings") }
-            ForEach(agenda) { day in
-                Section(dayTitle(day.day, now: now)) {
-                    ForEach(day.meetings) { row($0, now: now) }
-                }
-            }
-            if agenda.isEmpty { Divider() } // A section already ends with a separator.
-            Button("Calendar settings…") { MainWindowController.shared.showWindow(section: .meetings) }
-            Divider()
-        }
-    }
-
-    /// Ended meetings are plain disabled items: AppKit enables any item that has a submenu.
-    @ViewBuilder private func row(_ event: CalendarMeeting, now: Date) -> some View {
-        let title = event.title.count > 40 ? String(event.title.prefix(39)) + "…" : event.title
-        let label = Label {
-            Text(verbatim: event.start.formatted(date: .omitted, time: .shortened) + " – " +
-                event.end.formatted(date: .omitted, time: .shortened) + "   " + title)
-        } icon: {
-            Image(systemName: event.meetingURL == nil ? "person.2.fill" : "video.fill")
-        }
-        if event.phase(at: now) == .past {
-            Button {} label: { label }.disabled(true)
-        } else {
-            Menu {
-                if let url = event.meetingURL {
-                    Button("Join") { join(event, record: connection.configuration.recordOnJoin) }
-                    if !connection.configuration.recordOnJoin {
-                        Button("Join and record") { join(event, record: true) }
-                    }
-                    Divider()
-                    Button("Copy meeting link") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                    }
-                } else {
-                    Button("Record meeting") { join(event, record: true) }
-                }
-            } label: { label }
-        }
-    }
-
-    private func dayTitle(_ day: Date, now: Date) -> String {
-        let date = day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
-        return Calendar.current.isDate(day, inSameDayAs: now)
-            ? String(localized: "Today (\(date))") : String(localized: "Tomorrow (\(date))")
-    }
-
-    private func join(_ event: CalendarMeeting, record: Bool) {
-        Task {
-            if let message = await connection.joinFromMenu(event, record: record) {
-                DictationOverlayController.shared.showInfo(message: message, duration: 5)
-            }
-        }
-    }
-}
-
-/// The menu cannot host custom views, so the timeline reaches it as a rendered image.
+/// Today's meetings around now, at the top of the menu bar menu.
 struct CalendarTimelineView: View {
-    static let size = CGSize(width: 300, height: 44)
+    static let size = CGSize(width: 320, height: 44)
     private static let inset: CGFloat = 12
     let timeline: CalendarTimeline
+    var hideNames = false
+    var onOpen: (() -> Void)? = nil
 
     @MainActor static func image(_ timeline: CalendarTimeline, appearance: NSAppearance?) -> NSImage? {
         let dark = appearance?.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
@@ -309,6 +236,7 @@ struct CalendarTimelineView: View {
                 Capsule().fill(fill(segment.phase))
                     .overlay(Capsule().strokeBorder(stroke(segment.phase), lineWidth: 1.5))
                     .frame(width: width, height: 14)
+                    .help(hideNames ? "" : segment.title)
                     .position(x: x(segment.from) + 1 + width / 2, y: 30)
             }
             Capsule().fill(Color.primary)
@@ -316,6 +244,11 @@ struct CalendarTimelineView: View {
                 .position(x: x(timeline.now), y: 30)
         }
         .frame(width: Self.size.width, height: Self.size.height)
+        .contentShape(Rectangle())
+        .onTapGesture { onOpen?() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Today's meetings timeline"))
+        .accessibilityAddTraits(.isButton)
     }
 
     private func fill(_ phase: CalendarTimeline.Phase) -> Color {
@@ -336,24 +269,43 @@ struct CalendarMenuLabel: View {
     var body: some View {
         if let event = connection.currentMeetings.first,
            event.start.timeIntervalSince(connection.menuClock) <= Double(connection.configuration.displayMinutes * 60) {
-            Text(String(event.title.prefix(32)) + " · " + (event.start <= connection.menuClock ? String(localized: "Now") : "\(Int(ceil(event.start.timeIntervalSince(connection.menuClock) / 60)))m"))
+            let title = connection.configuration.hideNames ? String(localized: "Meeting") : String(event.title.prefix(32))
+            Text(title + " · " + (event.start <= connection.menuClock ? String(localized: "Now") : "\(Int(ceil(event.start.timeIntervalSince(connection.menuClock) / 60)))m"))
         }
     }
 }
 
-/// Apps that open web links, for "Open meeting links in".
-struct InstalledBrowser: Identifiable, Equatable {
-    let id: String
-    let name: String
+/// The current or next meeting with its Join button, under the timeline in the menu bar menu.
+struct NextMeetingCard: View {
+    static let size = CGSize(width: 320, height: 66)
+    let meeting: CalendarMeeting
+    let now: Date
+    let hideNames: Bool
+    let recordOnJoin: Bool
+    let join: (_ record: Bool) -> Void
 
-    static func all() -> [InstalledBrowser] {
-        guard let probe = URL(string: "https://example.com") else { return [] }
-        var seen = Set<String>()
-        return NSWorkspace.shared.urlsForApplications(toOpen: probe).compactMap { url -> InstalledBrowser? in
-            guard let id = Bundle(url: url)?.bundleIdentifier, seen.insert(id).inserted else { return nil }
-            return InstalledBrowser(id: id, name: FileManager.default.displayName(atPath: url.path)
-                .replacingOccurrences(of: ".app", with: ""))
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: (meeting.phase(at: now) == .current ? String(localized: "Current meeting") : String(localized: "Next meeting"))
+                    + " · " + meeting.statusLine(now: now))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color("BrandAccentDeep"))
+                Text(hideNames ? String(localized: "Meeting") : meeting.title)
+                    .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text(meeting.scheduleLine).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            if meeting.meetingURL != nil {
+                Button("Join") { join(recordOnJoin) }
+            } else {
+                Button("Record meeting") { join(true) }
+            }
         }
-        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+        .tint(Color("BrandAccentDeep"))
+        .padding(.horizontal, 14)
+        .frame(width: Self.size.width, height: Self.size.height, alignment: .leading)
     }
 }

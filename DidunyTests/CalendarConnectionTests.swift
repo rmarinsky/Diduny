@@ -168,7 +168,6 @@ import SwiftUI
     }
 
     func testNativeUpcomingMenuDispatchesSelectedURLThroughAppDelegateWithoutRecording() async throws {
-        guard #available(macOS 14.4, *) else { throw XCTSkip("NSHostingMenu requires macOS 14.4") }
         let defaults = UserDefaults(suiteName: "CalendarNativeMenu-\(UUID())")!
         let event = CalendarMeeting(id: "menu", calendarID: "work", title: "Synthetic menu meeting",
                                     start: Date(), end: Date().addingTimeInterval(600),
@@ -192,19 +191,18 @@ import SwiftUI
                 return true
             })
         }
-        let menu = NSHostingMenu(rootView: CalendarMenuItems(connection: connection))
-        menu.update()
-        let timeline = try XCTUnwrap(menu.items.first?.image, "The day timeline leads the meetings menu")
-        XCTAssertFalse(timeline.isTemplate, "Brand colours must survive menu rendering")
-        XCTAssertEqual(timeline.size, CalendarTimelineView.size)
+        let menu = NSMenu()
+        Self.builder(connection).items().forEach(menu.addItem)
+        XCTAssertNotNil(menu.items.first?.view as? NSHostingView<CalendarTimelineView>, "The live day timeline leads the menu")
+        XCTAssertNotNil(menu.items.dropFirst().first?.view, "The next-meeting card follows the timeline")
         XCTAssertTrue(menu.items.contains { $0.title.hasPrefix(String(localized: "Today")) })
-        XCTAssertFalse(zip(menu.items, menu.items.dropFirst()).contains { $0.isSeparatorItem && $1.isSeparatorItem },
-                       "Sections already end with a separator")
+        XCTAssertFalse(menu.items.contains { $0.title.hasPrefix(String(localized: "Tomorrow")) })
+        XCTAssertFalse(zip(menu.items, menu.items.dropFirst()).contains { $0.isSeparatorItem && $1.isSeparatorItem })
+        XCTAssertFalse(menu.items.contains { $0.title == String(localized: "Typing Speed Test…") }, "Typing test lives in the window")
         let endedRow = try XCTUnwrap(menu.items.first { $0.title.contains(ended.title) })
         XCTAssertFalse(endedRow.isEnabled, "Ended meetings stay visible but cannot be joined")
         XCTAssertNil(endedRow.submenu)
         let actions = try XCTUnwrap(menu.items.first { $0.title.contains(event.title) }?.submenu)
-        actions.update()
         XCTAssertTrue(actions.items.contains { $0.title == String(localized: "Join and record") })
         let index = try XCTUnwrap(actions.items.firstIndex { $0.title == String(localized: "Join") })
         XCTAssertTrue(actions.items[index].isEnabled)
@@ -213,6 +211,17 @@ import SwiftUI
         failRead = false
         actions.performActionForItem(at: index)
         await fulfillment(of: [opened], timeout: 3)
+
+        connection.updatePreferences { $0.hideNames = true }
+        let hidden = Self.builder(connection).calendarItems()
+        XCTAssertFalse(hidden.contains { $0.title.contains(event.title) }, "Hidden names never reach the menu")
+        XCTAssertTrue(hidden.contains { $0.title.contains(String(localized: "Meeting")) })
+    }
+
+    private static func builder(_ connection: CalendarConnection) -> StatusMenuBuilder {
+        StatusMenuBuilder(appState: AppState(), audioDeviceManager: AudioDeviceManager(), connection: connection, actions: .init(
+            toggleRecording: {}, toggleTranslation: {}, toggleMeeting: {}, toggleMeetingTranslation: {},
+            batchFilesAndURLs: {}, openMainWindow: { _ in }))
     }
 
     /// Writes the menu timeline in light and dark so reviewers can see it without a local build.
@@ -320,29 +329,26 @@ import SwiftUI
             try write(audio, "reference-meeting-audio-settings-\(appearanceName)")
         }
 
-        if #available(macOS 14.4, *) {
-            let menu = NSHostingMenu(rootView: MenuBarContentView(
-                audioDeviceManager: AudioDeviceManager(),
-                onToggleRecording: {}, onToggleTranslationRecording: {}, onToggleMeetingRecording: {},
-                onToggleMeetingTranslationRecording: {}, onBatchFilesAndURLs: {}, onOpenMainWindow: { _ in },
-                onCheckForUpdates: {}
-            ).environment(AppState()))
-            menu.update()
-            func dump(_ menu: NSMenu, _ depth: Int) -> [String] {
-                menu.update()
-                return menu.items.flatMap { item -> [String] in
-                    let line = String(repeating: "  ", count: depth) + (item.isSeparatorItem ? "---" :
-                        "\(item.title.isEmpty ? "[image \(Int(item.image?.size.width ?? 0))x\(Int(item.image?.size.height ?? 0))]" : item.title)"
-                        + (item.isEnabled ? "" : " (disabled)")
-                        + (item.keyEquivalent.isEmpty ? "" : " ⌘\(item.keyEquivalent)"))
-                    return [line] + (item.submenu.map { dump($0, depth + 1) } ?? [])
-                }
+        let menu = NSMenu()
+        Self.builder(connection).items().forEach(menu.addItem)
+        func dump(_ menu: NSMenu, _ depth: Int) -> [String] {
+            menu.items.flatMap { item -> [String] in
+                let title = item.view.map { "[\(type(of: $0)) \(Int($0.frame.width))x\(Int($0.frame.height))]" } ?? item.title
+                let line = String(repeating: "  ", count: depth) + (item.isSeparatorItem ? "---" :
+                    title + (item.isEnabled ? "" : " (disabled)")
+                    + (item.keyEquivalent.isEmpty ? "" : " ⌘\(item.keyEquivalent)"))
+                return [line] + (item.submenu.map { dump($0, depth + 1) } ?? [])
             }
-            let calendarMenu = NSHostingMenu(rootView: CalendarMenuItems(connection: connection))
-            if let outputDirectory {
-                let lines = dump(calendarMenu, 0) + ["=== rest of the menu (calendar not connected in CI) ==="] + dump(menu, 0)
-                try lines.joined(separator: "\n").write(to: outputDirectory.appendingPathComponent("reference-menu-structure.txt"),
-                                                        atomically: true, encoding: .utf8)
+        }
+        if let outputDirectory {
+            try dump(menu, 0).joined(separator: "\n").write(to: outputDirectory.appendingPathComponent("reference-menu-structure.txt"),
+                                                             atomically: true, encoding: .utf8)
+        }
+        for (appearanceName, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+            for (index, name) in [(0, "timeline"), (1, "next-meeting-card")] {
+                let view = try XCTUnwrap(menu.items[index].view)
+                view.appearance = NSAppearance(named: appearance)
+                try write(view, "reference-menu-\(name)-\(appearanceName)")
             }
         }
     }

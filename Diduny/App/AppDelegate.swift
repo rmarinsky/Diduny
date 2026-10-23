@@ -178,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var calendarWakeObserver: NSObjectProtocol?
     var calendarLockObservers: [NSObjectProtocol] = []
     let calendarRecordingLinker = CalendarRecordingLinker()
+    var statusMenuController: StatusMenuController?
     private var powerOffObserver: NSObjectProtocol?
     lazy var realtimeTranscriptionService = CloudRealtimeService()
     var localVoiceStreamingService: LocalWhisperStreamingService?
@@ -250,6 +251,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         MainWindowController.shared.configure(appDelegate: self)
+        statusMenuController = StatusMenuController(appState: appState) { [unowned self] in
+            StatusMenuBuilder(appState: appState, audioDeviceManager: audioDeviceManager, connection: .shared, actions: .init(
+                toggleRecording: { self.toggleRecording() },
+                toggleTranslation: { self.toggleTranslationRecording() },
+                toggleMeeting: { self.toggleMeetingRecording() },
+                toggleMeetingTranslation: { self.toggleMeetingTranslationRecording() },
+                batchFilesAndURLs: { self.batchFilesAndURLs() },
+                openMainWindow: { self.openMainWindow(section: $0) }
+            ))
+        }
         EdgeCommandPanelController.shared.configure(appDelegate: self)
         OnboardingWindowController.shared.configure(appDelegate: self)
 

@@ -177,6 +177,12 @@ extension CalendarMeeting {
             .joined(separator: " · ")
     }
 
+    /// Opens the event in Calendar.
+    var calendarAppURL: URL? {
+        guard let identifier = eventIdentifier?.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return nil }
+        return URL(string: "ical://ekevent/\(identifier)?method=show&options=more")
+    }
+
     static func copyLink(_ url: URL) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.absoluteString, forType: .string)
@@ -266,7 +272,7 @@ struct CalendarAgendaDay: Identifiable, Equatable {
 struct CalendarTimeline: Equatable {
     enum Phase: Equatable { case past, current, upcoming }
     struct Hour: Equatable { let hour: Int; let position: Double }
-    struct Segment: Equatable, Identifiable { let id: String; let from: Double; let to: Double; let phase: Phase }
+    struct Segment: Equatable, Identifiable { let id: String; let from: Double; let to: Double; let phase: Phase; var title = "" }
 
     let hours: [Hour]
     let now: Double
@@ -281,7 +287,7 @@ struct CalendarTimeline: Equatable {
         self.now = position(now)
         segments = meetings.filter { $0.canRemind && $0.end > start && $0.start < start.addingTimeInterval(span) }
             .sorted { $0.start < $1.start }
-            .map { Segment(id: $0.id, from: position($0.start), to: position($0.end), phase: $0.phase(at: now)) }
+            .map { Segment(id: $0.id, from: position($0.start), to: position($0.end), phase: $0.phase(at: now), title: $0.title) }
     }
 }
 

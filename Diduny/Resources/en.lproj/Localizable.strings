@@ -1364,3 +1364,8 @@
 "Show meetings without a link" = "Show meetings without a link";
 "Hide meeting names" = "Hide meeting names";
 "Hides titles, people and agendas in the menu bar and reminders, for example while sharing your screen." = "Hides titles, people and agendas in the menu bar and reminders, for example while sharing your screen.";
+"Settings…" = "Settings…";
+"Input: %@ · %@" = "Input: %@ · %@";
+"Open in Calendar" = "Open in Calendar";
+"Current meeting" = "Current meeting";
+"Next meeting" = "Next meeting";
