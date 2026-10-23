@@ -32,7 +32,7 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
             )
 
             self.run_script("render", str(PAYLOAD), str(markdown))
-            expected = '# Switch output while you speak\n\n- Pick the output from the Mode chip in the live panel during dictation or translation, without stopping the recording.\n- The new output applies to everything you have already said; switch back to Original to paste your own words.\n- Preview the translated text live before you stop.\n'
+            expected = '# Checked before every update\n\n- Each update now passes automated checks of the setup guide and main window on macOS 26 before release.\n- Output switching from the live panel is unchanged; this update only adds release checks.\n'
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
             arguments = (
