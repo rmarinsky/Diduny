@@ -53,7 +53,7 @@ final class ActionMenuItem: NSMenuItem {
         menu.autoenablesItems = false
         statusItem.menu = menu
         guard let button = statusItem.button else { return }
-        let label = NSHostingView(rootView: StatusItemLabel { [weak self] size in
+        let label = PassthroughHostingView(rootView: StatusItemLabel { [weak self] size in
             self?.statusItem.length = max(22, size.width + 8)
         }.environment(appState))
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -69,6 +69,11 @@ final class ActionMenuItem: NSMenuItem {
         menu.removeAllItems()
         builder().items().forEach(menu.addItem)
     }
+}
+
+/// Clicks go to the status bar button underneath, which opens the menu.
+private final class PassthroughHostingView<Content: View>: NSHostingView<Content> {
+    override func hitTest(_: NSPoint) -> NSView? { nil }
 }
 
 /// Recording state icon and the next meeting, shown in the menu bar.

@@ -56,7 +56,7 @@ extension AppDelegate {
         switch CalendarMeeting.openTarget(for: url, configuration: configuration,
                                           appInstalled: { NSWorkspace.shared.urlForApplication(toOpen: $0) != nil }) {
         case let .app(appLink):
-            return NSWorkspace.shared.open(appLink)
+            return NSWorkspace.shared.open(appLink) || NSWorkspace.shared.open(url)
         case let .browser(link, bundleID):
             guard let bundleID, let browser = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
                 return NSWorkspace.shared.open(link)
@@ -118,7 +118,8 @@ extension AppDelegate {
     private var running = false
 
     func run(storage: RecordingsLibraryStorage, connection: CalendarConnection) async {
-        guard !running, connection.configuration.connected, !connection.configuration.selected.isEmpty else { return }
+        guard !running, connection.configuration.connected, connection.configuration.detailsConsent,
+              !connection.configuration.selected.isEmpty else { return }
         let pending = Self.pending(in: storage)
         guard !pending.isEmpty, Self.signature(pending, connection) != signature,
               let from = pending.map({ $0.start }).min(), let to = pending.map({ $0.end }).max() else { return }
@@ -174,13 +175,14 @@ struct RecordCurrentMeetingIntent: AppIntent {
 
     @MainActor func perform() async throws -> some IntentResult & ProvidesDialog {
         guard let delegate = AppDelegate.current else { return .result(dialog: "Diduny is not ready yet.") }
-        guard delegate.appState.meetingRecordingState == .idle else { return .result(dialog: "A meeting recording is already running.") }
+        let state = delegate.appState.meetingRecordingState
+        guard state != .recording, state != .processing else { return .result(dialog: "A meeting recording is already running.") }
         let connection = CalendarConnection.shared
         if let meeting = connection.currentMeetings.first(where: { $0.start <= Date().addingTimeInterval(300) }) {
             delegate.toggleMeetingRecording(provider: connection.configuration.localRecording ? .local : .cloud, calendarMeeting: meeting)
         } else {
             delegate.toggleMeetingRecording()
         }
-        return .result(dialog: "Recording started.")
+        return .result(dialog: "Diduny is starting the meeting recording.")
     }
 }

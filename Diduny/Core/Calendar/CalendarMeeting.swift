@@ -57,9 +57,10 @@ struct CalendarReminderLedger: Codable, Equatable {
         snoozed = try container.decodeIfPresent([String: Date].self, forKey: .snoozed) ?? [:]
     }
 
-    /// Editing the event in Calendar changes the key, so a dismissed meeting is offered again.
+    /// Moving the meeting or changing its link offers a dismissed meeting again; RSVP and note
+    /// edits do not.
     static func acknowledgementKey(_ meeting: CalendarMeeting) -> String {
-        meeting.reminderKey + "|" + (meeting.lastModified.map { String($0.timeIntervalSince1970) } ?? "")
+        meeting.reminderKey + "|" + (meeting.meetingURL?.absoluteString ?? "")
     }
 
     func isAcknowledged(_ meeting: CalendarMeeting) -> Bool { acknowledged[Self.acknowledgementKey(meeting)] != nil }
@@ -91,7 +92,9 @@ struct CalendarReminderLedger: Codable, Equatable {
                 } else {
                     let upcoming = meeting.start >= now.addingTimeInterval(-300) && meeting.start <= lead
                         && delivered[meeting.reminderKey] == nil
+                    // Only real meetings come back while running, not focus or travel blocks.
                     let running = repeatDuringMeeting && meeting.start <= now
+                        && (meeting.meetingURL != nil || !(meeting.attendees ?? []).isEmpty)
                     guard upcoming || running else { return false }
                 }
                 delivered[meeting.reminderKey] = now

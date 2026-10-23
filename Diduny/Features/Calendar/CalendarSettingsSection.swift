@@ -62,7 +62,7 @@ struct CalendarSettingsSection: View {
             VStack(alignment: .leading, spacing: 18) {
                 Label("Connect your calendars", systemImage: "hand.raised").font(.title2.bold())
                 Text("Allow Diduny to read event titles, times, meeting links, descriptions, locations and attendees from calendars on this Mac, including after restart, until you disconnect. Choose the calendars after connecting.")
-                Text("Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When a recording is linked to a meeting, the meeting's title, time, calendar, agenda, location and attendees (names and emails) are saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization.")
+                Text("Calendar events stay in memory. Connection settings and reminder history stay on this Mac. Meeting recordings, including ones made before connecting, are linked to their calendar events automatically; the meeting's title, time, calendar, agenda, location and attendees (names and emails) are then saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization.")
                 Text("macOS requests full calendar access; Diduny only reads calendar data. Recording requires a separate action. Local transcription is the default for calendar recordings.").foregroundStyle(.secondary)
                 Toggle("I am allowed to access these calendars and approve ongoing local reading.", isOn: $approved)
                 HStack {
@@ -72,6 +72,15 @@ struct CalendarSettingsSection: View {
                         .disabled(!approved).keyboardShortcut(.defaultAction)
                 }
             }.padding(28).frame(width: 540)
+        }
+        if connection.configuration.connected, !connection.configuration.detailsConsent {
+            Section {
+                Label("Show agendas and people", systemImage: "person.2.badge.key").font(.headline)
+                Text("Diduny can show each meeting's description, place and attendees in reminders and the menu, keep them (names and emails) with linked recordings on this Mac, and link your earlier meeting recordings to their calendar events automatically. Nothing is sent to a server.")
+                    .foregroundStyle(.secondary)
+                Button("Allow agendas and people") { Task { await connection.allowEventDetails() } }
+                    .buttonStyle(.borderedProminent)
+            }
         }
         if connection.configuration.connected {
             Section("Meeting reminders") {

@@ -201,7 +201,8 @@ final class CalendarMeetingTests: XCTestCase {
     func testRunningMeetingIsShownAgainUntilJoinedOrDismissedAndSnoozeDelaysIt() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         var meeting = CalendarMeeting(id: "m", calendarID: "work", title: "Review",
-                                      start: now.addingTimeInterval(-600), end: now.addingTimeInterval(1200))
+                                      start: now.addingTimeInterval(-600), end: now.addingTimeInterval(1200),
+                                      meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))
         var ledger = CalendarReminderLedger()
         let due = { (ledger: inout CalendarReminderLedger, at: Date) in
             ledger.due([meeting], selected: ["work"], now: at, fetchedAt: at, leadMinutes: 0, repeatDuringMeeting: true).map(\.id)
@@ -225,7 +226,17 @@ final class CalendarMeetingTests: XCTestCase {
         restored = try JSONDecoder().decode(CalendarReminderLedger.self, from: JSONEncoder().encode(ledger))
         XCTAssertEqual(due(&restored, now.addingTimeInterval(90)), [])
         meeting.lastModified = now
-        XCTAssertEqual(due(&ledger, now.addingTimeInterval(90)), ["m"], "Editing the event re-arms it")
+        XCTAssertEqual(due(&ledger, now.addingTimeInterval(90)), [], "An RSVP or note edit does not re-arm a dismissed meeting")
+        meeting.meetingURL = URL(string: "https://meet.google.com/xyz-abcd-efg")
+        XCTAssertEqual(due(&ledger, now.addingTimeInterval(90)), ["m"], "A new link re-arms it")
+
+        var focus = CalendarMeeting(id: "focus", calendarID: "work", title: "Focus time",
+                                    start: now.addingTimeInterval(-600), end: now.addingTimeInterval(3600))
+        var fresh = CalendarReminderLedger()
+        XCTAssertTrue(fresh.due([focus], selected: ["work"], now: now, fetchedAt: now, leadMinutes: 0, repeatDuringMeeting: true).isEmpty,
+                      "Blocks without a link or attendees are not offered again while running")
+        focus.attendees = [CalendarAttendee(name: "Olena", email: "olena@example.com")]
+        XCTAssertEqual(fresh.due([focus], selected: ["work"], now: now, fetchedAt: now, leadMinutes: 0, repeatDuringMeeting: true).map(\.id), ["focus"])
     }
 
     func testSavedCalendarSettingsWithoutNewKeysKeepTheirValues() throws {

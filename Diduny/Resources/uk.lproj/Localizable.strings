@@ -155,7 +155,7 @@
 "CANCEL RECORDING" = "СКАСУВАННЯ ЗАПИСУ";
 "Calendar" = "Календар";
 "Calendar access was not granted. You can change it in System Settings." = "Доступ до календаря не надано. Ви можете змінити це в системних параметрах.";
-"Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When a recording is linked to a meeting, the meeting's title, time, calendar, agenda, location and attendees (names and emails) are saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization." = "Події календаря залишаються в пам'яті. Налаштування підключення та історія нагадувань зберігаються на цьому Mac. Коли запис пов'язано із зустріччю, її назва, час, календар, порядок денний, місце та учасники (імена й адреси email) зберігаються разом із цим локальним записом, залишаються після відключення календарів і видаляються разом із записом. Diduny не надсилає ваш календар на сервер. Ваші облікові записи календарів синхронізуються як зазвичай.";
+"Calendar events stay in memory. Connection settings and reminder history stay on this Mac. Meeting recordings, including ones made before connecting, are linked to their calendar events automatically; the meeting's title, time, calendar, agenda, location and attendees (names and emails) are then saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization." = "Події календаря залишаються в пам'яті. Налаштування підключення та історія нагадувань зберігаються на цьому Mac. Записи зустрічей, зокрема зроблені до підключення, автоматично пов'язуються з подіями календаря; тоді назва, час, календар, порядок денний, місце та учасники зустрічі (імена й адреси email) зберігаються разом із цим локальним записом, залишаються після відключення календарів і видаляються разом із записом. Diduny не надсилає ваш календар на сервер. Ваші облікові записи календарів синхронізуються як зазвичай.";
 "Calendar meeting" = "Зустріч у календарі";
 "Calendar reminders" = "Нагадування про зустрічі";
 "Calendar settings…" = "Налаштування календарів…";
@@ -1382,3 +1382,7 @@
 "Diduny is not ready yet." = "Diduny ще не готовий.";
 "A meeting recording is already running." = "Запис зустрічі вже триває.";
 "Recording started." = "Запис почався.";
+"Show agendas and people" = "Показувати порядок денний і учасників";
+"Diduny can show each meeting's description, place and attendees in reminders and the menu, keep them (names and emails) with linked recordings on this Mac, and link your earlier meeting recordings to their calendar events automatically. Nothing is sent to a server." = "Diduny може показувати опис, місце та учасників кожної зустрічі в нагадуваннях і меню, зберігати їх (імена й адреси email) разом із пов'язаними записами на цьому Mac і автоматично пов'язувати ваші попередні записи зустрічей із подіями календаря. Нічого не надсилається на сервер.";
+"Allow agendas and people" = "Дозволити порядок денний і учасників";
+"Diduny is starting the meeting recording." = "Diduny починає запис зустрічі.";

@@ -305,7 +305,8 @@ struct RecordingsLibraryView: View {
                 Spacer()
             }
 
-            if !filter.showsBatches, !calendarOptions.isEmpty {
+            // Shown while a calendar is chosen even if its recordings are gone, so the filter can be cleared.
+            if !filter.showsBatches, !calendarOptions.isEmpty || !selectedCalendarIDs.isEmpty {
                 calendarChips
             }
 

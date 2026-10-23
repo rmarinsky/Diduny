@@ -379,6 +379,38 @@ import SwiftUI
         XCTAssertEqual(shown.count, 1)
     }
 
+    func testPeopleWhoConnectedBeforeTheWiderConsentDoNotGetAgendasOrAttendeesUntilTheyAllowThem() async throws {
+        let defaults = UserDefaults(suiteName: "CalendarDetailsConsent-\(UUID())")!
+        let saved = #"{"version":1,"connected":true,"selected":["work"],"ledger":{}}"#
+        defaults.set(Data(saved.utf8), forKey: "calendar.connection.v1")
+        var event = CalendarMeeting(id: "e", calendarID: "work", title: "Review", start: Date(), end: Date().addingTimeInterval(600))
+        event.notes = "Agenda"
+        event.location = "Room 4"
+        event.attendees = [CalendarAttendee(name: "Olena", email: "olena@example.com", response: .accepted)]
+        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in
+            ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: [event])
+        }, readRange: { _, _, _ in [event] })
+        defer { connection.disconnect() }
+        XCTAssertFalse(connection.configuration.detailsConsent)
+        await connection.refresh()
+        let stripped = try XCTUnwrap(connection.meetings.first)
+        XCTAssertNil(stripped.notes)
+        XCTAssertNil(stripped.location)
+        XCTAssertNil(stripped.attendees)
+        XCTAssertNil(try await connection.readMeetings(from: Date().addingTimeInterval(-60), to: Date()).first?.attendees)
+
+        await connection.allowEventDetails()
+        XCTAssertTrue(connection.configuration.detailsConsent)
+        XCTAssertEqual(connection.meetings.first?.attendees, event.attendees)
+
+        let fresh = CalendarConnection(defaults: UserDefaults(suiteName: "CalendarDetailsFresh-\(UUID())")!, authorize: { true },
+                                       read: { _ in ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: [event]) })
+        defer { fresh.disconnect() }
+        await fresh.connect()
+        XCTAssertTrue(fresh.configuration.detailsConsent, "Connecting shows the current consent, which covers details")
+        XCTAssertEqual(fresh.meetings.first?.notes, "Agenda")
+    }
+
     func testDisconnectRejectsLateReadAndDoesNotRestoreClearedConsent() async {
         let defaults = UserDefaults(suiteName: "CalendarLateReadTests-\(UUID())")!
         let gate = CalendarReadGate()

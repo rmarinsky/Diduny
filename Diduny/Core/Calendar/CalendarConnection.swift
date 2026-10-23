@@ -74,6 +74,9 @@ struct CalendarConfiguration: Codable, Equatable {
     var hideNames = false
     var showTomorrow = true
     var showWithoutLink = true
+    /// Agendas, places and attendees (and linking past recordings) need the consent shown since this
+    /// release; people who connected earlier allow it from Calendar & Meetings.
+    var detailsConsent = false
     var ledger = CalendarReminderLedger()
 
     var reminderStyle: ReminderStyle {
@@ -105,6 +108,7 @@ struct CalendarConfiguration: Codable, Equatable {
         hideNames = try value(.hideNames, defaults.hideNames)
         showTomorrow = try value(.showTomorrow, defaults.showTomorrow)
         showWithoutLink = try value(.showWithoutLink, defaults.showWithoutLink)
+        detailsConsent = try value(.detailsConsent, defaults.detailsConsent)
         ledger = try value(.ledger, defaults.ledger)
     }
 }
@@ -153,6 +157,7 @@ struct CalendarConfiguration: Codable, Equatable {
             }
             guard request == generation else { return }
             configuration.connected = true
+            configuration.detailsConsent = true
             persist()
             busy = false
             await refresh(selectInitialCalendars: true)
@@ -195,7 +200,7 @@ struct CalendarConfiguration: Codable, Equatable {
             if selectInitialCalendars {
                 configuration.selected = Set(calendars.filter(\.suggested).map(\.id)); persist()
             }
-            meetings = snapshot.meetings.filter { configuration.selected.contains($0.calendarID) }
+            meetings = snapshot.meetings.filter { configuration.selected.contains($0.calendarID) }.map(allowedDetails)
             deliverReminders()
             onRefresh?()
         } catch {
@@ -219,7 +224,23 @@ struct CalendarConfiguration: Codable, Equatable {
     /// Meetings of the selected calendars in any date range, e.g. to link past recordings.
     func readMeetings(from: Date, to: Date) async throws -> [CalendarMeeting] {
         guard configuration.connected else { return [] }
-        return try await readRange(configuration.selected, from, to)
+        return try await readRange(configuration.selected, from, to).map(allowedDetails)
+    }
+
+    func allowEventDetails() async {
+        configuration.detailsConsent = true
+        persist()
+        await refresh()
+    }
+
+    private func allowedDetails(_ meeting: CalendarMeeting) -> CalendarMeeting {
+        guard !configuration.detailsConsent else { return meeting }
+        var meeting = meeting
+        meeting.notes = nil
+        meeting.location = nil
+        meeting.attendees = nil
+        meeting.myResponse = nil
+        return meeting
     }
 
     /// Unlike `currentMeetings`, keeps ended meetings so the menu can show the whole day.

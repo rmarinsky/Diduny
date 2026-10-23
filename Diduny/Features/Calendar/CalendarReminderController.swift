@@ -113,31 +113,37 @@ struct CalendarReminderView: View {
     let snooze: (Int) -> Void
     let join: (CalendarMeeting, Bool) -> Void
 
+    /// The latest version of each shown meeting; the shown copy when the calendar can't be read right now.
     private var current: [CalendarMeeting] {
-        meetings.compactMap { event in connection.currentMeetings.first { $0.id == event.id && $0.start == event.start } }
+        meetings.map { event in connection.currentMeetings.first { $0.id == event.id && $0.start == event.start } ?? event }
     }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
+            let running = current.filter { $0.end > context.date }
             VStack(spacing: 0) {
-                if let meeting = current.first {
+                if let meeting = running.first {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 22) {
                             CalendarMeetingDetails(meeting: meeting, now: context.date, hideNames: connection.configuration.hideNames,
                                                    titleSize: fullScreen ? 34 : 22)
                             actions(meeting)
-                            if current.count > 1 { others(Array(current.dropFirst()), now: context.date) }
+                            if running.count > 1 { others(Array(running.dropFirst()), now: context.date) }
                         }
                         .frame(maxWidth: 680, alignment: .leading)
                         .padding(fullScreen ? 48 : 24)
                         .frame(maxWidth: .infinity)
                     }
-                    Divider()
-                    footer
+                } else {
+                    Spacer()
                 }
+                // Always present, so the reminder can be closed (Escape) whatever happens to the meeting.
+                Divider()
+                footer
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.background)
+            .onChange(of: running.isEmpty) { _, ended in if ended { dismiss() } }
         }
         .tint(Color("BrandAccentDeep"))
         .onChange(of: connection.currentMeetings.map(\.reminderKey)) { _, keys in
@@ -151,7 +157,8 @@ struct CalendarReminderView: View {
                 Button { join(meeting, connection.configuration.recordOnJoin) } label: {
                     Label("Join", systemImage: "video.fill").frame(minWidth: 120)
                 }
-                .buttonStyle(.borderedProminent).controlSize(.large).keyboardShortcut(.defaultAction)
+                // No Return shortcut: the panel can take key focus while the person types elsewhere.
+                .buttonStyle(.borderedProminent).controlSize(.large)
                 if !connection.configuration.recordOnJoin {
                     Button("Join and record") { join(meeting, true) }.controlSize(.large)
                 }
@@ -160,7 +167,7 @@ struct CalendarReminderView: View {
                 Button { join(meeting, true) } label: {
                     Label("Record meeting", systemImage: "record.circle").frame(minWidth: 120)
                 }
-                .buttonStyle(.borderedProminent).controlSize(.large).keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent).controlSize(.large)
             }
         }
     }
@@ -211,7 +218,7 @@ private struct MeetingEndedView: View {
             HStack {
                 Spacer()
                 Button("Keep recording", action: keep).keyboardShortcut(.cancelAction)
-                Button("Stop recording", action: stop).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                Button("Stop recording", action: stop).buttonStyle(.borderedProminent)
             }
         }
         .padding(18)
@@ -235,7 +242,7 @@ struct CalendarMeetingDetails: View {
                     Circle().fill(Color(rgb: rgb)).frame(width: 9, height: 9).accessibilityHidden(true)
                 }
                 if let now { Text(meeting.statusLine(now: now)).font(.headline).foregroundStyle(Color("BrandAccentDeep")) }
-                if let calendar = meeting.calendarTitle { Text(calendar).foregroundStyle(.secondary) }
+                if !hideNames, let calendar = meeting.calendarTitle { Text(calendar).foregroundStyle(.secondary) }
             }
             Text(hideNames ? String(localized: "Meeting") : meeting.title)
                 .font(.system(size: titleSize, weight: .bold)).textSelection(.enabled)
@@ -244,7 +251,7 @@ struct CalendarMeetingDetails: View {
                 Text(meeting.scheduleLine)
             }
             .foregroundStyle(.secondary)
-            if let location = meeting.location {
+            if !hideNames, let location = meeting.location {
                 Label(location, systemImage: "mappin.and.ellipse").foregroundStyle(.secondary).textSelection(.enabled)
             }
             if !hideNames, let attendees = meeting.attendees, !attendees.isEmpty {

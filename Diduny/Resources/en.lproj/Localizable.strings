@@ -155,7 +155,7 @@
 "CANCEL RECORDING" = "CANCEL RECORDING";
 "Calendar" = "Calendar";
 "Calendar access was not granted. You can change it in System Settings." = "Calendar access was not granted. You can change it in System Settings.";
-"Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When a recording is linked to a meeting, the meeting's title, time, calendar, agenda, location and attendees (names and emails) are saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization." = "Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When a recording is linked to a meeting, the meeting's title, time, calendar, agenda, location and attendees (names and emails) are saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization.";
+"Calendar events stay in memory. Connection settings and reminder history stay on this Mac. Meeting recordings, including ones made before connecting, are linked to their calendar events automatically; the meeting's title, time, calendar, agenda, location and attendees (names and emails) are then saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization." = "Calendar events stay in memory. Connection settings and reminder history stay on this Mac. Meeting recordings, including ones made before connecting, are linked to their calendar events automatically; the meeting's title, time, calendar, agenda, location and attendees (names and emails) are then saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization.";
 "Calendar meeting" = "Calendar meeting";
 "Calendar reminders" = "Calendar reminders";
 "Calendar settings…" = "Calendar settings…";
@@ -1382,3 +1382,7 @@
 "Diduny is not ready yet." = "Diduny is not ready yet.";
 "A meeting recording is already running." = "A meeting recording is already running.";
 "Recording started." = "Recording started.";
+"Show agendas and people" = "Show agendas and people";
+"Diduny can show each meeting's description, place and attendees in reminders and the menu, keep them (names and emails) with linked recordings on this Mac, and link your earlier meeting recordings to their calendar events automatically. Nothing is sent to a server." = "Diduny can show each meeting's description, place and attendees in reminders and the menu, keep them (names and emails) with linked recordings on this Mac, and link your earlier meeting recordings to their calendar events automatically. Nothing is sent to a server.";
+"Allow agendas and people" = "Allow agendas and people";
+"Diduny is starting the meeting recording." = "Diduny is starting the meeting recording.";
