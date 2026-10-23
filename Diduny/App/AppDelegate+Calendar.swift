@@ -121,7 +121,7 @@ extension AppDelegate {
     private var running = false
 
     func run(storage: RecordingsLibraryStorage, connection: CalendarConnection) async {
-        guard !running, connection.configuration.connected, connection.configuration.detailsConsent,
+        guard !running, connection.configuration.connected, connection.configuration.eventDetails,
               !connection.configuration.selected.isEmpty else { return }
         let key = connection.configuration.selected.sorted().joined(separator: ",")
         if key != selection { attempted = []; selection = key }

@@ -73,16 +73,14 @@ struct CalendarSettingsSection: View {
                 }
             }.padding(28).frame(width: 540)
         }
-        if connection.configuration.connected, !connection.configuration.detailsConsent {
-            Section {
-                Label("Show agendas and people", systemImage: "person.2.badge.key").font(.headline)
-                Text("Diduny can show each meeting's description, place and attendees in reminders and the menu, keep them (names and emails) with linked recordings on this Mac, and link your earlier meeting recordings to their calendar events automatically. Nothing is sent to a server.")
-                    .foregroundStyle(.secondary)
-                Button("Allow agendas and people") { Task { await connection.allowEventDetails() } }
-                    .buttonStyle(.borderedProminent)
-            }
-        }
         if connection.configuration.connected {
+            Section {
+                Toggle("Show agendas and people", isOn: Binding(
+                    get: { connection.configuration.eventDetails },
+                    set: { enabled in Task { await connection.setEventDetails(enabled) } }))
+                Text("Reads each meeting's description, place and attendees for reminders and the menu, keeps them (names and emails) with linked recordings on this Mac, and links earlier meeting recordings to their events. Nothing is sent to a server.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Meeting reminders") {
                 Picker("When a meeting starts", selection: preference(\.reminderStyle)) {
                     Text("Full screen").tag(CalendarConfiguration.ReminderStyle.fullScreen)

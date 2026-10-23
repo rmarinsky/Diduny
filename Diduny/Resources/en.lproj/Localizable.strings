@@ -1389,3 +1389,4 @@
 "%@" = "%@";
 "Now · ends %@" = "Now · ends %@";
 "Next" = "Next";
+"Reads each meeting's description, place and attendees for reminders and the menu, keeps them (names and emails) with linked recordings on this Mac, and links earlier meeting recordings to their events. Nothing is sent to a server." = "Reads each meeting's description, place and attendees for reminders and the menu, keeps them (names and emails) with linked recordings on this Mac, and links earlier meeting recordings to their events. Nothing is sent to a server.";

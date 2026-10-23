@@ -74,9 +74,9 @@ struct CalendarConfiguration: Codable, Equatable {
     var hideNames = false
     var showTomorrow = true
     var showWithoutLink = true
-    /// Agendas, places and attendees (and linking past recordings) need the consent shown since this
-    /// release; people who connected earlier allow it from Calendar & Meetings.
-    var detailsConsent = false
+    /// Agendas, places and attendees are read and shown, and past recordings are linked. On by
+    /// default for every connected calendar; can be turned off in Calendar & Meetings.
+    var eventDetails = true
     var ledger = CalendarReminderLedger()
 
     var reminderStyle: ReminderStyle {
@@ -109,7 +109,7 @@ struct CalendarConfiguration: Codable, Equatable {
         hideNames = try value(.hideNames, defaults.hideNames)
         showTomorrow = try value(.showTomorrow, defaults.showTomorrow)
         showWithoutLink = try value(.showWithoutLink, defaults.showWithoutLink)
-        detailsConsent = try value(.detailsConsent, defaults.detailsConsent)
+        eventDetails = try value(.eventDetails, defaults.eventDetails)
         ledger = try value(.ledger, defaults.ledger)
     }
 
@@ -162,7 +162,6 @@ struct CalendarConfiguration: Codable, Equatable {
             }
             guard request == generation else { return }
             configuration.connected = true
-            configuration.detailsConsent = true
             persist()
             busy = false
             await refresh(selectInitialCalendars: true)
@@ -232,14 +231,15 @@ struct CalendarConfiguration: Codable, Equatable {
         return try await readRange(configuration.selected, from, to).map(allowedDetails)
     }
 
-    func allowEventDetails() async {
-        configuration.detailsConsent = true
+    func setEventDetails(_ enabled: Bool) async {
+        configuration.eventDetails = enabled
         persist()
+        meetings = meetings.map(allowedDetails) // Hide at once, even if the next read fails.
         await refresh()
     }
 
     private func allowedDetails(_ meeting: CalendarMeeting) -> CalendarMeeting {
-        guard !configuration.detailsConsent else { return meeting }
+        guard !configuration.eventDetails else { return meeting }
         var meeting = meeting
         meeting.notes = nil
         meeting.location = nil
