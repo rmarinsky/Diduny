@@ -30,8 +30,25 @@ extension AppDelegate {
         }
     }
 
+    /// Opens a validated meeting link the way Calendar settings ask: Zoom/Teams app, chosen browser or default browser.
+    static func openMeetingLink(_ url: URL, configuration: CalendarConfiguration = CalendarConnection.shared.configuration) -> Bool {
+        switch CalendarMeeting.openTarget(for: url, configuration: configuration,
+                                          appInstalled: { NSWorkspace.shared.urlForApplication(toOpen: $0) != nil }) {
+        case let .app(appLink):
+            return NSWorkspace.shared.open(appLink)
+        case let .browser(link, bundleID):
+            guard let bundleID, let browser = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+                return NSWorkspace.shared.open(link)
+            }
+            NSWorkspace.shared.open([link], withApplicationAt: browser, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                if error != nil { DispatchQueue.main.async { NSWorkspace.shared.open(link) } }
+            }
+            return true
+        }
+    }
+
     func joinCalendarMeeting(_ meeting: CalendarMeeting, record: Bool, local: Bool,
-                             openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }) {
+                             openURL: (URL) -> Bool = { AppDelegate.openMeetingLink($0) }) {
         let opened: Bool
         if let url = meeting.meetingURL {
             guard CalendarMeeting.isJoinURL(url) else { return }

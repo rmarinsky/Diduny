@@ -267,4 +267,37 @@ final class CalendarMeetingTests: XCTestCase {
         ]), [String(localized: "\(5) people"), String(localized: "\(2) accepted"), String(localized: "\(1) declined"),
             String(localized: "\(2) no response")].joined(separator: " · "))
     }
+
+    func testMoreMeetingServicesAreRecognizedWithoutLookalikes() {
+        for link in ["https://app.slack.com/huddle/T0123ABCD/C0456EFGH", "https://facetime.apple.com/join#v=1&p=AbCdEf&k=xyz",
+                     "https://whereby.com/team-standup", "https://chime.aws/1234567890"] {
+            XCTAssertEqual(CalendarMeeting.joinURL(in: "Join: \(link)")?.absoluteString, link, link)
+        }
+        for link in ["https://app.slack.com/client/T0123ABCD", "https://whereby.com/", "https://whereby.com/information/pricing",
+                     "https://chime.aws/", "https://facetime.apple.com/", "https://whereby.com.evil.test/room"] {
+            XCTAssertNil(CalendarMeeting.joinURL(in: link), link)
+        }
+        XCTAssertEqual(CalendarMeeting.serviceName(for: URL(string: "https://app.slack.com/huddle/T1/C2")), "Slack huddle")
+        XCTAssertEqual(CalendarMeeting.serviceName(for: URL(string: "https://facetime.apple.com/join#v=1")), "FaceTime")
+    }
+
+    func testZoomAndTeamsLinksOpenInTheirAppsOnlyWhenRequested() {
+        let zoom = URL(string: "https://acme.zoom.us/j/123456789?pwd=AbC12")!
+        XCTAssertEqual(CalendarMeeting.appURL(for: zoom)?.absoluteString, "zoommtg://zoom.us/join?action=join&confno=123456789&pwd=AbC12")
+        XCTAssertEqual(CalendarMeeting.appURL(for: URL(string: "https://zoom.us/j/987")!)?.absoluteString,
+                       "zoommtg://zoom.us/join?action=join&confno=987")
+        XCTAssertNil(CalendarMeeting.appURL(for: URL(string: "https://zoom.us/my/roman")!), "Personal rooms stay in the browser")
+        let teams = URL(string: "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0?context=%7B%7D")!
+        XCTAssertEqual(CalendarMeeting.appURL(for: teams)?.absoluteString, "msteams:/l/meetup-join/19%3ameeting_x%40thread.v2/0?context=%7B%7D")
+        XCTAssertNil(CalendarMeeting.appURL(for: URL(string: "https://meet.google.com/abc-defg-hij")!))
+
+        var configuration = CalendarConfiguration()
+        XCTAssertEqual(CalendarMeeting.openTarget(for: zoom, configuration: configuration, appInstalled: { _ in true }), .browser(zoom, bundleID: nil))
+        configuration.openInApps = true
+        configuration.browserBundleID = "com.google.Chrome"
+        XCTAssertEqual(CalendarMeeting.openTarget(for: zoom, configuration: configuration, appInstalled: { _ in true }),
+                       .app(CalendarMeeting.appURL(for: zoom)!))
+        XCTAssertEqual(CalendarMeeting.openTarget(for: zoom, configuration: configuration, appInstalled: { _ in false }),
+                       .browser(zoom, bundleID: "com.google.Chrome"), "Without the Zoom app the chosen browser opens the link")
+    }
 }

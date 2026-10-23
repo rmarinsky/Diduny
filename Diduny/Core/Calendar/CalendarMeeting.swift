@@ -189,6 +189,47 @@ extension CalendarMeeting {
         if host == "zoom.us" || host.hasSuffix(".zoom.us") { return "Zoom" }
         if host == "webex.com" || host.hasSuffix(".webex.com") { return "Webex" }
         if host == "meet.jit.si" { return "Jitsi Meet" }
+        if host == "app.slack.com" { return "Slack huddle" }
+        if host == "facetime.apple.com" { return "FaceTime" }
+        if host == "whereby.com" { return "Whereby" }
+        if host == "chime.aws" { return "Amazon Chime" }
+        return nil
+    }
+
+    enum OpenTarget: Equatable {
+        case app(URL)
+        case browser(URL, bundleID: String?)
+    }
+
+    /// Zoom and Teams open in their apps when asked and installed; everything else in the chosen browser.
+    static func openTarget(for url: URL, configuration: CalendarConfiguration, appInstalled: (URL) -> Bool) -> OpenTarget {
+        if configuration.openInApps, let app = appURL(for: url), appInstalled(app) { return .app(app) }
+        return .browser(url, bundleID: configuration.browserBundleID)
+    }
+
+    /// The desktop-app form of a Zoom or Teams meeting link. Personal Zoom rooms have no app form.
+    static func appURL(for url: URL) -> URL? {
+        guard let host = url.host?.lowercased() else { return nil }
+        if host == "zoom.us" || host.hasSuffix(".zoom.us") {
+            let parts = url.path.split(separator: "/")
+            guard parts.count >= 2, parts[0] == "j" else { return nil }
+            var components = URLComponents()
+            components.scheme = "zoommtg"
+            components.host = "zoom.us"
+            components.path = "/join"
+            var items = [URLQueryItem(name: "action", value: "join"), URLQueryItem(name: "confno", value: String(parts[1]))]
+            if let password = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                .first(where: { $0.name == "pwd" })?.value {
+                items.append(URLQueryItem(name: "pwd", value: password))
+            }
+            components.queryItems = items
+            return components.url
+        }
+        if host == "teams.microsoft.com", url.path.hasPrefix("/l/meetup-join/") || url.path.hasPrefix("/meet/") {
+            let link = url.absoluteString
+            guard let hostRange = link.range(of: "teams.microsoft.com", options: .caseInsensitive) else { return nil }
+            return URL(string: "msteams:" + link[hostRange.upperBound...])
+        }
         return nil
     }
 
@@ -206,6 +247,10 @@ extension CalendarMeeting {
         if host == "webex.com" || host.hasSuffix(".webex.com") {
             return path.hasPrefix("/meet/") || path.contains("/j.php") || path.contains("/join/")
         }
+        if host == "app.slack.com" { return path.hasPrefix("/huddle/") }
+        if host == "facetime.apple.com" { return path.hasPrefix("/join") }
+        if host == "whereby.com" { return path.range(of: "^/[A-Za-z0-9][A-Za-z0-9-]*$", options: .regularExpression) != nil }
+        if host == "chime.aws" { return path.range(of: "^/[0-9]{10}$", options: .regularExpression) != nil }
         return host == "meet.jit.si" && path.count > 1
 
     }
