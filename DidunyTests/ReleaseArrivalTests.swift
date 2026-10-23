@@ -49,7 +49,7 @@ final class ReleaseHighlightsTests: XCTestCase {
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Change the output language from the live panel during dictation or translation, without stopping the recording.",
+                "Pick the output from the Mode chip in the live panel during dictation or translation, without stopping the recording.",
                 "The new output applies to everything you have already said; switch back to Original to paste your own words.",
                 "Preview the translated text live before you stop.",
             ]
