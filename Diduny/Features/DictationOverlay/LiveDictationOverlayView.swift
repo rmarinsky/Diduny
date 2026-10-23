@@ -91,11 +91,9 @@ struct LiveDictationOverlayView: View {
         HStack(spacing: 9) {
             OverlayStatusIcon(store: store, statusColor: statusColor, iconName: iconName)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 5) {
-                    statusBadge(store.providerLabel)
-                    statusBadge(store.sourceLabel)
-                }
+            HStack(spacing: 5) {
+                statusBadge(store.providerLabel)
+                statusBadge(store.sourceLabel)
                 if !store.outputOptions.isEmpty, store.canStop {
                     outputPicker
                 } else if let target = store.targetLabel {
@@ -132,7 +130,9 @@ struct LiveDictationOverlayView: View {
             .frame(height: 20)
             .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
-        .menuStyle(.borderlessButton)
+        // .borderlessButton redraws the label in the system font; .button + .plain keeps the chip styling.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Output for this recording. Applies to everything said so far.")
