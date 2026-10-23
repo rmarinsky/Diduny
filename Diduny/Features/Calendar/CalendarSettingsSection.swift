@@ -2,12 +2,16 @@ import AppKit
 import SwiftUI
 
 struct CalendarSettingsSection: View {
-    @State private var connection = CalendarConnection.shared
+    @State private var connection: CalendarConnection
     @State private var showConsent = false
     @State private var approved = false
     @State private var showBrowser = false
     @State private var showCalendars = false
     @State private var showUpcoming = false
+
+    init(connection: CalendarConnection = .shared) {
+        _connection = State(initialValue: connection)
+    }
 
     var body: some View {
         Section {

@@ -240,6 +240,99 @@ import SwiftUI
         }
     }
 
+    /// Design references for the meetings work: the real reminder windows, Meetings settings
+    /// and the menu bar menu structure, written to SCREENSHOT_DIR on CI.
+    func testMeetingsDesignReferenceScreenshots() async throws {
+        let outputDirectory = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"].map { URL(fileURLWithPath: $0) }
+        if let outputDirectory {
+            try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        }
+        let now = Date()
+        let hour = Calendar.current.dateInterval(of: .hour, for: now)!.start
+        let event = { (id: String, title: String, from: Double, to: Double, link: String?) in
+            CalendarMeeting(id: id, calendarID: "work", title: title,
+                            start: hour.addingTimeInterval(from * 3600), end: hour.addingTimeInterval(to * 3600),
+                            meetingURL: link.flatMap(URL.init(string:)))
+        }
+        let meetings = [
+            event("tennis", "Tennis", -3, -2, nil),
+            event("sync", "Team velocity sync", -1, -0.75, "https://teams.microsoft.com/l/meetup-join/19%3ameeting"),
+            event("review", "Design review: meetings menu", 0, 1, "https://meet.google.com/abc-defg-hij"),
+            event("ba", "Neovolta: BA AI Automation", 3, 3.5, "https://meet.google.com/abc-defg-hij"),
+            event("qa", "Neovolta: QA AI Automation", 4, 4.5, "https://zoom.us/j/123456789"),
+        ]
+        let defaults = UserDefaults(suiteName: "CalendarDesignReference-\(UUID())")!
+        let connection = CalendarConnection(defaults: defaults, authorize: { true }, read: { _ in
+            ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Google", sourceKind: .calDAV, colorRGB: 0x4285F4),
+                                                  .init(id: "home", title: "Personal", source: "iCloud", sourceKind: .iCloud, colorRGB: 0x34A853)],
+                                      meetings: meetings)
+        })
+        defer { connection.disconnect() }
+        await connection.connect()
+
+        func write(_ view: NSView, _ name: String) throws {
+            view.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            let image = NSImage(size: view.bounds.size)
+            image.addRepresentation(bitmap)
+            let attachment = XCTAttachment(image: image)
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            if let outputDirectory, let png = bitmap.representation(using: .png, properties: [:]) {
+                try png.write(to: outputDirectory.appendingPathComponent("\(name).png"))
+            }
+        }
+
+        for (appearanceName, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+            for fullScreen in [false, true] {
+                connection.updatePreferences { $0.fullScreen = fullScreen }
+                let controller = CalendarReminderController()
+                controller.show([meetings[2], meetings[3]], connection: connection)
+                let content = try XCTUnwrap(controller.window?.contentView)
+                content.appearance = NSAppearance(named: appearance)
+                try write(content, "reference-reminder-\(fullScreen ? "fullscreen" : "popup")-\(appearanceName)")
+                controller.dismiss()
+            }
+            let settings = NSHostingView(rootView: Form { CalendarSettingsSection(connection: connection) }
+                .formStyle(.grouped).frame(width: 640, height: 820))
+            settings.appearance = NSAppearance(named: appearance)
+            settings.frame = CGRect(x: 0, y: 0, width: 640, height: 820)
+            try write(settings, "reference-meetings-settings-\(appearanceName)")
+            let audio = NSHostingView(rootView: MeetingAudioSettingsView().frame(width: 640, height: 900))
+            audio.appearance = NSAppearance(named: appearance)
+            audio.frame = CGRect(x: 0, y: 0, width: 640, height: 900)
+            try write(audio, "reference-meeting-audio-settings-\(appearanceName)")
+        }
+
+        if #available(macOS 14.4, *) {
+            let menu = NSHostingMenu(rootView: MenuBarContentView(
+                audioDeviceManager: AudioDeviceManager(),
+                onToggleRecording: {}, onToggleTranslationRecording: {}, onToggleMeetingRecording: {},
+                onToggleMeetingTranslationRecording: {}, onBatchFilesAndURLs: {}, onOpenMainWindow: { _ in },
+                onCheckForUpdates: {}
+            ).environment(AppState()))
+            menu.update()
+            func dump(_ menu: NSMenu, _ depth: Int) -> [String] {
+                menu.update()
+                return menu.items.flatMap { item -> [String] in
+                    let line = String(repeating: "  ", count: depth) + (item.isSeparatorItem ? "---" :
+                        "\(item.title.isEmpty ? "[image \(Int(item.image?.size.width ?? 0))x\(Int(item.image?.size.height ?? 0))]" : item.title)"
+                        + (item.isEnabled ? "" : " (disabled)")
+                        + (item.keyEquivalent.isEmpty ? "" : " ⌘\(item.keyEquivalent)"))
+                    return [line] + (item.submenu.map { dump($0, depth + 1) } ?? [])
+                }
+            }
+            let calendarMenu = NSHostingMenu(rootView: CalendarMenuItems(connection: connection))
+            if let outputDirectory {
+                let lines = dump(calendarMenu, 0) + ["=== rest of the menu (calendar not connected in CI) ==="] + dump(menu, 0)
+                try lines.joined(separator: "\n").write(to: outputDirectory.appendingPathComponent("reference-menu-structure.txt"),
+                                                        atomically: true, encoding: .utf8)
+            }
+        }
+    }
+
     func testDisconnectRejectsLateReadAndDoesNotRestoreClearedConsent() async {
         let defaults = UserDefaults(suiteName: "CalendarLateReadTests-\(UUID())")!
         let gate = CalendarReadGate()
