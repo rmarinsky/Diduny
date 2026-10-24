@@ -32,7 +32,7 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
             )
 
             self.run_script("render", str(PAYLOAD), str(markdown))
-            expected = '# Checked before every update\n\n- Each update now passes automated checks of the setup guide and main window on macOS 26 before release.\n- Output switching from the live panel is unchanged; this update only adds release checks.\n'
+            expected = "# Meetings, with your calendar\n\n- A full-screen meeting-now screen at start time shows the agenda, people and place, with Join in your chosen browser or the Zoom or Teams app.\n- Meeting recordings link to their calendar events automatically, older ones too, and search finds them by person, email, agenda or words said.\n- The menu bar shows today's timeline, the next meeting with a Join button, and each meeting's details.\n"
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
             arguments = (

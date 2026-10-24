@@ -56,16 +56,66 @@ struct ScheduledCalendarSnapshot: Sendable {
 }
 
 struct CalendarConfiguration: Codable, Equatable {
+    enum ReminderStyle: String, CaseIterable { case fullScreen, window, off }
+
     var version = 1
     var connected = false
     var selected: Set<String> = []
     var displayMinutes = 60
-    var reminderMinutes = 5
-    var popup = true
-    var fullScreen = false
+    var reminderMinutes = 0
+    var popup = false
+    var fullScreen = true
     var recordOnJoin = false
     var localRecording = true
+    var repeatDuringMeeting = true
+    /// nil opens meeting links with the system's default browser.
+    var browserBundleID: String? = nil
+    var openInApps = false
+    var hideNames = false
+    var showTomorrow = true
+    var showWithoutLink = true
+    /// Agendas, places and attendees are read and shown, and past recordings are linked. On by
+    /// default for every connected calendar; can be turned off in Calendar & Meetings.
+    var eventDetails = true
     var ledger = CalendarReminderLedger()
+
+    var reminderStyle: ReminderStyle {
+        get { fullScreen ? .fullScreen : popup ? .window : .off }
+        set { fullScreen = newValue == .fullScreen; popup = newValue == .window }
+    }
+
+    init() {}
+
+    /// Saved settings from older releases lack newer keys; each missing key keeps its default.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) throws -> T {
+            try container.decodeIfPresent(T.self, forKey: key) ?? fallback
+        }
+        let defaults = Self()
+        version = try value(.version, defaults.version)
+        connected = try value(.connected, defaults.connected)
+        selected = try value(.selected, defaults.selected)
+        // Values outside the current pickers snap to the nearest choice instead of showing blank.
+        displayMinutes = Self.nearest(try value(.displayMinutes, defaults.displayMinutes), in: [15, 60, 1440])
+        reminderMinutes = Self.nearest(try value(.reminderMinutes, defaults.reminderMinutes), in: [0, 1, 5, 15, 60])
+        popup = try value(.popup, defaults.popup)
+        fullScreen = try value(.fullScreen, defaults.fullScreen)
+        recordOnJoin = try value(.recordOnJoin, defaults.recordOnJoin)
+        localRecording = try value(.localRecording, defaults.localRecording)
+        repeatDuringMeeting = try value(.repeatDuringMeeting, defaults.repeatDuringMeeting)
+        browserBundleID = try container.decodeIfPresent(String.self, forKey: .browserBundleID)
+        openInApps = try value(.openInApps, defaults.openInApps)
+        hideNames = try value(.hideNames, defaults.hideNames)
+        showTomorrow = try value(.showTomorrow, defaults.showTomorrow)
+        showWithoutLink = try value(.showWithoutLink, defaults.showWithoutLink)
+        eventDetails = try value(.eventDetails, defaults.eventDetails)
+        ledger = try value(.ledger, defaults.ledger)
+    }
+
+    private static func nearest(_ value: Int, in choices: [Int]) -> Int {
+        choices.min { abs($0 - value) < abs($1 - value) } ?? value
+    }
 }
 
 @MainActor @Observable final class CalendarConnection {
@@ -81,13 +131,19 @@ struct CalendarConfiguration: Codable, Equatable {
     private let defaults: UserDefaults
     private let authorize: () async throws -> Bool
     private let read: (Set<String>?) async throws -> ScheduledCalendarSnapshot
+    private let readRange: (Set<String>, Date, Date) async throws -> [CalendarMeeting]
+    /// Called after each successful calendar read.
+    var onRefresh: (() -> Void)?
+    /// Called every 15 seconds while the connection runs.
+    var onTick: (() -> Void)?
     private var generation = UUID()
     private var polling: Task<Void, Never>?
     private static let key = "calendar.connection.v1"
 
     init(defaults: UserDefaults, authorize: @escaping () async throws -> Bool,
-         read: @escaping (Set<String>?) async throws -> ScheduledCalendarSnapshot) {
-        self.defaults = defaults; self.authorize = authorize; self.read = read
+         read: @escaping (Set<String>?) async throws -> ScheduledCalendarSnapshot,
+         readRange: @escaping (Set<String>, Date, Date) async throws -> [CalendarMeeting] = { _, _, _ in [] }) {
+        self.defaults = defaults; self.authorize = authorize; self.read = read; self.readRange = readRange
         if let data = defaults.data(forKey: Self.key) {
             if let saved = try? JSONDecoder().decode(CalendarConfiguration.self, from: data), saved.version == 1 {
                 configuration = saved
@@ -148,8 +204,9 @@ struct CalendarConfiguration: Codable, Equatable {
             if selectInitialCalendars {
                 configuration.selected = Set(calendars.filter(\.suggested).map(\.id)); persist()
             }
-            meetings = snapshot.meetings.filter { configuration.selected.contains($0.calendarID) }
+            meetings = snapshot.meetings.filter { configuration.selected.contains($0.calendarID) }.map(allowedDetails)
             deliverReminders()
+            onRefresh?()
         } catch {
             guard request == generation else { return }
             busy = false; self.error = error.localizedDescription
@@ -157,7 +214,7 @@ struct CalendarConfiguration: Codable, Equatable {
         }
     }
 
-    private var hasFreshSnapshot: Bool {
+    var hasFreshSnapshot: Bool {
         guard configuration.connected, let fetchedAt else { return false }
         return (0...300).contains(Date().timeIntervalSince(fetchedAt))
     }
@@ -168,26 +225,88 @@ struct CalendarConfiguration: Codable, Equatable {
             .sorted { $0.start < $1.start }
     }
 
+    /// Meetings of the selected calendars in any date range, e.g. to link past recordings.
+    func readMeetings(from: Date, to: Date) async throws -> [CalendarMeeting] {
+        guard configuration.connected else { return [] }
+        return try await readRange(configuration.selected, from, to).map(allowedDetails)
+    }
+
+    func setEventDetails(_ enabled: Bool) async {
+        configuration.eventDetails = enabled
+        persist()
+        meetings = meetings.map(allowedDetails) // Hide at once, even if the next read fails.
+        await refresh()
+    }
+
+    private func allowedDetails(_ meeting: CalendarMeeting) -> CalendarMeeting {
+        guard !configuration.eventDetails else { return meeting }
+        var meeting = meeting
+        meeting.notes = nil
+        meeting.location = nil
+        meeting.attendees = nil
+        meeting.myResponse = nil
+        return meeting
+    }
+
+    /// Unlike `currentMeetings`, keeps ended meetings so the menu can show the whole day.
+    var agendaMeetings: [CalendarMeeting] {
+        guard hasFreshSnapshot else { return [] }
+        return meetings.filter { configuration.selected.contains($0.calendarID) && $0.canRemind }
+    }
+
     @discardableResult
     func join(_ meeting: CalendarMeeting, record: Bool) -> Bool {
         guard let current = currentMeetings.first(where: { $0.id == meeting.id }),
               current.start == meeting.start, current.meetingURL == meeting.meetingURL,
               current.meetingURL.map(CalendarMeeting.isJoinURL) ?? record,
               let onJoin else { return false }
+        acknowledge([current])
         onJoin(current, record, configuration.localRecording)
         return true
     }
 
+    /// Joined or dismissed: the meeting-now screen is not offered again for this occurrence.
+    func acknowledge(_ meetings: [CalendarMeeting]) {
+        guard !meetings.isEmpty else { return }
+        for meeting in meetings { configuration.ledger.acknowledge(meeting, at: Date()) }
+        persist()
+    }
+
+    func snooze(_ meetings: [CalendarMeeting], minutes: Int) {
+        let until = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        for meeting in meetings { configuration.ledger.snooze(meeting, until: until) }
+        persist()
+    }
+
+    /// The call detector saw a call: meetings running now or starting within five minutes count as joined.
+    func acknowledgeMeetingsInProgress(now: Date = Date()) {
+        acknowledge(currentMeetings.filter { $0.start <= now.addingTimeInterval(300) && $0.end > now })
+    }
+
+    /// After wake or unlock a meeting that is still running and not joined is offered again.
+    func resetReminderSession() {
+        configuration.ledger.resetSession()
+        deliverReminders()
+    }
+
+    private(set) var isScreenLocked = false
+
+    func setScreenLocked(_ locked: Bool) {
+        let unlocked = isScreenLocked && !locked
+        isScreenLocked = locked
+        if unlocked { resetReminderSession() }
+    }
+
     @discardableResult
-    func joinFromMenu(_ meeting: CalendarMeeting) async -> String? {
+    func joinFromMenu(_ meeting: CalendarMeeting, record: Bool) async -> String? {
         if !hasFreshSnapshot {
             await refresh()
         }
         guard hasFreshSnapshot else {
             return String(localized: "Calendar access could not be refreshed. Open Calendar settings and try again.")
         }
-        guard join(meeting, record: meeting.meetingURL == nil || configuration.recordOnJoin) else {
-            return String(localized: "This meeting changed or is no longer available. Reopen Upcoming meetings and select it again.")
+        guard join(meeting, record: meeting.meetingURL == nil || record) else {
+            return String(localized: "This meeting changed or is no longer available. Reopen the Diduny menu and select it again.")
         }
         return nil
     }
@@ -200,6 +319,7 @@ struct CalendarConfiguration: Codable, Equatable {
                     self.menuClock = Date()
                     if self.fetchedAt == nil || Date().timeIntervalSince(self.fetchedAt!) >= 60 { await self.refresh() }
                     self.deliverReminders()
+                    self.onTick?()
                 }
                 do { try await Task.sleep(for: .seconds(15)) } catch { return }
             }
@@ -208,9 +328,10 @@ struct CalendarConfiguration: Codable, Equatable {
     func stop() { polling?.cancel(); polling = nil; generation = UUID(); busy = false }
 
     private func deliverReminders() {
-        guard let onReminder, configuration.popup || configuration.fullScreen else { return }
+        guard let onReminder, configuration.reminderStyle != .off, !isScreenLocked else { return }
         let due = configuration.ledger.due(meetings, selected: configuration.selected, now: Date(),
-                                          fetchedAt: fetchedAt, leadMinutes: configuration.reminderMinutes)
+                                          fetchedAt: fetchedAt, leadMinutes: configuration.reminderMinutes,
+                                          repeatDuringMeeting: configuration.repeatDuringMeeting)
         guard !due.isEmpty else { return }
         persist()
         onReminder(due)

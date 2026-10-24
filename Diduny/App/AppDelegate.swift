@@ -176,6 +176,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let calendarReminderController = CalendarReminderController()
     var calendarStoreObserver: NSObjectProtocol?
     var calendarWakeObserver: NSObjectProtocol?
+    var calendarLockObservers: [NSObjectProtocol] = []
+    let calendarRecordingLinker = CalendarRecordingLinker()
+    var statusMenuController: StatusMenuController?
+    var meetingEndPromptsOffered = Set<UUID>()
+    /// The running app's delegate. NSApp.delegate is SwiftUI's adaptor, not this class.
+    static weak var current: AppDelegate?
     private var powerOffObserver: NSObjectProtocol?
     lazy var realtimeTranscriptionService = CloudRealtimeService()
     var localVoiceStreamingService: LocalWhisperStreamingService?
@@ -203,6 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_: Notification) {
+        Self.current = self
         let launch = AppLaunchTracker.shared.begin()
         // Sudden termination can end the process at logout/shutdown without
         // applicationWillTerminate; those exits are clean, not crashes.
@@ -248,6 +255,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         MainWindowController.shared.configure(appDelegate: self)
+        statusMenuController = StatusMenuController(appState: appState) { [unowned self] in
+            StatusMenuBuilder(appState: appState, audioDeviceManager: audioDeviceManager, connection: .shared, actions: .init(
+                toggleRecording: { self.toggleRecording() },
+                toggleTranslation: { self.toggleTranslationRecording() },
+                toggleMeeting: { self.toggleMeetingRecording() },
+                toggleMeetingTranslation: { self.toggleMeetingTranslationRecording() },
+                batchFilesAndURLs: { self.batchFilesAndURLs() },
+                openMainWindow: { self.openMainWindow(section: $0) }
+            ))
+        }
         EdgeCommandPanelController.shared.configure(appDelegate: self)
         OnboardingWindowController.shared.configure(appDelegate: self)
 
@@ -391,6 +408,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleMeetingPresenceEvent(_ event: MeetingPresenceEvent) {
         switch event {
         case let .joined(meeting):
+            // In the call already: the meeting-now screen is not needed for it.
+            CalendarConnection.shared.acknowledgeMeetingsInProgress()
+            if calendarReminderController.window != nil { calendarReminderController.dismiss() }
             guard !hasAnyRecordingInProgress else { return }
             EdgeCommandPanelController.shared.showMeetingSuggestion(meeting)
         case let .ended(meeting):
@@ -724,6 +744,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         calendarReminderController.dismiss()
         if let calendarStoreObserver { NotificationCenter.default.removeObserver(calendarStoreObserver) }
         if let calendarWakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(calendarWakeObserver) }
+        calendarLockObservers.forEach { DistributedNotificationCenter.default().removeObserver($0) }
         meetingJoinMonitor.stop()
         hotkeyService.unregisterAll()
         pushToTalkService.stop()

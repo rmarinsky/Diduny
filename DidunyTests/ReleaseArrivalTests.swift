@@ -45,12 +45,13 @@ final class ReleaseHighlightsTests: XCTestCase {
     func testBundledPayloadMatchesCuratedReleaseCopy() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Checked before every update")
+        XCTAssertEqual(highlights.headline, "Meetings, with your calendar")
         XCTAssertEqual(
             highlights.highlights,
             [
-                "Each update now passes automated checks of the setup guide and main window on macOS 26 before release.",
-                "Output switching from the live panel is unchanged; this update only adds release checks.",
+                "A full-screen meeting-now screen at start time shows the agenda, people and place, with Join in your chosen browser or the Zoom or Teams app.",
+                "Meeting recordings link to their calendar events automatically, older ones too, and search finds them by person, email, agenda or words said.",
+                "The menu bar shows today's timeline, the next meeting with a Join button, and each meeting's details.",
             ]
         )
     }

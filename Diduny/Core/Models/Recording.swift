@@ -180,6 +180,10 @@ struct Recording: Identifiable, Codable, Equatable {
     var trimRange: AudioTrimRange? = nil
     /// Optional local calendar context. Older recordings decode without it.
     var calendarMeeting: CalendarMeeting? = nil
+    /// Events that fit equally well when linking automatically; the person picks one.
+    var calendarCandidates: [CalendarMeeting]? = nil
+    /// The person removed the link, so automatic linking leaves this recording alone.
+    var calendarLinkDeclined: Bool? = nil
 
     var effectiveDurationSeconds: TimeInterval {
         guard let trimRange, trimRange.isValid(for: durationSeconds) else { return durationSeconds }
@@ -374,6 +378,43 @@ struct Recording: Identifiable, Codable, Equatable {
             default: false
             }
         }
+    }
+}
+
+struct CalendarFilterOption: Equatable {
+    let id: String
+    let title: String
+    let colorRGB: UInt32?
+}
+
+extension Recording {
+    /// Library search: names, descriptions and source details, the linked meeting's title, agenda,
+    /// place, calendar and people (names and emails), and every transcript version.
+    func matchesSearch(_ query: String) -> Bool {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return true }
+        let meeting = calendarMeeting
+        let fields: [String?] = [displayTitle, libraryDisplayName, description, sourceFileName,
+                                 remoteSource?.channelName, remoteSource?.description,
+                                 meeting?.title, meeting?.notes, meeting?.location, meeting?.calendarTitle]
+            + (meeting?.attendees ?? []).flatMap { [$0.name, $0.email] }
+        return fields.contains { $0?.lowercased().contains(query) == true }
+            || resolvedTranscriptHistory.contains { $0.text.lowercased().contains(query) }
+    }
+
+    /// No calendar chosen shows every recording; otherwise only recordings linked to a chosen calendar.
+    func matchesCalendars(_ calendarIDs: Set<String>) -> Bool {
+        calendarIDs.isEmpty || calendarMeeting.map { calendarIDs.contains($0.calendarID) } == true
+    }
+
+    static func calendarFilterOptions(_ recordings: [Recording]) -> [CalendarFilterOption] {
+        var options: [String: CalendarFilterOption] = [:]
+        for meeting in recordings.compactMap(\.calendarMeeting) where options[meeting.calendarID] == nil {
+            options[meeting.calendarID] = CalendarFilterOption(id: meeting.calendarID,
+                                                               title: meeting.calendarTitle ?? String(localized: "Calendar"),
+                                                               colorRGB: meeting.calendarColorRGB)
+        }
+        return options.values.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 }
 

@@ -1,12 +1,17 @@
+import AppKit
 import SwiftUI
 
 struct CalendarSettingsSection: View {
-    @State private var connection = CalendarConnection.shared
+    @State private var connection: CalendarConnection
     @State private var showConsent = false
     @State private var approved = false
     @State private var showBrowser = false
     @State private var showCalendars = false
-    @State private var showUpcoming = false
+    @State private var browsers = InstalledBrowser.discover()
+
+    init(connection: CalendarConnection = .shared) {
+        _connection = State(initialValue: connection)
+    }
 
     var body: some View {
         Section {
@@ -56,8 +61,8 @@ struct CalendarSettingsSection: View {
         .sheet(isPresented: $showConsent) {
             VStack(alignment: .leading, spacing: 18) {
                 Label("Connect your calendars", systemImage: "hand.raised").font(.title2.bold())
-                Text("Allow Diduny to read event titles, times and meeting links from calendars on this Mac, including after restart, until you disconnect. Choose the calendars after connecting.")
-                Text("Calendar events stay in memory. Connection settings and reminder history stay on this Mac. When you record a meeting, its calendar reference is saved with the local recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization.")
+                Text("Allow Diduny to read event titles, times, meeting links, descriptions, locations and attendees from calendars on this Mac, including after restart, until you disconnect. Choose the calendars after connecting.")
+                Text("Calendar events stay in memory. Connection settings and reminder history stay on this Mac. Meeting recordings, including ones made before connecting, are linked to their calendar events automatically; the meeting's title, time, calendar, agenda, location and attendees (names and emails) are then saved with that local recording, remain after you disconnect, and are deleted with the recording. Diduny does not send your calendar to a server. Your calendar accounts continue their normal provider synchronization.")
                 Text("macOS requests full calendar access; Diduny only reads calendar data. Recording requires a separate action. Local transcription is the default for calendar recordings.").foregroundStyle(.secondary)
                 Toggle("I am allowed to access these calendars and approve ongoing local reading.", isOn: $approved)
                 HStack {
@@ -69,52 +74,57 @@ struct CalendarSettingsSection: View {
             }.padding(28).frame(width: 540)
         }
         if connection.configuration.connected {
-            Section("Calendar reminders") {
+            Section {
+                Toggle("Show agendas and people", isOn: Binding(
+                    get: { connection.configuration.eventDetails },
+                    set: { enabled in Task { await connection.setEventDetails(enabled) } }))
+                Text("Reads each meeting's description, place and attendees for reminders and the menu, keeps them (names and emails) with linked recordings on this Mac, and links earlier meeting recordings to their events. Nothing is sent to a server.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Meeting reminders") {
+                Picker("When a meeting starts", selection: preference(\.reminderStyle)) {
+                    Text("Full screen").tag(CalendarConfiguration.ReminderStyle.fullScreen)
+                    Text("Small window").tag(CalendarConfiguration.ReminderStyle.window)
+                    Text("Off").tag(CalendarConfiguration.ReminderStyle.off)
+                }
+                Picker("Remind me", selection: preference(\.reminderMinutes)) {
+                    Text("At start time").tag(0)
+                    Text("1 minute before").tag(1)
+                    Text("5 minutes before").tag(5)
+                    Text("15 minutes before").tag(15)
+                    Text("1 hour before").tag(60)
+                }
+                .disabled(connection.configuration.reminderStyle == .off)
+                Toggle("Show again while the meeting is running", isOn: preference(\.repeatDuringMeeting))
+                    .disabled(connection.configuration.reminderStyle == .off)
+                Text("Until you join or dismiss it, including after the Mac wakes or is unlocked. Full-screen reminders can always be dismissed with Escape.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Joining") {
+                Picker("Open meeting links in", selection: preference(\.browserBundleID)) {
+                    Text("Default browser").tag(String?.none)
+                    ForEach(browsers) { browser in
+                        Text(verbatim: browser.name).tag(String?.some(browser.id))
+                    }
+                }
+                Toggle("Open Zoom and Teams in their apps", isOn: preference(\.openInApps))
+                Toggle("Record when I choose Join", isOn: preference(\.recordOnJoin))
+                Toggle("Transcribe calendar recordings locally", isOn: preference(\.localRecording))
+                Text("Local mode saves audio if no model is ready; it never silently uploads it. To keep reminders running after login, use Launch at Login in General.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Menu bar") {
                 Picker("Show next meeting in menu bar", selection: preference(\.displayMinutes)) {
                     Text("15 minutes before").tag(15)
                     Text("1 hour before").tag(60)
                     Text("All day").tag(1440)
                 }
-                Picker("Remind me", selection: preference(\.reminderMinutes)) {
-                    Text("At start time").tag(0)
-                    Text("5 minutes before").tag(5)
-                    Text("15 minutes before").tag(15)
-                    Text("1 hour before").tag(60)
-                }
-                Toggle("Show a reminder pop-up", isOn: preference(\.popup))
-                Toggle("Show a full-screen reminder", isOn: preference(\.fullScreen))
-                Toggle("Record when I choose Join", isOn: preference(\.recordOnJoin))
-                Toggle("Transcribe calendar recordings locally", isOn: preference(\.localRecording))
-                Text("Full-screen reminders can always be dismissed with Escape. Local mode saves audio if no model is ready; it never silently uploads it. To keep reminders running after login, use Launch at Login in General.")
+                Toggle("Show tomorrow's meetings", isOn: preference(\.showTomorrow))
+                Toggle("Show meetings without a link", isOn: preference(\.showWithoutLink))
+                Toggle("Hide meeting names", isOn: preference(\.hideNames))
+                Text("Hides titles, people and agendas in the menu bar and reminders, for example while sharing your screen.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section {
-                DisclosureGroup("Upcoming meetings", isExpanded: $showUpcoming) {
-                    if connection.currentMeetings.isEmpty {
-                        Text("No upcoming timed events in the selected calendars.").foregroundStyle(.secondary)
-                    }
-                    ForEach(connection.currentMeetings.prefix(3)) { meeting in
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(meeting.title).lineLimit(1)
-                                Text(meeting.start.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button(meeting.meetingURL == nil ? "Record meeting" : "Join") {
-                                connection.join(meeting, record: meeting.meetingURL == nil || connection.configuration.recordOnJoin)
-                            }
-                            .buttonStyle(.link)
-                            .help(meeting.meetingURL?.absoluteString ?? meeting.title)
-                            .accessibilityLabel(Text("\(meeting.meetingURL == nil ? String(localized: "Record meeting") : String(localized: "Join")): \(meeting.title)"))
-                            .accessibilityHint(Text(meeting.meetingURL?.host ?? ""))
-                        }.padding(.vertical, 4)
-                    }
-                    Text("The next three meetings are shown here. More meetings are available in the menu bar.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-
         }
     }
 
@@ -200,30 +210,64 @@ struct CalendarSettingsSection: View {
     }
 }
 
-struct CalendarMenuItems: View {
-    @State private var connection: CalendarConnection
+/// Today's meetings around now, at the top of the menu bar menu.
+struct CalendarTimelineView: View {
+    static let size = CGSize(width: 320, height: 44)
+    private static let inset: CGFloat = 12
+    let timeline: CalendarTimeline
+    var hideNames = false
+    var onOpen: (() -> Void)? = nil
 
-    init(connection: CalendarConnection = .shared) {
-        _connection = State(initialValue: connection)
+    @MainActor static func image(_ timeline: CalendarTimeline, appearance: NSAppearance?) -> NSImage? {
+        let dark = appearance?.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let renderer = ImageRenderer(content: CalendarTimelineView(timeline: timeline)
+            .environment(\.colorScheme, dark ? .dark : .light))
+        renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
+        return renderer.nsImage
     }
+
     var body: some View {
-        if connection.configuration.connected {
-            Menu("Upcoming meetings") {
-                if connection.currentMeetings.isEmpty { Text("No upcoming meetings") }
-                ForEach(connection.currentMeetings.prefix(15)) { event in
-                    Button((event.meetingURL == nil ? String(localized: "Record meeting") + " · " : "") + event.start.formatted(date: .omitted, time: .shortened) + " · " + event.title) {
-                        Task {
-                            if let message = await connection.joinFromMenu(event) {
-                                DictationOverlayController.shared.showInfo(message: message, duration: 5)
-                            }
-                        }
-                    }
-                }
-                Divider()
-                Button("Calendar settings…") { MainWindowController.shared.showWindow(section: .meetings) }
+        let x = { (position: Double) in Self.inset + position * (Self.size.width - 2 * Self.inset) }
+        ZStack(alignment: .topLeading) {
+            ForEach(timeline.hours, id: \.position) { hour in
+                Text(verbatim: String(hour.hour))
+                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .position(x: x(hour.position), y: 8)
+                Rectangle().fill(Color.secondary.opacity(0.3))
+                    .frame(width: 1, height: 22)
+                    .position(x: x(hour.position), y: 30)
             }
-            Divider()
+            ForEach(timeline.segments) { segment in
+                let width = max(6, x(segment.to) - x(segment.from) - 2)
+                Capsule().fill(fill(segment.phase))
+                    .overlay(Capsule().strokeBorder(stroke(segment.phase), lineWidth: 1.5))
+                    .frame(width: width, height: 14)
+                    .help(hideNames ? "" : segment.title)
+                    .position(x: x(segment.from) + 1 + width / 2, y: 30)
+            }
+            Capsule().fill(Color.primary)
+                .frame(width: 2.5, height: 26)
+                .position(x: x(timeline.now), y: 30)
         }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .contentShape(Rectangle())
+        .onTapGesture { onOpen?() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Today's meetings timeline"))
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func fill(_ phase: CalendarTimeline.Phase) -> Color {
+        switch phase {
+        case .past: .clear
+        case .current: Color("BrandAccentDeep")
+        case .upcoming: Color("BrandTintSoft")
+        }
+    }
+
+    private func stroke(_ phase: CalendarTimeline.Phase) -> Color {
+        phase == .past ? Color.secondary.opacity(0.45) : Color("BrandAccentDeep")
     }
 }
 
@@ -232,7 +276,53 @@ struct CalendarMenuLabel: View {
     var body: some View {
         if let event = connection.currentMeetings.first,
            event.start.timeIntervalSince(connection.menuClock) <= Double(connection.configuration.displayMinutes * 60) {
-            Text(String(event.title.prefix(32)) + " · " + (event.start <= connection.menuClock ? String(localized: "Now") : "\(Int(ceil(event.start.timeIntervalSince(connection.menuClock) / 60)))m"))
+            let title = connection.configuration.hideNames ? String(localized: "Meeting") : String(event.title.prefix(32))
+            Text(title + " · " + event.shortCountdown(now: connection.menuClock))
         }
+    }
+}
+
+/// The current or next meeting with its Join button, under the timeline in the menu bar menu.
+struct NextMeetingCard: View {
+    static let size = CGSize(width: 320, height: 66)
+    let meeting: CalendarMeeting
+    let now: Date
+    let hideNames: Bool
+    let recordOnJoin: Bool
+    let join: (_ record: Bool) -> Void
+
+    /// One short line: "Now · ends 12:00" or "Next · Starts in 4 min".
+    private var headline: String {
+        meeting.phase(at: now) == .current
+            ? String(localized: "Now · ends \(meeting.end.formatted(date: .omitted, time: .shortened))")
+            : String(localized: "Next") + " · " + meeting.statusLine(now: now)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: headline)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color("BrandAccentDeep"))
+                    .lineLimit(1)
+                Text(hideNames ? String(localized: "Meeting") : meeting.title)
+                    .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text(meeting.scheduleLine).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Nothing to join days ahead: the button appears ten minutes before the start.
+            if meeting.isJoinable(now: now) {
+                if meeting.meetingURL != nil {
+                    Button("Join") { join(recordOnJoin) }
+                } else {
+                    Button("Record meeting") { join(true) }
+                }
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+        .tint(Color("BrandAccentDeep"))
+        .padding(.horizontal, 14)
+        .frame(width: Self.size.width, height: Self.size.height, alignment: .leading)
     }
 }

@@ -22,6 +22,7 @@ struct RecordingsLibraryView: View {
     @State private var playbackService = AudioPlaybackService.shared
     @State private var searchText = ""
     @State private var filter: RecordingTypeFilter = .all
+    @State private var selectedCalendarIDs: Set<String> = []
     @State private var inspectorSelection: RecordingsInspectorSelection?
     @State private var trimNavigationGuard: (() -> Bool)?
     @State private var showDeleteConfirmation = false
@@ -70,17 +71,12 @@ struct RecordingsLibraryView: View {
 
     private var filteredRecordings: [Recording] {
         storage.recordings.filter { recording in
-            guard filter.matches(recording) else { return false }
-            guard !searchText.isEmpty else { return true }
-            let query = searchText.lowercased()
-            return recording.displayTitle.lowercased().contains(query)
-                || recording.libraryDisplayName.lowercased().contains(query)
-                || (recording.description?.lowercased().contains(query) ?? false)
-                || (recording.sourceFileName?.lowercased().contains(query) ?? false)
-                || (recording.remoteSource?.channelName?.lowercased().contains(query) ?? false)
-                || (recording.remoteSource?.description?.lowercased().contains(query) ?? false)
-                || recording.resolvedTranscriptHistory.contains { $0.text.lowercased().contains(query) }
+            filter.matches(recording) && recording.matchesCalendars(selectedCalendarIDs) && recording.matchesSearch(searchText)
         }
+    }
+
+    private var calendarOptions: [CalendarFilterOption] {
+        Recording.calendarFilterOptions(storage.recordings)
     }
 
     private var filteredBatches: [TranscriptionBatch] {
@@ -265,10 +261,10 @@ struct RecordingsLibraryView: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                     .font(.system(size: 13))
-                TextField(filter.showsBatches ? "Search batches" : "Search transcripts", text: $searchText)
+                TextField(filter.showsBatches ? "Search batches" : "Search meetings, people and transcripts", text: $searchText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
-                    .frame(width: 160)
+                    .frame(width: 220)
                 if !searchText.isEmpty {
                     Button {
                         searchText = ""
@@ -309,10 +305,37 @@ struct RecordingsLibraryView: View {
                 Spacer()
             }
 
+            // Shown while a calendar is chosen even if its recordings are gone, so the filter can be cleared.
+            if !filter.showsBatches, !calendarOptions.isEmpty || !selectedCalendarIDs.isEmpty {
+                calendarChips
+            }
+
             if isSelectionMode, !filter.showsBatches {
                 bulkSelectionBar
             }
         }
+    }
+
+    /// Calendars of linked meetings. Nothing chosen shows all; choosing narrows to those calendars.
+    private var calendarChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                FilterChip(label: String(localized: "All calendars"), isSelected: selectedCalendarIDs.isEmpty) {
+                    selectedCalendarIDs = []
+                }
+                ForEach(calendarOptions, id: \.id) { option in
+                    FilterChip(label: option.title, isSelected: selectedCalendarIDs.contains(option.id),
+                               dotRGB: option.colorRGB) {
+                        if selectedCalendarIDs.contains(option.id) {
+                            selectedCalendarIDs.remove(option.id)
+                        } else {
+                            selectedCalendarIDs.insert(option.id)
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityLabel(Text("Calendars"))
     }
 
     private var bulkSelectionBar: some View {
@@ -677,11 +700,17 @@ struct RecordingsLibraryView: View {
 private struct FilterChip: View {
     let label: String
     let isSelected: Bool
+    var dotRGB: UInt32? = nil
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(label)
+            HStack(spacing: 6) {
+                if let dotRGB {
+                    Circle().fill(Color(rgb: dotRGB)).frame(width: 8, height: 8).accessibilityHidden(true)
+                }
+                Text(label)
+            }
                 .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                 .foregroundColor(isSelected ? .white : .primary)
                 .padding(.horizontal, 14)
