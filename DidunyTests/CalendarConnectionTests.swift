@@ -181,6 +181,7 @@ import SwiftUI
         })
         defer { connection.disconnect() }
         await connection.connect()
+        connection.updatePreferences { $0.recordOnJoin = false } // Record on Join is the default now.
         let delegate = AppDelegate()
         let opened = expectation(description: "Selected meeting reaches the system URL opening boundary")
         connection.onJoin = { meeting, record, local in
@@ -310,10 +311,11 @@ import SwiftUI
         for (appearanceName, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             // Rendered without presenting a window: a screen-saver-level panel would take key
             // focus from UI tests that click into their own windows while this runs.
-            for (name, size) in [("popup", CGSize(width: 560, height: 620)), ("fullscreen", CGSize(width: 1280, height: 800))] {
+            for (name, size) in [("popup", CGSize(width: 560, height: 620)), ("fullscreen", CGSize(width: 1280, height: 800)),
+                                 ("early", CGSize(width: 420, height: 360))] {
                 let reminder = NSHostingView(rootView: CalendarReminderView(
                     meetings: [meetings[2], meetings[3]], connection: connection, fullScreen: name == "fullscreen",
-                    dismiss: {}, close: {}, snooze: { _ in }, join: { _, _ in }))
+                    early: name == "early", dismiss: {}, close: {}, snooze: { _ in }, join: { _, _, _ in }))
                 reminder.appearance = NSAppearance(named: appearance)
                 reminder.frame = CGRect(origin: .zero, size: size)
                 try write(reminder, "reference-reminder-\(name)-\(appearanceName)")

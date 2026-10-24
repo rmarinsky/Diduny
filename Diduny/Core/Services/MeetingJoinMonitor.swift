@@ -129,6 +129,12 @@ final class MeetingJoinMonitor {
         }
     }
 
+    /// A call is going on now (joined and not yet ended).
+    var isCallActive: Bool {
+        if case .prompted = state { return true }
+        return false
+    }
+
     func stop() {
         scanGeneration &+= 1
         pollingTask?.cancel()

@@ -60,6 +60,22 @@ final class MeetingJoinMonitorTests: XCTestCase {
         XCTAssertNotEqual(firstMeeting.id, secondMeeting.id)
     }
 
+    func test_callIsActiveFromJoinUntilEnd() {
+        let monitor = MeetingJoinMonitor()
+        let meet = MeetingSignal(client: .googleMeet, source: .browser, isInputActive: true, isOutputActive: true,
+                                 hasCallWindow: true, isFrontmostCallWindow: true)
+        let startedAt = Date(timeIntervalSince1970: 3000)
+        XCTAssertFalse(monitor.isCallActive)
+        _ = monitor.ingest([meet], at: startedAt)
+        XCTAssertFalse(monitor.isCallActive, "A candidate is not a call yet")
+        _ = monitor.ingest([meet], at: startedAt.addingTimeInterval(1))
+        XCTAssertTrue(monitor.isCallActive)
+        _ = monitor.ingest([], at: startedAt.addingTimeInterval(10))
+        XCTAssertTrue(monitor.isCallActive, "A short drop is still the same call")
+        _ = monitor.ingest([], at: startedAt.addingTimeInterval(31))
+        XCTAssertFalse(monitor.isCallActive)
+    }
+
     func test_differentClientDoesNotKeepPromptedSessionAlive() {
         let monitor = MeetingJoinMonitor()
         let zoom = MeetingSignal(

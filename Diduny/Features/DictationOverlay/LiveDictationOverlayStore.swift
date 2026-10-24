@@ -23,6 +23,8 @@ final class LiveDictationOverlayStore {
     var finalText = ""
     var provisionalText = ""
     var copiedAt: Date?
+    /// Set while a meeting records audio only; turns on the cloud live transcript.
+    var onTurnOnLiveTranscript: (() -> Void)?
     /// What the live STT stream produces for this session.
     private(set) var nativeOutput: DictationOutput = .original
     /// Output picked in the panel; applies to the whole recording at Stop.
@@ -222,6 +224,7 @@ final class LiveDictationOverlayStore {
         selectedOutput = .original
         outputOptions = []
         convertedPreview = nil
+        onTurnOnLiveTranscript = nil
     }
 
     func configureOutput(native: DictationOutput, options: [DictationOutput]) {

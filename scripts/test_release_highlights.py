@@ -32,7 +32,7 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
             )
 
             self.run_script("render", str(PAYLOAD), str(markdown))
-            expected = "# Meetings, with your calendar\n\n- A full-screen meeting-now screen at start time shows the agenda, people and place, with Join in your chosen browser or the Zoom or Teams app.\n- Meeting recordings link to their calendar events automatically, older ones too, and search finds them by person, email, agenda or words said.\n- The menu bar shows today's timeline, the next meeting with a Join button, and each meeting's details.\n"
+            expected = "# Meetings that record themselves\n\n- Five minutes before a meeting a small window in the middle of the screen shows what's next; the full-screen screen still comes at the start.\n- Join now records by default: audio only during the call, transcribed on your Mac after it ends. A live transcript can be turned on mid-meeting.\n- When the call ends, Diduny offers to stop recording; drop out and rejoin, and the recording just continues.\n"
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
             arguments = (
