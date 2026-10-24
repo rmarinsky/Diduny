@@ -19,8 +19,11 @@ extension AppDelegate {
         connection.onTick = { [weak self] in self?.offerStopIfLinkedMeetingEnded() }
         connection.start()
         _ = BrowserCalendarConnection.shared
-        calendarStoreObserver = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { _ in
-            Task { @MainActor in await CalendarConnection.shared.refresh() }
+        calendarStoreObserver = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.calendarRecordingLinker.calendarChanged()
+                await CalendarConnection.shared.refresh()
+            }
         }
         calendarWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
             Task { @MainActor in
@@ -142,6 +145,9 @@ extension AppDelegate {
         if storage.applyCalendarMatches(matches) { attempted.formUnion(pending.map { $0.id }) }
     }
 
+    /// Events were added or moved: recordings that matched nothing may match now.
+    func calendarChanged() { attempted = [] }
+
     /// Unlinked, finished meeting recordings that are not waiting for the person to choose an event.
     private static func pending(in storage: RecordingsLibraryStorage) -> [(id: UUID, start: Date, end: Date)] {
         storage.recordings.compactMap { recording in
@@ -202,6 +208,12 @@ struct RecordCurrentMeetingIntent: AppIntent {
         } else {
             delegate.toggleMeetingRecording()
         }
+        guard Self.started(after: delegate.appState.meetingRecordingState) else {
+            return .result(dialog: "Diduny couldn't start the meeting recording. Finish the current recording or sign in, then try again.")
+        }
         return .result(dialog: "Diduny is starting the meeting recording.")
     }
+
+    /// A start blocked by sign-in or another recording leaves the state unchanged.
+    static func started(after state: RecordingState) -> Bool { state == .processing || state == .recording }
 }

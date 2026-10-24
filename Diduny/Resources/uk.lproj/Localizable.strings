@@ -1345,6 +1345,7 @@
 "Find calendar event" = "Знайти подію календаря";
 "The calendar link could not be saved." = "Не вдалося зберегти зв'язок із календарем.";
 "No calendar event overlaps this recording." = "Жодна подія календаря не збігається за часом із цим записом.";
+"Diduny couldn't read your calendar. Check calendar access in System Settings." = "Diduny не вдалося прочитати календар. Перевірте доступ до календаря в Системних параметрах.";
 "Search meetings, people and transcripts" = "Пошук зустрічей, людей і транскриптів";
 "All calendars" = "Усі календарі";
 "Meeting reminders" = "Нагадування про зустрічі";
@@ -1386,6 +1387,7 @@
 "Diduny can show each meeting's description, place and attendees in reminders and the menu, keep them (names and emails) with linked recordings on this Mac, and link your earlier meeting recordings to their calendar events automatically. Nothing is sent to a server." = "Diduny може показувати опис, місце та учасників кожної зустрічі в нагадуваннях і меню, зберігати їх (імена й адреси email) разом із пов'язаними записами на цьому Mac і автоматично пов'язувати ваші попередні записи зустрічей із подіями календаря. Нічого не надсилається на сервер.";
 "Allow agendas and people" = "Дозволити порядок денний і учасників";
 "Diduny is starting the meeting recording." = "Diduny починає запис зустрічі.";
+"Diduny couldn't start the meeting recording. Finish the current recording or sign in, then try again." = "Diduny не вдалося почати запис зустрічі. Завершіть поточний запис або увійдіть в акаунт і спробуйте ще раз.";
 "%@" = "%@";
 "Now · ends %@" = "Зараз · до %@";
 "Next" = "Далі";

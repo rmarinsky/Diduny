@@ -108,6 +108,9 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
                            "Only the new recording's time is read, not back to the oldest recording")
         await laterLinker.run(storage: laterStorage, connection: rangeConnection)
         XCTAssertEqual(ranges.count, 1, "A recording that matched nothing is not read again")
+        laterLinker.calendarChanged()
+        await laterLinker.run(storage: laterStorage, connection: rangeConnection)
+        XCTAssertEqual(ranges.count, 2, "After the calendar changes, an unmatched recording is tried again")
 
         XCTAssertTrue(restored.chooseCalendarMeeting(id: double, meeting: second))
         XCTAssertEqual(restored.recordings.first { $0.id == double }?.calendarMeeting, second)

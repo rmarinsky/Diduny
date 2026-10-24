@@ -142,14 +142,14 @@ struct RecordingDetailView: View {
         let recording = currentRecording
         let end = recording.resolvedEndedAt ?? recording.createdAt.addingTimeInterval(recording.durationSeconds)
         Task {
-            let events = (try? await CalendarConnection.shared.readMeetings(from: recording.createdAt.addingTimeInterval(-3600),
-                                                                            to: end.addingTimeInterval(3600))) ?? []
-            let overlapping = events.filter { !$0.allDay && $0.end > recording.createdAt.addingTimeInterval(-900) && $0.start < end.addingTimeInterval(900) }
-                .sorted { $0.start < $1.start }
-            if overlapping.isEmpty {
-                operationErrorMessage = String(localized: "No calendar event overlaps this recording.")
-            } else {
+            switch await CalendarMeeting.findEvents(recordingStart: recording.createdAt, recordingEnd: end,
+                                                    read: CalendarConnection.shared.readMeetings) {
+            case let .found(overlapping):
                 storage.setCalendarCandidates(id: recording.id, candidates: overlapping)
+            case .noOverlap:
+                operationErrorMessage = String(localized: "No calendar event overlaps this recording.")
+            case .readFailed:
+                operationErrorMessage = String(localized: "Diduny couldn't read your calendar. Check calendar access in System Settings.")
             }
         }
     }

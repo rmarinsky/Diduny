@@ -116,7 +116,9 @@ extension CalendarMeeting {
     static func cleanedNotes(_ notes: String?) -> String? {
         guard var text = notes else { return nil }
         text = text.replacingOccurrences(of: #"(?i)<br\s*/?>|</p>|</div>|</li>"#, with: "\n", options: .regularExpression)
-            .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
+            // Only HTML tags: plain-text invites put emails and links in angle brackets.
+            .replacingOccurrences(of: #"(?i)</?(?:a|b|blockquote|body|br|code|div|em|font|h[1-6]|head|hr|html|i|img|li|meta|ol|p|pre|small|span|strong|style|sub|sup|table|tbody|td|th|thead|tr|u|ul)(?=[\s/>])[^>]*>"#,
+                                  with: "", options: .regularExpression)
         for (entity, value) in [("&nbsp;", " "), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&#39;", "'"), ("&amp;", "&")] {
             text = text.replacingOccurrences(of: entity, with: value)
         }
@@ -369,6 +371,24 @@ extension CalendarMeeting {
         guard let best = scored.first else { return .none }
         let close = scored.filter { best.score - $0.score < 0.2 }.map(\.event)
         return close.count == 1 ? .linked(best.event) : .ambiguous(close.sorted { $0.start < $1.start })
+    }
+}
+
+enum CalendarEventSearch: Equatable {
+    case found([CalendarMeeting]), noOverlap, readFailed
+}
+
+extension CalendarMeeting {
+    /// Events within 15 minutes of a recording, for linking it by hand. A failed read is not "no events".
+    static func findEvents(recordingStart: Date, recordingEnd: Date,
+                           read: (Date, Date) async throws -> [CalendarMeeting]) async -> CalendarEventSearch {
+        guard let events = try? await read(recordingStart.addingTimeInterval(-3600), recordingEnd.addingTimeInterval(3600)) else {
+            return .readFailed
+        }
+        let overlapping = events.filter {
+            !$0.allDay && $0.end > recordingStart.addingTimeInterval(-900) && $0.start < recordingEnd.addingTimeInterval(900)
+        }.sorted { $0.start < $1.start }
+        return overlapping.isEmpty ? .noOverlap : .found(overlapping)
     }
 }
 

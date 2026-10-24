@@ -1345,6 +1345,7 @@
 "Find calendar event" = "Find calendar event";
 "The calendar link could not be saved." = "The calendar link could not be saved.";
 "No calendar event overlaps this recording." = "No calendar event overlaps this recording.";
+"Diduny couldn't read your calendar. Check calendar access in System Settings." = "Diduny couldn't read your calendar. Check calendar access in System Settings.";
 "Search meetings, people and transcripts" = "Search meetings, people and transcripts";
 "All calendars" = "All calendars";
 "Meeting reminders" = "Meeting reminders";
@@ -1386,6 +1387,7 @@
 "Diduny can show each meeting's description, place and attendees in reminders and the menu, keep them (names and emails) with linked recordings on this Mac, and link your earlier meeting recordings to their calendar events automatically. Nothing is sent to a server." = "Diduny can show each meeting's description, place and attendees in reminders and the menu, keep them (names and emails) with linked recordings on this Mac, and link your earlier meeting recordings to their calendar events automatically. Nothing is sent to a server.";
 "Allow agendas and people" = "Allow agendas and people";
 "Diduny is starting the meeting recording." = "Diduny is starting the meeting recording.";
+"Diduny couldn't start the meeting recording. Finish the current recording or sign in, then try again." = "Diduny couldn't start the meeting recording. Finish the current recording or sign in, then try again.";
 "%@" = "%@";
 "Now · ends %@" = "Now · ends %@";
 "Next" = "Next";

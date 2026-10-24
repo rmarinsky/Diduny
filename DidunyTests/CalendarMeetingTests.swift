@@ -175,6 +175,32 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertNil(CalendarMeeting.cleanedNotes(nil))
     }
 
+    func testAgendaNotesKeepPlainTextInAngleBrackets() {
+        XCTAssertEqual(CalendarMeeting.cleanedNotes("Host: Jane Doe <jane@example.com>\nDeck <https://example.com/deck>"),
+                       "Host: Jane Doe <jane@example.com>\nDeck <https://example.com/deck>")
+        XCTAssertEqual(CalendarMeeting.cleanedNotes(#"<div class="x"><b>Agenda</b> <a href="https://a.b">deck</a></div>"#), "Agenda deck")
+    }
+
+    func testFindingAnEventTellsAFailedCalendarReadFromNoOverlap() async {
+        let start = Date(timeIntervalSince1970: 1_800_000_000), end = start.addingTimeInterval(1800)
+        let review = CalendarMeeting(id: "r", calendarID: "work", title: "Review", start: start, end: end)
+        let later = CalendarMeeting(id: "l", calendarID: "work", title: "Later", start: end.addingTimeInterval(7200), end: end.addingTimeInterval(9000))
+        struct Denied: Error {}
+
+        let found = await CalendarMeeting.findEvents(recordingStart: start, recordingEnd: end) { _, _ in [review, later] }
+        XCTAssertEqual(found, .found([review]))
+        let none = await CalendarMeeting.findEvents(recordingStart: start, recordingEnd: end) { _, _ in [later] }
+        XCTAssertEqual(none, .noOverlap)
+        let failed = await CalendarMeeting.findEvents(recordingStart: start, recordingEnd: end) { _, _ in throw Denied() }
+        XCTAssertEqual(failed, .readFailed)
+    }
+
+    func testRecordCurrentMeetingReportsStartOnlyWhenTheRecordingStarted() {
+        XCTAssertTrue(RecordCurrentMeetingIntent.started(after: .processing))
+        XCTAssertTrue(RecordCurrentMeetingIntent.started(after: .recording))
+        XCTAssertFalse(RecordCurrentMeetingIntent.started(after: .idle), "Signed out or another recording blocked the start")
+    }
+
     func testStoredMeetingsWithoutEventDetailsStillDecodeAndDetailsRoundTrip() throws {
         let legacy = #"{"id":"a","calendarID":"work","title":"Review","start":0,"end":600,"cancelled":false,"declined":false,"allDay":false}"#
         let decoded = try JSONDecoder().decode(CalendarMeeting.self, from: Data(legacy.utf8))
