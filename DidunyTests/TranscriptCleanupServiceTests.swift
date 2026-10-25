@@ -12,6 +12,14 @@ import Testing
 @Suite("TranscriptCleanupService guard clauses")
 struct TranscriptCleanupServiceTests {
 
+    @Test("Translation semicolons become commas")
+    func translationSemicolons() {
+        #expect(
+            TranscriptCleanupService.replaceSemicolonsWithCommas("I looked at it; it doesn't work ; really.")
+                == "I looked at it, it doesn't work, really."
+        )
+    }
+
     @Test("Chat messages lowercase the first word across languages and preserve inner punctuation")
     func chatMessageFormatting() {
         #expect(ClipboardService.preparedMessageText(" Так, добре. Зараз перевірю. ", mode: .chat) == "так, добре. Зараз перевірю")
