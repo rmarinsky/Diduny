@@ -1232,6 +1232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if state == .error {
             EscapeCancelService.shared.deactivate()
         }
+        if state != .recording, state != .processing { whisperTranscriptionService.endRecordingHold() }
         if state == .recording {
             startMeetingSilenceMonitor { [weak self] in
                 guard self?.appState.meetingRecordingState == .recording else { return }

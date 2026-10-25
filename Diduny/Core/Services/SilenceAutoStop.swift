@@ -8,7 +8,7 @@ struct SpeechProbabilityGate {
     let offThreshold: Float
     private(set) var isSpeech = false
 
-    /// Silero reference values: 0.5 on, 0.15 gap.
+    /// Silero reference values: 0.5 on, 0.35 off (a 0.15 gap).
     init(onThreshold: Float = 0.5, offThreshold: Float = 0.35) {
         self.onThreshold = onThreshold
         self.offThreshold = offThreshold

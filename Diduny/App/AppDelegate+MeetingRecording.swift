@@ -518,6 +518,7 @@ extension AppDelegate {
         store.connectionStatus = .connected
 
         let whisper = whisperTranscriptionService
+        whisper.beginRecordingHold()
         let stream = LocalWhisperStreamingService(
             transcribe: { samples in
                 try await whisper.transcribeRawSamples(samples)

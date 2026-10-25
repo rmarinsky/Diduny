@@ -40,6 +40,8 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         Task { [weak self] in
             do {
                 _ = try await self?.ensureContext()
+                // The recording may have ended before the load finished; start the timer then.
+                self?.scheduleModelUnload()
             } catch {
                 Log.whisper.warning("Whisper preload failed: \(error.localizedDescription)")
             }
@@ -217,22 +219,25 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
     // MARK: - Model Unload Timer
 
     private func cancelUnloadTimer() {
-        unloadTask?.cancel()
-        unloadTask = nil
+        stateLock.withLock {
+            unloadTask?.cancel()
+            unloadTask = nil
+        }
     }
 
     private func scheduleModelUnload() {
-        let canUnload = stateLock.withLock { whisperContext != nil && !isHeldForRecording }
-        guard canUnload else { return }
-
         guard let interval = SettingsStorage.shared.whisperModelUnloadPolicy.timeInterval else {
             return // keepLoaded — no timer
         }
 
-        unloadTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(interval))
-            guard !Task.isCancelled else { return }
-            self?.unloadModel()
+        stateLock.withLock {
+            guard whisperContext != nil, !isHeldForRecording else { return }
+            unloadTask?.cancel()
+            unloadTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(interval))
+                guard !Task.isCancelled else { return }
+                self?.unloadModel()
+            }
         }
     }
 
