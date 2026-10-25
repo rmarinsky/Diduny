@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import subprocess
 import sys
 import tempfile
@@ -32,7 +33,8 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
             )
 
             self.run_script("render", str(PAYLOAD), str(markdown))
-            expected = "# Meetings that record themselves\n\n- Five minutes before a meeting a small window in the middle of the screen shows what's next; the full-screen screen still comes at the start.\n- Join now records by default: audio only during the call, transcribed on your Mac after it ends. A live transcript can be turned on mid-meeting.\n- When the call ends, Diduny offers to stop recording; drop out and rejoin, and the recording just continues.\n"
+            payload = json.loads(PAYLOAD.read_text(encoding="utf-8"))
+            expected = f"# {payload['headline']}\n\n" + "".join(f"- {item}\n" for item in payload["highlights"])
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
             arguments = (
