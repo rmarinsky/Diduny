@@ -315,6 +315,7 @@ extension AppDelegate {
                 return
             }
             Log.app.info("startRecording: Whisper model ready")
+            whisperTranscriptionService.beginRecordingHold()
         }
 
         // Resolve device (nil preference = System Default)

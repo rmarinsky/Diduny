@@ -1206,6 +1206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleRecordingStateChange(_ state: RecordingState) {
+        if state != .recording { whisperTranscriptionService.endRecordingHold() }
         voiceAutoResetTask?.cancel()
         handleStateChange(
             state,
@@ -1272,6 +1273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleTranslationStateChange(_ state: RecordingState) {
+        if state != .recording { whisperTranscriptionService.endRecordingHold() }
         translationAutoResetTask?.cancel()
         handleStateChange(
             state,

@@ -263,6 +263,7 @@ extension AppDelegate {
                 }
                 return
             }
+            whisperTranscriptionService.beginRecordingHold()
         }
         Log.app.info("startTranslationRecording: Provider ready, pair=\(pair.displayLabel)")
         translationRealtimeSessionEnabled = false
