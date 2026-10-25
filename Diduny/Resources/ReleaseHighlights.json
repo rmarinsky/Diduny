@@ -1,9 +1,7 @@
 {
   "schemaVersion": 1,
-  "headline": "Meetings that record themselves",
+  "headline": "Cleaner punctuation in translations",
   "highlights": [
-    "Five minutes before a meeting a small window in the middle of the screen shows what's next; the full-screen screen still comes at the start.",
-    "Join now records by default: audio only during the call, transcribed on your Mac after it ends. A live transcript can be turned on mid-meeting.",
-    "When the call ends, Diduny offers to stop recording; drop out and rejoin, and the recording just continues."
+    "Translated text uses commas instead of the semicolons the translation model liked to add."
   ]
 }
