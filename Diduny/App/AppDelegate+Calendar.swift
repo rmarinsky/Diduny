@@ -9,6 +9,10 @@ extension AppDelegate {
             guard let self, let connection else { return }
             self.calendarReminderController.show(meetings, connection: connection)
         }
+        connection.onEarlyReminder = { [weak self, weak connection] meetings in
+            guard let self, let connection else { return }
+            self.calendarReminderController.showEarly(meetings, connection: connection)
+        }
         connection.onJoin = { [weak self] meeting, record, local in
             self?.joinCalendarMeeting(meeting, record: record, local: local)
         }
@@ -46,14 +50,42 @@ extension AppDelegate {
         let stored = recordingID.flatMap { id in RecordingsLibraryStorage.shared.recordings.first(where: { $0.id == id })?.calendarMeeting }
         // A meeting extended or moved in Calendar after linking ends when Calendar now says.
         let linked = stored.map { stored in CalendarConnection.shared.meetings.first(where: { $0.id == stored.id }) ?? stored }
-        guard CalendarMeeting.stopPromptDue(meeting: linked, recordingID: recordingID, offered: meetingEndPromptsOffered, now: now),
+        guard CalendarMeeting.stopPromptDue(meeting: linked, recordingID: recordingID, offered: meetingEndPromptsOffered, now: now,
+                                            callActive: meetingJoinMonitor.isCallActive),
               let id = recordingID, let meeting = linked else { return }
         meetingEndPromptsOffered.insert(id)
-        calendarReminderController.showMeetingEnded(meeting, hideNames: CalendarConnection.shared.configuration.hideNames) { [weak self] in
-            guard let self, self.appState.meetingRecordingState == .recording,
-                  self.meetingRecorderService.currentRecordingId == id else { return }
-            self.toggleMeetingRecording()
+        let title = CalendarConnection.shared.configuration.hideNames ? String(localized: "Meeting") : meeting.title
+        calendarReminderController.showMeetingEnded(title: String(localized: "\(title) has ended"),
+                                                    message: String(localized: "Diduny is still recording this meeting.")) { [weak self] in
+            self?.stopMeetingRecording(ifCurrent: id)
         }
+    }
+
+    /// The call detector saw the call end while a meeting is recorded. Rejoining closes the offer.
+    func offerStopAfterCallEnded(_ call: DetectedMeeting) {
+        guard appState.meetingRecordingState == .recording, let id = meetingRecorderService.currentRecordingId else { return }
+        meetingEndPromptsOffered.insert(id) // The calendar end prompt is not needed after this one.
+        calendarReminderController.showMeetingEnded(
+            title: String(localized: "Looks like the call ended"),
+            message: String(localized: "\(call.client.displayName) stopped. Diduny is still recording. If you rejoin, recording just continues.")
+        ) { [weak self] in
+            self?.stopMeetingRecording(ifCurrent: id)
+        }
+    }
+
+    /// Back in a call: the stop offer closes and recording continues.
+    func closeStopOfferAfterRejoin() {
+        guard calendarReminderController.isShowingMeetingEnded else { return }
+        calendarReminderController.closeMeetingEnded()
+        if appState.meetingRecordingState == .recording {
+            DictationOverlayController.shared.showInfoDuringRecording(
+                message: String(localized: "Back in the call — still recording"), mode: .meeting, duration: 3)
+        }
+    }
+
+    private func stopMeetingRecording(ifCurrent id: UUID) {
+        guard appState.meetingRecordingState == .recording, meetingRecorderService.currentRecordingId == id else { return }
+        toggleMeetingRecording()
     }
 
     /// Opens a validated meeting link the way Calendar settings ask: Zoom/Teams app, chosen browser or default browser.

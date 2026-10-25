@@ -353,7 +353,9 @@ extension AppDelegate {
             // up is buffered by CloudRealtimeService and flushed on connect —
             // recording never waits for the network.
             guard !Task.isCancelled, activeMeetingTranscriptionSessionID == sessionID else { return }
-            let store = await setupMeetingLiveTranscription(cloudModeEnabled: cloudModeEnabled)
+            // Calendar recordings capture audio only; the transcript is made after the meeting.
+            let localPreview = calendarMeeting == nil && SettingsStorage.shared.meetingLocalLivePreviewEnabled
+            let store = await setupMeetingLiveTranscription(cloudModeEnabled: cloudModeEnabled, localPreview: localPreview)
             let stillOwnsSession = activeMeetingTranscriptionSessionID == sessionID
             guard !Task.isCancelled,
                   stillOwnsSession,
@@ -406,6 +408,11 @@ extension AppDelegate {
                 handleMeetingStateChange(.recording)
                 if !cloudModeEnabled {
                     updateRecordingFeedbackConnectionStatus(.connected, mode: .meeting)
+                }
+                if !cloudModeEnabled, !localPreview {
+                    DictationOverlayController.shared.store.onTurnOnLiveTranscript = { [weak self] in
+                        self?.turnOnMeetingLiveTranscript()
+                    }
                 }
             }
             didStart = true
@@ -492,12 +499,15 @@ extension AppDelegate {
 
     // MARK: - Real-Time Transcription Setup
 
-    func setupMeetingLiveTranscription(cloudModeEnabled: Bool) async -> LiveTranscriptStore {
+    func setupMeetingLiveTranscription(
+        cloudModeEnabled: Bool,
+        localPreview: Bool = SettingsStorage.shared.meetingLocalLivePreviewEnabled
+    ) async -> LiveTranscriptStore {
         if cloudModeEnabled {
             return await setupRealtimeTranscription(sessionID: activeMeetingTranscriptionSessionID)
         }
 
-        guard SettingsStorage.shared.meetingLocalLivePreviewEnabled else {
+        guard localPreview else {
             Log.app.info("Local meeting mode selected — live preview disabled, recording only")
             return LiveTranscriptStore()
         }
@@ -534,6 +544,30 @@ extension AppDelegate {
             Task { await stream?.appendPCM16(pcmData) }
         }
         return store
+    }
+
+    /// Adds a cloud live transcript to an audio-only meeting recording, from now on. The recording stays
+    /// local: the final transcript is still made on this Mac from the whole audio after Stop.
+    func turnOnMeetingLiveTranscript() {
+        guard appState.meetingRecordingState == .recording, activeMeetingTranscriptionProvider == .local,
+              localMeetingStreamingService == nil, meetingRealtimeConnectTask == nil else { return }
+        guard UsageService.canOfferCloudTranscription(hasStoredSession: AuthService.hasStoredSession,
+                                                      usage: UsageService.shared.cachedUsage) else {
+            DictationOverlayController.shared.showInfoDuringRecording(
+                message: String(localized: "Sign in to Diduny with minutes left to turn on the live transcript."),
+                mode: .meeting, duration: 4)
+            return
+        }
+        DictationOverlayController.shared.store.onTurnOnLiveTranscript = nil
+        let sessionID = activeMeetingTranscriptionSessionID
+        Task { @MainActor in
+            let store = await setupRealtimeTranscription(sessionID: sessionID)
+            guard appState.meetingRecordingState == .recording, activeMeetingTranscriptionSessionID == sessionID else {
+                _ = await stopMeetingLiveTranscription()
+                return
+            }
+            appState.liveTranscriptStore = store
+        }
     }
 
     @discardableResult

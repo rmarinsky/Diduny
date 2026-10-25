@@ -62,10 +62,12 @@ struct CalendarConfiguration: Codable, Equatable {
     var connected = false
     var selected: Set<String> = []
     var displayMinutes = 60
-    var reminderMinutes = 0
+    /// Minutes before the start for the compact heads-up; 0 turns it off. The start reminder
+    /// (`reminderStyle`) always comes at the start time.
+    var reminderMinutes = 5
     var popup = false
     var fullScreen = true
-    var recordOnJoin = false
+    var recordOnJoin = true
     var localRecording = true
     var repeatDuringMeeting = true
     /// nil opens meeting links with the system's default browser.
@@ -78,6 +80,8 @@ struct CalendarConfiguration: Codable, Equatable {
     /// default for every connected calendar; can be turned off in Calendar & Meetings.
     var eventDetails = true
     var ledger = CalendarReminderLedger()
+    /// Settings saved before the early reminder existed get the new defaults once.
+    var migratedToEarlyReminder = true
 
     var reminderStyle: ReminderStyle {
         get { fullScreen ? .fullScreen : popup ? .window : .off }
@@ -111,6 +115,12 @@ struct CalendarConfiguration: Codable, Equatable {
         showWithoutLink = try value(.showWithoutLink, defaults.showWithoutLink)
         eventDetails = try value(.eventDetails, defaults.eventDetails)
         ledger = try value(.ledger, defaults.ledger)
+        if !(try value(.migratedToEarlyReminder, false)) {
+            // "At start time" was the old single reminder; it is now the full-screen one, plus the heads-up.
+            if reminderMinutes == 0 { reminderMinutes = defaults.reminderMinutes }
+            recordOnJoin = true
+        }
+        migratedToEarlyReminder = true
     }
 
     private static func nearest(_ value: Int, in choices: [Int]) -> Int {
@@ -128,6 +138,7 @@ struct CalendarConfiguration: Codable, Equatable {
     private(set) var error: String?
     var onJoin: ((CalendarMeeting, Bool, Bool) -> Void)?
     var onReminder: (([CalendarMeeting]) -> Void)?
+    var onEarlyReminder: (([CalendarMeeting]) -> Void)?
     private let defaults: UserDefaults
     private let authorize: () async throws -> Bool
     private let read: (Set<String>?) async throws -> ScheduledCalendarSnapshot
@@ -254,14 +265,15 @@ struct CalendarConfiguration: Codable, Equatable {
         return meetings.filter { configuration.selected.contains($0.calendarID) && $0.canRemind }
     }
 
+    /// `local` overrides the calendar default for this meeting only.
     @discardableResult
-    func join(_ meeting: CalendarMeeting, record: Bool) -> Bool {
+    func join(_ meeting: CalendarMeeting, record: Bool, local: Bool? = nil) -> Bool {
         guard let current = currentMeetings.first(where: { $0.id == meeting.id }),
               current.start == meeting.start, current.meetingURL == meeting.meetingURL,
               current.meetingURL.map(CalendarMeeting.isJoinURL) ?? record,
               let onJoin else { return false }
         acknowledge([current])
-        onJoin(current, record, configuration.localRecording)
+        onJoin(current, record, local ?? configuration.localRecording)
         return true
     }
 
@@ -298,14 +310,14 @@ struct CalendarConfiguration: Codable, Equatable {
     }
 
     @discardableResult
-    func joinFromMenu(_ meeting: CalendarMeeting, record: Bool) async -> String? {
+    func joinFromMenu(_ meeting: CalendarMeeting, record: Bool, local: Bool? = nil) async -> String? {
         if !hasFreshSnapshot {
             await refresh()
         }
         guard hasFreshSnapshot else {
             return String(localized: "Calendar access could not be refreshed. Open Calendar settings and try again.")
         }
-        guard join(meeting, record: meeting.meetingURL == nil || record) else {
+        guard join(meeting, record: meeting.meetingURL == nil || record, local: local) else {
             return String(localized: "This meeting changed or is no longer available. Reopen the Diduny menu and select it again.")
         }
         return nil
@@ -328,13 +340,18 @@ struct CalendarConfiguration: Codable, Equatable {
     func stop() { polling?.cancel(); polling = nil; generation = UUID(); busy = false }
 
     private func deliverReminders() {
-        guard let onReminder, configuration.reminderStyle != .off, !isScreenLocked else { return }
-        let due = configuration.ledger.due(meetings, selected: configuration.selected, now: Date(),
-                                          fetchedAt: fetchedAt, leadMinutes: configuration.reminderMinutes,
-                                          repeatDuringMeeting: configuration.repeatDuringMeeting)
-        guard !due.isEmpty else { return }
+        guard !isScreenLocked else { return }
+        let now = Date()
+        let early = onEarlyReminder == nil ? [] : configuration.ledger.dueEarly(
+            meetings, selected: configuration.selected, now: now, fetchedAt: fetchedAt,
+            leadMinutes: configuration.reminderMinutes)
+        let due = onReminder == nil || configuration.reminderStyle == .off ? [] : configuration.ledger.due(
+            meetings, selected: configuration.selected, now: now, fetchedAt: fetchedAt,
+            leadMinutes: 0, repeatDuringMeeting: configuration.repeatDuringMeeting)
+        guard !early.isEmpty || !due.isEmpty else { return }
         persist()
-        onReminder(due)
+        // The start reminder replaces a heads-up that is still on screen.
+        if !due.isEmpty { onReminder?(due) } else { onEarlyReminder?(early) }
     }
     private func persist() {
         if let data = try? JSONEncoder().encode(configuration) { defaults.set(data, forKey: Self.key) }

@@ -42,18 +42,14 @@ final class ReleaseHighlightsTests: XCTestCase {
         XCTAssertNil(ReleaseHighlights.load(from: malformedURL))
     }
 
-    func testBundledPayloadMatchesCuratedReleaseCopy() throws {
+    /// The copy changes every release; only its shape is checked (same contract as
+    /// scripts/release_highlights.py validate).
+    func testBundledPayloadHasHeadlineAndHighlights() throws {
         let highlights = try XCTUnwrap(ReleaseHighlights.bundled())
 
-        XCTAssertEqual(highlights.headline, "Meetings, with your calendar")
-        XCTAssertEqual(
-            highlights.highlights,
-            [
-                "A full-screen meeting-now screen at start time shows the agenda, people and place, with Join in your chosen browser or the Zoom or Teams app.",
-                "Meeting recordings link to their calendar events automatically, older ones too, and search finds them by person, email, agenda or words said.",
-                "The menu bar shows today's timeline, the next meeting with a Join button, and each meeting's details.",
-            ]
-        )
+        XCTAssertFalse(highlights.headline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertTrue((1...3).contains(highlights.highlights.count))
+        XCTAssertFalse(highlights.highlights.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
     }
 }
 

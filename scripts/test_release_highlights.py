@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import subprocess
 import sys
 import tempfile
@@ -32,7 +33,8 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
             )
 
             self.run_script("render", str(PAYLOAD), str(markdown))
-            expected = "# Meetings, with your calendar\n\n- A full-screen meeting-now screen at start time shows the agenda, people and place, with Join in your chosen browser or the Zoom or Teams app.\n- Meeting recordings link to their calendar events automatically, older ones too, and search finds them by person, email, agenda or words said.\n- The menu bar shows today's timeline, the next meeting with a Join button, and each meeting's details.\n"
+            payload = json.loads(PAYLOAD.read_text(encoding="utf-8"))
+            expected = f"# {payload['headline']}\n\n" + "".join(f"- {item}\n" for item in payload["highlights"])
             self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
 
             arguments = (

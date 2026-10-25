@@ -411,10 +411,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // In the call already: the meeting-now screen is not needed for it.
             CalendarConnection.shared.acknowledgeMeetingsInProgress()
             if calendarReminderController.window != nil { calendarReminderController.dismiss() }
+            closeStopOfferAfterRejoin()
             guard !hasAnyRecordingInProgress else { return }
             EdgeCommandPanelController.shared.showMeetingSuggestion(meeting)
         case let .ended(meeting):
             EdgeCommandPanelController.shared.dismissMeetingSuggestion(id: meeting.id)
+            offerStopAfterCallEnded(meeting)
         }
     }
 

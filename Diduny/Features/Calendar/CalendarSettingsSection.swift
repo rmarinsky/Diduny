@@ -82,19 +82,20 @@ struct CalendarSettingsSection: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Meeting reminders") {
-                Picker("When a meeting starts", selection: preference(\.reminderStyle)) {
-                    Text("Full screen").tag(CalendarConfiguration.ReminderStyle.fullScreen)
-                    Text("Small window").tag(CalendarConfiguration.ReminderStyle.window)
-                    Text("Off").tag(CalendarConfiguration.ReminderStyle.off)
-                }
-                Picker("Remind me", selection: preference(\.reminderMinutes)) {
-                    Text("At start time").tag(0)
+                Picker("Before a meeting", selection: preference(\.reminderMinutes)) {
+                    Text("Off").tag(0)
                     Text("1 minute before").tag(1)
                     Text("5 minutes before").tag(5)
                     Text("15 minutes before").tag(15)
                     Text("1 hour before").tag(60)
                 }
-                .disabled(connection.configuration.reminderStyle == .off)
+                Text("A small window in the middle of the screen with the meeting's details.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Picker("When a meeting starts", selection: preference(\.reminderStyle)) {
+                    Text("Full screen").tag(CalendarConfiguration.ReminderStyle.fullScreen)
+                    Text("Small window").tag(CalendarConfiguration.ReminderStyle.window)
+                    Text("Off").tag(CalendarConfiguration.ReminderStyle.off)
+                }
                 Toggle("Show again while the meeting is running", isOn: preference(\.repeatDuringMeeting))
                     .disabled(connection.configuration.reminderStyle == .off)
                 Text("Until you join or dismiss it, including after the Mac wakes or is unlocked. Full-screen reminders can always be dismissed with Escape.")
@@ -109,8 +110,11 @@ struct CalendarSettingsSection: View {
                 }
                 Toggle("Open Zoom and Teams in their apps", isOn: preference(\.openInApps))
                 Toggle("Record when I choose Join", isOn: preference(\.recordOnJoin))
-                Toggle("Transcribe calendar recordings locally", isOn: preference(\.localRecording))
-                Text("Local mode saves audio if no model is ready; it never silently uploads it. To keep reminders running after login, use Launch at Login in General.")
+                Picker("Transcribe calendar recordings", selection: preference(\.localRecording)) {
+                    Text("On this Mac, after the meeting").tag(true)
+                    Text("Live, in the cloud").tag(false)
+                }
+                Text("On this Mac, only audio is recorded during the call and the transcript is made in the background when you stop. You can turn on a live transcript during the meeting. Without a downloaded model the audio is saved; it is never uploaded silently. To keep reminders running after login, use Launch at Login in General.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Menu bar") {

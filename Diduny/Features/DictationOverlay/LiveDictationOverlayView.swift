@@ -16,7 +16,11 @@ struct LiveDictationOverlayView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             statusRow
-            transcriptView
+            if let turnOn = store.onTurnOnLiveTranscript, !store.hasText, store.canStop {
+                recordingOnlyView(turnOn)
+            } else {
+                transcriptView
+            }
 
             if store.phase == .pasted {
                 Toggle("Paste and close automatically", isOn: $autoPaste)
@@ -197,6 +201,29 @@ struct LiveDictationOverlayView: View {
             .onAppear { scrollTranscriptToBottom(proxy) }
             .onChange(of: store.displayText) { _, _ in scrollTranscriptToBottom(proxy) }
             .onChange(of: store.phase) { _, _ in scrollTranscriptToBottom(proxy) }
+        }
+    }
+
+    private func recordingOnlyView(_ turnOn: @escaping () -> Void) -> some View {
+        VStack(spacing: 10) {
+            Text("Recording only. The transcript will be ready after the meeting, made on this Mac.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Turn on live transcript", action: turnOn)
+                .buttonStyle(.borderedProminent)
+                .tint(Color("BrandAccentDeep"))
+            Text("Live view from now, in the cloud. The final transcript is still made on this Mac.")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
         }
     }
 

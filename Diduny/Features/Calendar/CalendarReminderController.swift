@@ -8,6 +8,8 @@ private final class CalendarReminderWindow: NSPanel {
 @MainActor final class CalendarReminderController {
     private(set) var window: NSWindow?
     private var pending: [CalendarMeeting] = []
+    /// The shown window is the heads-up before the meeting, not the start reminder.
+    private(set) var isEarly = false
     private var screenObserver: NSObjectProtocol?
 
     func dismiss() {
@@ -15,6 +17,7 @@ private final class CalendarReminderWindow: NSPanel {
         window?.close()
         window = nil
         pending = []
+        isEarly = false
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
     }
@@ -30,11 +33,11 @@ private final class CalendarReminderWindow: NSPanel {
         dismiss()
     }
 
-    func join(_ meeting: CalendarMeeting, record: Bool, connection: CalendarConnection) {
+    func join(_ meeting: CalendarMeeting, record: Bool, local: Bool? = nil, connection: CalendarConnection) {
         guard connection.hasFreshSnapshot else {
             // The panel may show a meeting from an older read: refresh first, keep the panel if it fails.
             Task {
-                if let message = await connection.joinFromMenu(meeting, record: record) {
+                if let message = await connection.joinFromMenu(meeting, record: record, local: local) {
                     DictationOverlayController.shared.showInfo(message: message, duration: 5)
                 } else {
                     dismiss()
@@ -43,18 +46,30 @@ private final class CalendarReminderWindow: NSPanel {
             return
         }
         dismiss()
-        connection.join(meeting, record: record)
+        connection.join(meeting, record: record, local: local)
+    }
+
+    /// The compact heads-up a few minutes before a meeting. Never covers a start reminder.
+    func showEarly(_ meetings: [CalendarMeeting], connection: CalendarConnection) {
+        guard !meetings.isEmpty, window?.isVisible != true || isEarly else { return }
+        present(meetings, connection: connection, early: true)
     }
 
     func show(_ meetings: [CalendarMeeting], connection: CalendarConnection) {
         guard !meetings.isEmpty else { return }
-        let merged = CalendarMeeting.pendingReminders(existing: window?.isVisible == true ? pending : [], incoming: meetings, current: connection.currentMeetings)
+        present(meetings, connection: connection, early: false)
+    }
+
+    private func present(_ meetings: [CalendarMeeting], connection: CalendarConnection, early: Bool) {
+        let shown = window?.isVisible == true && isEarly == early ? pending : []
+        let merged = CalendarMeeting.pendingReminders(existing: shown, incoming: meetings, current: connection.currentMeetings)
         dismiss()
         pending = merged
-        let fullScreen = connection.configuration.reminderStyle == .fullScreen
+        isEarly = early
+        let fullScreen = !early && connection.configuration.reminderStyle == .fullScreen
         let screen = Self.activeScreen()
         let frame = fullScreen ? (screen?.frame ?? NSRect(x: 0, y: 0, width: 1000, height: 700))
-                               : NSRect(x: 0, y: 0, width: 560, height: 620)
+                               : NSRect(x: 0, y: 0, width: early ? 420 : 560, height: early ? 300 : 620)
         let panel = CalendarReminderWindow(contentRect: frame,
             styleMask: fullScreen ? [.borderless, .nonactivatingPanel] : [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = String(localized: "Upcoming meeting")
@@ -63,12 +78,15 @@ private final class CalendarReminderWindow: NSPanel {
         panel.animationBehavior = .none
         panel.level = fullScreen ? .screenSaver : .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.contentView = NSHostingView(rootView: CalendarReminderView(
-            meetings: merged, connection: connection, fullScreen: fullScreen,
-            dismiss: { [weak self] in self?.dismissByUser(connection: connection) },
+        let content = NSHostingView(rootView: CalendarReminderView(
+            meetings: merged, connection: connection, fullScreen: fullScreen, early: early,
+            // Dismissing the heads-up keeps the start reminder coming.
+            dismiss: { [weak self] in early ? self?.dismiss() : self?.dismissByUser(connection: connection) },
             close: { [weak self] in self?.dismiss() },
             snooze: { [weak self] minutes in self?.snooze(minutes: minutes, connection: connection) },
-            join: { [weak self] meeting, record in self?.join(meeting, record: record, connection: connection) }))
+            join: { [weak self] meeting, record, local in self?.join(meeting, record: record, local: local, connection: connection) }))
+        panel.contentView = content
+        if early { panel.setContentSize(NSSize(width: frame.width, height: content.fittingSize.height)) }
         if fullScreen {
             // A disconnected display would strand the full-screen reminder off-screen.
             screenObserver = NotificationCenter.default.addObserver(
@@ -80,31 +98,45 @@ private final class CalendarReminderWindow: NSPanel {
                 }
             }
         } else if let screen {
-            panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.midX - frame.width / 2, y: screen.visibleFrame.midY - frame.height / 2))
+            let size = panel.frame.size
+            panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.midX - size.width / 2, y: screen.visibleFrame.midY - size.height / 2))
         }
         window = panel
-        panel.makeKeyAndOrderFront(nil)
+        // The heads-up must not take the keys of whatever the person is typing in.
+        if !early { panel.makeKeyAndOrderFront(nil) }
         panel.orderFrontRegardless()
     }
 
     private var endedWindow: NSWindow?
 
-    /// A small floating prompt: the meeting being recorded has ended.
-    func showMeetingEnded(_ meeting: CalendarMeeting, hideNames: Bool, stop: @escaping () -> Void) {
+    var isShowingMeetingEnded: Bool { endedWindow != nil }
+
+    func closeMeetingEnded() {
         endedWindow?.close()
-        let panel = CalendarReminderWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 150),
-                                           styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.title = String(localized: "Meeting ended")
+        endedWindow = nil
+    }
+
+    /// A small floating prompt: the meeting being recorded has ended. One at a time; a newer one replaces it.
+    func showMeetingEnded(title: String, message: String, stop: @escaping () -> Void) {
+        closeMeetingEnded()
+        let panel = CalendarReminderWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 160),
+                                           styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        let close: () -> Void = { [weak self] in self?.endedWindow?.close(); self?.endedWindow = nil }
-        panel.contentView = NSHostingView(rootView: MeetingEndedView(
-            title: hideNames ? String(localized: "Meeting") : meeting.title,
-            stop: { close(); stop() }, keep: close))
+        let content = NSHostingView(rootView: MeetingEndedView(
+            title: title, message: message,
+            stop: { [weak self] in self?.closeMeetingEnded(); stop() },
+            keep: { [weak self] in self?.closeMeetingEnded() }))
+        panel.contentView = content
+        panel.setContentSize(content.fittingSize)
         if let screen = Self.activeScreen() {
-            panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.maxX - 420, y: screen.visibleFrame.maxY - 170))
+            panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.maxX - panel.frame.width - 20,
+                                         y: screen.visibleFrame.maxY - panel.frame.height - 20))
         }
         endedWindow = panel
         panel.orderFrontRegardless()
@@ -121,12 +153,19 @@ struct CalendarReminderView: View {
     let meetings: [CalendarMeeting]
     let connection: CalendarConnection
     let fullScreen: Bool
-    /// Dismissed by the person: not offered again for this occurrence.
+    /// The compact heads-up before the start.
+    var early = false
+    /// Dismissed by the person: not offered again for this occurrence (the heads-up only closes).
     let dismiss: () -> Void
     /// Closed because the meetings ended or changed: no acknowledgement.
     let close: () -> Void
     let snooze: (Int) -> Void
-    let join: (CalendarMeeting, Bool) -> Void
+    /// Meeting, record, and local transcription for this meeting (nil keeps the calendar default).
+    let join: (CalendarMeeting, Bool, Bool?) -> Void
+    /// Chosen on the reminder for this meeting only.
+    @State var localOverride: Bool? = nil
+
+    private var local: Bool { localOverride ?? connection.configuration.localRecording }
 
     /// The latest version of each shown meeting; the shown copy when the calendar can't be read right now.
     private var current: [CalendarMeeting] {
@@ -134,6 +173,39 @@ struct CalendarReminderView: View {
     }
 
     var body: some View {
+        if early { earlyBody } else { startBody }
+    }
+
+    private var earlyBody: some View {
+        TimelineView(.periodic(from: .now, by: 15)) { context in
+            let upcoming = current.filter { $0.start > context.date }
+            VStack(alignment: .leading, spacing: 14) {
+                if let meeting = upcoming.first {
+                    CalendarMeetingDetails(meeting: meeting, now: context.date, hideNames: connection.configuration.hideNames,
+                                           titleSize: 19, compact: true)
+                    HStack(spacing: 8) {
+                        actions(meeting, size: .regular)
+                        Spacer()
+                        Button("Dismiss", action: dismiss).keyboardShortcut(.cancelAction)
+                    }
+                    processingLine(meeting, changeable: false)
+                    if upcoming.count > 1 { others(Array(upcoming.dropFirst()), now: context.date) }
+                }
+            }
+            .padding(20)
+            .frame(width: 420, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            // The start reminder takes over at the start time.
+            .onChange(of: upcoming.isEmpty) { _, started in if started { close() } }
+        }
+        .tint(Color("BrandAccentDeep"))
+        .onChange(of: connection.currentMeetings.map(\.reminderKey)) { _, keys in
+            guard connection.hasFreshSnapshot else { return }
+            if !meetings.contains(where: { keys.contains($0.reminderKey) }) { close() }
+        }
+    }
+
+    private var startBody: some View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             let running = current.filter { $0.end > context.date }
             VStack(spacing: 0) {
@@ -142,7 +214,10 @@ struct CalendarReminderView: View {
                         VStack(alignment: .leading, spacing: 22) {
                             CalendarMeetingDetails(meeting: meeting, now: context.date, hideNames: connection.configuration.hideNames,
                                                    titleSize: fullScreen ? 34 : 22)
-                            actions(meeting)
+                            VStack(alignment: .leading, spacing: 10) {
+                                actions(meeting, size: .large)
+                                processingLine(meeting, changeable: true)
+                            }
                             if running.count > 1 { others(Array(running.dropFirst()), now: context.date) }
                         }
                         .frame(maxWidth: 680, alignment: .leading)
@@ -168,24 +243,63 @@ struct CalendarReminderView: View {
         }
     }
 
-    @ViewBuilder private func actions(_ meeting: CalendarMeeting) -> some View {
+    @ViewBuilder private func actions(_ meeting: CalendarMeeting, size: ControlSize) -> some View {
         HStack(spacing: 10) {
             if let url = meeting.meetingURL {
-                Button { join(meeting, connection.configuration.recordOnJoin) } label: {
-                    Label("Join", systemImage: "video.fill").frame(minWidth: 120)
+                Button { join(meeting, connection.configuration.recordOnJoin, localOverride) } label: {
+                    Label("Join", systemImage: "video.fill").frame(minWidth: size == .large ? 120 : 0)
                 }
                 // No Return shortcut: the panel can take key focus while the person types elsewhere.
-                .buttonStyle(.borderedProminent).controlSize(.large)
+                .buttonStyle(.borderedProminent).controlSize(size)
                 if !connection.configuration.recordOnJoin {
-                    Button("Join and record") { join(meeting, true) }.controlSize(.large)
+                    Button("Join and record") { join(meeting, true, localOverride) }.controlSize(size)
                 }
-                Button("Copy link") { CalendarMeeting.copyLink(url) }.controlSize(.large)
+                Button("Copy link") { CalendarMeeting.copyLink(url) }.controlSize(size)
             } else {
-                Button { join(meeting, true) } label: {
-                    Label("Record meeting", systemImage: "record.circle").frame(minWidth: 120)
+                Button { join(meeting, true, localOverride) } label: {
+                    Label("Record meeting", systemImage: "record.circle").frame(minWidth: size == .large ? 120 : 0)
                 }
-                .buttonStyle(.borderedProminent).controlSize(.large)
+                .buttonStyle(.borderedProminent).controlSize(size)
             }
+        }
+    }
+
+    /// What Join does with the recording; on the start reminder it can be changed for this meeting.
+    @ViewBuilder private func processingLine(_ meeting: CalendarMeeting, changeable: Bool) -> some View {
+        if connection.configuration.recordOnJoin || meeting.meetingURL == nil {
+            let hasModel = WhisperModelManager.shared.selectedModel() != nil
+            HStack(spacing: 8) {
+                Circle().fill(Color("BrandAccentDeep")).frame(width: 7, height: 7).accessibilityHidden(true)
+                if !local {
+                    Text("Records with a live transcript in the cloud")
+                } else if hasModel {
+                    Text("Records on this Mac · transcribed after the meeting")
+                } else {
+                    Text("Records audio only · download a model to transcribe")
+                }
+                if changeable {
+                    Menu("Change") {
+                        Button { localOverride = true } label: {
+                            if local { Label("On this Mac, after the meeting", systemImage: "checkmark") } else { Text("On this Mac, after the meeting") }
+                        }
+                        Button { localOverride = false } label: {
+                            if local { Text("Live transcript in the cloud") } else { Label("Live transcript in the cloud", systemImage: "checkmark") }
+                        }
+                        .disabled(!UsageService.canOfferCloudTranscription(hasStoredSession: AuthService.hasStoredSession,
+                                                                           usage: UsageService.shared.cachedUsage))
+                        Divider()
+                        Text("Applies to this meeting only")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    if local && !hasModel {
+                        Button("Download model") { AppDelegate.current?.openSettings(tab: .models) }
+                            .buttonStyle(.link).foregroundStyle(Color("BrandAccentDeep"))
+                    }
+                }
+            }
+            .font(changeable ? .callout : .caption)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -198,9 +312,9 @@ struct CalendarReminderView: View {
                     Text(meeting.start.formatted(date: .omitted, time: .shortened)).foregroundStyle(.secondary)
                     Spacer()
                     if meeting.meetingURL != nil {
-                        Button("Join") { join(meeting, connection.configuration.recordOnJoin) }
+                        Button("Join") { join(meeting, connection.configuration.recordOnJoin, localOverride) }
                     } else {
-                        Button("Record meeting") { join(meeting, true) }
+                        Button("Record meeting") { join(meeting, true, localOverride) }
                     }
                 }
             }
@@ -214,8 +328,6 @@ struct CalendarReminderView: View {
                 Button("5 minutes") { snooze(5) }
             }
             .fixedSize()
-            Text(connection.configuration.localRecording ? "New recordings use local transcription. If a recording is already running, it is linked with its current processing settings." : "New recordings use cloud transcription. If a recording is already running, it is linked with its current processing settings.")
-                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
             Spacer()
             Button("Dismiss", action: dismiss).keyboardShortcut(.cancelAction)
         }
@@ -223,23 +335,42 @@ struct CalendarReminderView: View {
     }
 }
 
+/// Same card look as "Looks like a meeting started".
 private struct MeetingEndedView: View {
     let title: String
+    let message: String
     let stop: () -> Void
     let keep: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("\(title) has ended").font(.headline).lineLimit(2)
-            Text("Diduny is still recording this meeting.").foregroundStyle(.secondary)
-            HStack {
-                Spacer()
-                Button("Keep recording", action: keep).keyboardShortcut(.cancelAction)
-                Button("Stop recording", action: stop).buttonStyle(.borderedProminent)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "stop.circle")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color("BrandAccentDeep"))
+                    .frame(width: 44, height: 44)
+                    .background(Color("BrandTintSoft"), in: RoundedRectangle(cornerRadius: 11))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title).font(.system(size: 15, weight: .semibold)).lineLimit(2)
+                    Text(message)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack(spacing: 8) {
+                Button(action: keep) { Text("Keep recording").frame(maxWidth: .infinity, minHeight: 32) }
+                    .buttonStyle(.bordered)
+                    .keyboardShortcut(.cancelAction)
+                Button(action: stop) { Text("Stop recording").frame(maxWidth: .infinity, minHeight: 32) }
+                    .buttonStyle(.borderedProminent)
             }
         }
-        .padding(18)
-        .frame(width: 400, alignment: .leading)
+        .padding(16)
+        .frame(width: 380, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(Color.primary.opacity(0.10), lineWidth: 0.5))
         .tint(Color("BrandAccentDeep"))
     }
 }
@@ -251,6 +382,8 @@ struct CalendarMeetingDetails: View {
     let now: Date?
     var hideNames = false
     var titleSize: CGFloat = 22
+    /// The heads-up: people as one summary line and the start of the agenda.
+    var compact = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -272,12 +405,19 @@ struct CalendarMeetingDetails: View {
                 Label(location, systemImage: "mappin.and.ellipse").foregroundStyle(.secondary).textSelection(.enabled)
             }
             if !hideNames, let attendees = meeting.attendees, !attendees.isEmpty {
-                people(attendees)
+                if compact {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("People").font(.headline)
+                        Text(CalendarMeeting.attendeeSummary(attendees)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                } else {
+                    people(attendees)
+                }
             }
             if !hideNames, let notes = meeting.notes {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Agenda").font(.headline)
-                    Text(notes).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    Text(notes).textSelection(.enabled).lineLimit(compact ? 2 : nil).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

@@ -107,7 +107,6 @@
 "Approve a read before accessing the calendar." = "Approve a read before accessing the calendar.";
 "Approve this read before accessing the calendar." = "Approve this read before accessing the calendar.";
 "Are you sure you want to delete this recording? This cannot be undone." = "Are you sure you want to delete this recording? This cannot be undone.";
-"At start time" = "At start time";
 "Audio & Dictation" = "Audio & Dictation";
 "Audio Gain" = "Audio Gain";
 "Audio Source" = "Audio Source";
@@ -527,8 +526,6 @@
 "Network error: %@" = "Network error: %@";
 "Never" = "Never";
 "New Transcription Batch" = "New Transcription Batch";
-"New recordings use cloud transcription. If a recording is already running, it is linked with its current processing settings." = "New recordings use cloud transcription. If a recording is already running, it is linked with its current processing settings.";
-"New recordings use local transcription. If a recording is already running, it is linked with its current processing settings." = "New recordings use local transcription. If a recording is already running, it is linked with its current processing settings.";
 "Next payment" = "Next payment";
 "No Batches Yet" = "No Batches Yet";
 "No Recordings Yet" = "No Recordings Yet";
@@ -698,7 +695,6 @@
 "Refresh browsers" = "Refresh browsers";
 "Refresh calendars" = "Refresh calendars";
 "Refresh sharing preference" = "Refresh sharing preference";
-"Remind me" = "Remind me";
 "Remote media support is unavailable in this Diduny build. Update Diduny and try again." = "Remote media support is unavailable in this Diduny build. Update Diduny and try again.";
 "Remove %@" = "Remove %@";
 "Remove pair" = "Remove pair";
@@ -904,7 +900,6 @@
 "Transcribe Again?" = "Transcribe Again?";
 "Transcribe Again…" = "Transcribe Again…";
 "Transcribe Locally" = "Transcribe Locally";
-"Transcribe calendar recordings locally" = "Transcribe calendar recordings locally";
 "Transcribe in Cloud" = "Transcribe in Cloud";
 "Transcribe recording" = "Transcribe recording";
 "Transcribe with Speakers" = "Transcribe with Speakers";
@@ -1359,7 +1354,6 @@
 "Open meeting links in" = "Open meeting links in";
 "Default browser" = "Default browser";
 "Open Zoom and Teams in their apps" = "Open Zoom and Teams in their apps";
-"Local mode saves audio if no model is ready; it never silently uploads it. To keep reminders running after login, use Launch at Login in General." = "Local mode saves audio if no model is ready; it never silently uploads it. To keep reminders running after login, use Launch at Login in General.";
 "Menu bar" = "Menu bar";
 "Show tomorrow's meetings" = "Show tomorrow's meetings";
 "Show meetings without a link" = "Show meetings without a link";
@@ -1370,7 +1364,6 @@
 "Open in Calendar" = "Open in Calendar";
 "Current meeting" = "Current meeting";
 "Next meeting" = "Next meeting";
-"Meeting ended" = "Meeting ended";
 "%@ has ended" = "%@ has ended";
 "Diduny is still recording this meeting." = "Diduny is still recording this meeting.";
 "Keep recording" = "Keep recording";
@@ -1397,3 +1390,23 @@
 "Today at %@" = "Today at %@";
 "Tomorrow at %@" = "Tomorrow at %@";
 "%@ at %@" = "%@ at %@";
+"Before a meeting" = "Before a meeting";
+"A small window in the middle of the screen with the meeting's details." = "A small window in the middle of the screen with the meeting's details.";
+"Transcribe calendar recordings" = "Transcribe calendar recordings";
+"On this Mac, after the meeting" = "On this Mac, after the meeting";
+"Live, in the cloud" = "Live, in the cloud";
+"On this Mac, only audio is recorded during the call and the transcript is made in the background when you stop. You can turn on a live transcript during the meeting. Without a downloaded model the audio is saved; it is never uploaded silently. To keep reminders running after login, use Launch at Login in General." = "On this Mac, only audio is recorded during the call and the transcript is made in the background when you stop. You can turn on a live transcript during the meeting. Without a downloaded model the audio is saved; it is never uploaded silently. To keep reminders running after login, use Launch at Login in General.";
+"Records with a live transcript in the cloud" = "Records with a live transcript in the cloud";
+"Records on this Mac · transcribed after the meeting" = "Records on this Mac · transcribed after the meeting";
+"Records audio only · download a model to transcribe" = "Records audio only · download a model to transcribe";
+"Change" = "Change";
+"Live transcript in the cloud" = "Live transcript in the cloud";
+"Applies to this meeting only" = "Applies to this meeting only";
+"Download model" = "Download model";
+"Recording only. The transcript will be ready after the meeting, made on this Mac." = "Recording only. The transcript will be ready after the meeting, made on this Mac.";
+"Turn on live transcript" = "Turn on live transcript";
+"Live view from now, in the cloud. The final transcript is still made on this Mac." = "Live view from now, in the cloud. The final transcript is still made on this Mac.";
+"Sign in to Diduny with minutes left to turn on the live transcript." = "Sign in to Diduny with minutes left to turn on the live transcript.";
+"Looks like the call ended" = "Looks like the call ended";
+"%@ stopped. Diduny is still recording. If you rejoin, recording just continues." = "%@ stopped. Diduny is still recording. If you rejoin, recording just continues.";
+"Back in the call — still recording" = "Back in the call — still recording";

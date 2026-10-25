@@ -44,9 +44,10 @@ struct CalendarReminderLedger: Codable, Equatable {
     private var delivered: [String: Date] = [:]
     private var acknowledged: [String: Date] = [:]
     private var snoozed: [String: Date] = [:]
+    private var earlyDelivered: [String: Date] = [:]
     private var shown: Set<String> = []
 
-    private enum CodingKeys: String, CodingKey { case delivered, acknowledged, snoozed }
+    private enum CodingKeys: String, CodingKey { case delivered, acknowledged, snoozed, earlyDelivered }
 
     init() {}
 
@@ -55,6 +56,7 @@ struct CalendarReminderLedger: Codable, Equatable {
         delivered = try container.decodeIfPresent([String: Date].self, forKey: .delivered) ?? [:]
         acknowledged = try container.decodeIfPresent([String: Date].self, forKey: .acknowledged) ?? [:]
         snoozed = try container.decodeIfPresent([String: Date].self, forKey: .snoozed) ?? [:]
+        earlyDelivered = try container.decodeIfPresent([String: Date].self, forKey: .earlyDelivered) ?? [:]
     }
 
     /// Moving the meeting or changing its link offers a dismissed meeting again; RSVP and note
@@ -71,6 +73,24 @@ struct CalendarReminderLedger: Codable, Equatable {
         shown.remove(key)
     }
     mutating func resetSession() { shown = [] }
+
+    /// The heads-up before a meeting: once per occurrence, from `leadMinutes` before the start until a
+    /// minute before it. Dismissing it does not acknowledge the meeting, so the start reminder still comes.
+    mutating func dueEarly(_ meetings: [CalendarMeeting], selected: Set<String>, now: Date,
+                           fetchedAt: Date?, leadMinutes: Int) -> [CalendarMeeting] {
+        earlyDelivered = earlyDelivered.filter { $0.value > now.addingTimeInterval(-86400) }
+        guard leadMinutes > 0, let fetchedAt, (0...300).contains(now.timeIntervalSince(fetchedAt)) else { return [] }
+        return meetings.filter { selected.contains($0.calendarID) && $0.canRemind }
+            .sorted { $0.start < $1.start }
+            .filter { meeting in
+                let untilStart = meeting.start.timeIntervalSince(now)
+                guard untilStart >= 60, untilStart <= TimeInterval(leadMinutes * 60),
+                      acknowledged[Self.acknowledgementKey(meeting)] == nil,
+                      earlyDelivered[meeting.reminderKey] == nil else { return false }
+                earlyDelivered[meeting.reminderKey] = now
+                return true
+            }
+    }
 
     mutating func due(_ meetings: [CalendarMeeting], selected: Set<String>, now: Date,
                       fetchedAt: Date?, leadMinutes: Int, repeatDuringMeeting: Bool = false) -> [CalendarMeeting] {
@@ -216,9 +236,11 @@ extension CalendarMeeting {
     }
 
     /// While a recording linked to this meeting continues, a minute after the meeting's end
-    /// Diduny offers to stop it, once per recording.
-    static func stopPromptDue(meeting: CalendarMeeting?, recordingID: UUID?, offered: Set<UUID>, now: Date) -> Bool {
-        guard let meeting, let recordingID, !offered.contains(recordingID) else { return false }
+    /// Diduny offers to stop it, once per recording. Not while the call is still going: the call
+    /// detector offers it when the call ends.
+    static func stopPromptDue(meeting: CalendarMeeting?, recordingID: UUID?, offered: Set<UUID>, now: Date,
+                              callActive: Bool = false) -> Bool {
+        guard let meeting, let recordingID, !offered.contains(recordingID), !callActive else { return false }
         return now >= meeting.end.addingTimeInterval(60)
     }
 

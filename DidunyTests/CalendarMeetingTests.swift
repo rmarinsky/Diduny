@@ -280,7 +280,51 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertEqual(snapped.displayMinutes, 60)
         let fresh = CalendarConfiguration()
         XCTAssertEqual(fresh.reminderStyle, .fullScreen)
-        XCTAssertEqual(fresh.reminderMinutes, 0)
+        XCTAssertEqual(fresh.reminderMinutes, 5)
+        XCTAssertTrue(fresh.recordOnJoin)
+        XCTAssertTrue(fresh.localRecording)
+    }
+
+    func testOlderSettingsGetTheHeadsUpAndRecordOnJoinOnceButKeepLaterChoices() throws {
+        let old = #"{"version":1,"connected":true,"reminderMinutes":0,"recordOnJoin":false,"popup":false,"fullScreen":false}"#
+        let migrated = try JSONDecoder().decode(CalendarConfiguration.self, from: Data(old.utf8))
+        XCTAssertEqual(migrated.reminderMinutes, 5)
+        XCTAssertTrue(migrated.recordOnJoin)
+        XCTAssertEqual(migrated.reminderStyle, .off, "A start reminder turned off stays off")
+
+        var chosen = migrated
+        chosen.reminderMinutes = 0
+        chosen.recordOnJoin = false
+        let restored = try JSONDecoder().decode(CalendarConfiguration.self, from: JSONEncoder().encode(chosen))
+        XCTAssertEqual(restored.reminderMinutes, 0, "Turning the heads-up off after the update is kept")
+        XCTAssertFalse(restored.recordOnJoin)
+    }
+
+    func testHeadsUpComesOnceBeforeTheStartAndDismissingItKeepsTheStartReminder() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let meeting = CalendarMeeting(id: "m", calendarID: "work", title: "Review",
+                                      start: now.addingTimeInterval(240), end: now.addingTimeInterval(2040),
+                                      meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"))
+        var ledger = CalendarReminderLedger()
+        let early = { (ledger: inout CalendarReminderLedger, at: Date, lead: Int) in
+            ledger.dueEarly([meeting], selected: ["work"], now: at, fetchedAt: at, leadMinutes: lead).map(\.id)
+        }
+        XCTAssertEqual(early(&ledger, now.addingTimeInterval(-120), 5), [], "Not before the lead time")
+        XCTAssertEqual(early(&ledger, now, 0), [], "Off")
+        XCTAssertEqual(early(&ledger, now, 5), ["m"])
+        XCTAssertEqual(early(&ledger, now.addingTimeInterval(30), 5), [], "Once per occurrence")
+        let restored = try JSONDecoder().decode(CalendarReminderLedger.self, from: JSONEncoder().encode(ledger))
+        var copy = restored
+        XCTAssertEqual(early(&copy, now.addingTimeInterval(30), 5), [], "Also after relaunch")
+        XCTAssertEqual(ledger.due([meeting], selected: ["work"], now: meeting.start, fetchedAt: meeting.start, leadMinutes: 0).map(\.id),
+                       ["m"], "The start reminder still comes after the heads-up")
+
+        var late = CalendarReminderLedger()
+        XCTAssertEqual(early(&late, meeting.start.addingTimeInterval(-59), 5), [],
+                       "Less than a minute before the start only the start reminder comes")
+        var joined = CalendarReminderLedger()
+        joined.acknowledge(meeting, at: now)
+        XCTAssertEqual(early(&joined, now, 5), [], "Joined already")
     }
 
     func testMeetingServiceNamesComeFromTheJoinLink() {
@@ -375,6 +419,9 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertFalse(CalendarMeeting.stopPromptDue(meeting: nil, recordingID: id, offered: [], now: end.addingTimeInterval(600)),
                        "Recordings without a calendar event have no end to compare")
         XCTAssertFalse(CalendarMeeting.stopPromptDue(meeting: meeting, recordingID: nil, offered: [], now: end.addingTimeInterval(600)))
+        XCTAssertFalse(CalendarMeeting.stopPromptDue(meeting: meeting, recordingID: id, offered: [], now: end.addingTimeInterval(600),
+                                                     callActive: true),
+                       "While the call goes on, the call detector offers Stop when it ends")
     }
 
     func testStartsInUsesTheRightUnitForTheDistance() throws {
