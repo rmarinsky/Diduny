@@ -40,6 +40,12 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         }
     }
 
+    var onMixedSamples: (([Float]) -> Void)? {
+        didSet {
+            systemAudioService?.onMixedSamples = onMixedSamples
+        }
+    }
+
     var onMicrophoneSilent: (() -> Void)?
     var onSystemAudioSilent: (() -> Void)?
     var onStatusMessage: ((String) -> Void)?
@@ -110,6 +116,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         service.micGain = SettingsStorage.shared.meetingMicGain
         service.systemGain = SettingsStorage.shared.meetingSystemGain
         service.onRawAudioData = onRealtimeAudioData
+        service.onMixedSamples = onMixedSamples
         service.onStatusMessage = { [weak self] message in
             self?.onStatusMessage?(message)
         }

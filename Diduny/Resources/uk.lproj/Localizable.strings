@@ -1410,3 +1410,12 @@
 "Looks like the call ended" = "Схоже, дзвінок завершився";
 "%@ stopped. Diduny is still recording. If you rejoin, recording just continues." = "%@ зупинився. Diduny досі записує. Якщо ви повернетеся, запис просто продовжиться.";
 "Back in the call — still recording" = "Знову в дзвінку — запис триває";
+"Stop after silence" = "Зупиняти після тиші";
+"Stop After Silence" = "Зупинка після тиші";
+"Silence" = "Тиша";
+"Stopping in %llds" = "Зупинка через %lld с";
+"%lld s" = "%lld с";
+"%lld min" = "%lld хв";
+"%lld min %lld s" = "%lld хв %lld с";
+"Stops dictation and translation after this much silence, once you have spoken. A countdown shows for the last 3 seconds; speak to keep recording. Ignored while you hold the push-to-talk key." = "Зупиняє диктування й переклад після такої тиші, коли ви вже щось сказали. Останні 3 секунди видно відлік; заговоріть, щоб продовжити запис. Не діє, поки ви тримаєте клавішу push-to-talk.";
+"Stops the meeting recording when both your microphone and the meeting audio stay quiet this long, once someone has spoken. A countdown shows for the last 3 seconds." = "Зупиняє запис зустрічі, коли і ваш мікрофон, і звук зустрічі мовчать так довго, після того як хтось уже говорив. Останні 3 секунди видно відлік.";

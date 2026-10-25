@@ -13,6 +13,8 @@ struct AudioDictationSettingsView: View {
 
     @State private var transcriptionProvider: TranscriptionProvider = SettingsStorage.shared.transcriptionProvider
     @State private var translationProvider: TranscriptionProvider = SettingsStorage.shared.translationProvider
+    @State private var silenceAutoStopEnabled = SettingsStorage.shared.dictationSilenceAutoStopEnabled
+    @State private var silenceAutoStopSeconds = SettingsStorage.shared.dictationSilenceAutoStopSeconds
     @State private var manualLanguageCodes = Set(SettingsStorage.shared.manualSpeechLanguageHints)
     @State private var disabledDetectedLanguageCodes = Set(SettingsStorage.shared.disabledDetectedSpeechLanguageHints)
     @State private var translationPairs = SettingsStorage.shared.translationLanguagePairs
@@ -57,6 +59,19 @@ struct AudioDictationSettingsView: View {
             inputDeviceSection
             testRecordingSection
             providerSection
+            SilenceAutoStopSection(
+                footer: "Stops dictation and translation after this much silence, once you have spoken. A countdown shows for the last 3 seconds; speak to keep recording. Ignored while you hold the push-to-talk key.",
+                range: SettingsStorage.dictationSilenceAutoStopRange,
+                step: 1,
+                isEnabled: $silenceAutoStopEnabled,
+                seconds: $silenceAutoStopSeconds
+            )
+            .onChange(of: silenceAutoStopEnabled) { _, value in
+                SettingsStorage.shared.dictationSilenceAutoStopEnabled = value
+            }
+            .onChange(of: silenceAutoStopSeconds) { _, value in
+                SettingsStorage.shared.dictationSilenceAutoStopSeconds = value
+            }
             speechLanguagesSection
 
             if translationProvider == .cloud {

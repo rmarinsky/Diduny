@@ -21,6 +21,8 @@ struct MeetingAudioSettingsView: View {
     @State private var meetingSuggestionsEnabled = SettingsStorage.shared.meetingSuggestionsEnabled
     @State private var meetingCloudModeEnabled: Bool = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
     @State private var localLivePreviewEnabled = SettingsStorage.shared.meetingLocalLivePreviewEnabled
+    @State private var silenceAutoStopEnabled = SettingsStorage.shared.meetingSilenceAutoStopEnabled
+    @State private var silenceAutoStopSeconds = SettingsStorage.shared.meetingSilenceAutoStopSeconds
     @State private var audioSource = SettingsStorage.shared.meetingAudioSource
     @State private var micGain = SettingsStorage.shared.meetingMicGain
     @State private var systemGain = SettingsStorage.shared.meetingSystemGain
@@ -83,6 +85,20 @@ struct MeetingAudioSettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 }
+            }
+
+            SilenceAutoStopSection(
+                footer: "Stops the meeting recording when both your microphone and the meeting audio stay quiet this long, once someone has spoken. A countdown shows for the last 3 seconds.",
+                range: SettingsStorage.meetingSilenceAutoStopRange,
+                step: 10,
+                isEnabled: $silenceAutoStopEnabled,
+                seconds: $silenceAutoStopSeconds
+            )
+            .onChange(of: silenceAutoStopEnabled) { _, value in
+                SettingsStorage.shared.meetingSilenceAutoStopEnabled = value
+            }
+            .onChange(of: silenceAutoStopSeconds) { _, value in
+                SettingsStorage.shared.meetingSilenceAutoStopSeconds = value
             }
 
             Section {

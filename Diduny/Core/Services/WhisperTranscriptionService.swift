@@ -3,8 +3,14 @@ import Foundation
 final class WhisperTranscriptionService: TranscriptionServiceProtocol {
     var modelNameOverride: String?
 
+    /// Guards the loaded context, the in-flight load and the recording hold:
+    /// preload, live preview and the final transcription reach them from
+    /// different tasks.
+    private let stateLock = NSLock()
     private var whisperContext: WhisperContext?
     private var loadedModelPath: String?
+    private var pendingLoad: (path: String, task: Task<WhisperContext, Error>)?
+    private var isHeldForRecording = false
 
     private var unloadTask: Task<Void, Never>?
     private var policyObserver: NSObjectProtocol?
@@ -24,6 +30,31 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         if let observer = policyObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+    }
+
+    /// Starts loading the model when a recording starts, so Stop only waits for
+    /// transcription. The unload timer stays off until `endRecordingHold()`.
+    func beginRecordingHold() {
+        stateLock.withLock { isHeldForRecording = true }
+        cancelUnloadTimer()
+        Task { [weak self] in
+            do {
+                _ = try await self?.ensureContext()
+                // The recording may have ended before the load finished; start the timer then.
+                self?.scheduleModelUnload()
+            } catch {
+                Log.whisper.warning("Whisper preload failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func endRecordingHold() {
+        let wasHeld = stateLock.withLock {
+            defer { isHeldForRecording = false }
+            return isHeldForRecording
+        }
+        guard wasHeld else { return }
+        scheduleModelUnload()
     }
 
     func transcribe(audioData: Data) async throws -> String {
@@ -101,12 +132,14 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
 
         let (language, prompt) = transcriptionHints()
 
+        let started = Date()
         let transcript = try await context.transcribe(
             samples: samples,
             language: language,
             initialPrompt: prompt,
             translate: translate
         )
+        Log.whisper.info("Whisper transcription took \(Int(Date().timeIntervalSince(started) * 1000)) ms")
 
         guard !transcript.text.isEmpty else {
             throw TranscriptionError.emptyTranscription
@@ -144,50 +177,83 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         }
 
         let path = WhisperModelManager.shared.modelPath(for: model)
+        let displayName = model.displayName
 
-        // Reuse context if same model
-        if let context = whisperContext, loadedModelPath == path {
-            return context
+        // Reuse the loaded context, or join a load already in flight for the same model
+        let task: Task<WhisperContext, Error> = stateLock.withLock {
+            if let context = whisperContext, loadedModelPath == path {
+                return Task { context }
+            }
+            if let pendingLoad, pendingLoad.path == path {
+                return pendingLoad.task
+            }
+            let task = Task.detached(priority: .userInitiated) {
+                Log.whisper.info("Loading Whisper model: \(displayName)")
+                let started = Date()
+                let context = try WhisperContext(modelPath: path)
+                Log.whisper.info("Whisper model loaded in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+                return context
+            }
+            pendingLoad = (path, task)
+            return task
         }
 
-        // Load new context
-        Log.whisper.info("Loading Whisper model: \(model.displayName)")
-        let context = try WhisperContext(modelPath: path)
-        whisperContext = context
-        loadedModelPath = path
-        return context
+        do {
+            let context = try await task.value
+            stateLock.withLock {
+                if pendingLoad?.path == path {
+                    pendingLoad = nil
+                    whisperContext = context
+                    loadedModelPath = path
+                }
+            }
+            return context
+        } catch {
+            stateLock.withLock {
+                if pendingLoad?.path == path { pendingLoad = nil }
+            }
+            throw error
+        }
     }
 
     // MARK: - Model Unload Timer
 
     private func cancelUnloadTimer() {
-        unloadTask?.cancel()
-        unloadTask = nil
+        stateLock.withLock {
+            unloadTask?.cancel()
+            unloadTask = nil
+        }
     }
 
     private func scheduleModelUnload() {
-        guard whisperContext != nil else { return }
-
         guard let interval = SettingsStorage.shared.whisperModelUnloadPolicy.timeInterval else {
             return // keepLoaded — no timer
         }
 
-        unloadTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(interval))
-            guard !Task.isCancelled else { return }
-            self?.unloadModel()
+        stateLock.withLock {
+            guard whisperContext != nil, !isHeldForRecording else { return }
+            unloadTask?.cancel()
+            unloadTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(interval))
+                guard !Task.isCancelled else { return }
+                self?.unloadModel()
+            }
         }
     }
 
     private func unloadModel() {
-        guard whisperContext != nil else { return }
-        whisperContext = nil
-        loadedModelPath = nil
+        let didUnload = stateLock.withLock {
+            guard whisperContext != nil, !isHeldForRecording else { return false }
+            whisperContext = nil
+            loadedModelPath = nil
+            return true
+        }
+        guard didUnload else { return }
         Log.whisper.info("Whisper model unloaded after inactivity timeout")
     }
 
     private func handlePolicyChange() {
-        guard whisperContext != nil else { return }
+        guard stateLock.withLock({ whisperContext != nil }) else { return }
         cancelUnloadTimer()
         scheduleModelUnload()
     }

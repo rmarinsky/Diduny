@@ -263,6 +263,7 @@ extension AppDelegate {
                 }
                 return
             }
+            whisperTranscriptionService.beginRecordingHold()
         }
         Log.app.info("startTranslationRecording: Provider ready, pair=\(pair.displayLabel)")
         translationRealtimeSessionEnabled = false
@@ -304,6 +305,9 @@ extension AppDelegate {
             // Set up realtime callback BEFORE starting recorder (AudioRecorderService
             // snapshots onRealtimeAudioData at start time). WebSocket connects in background.
             setupRealtimeTranslationIfNeeded()
+            startDictationSilenceMonitor(pushToTalk: translationPushToTalkService) { [weak self] in
+                await self?.stopTranslationRecordingIfRecording()
+            }
 
             Log.app.info("startTranslationRecording: Starting audio recording")
             _ = try await startAudioRecorderWithFallback(

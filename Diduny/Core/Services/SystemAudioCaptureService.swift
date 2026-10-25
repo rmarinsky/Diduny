@@ -82,6 +82,9 @@ final class SystemAudioCaptureService: NSObject {
     /// Raw mono s16le PCM data callback for cloud real-time transcription.
     var onRawAudioData: ((Data) -> Void)?
 
+    /// The same mixed mono 16 kHz audio as Float samples, for on-device analysis (silence auto-stop).
+    var onMixedSamples: (([Float]) -> Void)?
+
     /// Fired when microphone has been silent for > `silenceTimeout`.
     var onMicrophoneSilent: (() -> Void)?
 
@@ -945,6 +948,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
     // MARK: - Real-Time Streaming
 
     private func emitRealtimeData(_ samples: [Float]) {
+        onMixedSamples?(samples)
         guard let onRawAudioData else { return }
 
         var data = Data(count: samples.count * MemoryLayout<Int16>.size)

@@ -31,6 +31,11 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     var onKeyDown: (() -> Void)?
     var onKeyUp: (() -> Void)?
 
+    /// True while a hold-to-record key is held down and its recording has started.
+    var isHoldingToRecord: Bool {
+        isKeyPressed && hasStartedAfterHold
+    }
+
     /// Called when recording should toggle (for hands-free mode)
     var onToggle: (() -> Void)?
 

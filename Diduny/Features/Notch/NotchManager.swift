@@ -20,6 +20,8 @@ final class NotchManager {
     private(set) var state: NotchState = .idle
     private(set) var recordingStartTime: Date?
     var audioLevel: Float = 0
+    /// Seconds left before "Stop after silence" ends the recording; nil when not counting down.
+    var silenceCountdown: Int?
 
     private var notch: DynamicNotch<NotchExpandedView, NotchCompactLeadingView, NotchCompactTrailingView>?
     private var autoDismissTask: Task<Void, Never>?
