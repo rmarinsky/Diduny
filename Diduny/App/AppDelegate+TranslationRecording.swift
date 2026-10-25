@@ -305,6 +305,9 @@ extension AppDelegate {
             // Set up realtime callback BEFORE starting recorder (AudioRecorderService
             // snapshots onRealtimeAudioData at start time). WebSocket connects in background.
             setupRealtimeTranslationIfNeeded()
+            startDictationSilenceMonitor(pushToTalk: translationPushToTalkService) { [weak self] in
+                await self?.stopTranslationRecordingIfRecording()
+            }
 
             Log.app.info("startTranslationRecording: Starting audio recording")
             _ = try await startAudioRecorderWithFallback(

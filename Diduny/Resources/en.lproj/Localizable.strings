@@ -1410,3 +1410,12 @@
 "Looks like the call ended" = "Looks like the call ended";
 "%@ stopped. Diduny is still recording. If you rejoin, recording just continues." = "%@ stopped. Diduny is still recording. If you rejoin, recording just continues.";
 "Back in the call — still recording" = "Back in the call — still recording";
+"Stop after silence" = "Stop after silence";
+"Stop After Silence" = "Stop After Silence";
+"Silence" = "Silence";
+"Stopping in %llds" = "Stopping in %llds";
+"%lld s" = "%lld s";
+"%lld min" = "%lld min";
+"%lld min %lld s" = "%lld min %lld s";
+"Stops dictation and translation after this much silence, once you have spoken. A countdown shows for the last 3 seconds; speak to keep recording. Ignored while you hold the push-to-talk key." = "Stops dictation and translation after this much silence, once you have spoken. A countdown shows for the last 3 seconds; speak to keep recording. Ignored while you hold the push-to-talk key.";
+"Stops the meeting recording when both your microphone and the meeting audio stay quiet this long, once someone has spoken. A countdown shows for the last 3 seconds." = "Stops the meeting recording when both your microphone and the meeting audio stay quiet this long, once someone has spoken. A countdown shows for the last 3 seconds.";

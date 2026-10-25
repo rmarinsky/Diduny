@@ -44,6 +44,10 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     /// Real-time PCM stream in `s16le`, 16kHz, mono for cloud websocket transcription/translation.
     var onRealtimeAudioData: ((Data) -> Void)?
 
+    /// Same 16 kHz PCM stream for on-device analysis (silence auto-stop). Snapshotted at start, like
+    /// `onRealtimeAudioData`.
+    var onAnalysisAudioData: ((Data) -> Void)?
+
     /// Called when the recording device is lost mid-recording (engine failed to restart).
     var onDeviceLost: (() -> Void)?
 
@@ -496,8 +500,13 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     }
 
     private func makeRealtimeAudioStreamerIfNeeded(inputFormat: AVAudioFormat) -> RealtimeAudioStreamer? {
-        guard let callback = onRealtimeAudioData else { return nil }
-        return RealtimeAudioStreamer(inputFormat: inputFormat, onAudioData: callback)
+        let realtime = onRealtimeAudioData
+        let analysis = onAnalysisAudioData
+        guard realtime != nil || analysis != nil else { return nil }
+        return RealtimeAudioStreamer(inputFormat: inputFormat) { data in
+            realtime?(data)
+            analysis?(data)
+        }
     }
 
     private func makeRecordingDeviceInfo(device: AudioDevice?, inputFormat: AVAudioFormat) -> RecordingDeviceInfo? {

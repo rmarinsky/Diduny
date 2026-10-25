@@ -19,6 +19,8 @@ final class LiveDictationOverlayStore {
     var phase: LiveDictationOverlayPhase = .starting
     var connectionStatus: RealtimeConnectionStatus = .disconnected
     var audioLevel: Float = 0
+    /// Seconds left before "Stop after silence" ends the recording; nil when not counting down.
+    var silenceCountdown: Int?
     var startedAt = Date()
     var finalText = ""
     var provisionalText = ""

@@ -167,6 +167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var audioRecorder = AudioRecorderService()
     lazy var transcriptionService = CloudTranscriptionService()
     lazy var whisperTranscriptionService = WhisperTranscriptionService()
+    /// "Stop after silence" for voice dictation / voice translation (they share `audioRecorder`).
+    var dictationSilenceMonitor: SilenceAutoStopMonitor?
+    var meetingSilenceMonitor: SilenceAutoStopMonitor?
     lazy var clipboardService = ClipboardService()
     lazy var hotkeyService = HotkeyService()
     lazy var pushToTalkService = PushToTalkService()
@@ -1206,7 +1209,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleRecordingStateChange(_ state: RecordingState) {
-        if state != .recording { whisperTranscriptionService.endRecordingHold() }
+        // `.processing` also precedes the start, so the hold ends only once the recording is over.
+        if state != .recording, state != .processing { whisperTranscriptionService.endRecordingHold() }
+        if state != .recording { stopDictationSilenceMonitor() }
         voiceAutoResetTask?.cancel()
         handleStateChange(
             state,
@@ -1227,6 +1232,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if state == .error {
             EscapeCancelService.shared.deactivate()
         }
+        if state == .recording {
+            startMeetingSilenceMonitor { [weak self] in
+                guard self?.appState.meetingRecordingState == .recording else { return }
+                await self?.stopMeetingRecording()
+            }
+        } else {
+            stopMeetingSilenceMonitor()
+        }
         meetingAutoResetTask?.cancel()
         handleStateChange(
             state,
@@ -1241,6 +1254,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleMeetingTranslationStateChange(_ state: RecordingState) {
+        if state == .recording {
+            startMeetingSilenceMonitor { [weak self] in
+                guard self?.appState.meetingTranslationRecordingState == .recording else { return }
+                await self?.stopMeetingTranslationRecording()
+            }
+        } else {
+            stopMeetingSilenceMonitor()
+        }
         meetingTranslationAutoResetTask?.cancel()
         handleStateChange(
             state,
@@ -1273,7 +1294,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleTranslationStateChange(_ state: RecordingState) {
-        if state != .recording { whisperTranscriptionService.endRecordingHold() }
+        // `.processing` also precedes the start, so the hold ends only once the recording is over.
+        if state != .recording, state != .processing { whisperTranscriptionService.endRecordingHold() }
+        if state != .recording { stopDictationSilenceMonitor() }
         translationAutoResetTask?.cancel()
         handleStateChange(
             state,

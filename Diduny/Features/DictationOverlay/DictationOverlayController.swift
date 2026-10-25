@@ -201,6 +201,15 @@ final class DictationOverlayController {
         }
     }
 
+    /// Shows (or with nil hides) the "Stop after silence" countdown on the active surface.
+    func updateSilenceCountdown(_ secondsLeft: Int?) {
+        if usesNotch {
+            NotchManager.shared.silenceCountdown = secondsLeft
+        } else {
+            store.silenceCountdown = secondsLeft
+        }
+    }
+
     func processTokens(_ tokens: [RealtimeToken]) {
         // The notch deliberately shows no live transcript — skip the token
         // pipeline entirely so it doesn't burn CPU with no UI attached.

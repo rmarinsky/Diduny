@@ -70,7 +70,11 @@ struct LiveDictationOverlayView: View {
             Spacer(minLength: 4)
 
             if store.phase != .pasted {
-                ElapsedTimeLabel(startedAt: store.startedAt)
+                if let secondsLeft = store.silenceCountdown {
+                    SilenceCountdownLabel(secondsLeft: secondsLeft)
+                } else {
+                    ElapsedTimeLabel(startedAt: store.startedAt)
+                }
 
                 Button(action: onMinimize) {
                     Image(systemName: "minus")
@@ -420,6 +424,17 @@ private struct OverlayStatusIcon: View {
             }
         }
         .frame(width: 38, height: 38)
+    }
+}
+
+private struct SilenceCountdownLabel: View {
+    let secondsLeft: Int
+
+    var body: some View {
+        Text("Stopping in \(secondsLeft)s")
+            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+            .foregroundStyle(.orange)
+            .lineLimit(1)
     }
 }
 

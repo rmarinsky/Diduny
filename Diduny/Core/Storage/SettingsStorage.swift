@@ -172,6 +172,10 @@ final class SettingsStorage {
         case transcriptionRealtimeSocketEnabled
         case meetingRealtimeTranscriptionEnabled
         case meetingLocalLivePreviewEnabled
+        case dictationSilenceAutoStopEnabled
+        case dictationSilenceAutoStopSeconds
+        case meetingSilenceAutoStopEnabled
+        case meetingSilenceAutoStopSeconds
         case escapeCancelEnabled
         case escapeCancelShortcut
         case escapeCancelPressCount
@@ -912,6 +916,54 @@ final class SettingsStorage {
                 || defaults.bool(forKey: Key.meetingLocalLivePreviewEnabled.rawValue)
         }
         set { defaults.set(newValue, forKey: Key.meetingLocalLivePreviewEnabled.rawValue) }
+    }
+
+    // MARK: - Stop After Silence
+
+    static let dictationSilenceAutoStopRange: ClosedRange<Double> = 1 ... 10
+    static let meetingSilenceAutoStopRange: ClosedRange<Double> = 10 ... 300
+
+    /// Voice dictation and voice translation (not while a hold-to-record key is held).
+    var dictationSilenceAutoStopEnabled: Bool {
+        get {
+            defaults.object(forKey: Key.dictationSilenceAutoStopEnabled.rawValue) == nil
+                || defaults.bool(forKey: Key.dictationSilenceAutoStopEnabled.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.dictationSilenceAutoStopEnabled.rawValue) }
+    }
+
+    var dictationSilenceAutoStopSeconds: Double {
+        get {
+            let stored = defaults.object(forKey: Key.dictationSilenceAutoStopSeconds.rawValue) as? Double ?? 5
+            return min(max(stored, Self.dictationSilenceAutoStopRange.lowerBound), Self.dictationSilenceAutoStopRange.upperBound)
+        }
+        set {
+            defaults.set(
+                min(max(newValue, Self.dictationSilenceAutoStopRange.lowerBound), Self.dictationSilenceAutoStopRange.upperBound),
+                forKey: Key.dictationSilenceAutoStopSeconds.rawValue
+            )
+        }
+    }
+
+    var meetingSilenceAutoStopEnabled: Bool {
+        get {
+            defaults.object(forKey: Key.meetingSilenceAutoStopEnabled.rawValue) == nil
+                || defaults.bool(forKey: Key.meetingSilenceAutoStopEnabled.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.meetingSilenceAutoStopEnabled.rawValue) }
+    }
+
+    var meetingSilenceAutoStopSeconds: Double {
+        get {
+            let stored = defaults.object(forKey: Key.meetingSilenceAutoStopSeconds.rawValue) as? Double ?? 60
+            return min(max(stored, Self.meetingSilenceAutoStopRange.lowerBound), Self.meetingSilenceAutoStopRange.upperBound)
+        }
+        set {
+            defaults.set(
+                min(max(newValue, Self.meetingSilenceAutoStopRange.lowerBound), Self.meetingSilenceAutoStopRange.upperBound),
+                forKey: Key.meetingSilenceAutoStopSeconds.rawValue
+            )
+        }
     }
 
     // MARK: - Escape Cancel
