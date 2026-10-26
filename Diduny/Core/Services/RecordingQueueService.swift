@@ -56,6 +56,8 @@ final class RecordingQueueService {
         resetStaleProcessingStates()
     }
 
+    /// Returns true when at least one recording was added to the queue.
+    @discardableResult
     func enqueue(
         _ ids: [UUID],
         action: QueueAction,
@@ -63,8 +65,8 @@ final class RecordingQueueService {
         whisperModelOverride: String? = nil,
         targetLanguage: String? = nil,
         localFallbackOnUsageLimit: Bool = false
-    ) {
-        guard !ids.isEmpty else { return }
+    ) -> Bool {
+        guard !ids.isEmpty else { return false }
 
         let newItems = ids.compactMap { id in
             makeQueueItem(
@@ -76,8 +78,9 @@ final class RecordingQueueService {
                 localFallbackOnUsageLimit: localFallbackOnUsageLimit
             )
         }
-        guard !newItems.isEmpty else { return }
+        guard !newItems.isEmpty else { return false }
 
+        var admitted = false
         for item in newItems {
             if let error = preflightError(for: item) {
                 storage.updateRecording(id: item.id, status: .failed, error: error)
@@ -85,10 +88,12 @@ final class RecordingQueueService {
             }
             storage.updateRecording(id: item.id, status: .processing, error: nil)
             pendingItems.append(item)
+            admitted = true
         }
 
         refreshQueueState()
         startProcessingIfNeeded()
+        return admitted
     }
 
     func cancelAll() {

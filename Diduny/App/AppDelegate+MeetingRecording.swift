@@ -1005,9 +1005,21 @@ extension AppDelegate {
                     handleMeetingStateChange(.success)
                 }
             } else {
+                // Say "in background" only when the queue actually took the recording.
+                var queued = false
+                if handsOffToQueue, let savedRecordingID = librarySavedId,
+                   case let .queueCloud(localFallback) = route
+                {
+                    queued = RecordingQueueService.shared.enqueue(
+                        [savedRecordingID],
+                        action: .transcribeDiarize,
+                        providerOverride: .cloud,
+                        localFallbackOnUsageLimit: localFallback
+                    )
+                }
                 await MainActor.run {
                     // Shown before .success so the panel switches in place instead of hiding.
-                    if handsOffToQueue {
+                    if queued {
                         DictationOverlayController.shared.showBackgroundHandoff()
                     }
                     appState.lastTranscription = nil
@@ -1029,13 +1041,8 @@ extension AppDelegate {
                         kind: .cloud,
                         provider: TranscriptionProvider.cloud.rawValue
                     )
-                } else if case let .queueCloud(localFallback) = route {
-                    RecordingQueueService.shared.enqueue(
-                        [savedRecordingID],
-                        action: .transcribeDiarize,
-                        providerOverride: .cloud,
-                        localFallbackOnUsageLimit: localFallback
-                    )
+                } else if case .queueCloud = route {
+                    // Already handed to the queue before the panel update.
                 } else {
                     RecordingsLibraryStorage.shared.updateRecording(
                         id: recordingId,
