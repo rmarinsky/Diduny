@@ -2,6 +2,8 @@ import Foundation
 
 final class WhisperTranscriptionService: TranscriptionServiceProtocol {
     var modelNameOverride: String?
+    /// Fraction 0…1 of the audio processed by file transcription, called off the main thread.
+    var onProgress: ((Double) -> Void)?
 
     /// Guards the loaded context, the in-flight load and the recording hold:
     /// preload, live preview and the final transcription reach them from
@@ -133,11 +135,13 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         let (language, prompt) = transcriptionHints()
 
         let started = Date()
+        let onProgress = onProgress
         let transcript = try await context.transcribe(
             samples: samples,
             language: language,
             initialPrompt: prompt,
-            translate: translate
+            translate: translate,
+            onProgress: onProgress.map { handler in { percent in handler(Double(percent) / 100) } }
         )
         Log.whisper.info("Whisper transcription took \(Int(Date().timeIntervalSince(started) * 1000)) ms")
 

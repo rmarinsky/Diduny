@@ -73,7 +73,7 @@ struct LiveDictationOverlayView: View {
                 if let secondsLeft = store.silenceCountdown {
                     SilenceCountdownLabel(secondsLeft: secondsLeft)
                 } else {
-                    ElapsedTimeLabel(startedAt: store.startedAt)
+                    ElapsedTimeLabel(startedAt: store.startedAt, endedAt: store.endedAt)
                 }
 
                 Button(action: onMinimize) {
@@ -251,7 +251,7 @@ struct LiveDictationOverlayView: View {
             .disabled(!store.hasText)
             .help("Copy transcript")
 
-            Button(action: store.phase == .pasted ? onDismiss : onStop) {
+            Button(action: showsCloseButton ? onDismiss : onStop) {
                 HStack(spacing: 6) {
                     Image(systemName: stopButtonIcon)
                         .font(.system(size: 11, weight: .semibold))
@@ -280,9 +280,9 @@ struct LiveDictationOverlayView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(store.phase == .pasted || store.canStop ? Color.white : Color.secondary.opacity(0.55))
+            .foregroundStyle(showsCloseButton || store.canStop ? Color.white : Color.secondary.opacity(0.55))
             .background(stopButtonColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .disabled(!store.canStop && store.phase != .pasted)
+            .disabled(!store.canStop && !showsCloseButton)
             .help(stopButtonHelp)
             .accessibilityLabel(stopButtonTitle)
             .accessibilityHint(stopButtonHelp)
@@ -302,8 +302,16 @@ struct LiveDictationOverlayView: View {
             }
     }
 
+    /// The right button closes the panel after a paste and during the background hand-off.
+    private var showsCloseButton: Bool {
+        store.phase == .pasted || store.backgroundHandoffDetail != nil
+    }
+
     private var stopButtonTitle: String {
-        switch store.phase {
+        if showsCloseButton {
+            return String(localized: "Close")
+        }
+        return switch store.phase {
         case .finalizing:
             String(localized: "Finishing…")
         case .processing:
@@ -316,7 +324,10 @@ struct LiveDictationOverlayView: View {
     }
 
     private var stopButtonIcon: String {
-        switch store.phase {
+        if showsCloseButton {
+            return "xmark"
+        }
+        return switch store.phase {
         case .finalizing, .processing:
             "ellipsis"
         case .pasted:
@@ -327,7 +338,7 @@ struct LiveDictationOverlayView: View {
     }
 
     private var stopButtonHelp: String {
-        if store.phase == .pasted {
+        if showsCloseButton {
             return "Close"
         }
 
@@ -342,11 +353,12 @@ struct LiveDictationOverlayView: View {
     }
 
     private var displayText: String {
-        store.displayText.isEmpty ? "Listening…" : store.displayText
+        guard store.displayText.isEmpty else { return store.displayText }
+        return store.backgroundHandoffDetail ?? "Listening…"
     }
 
     private var stopButtonColor: Color {
-        if store.phase == .pasted {
+        if showsCloseButton {
             return Color.primary.opacity(0.14)
         }
         if store.canStop {
@@ -440,6 +452,7 @@ private struct SilenceCountdownLabel: View {
 
 private struct ElapsedTimeLabel: View {
     let startedAt: Date
+    var endedAt: Date?
 
     var body: some View {
         TimelineView(.periodic(from: startedAt, by: 1)) { timeline in
@@ -451,7 +464,7 @@ private struct ElapsedTimeLabel: View {
     }
 
     private func elapsedText(at date: Date) -> String {
-        let elapsed = max(0, Int(date.timeIntervalSince(startedAt)))
+        let elapsed = max(0, Int(min(date, endedAt ?? date).timeIntervalSince(startedAt)))
         return String(format: "%02d:%02d", elapsed / 60, elapsed % 60)
     }
 }

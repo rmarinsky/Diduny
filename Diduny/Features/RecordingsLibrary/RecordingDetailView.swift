@@ -12,6 +12,7 @@ struct RecordingDetailView: View {
 
     @State private var playbackService = AudioPlaybackService.shared
     @State private var queueService = RecordingQueueService.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var modelManager = WhisperModelManager.shared
     @State private var selectedWhisperModel: String = SettingsStorage.shared.selectedWhisperModel
     @State private var storage = RecordingsLibraryStorage.shared
@@ -59,6 +60,43 @@ struct RecordingDetailView: View {
 
     private var translationPair: TranslationLanguagePair {
         SettingsStorage.shared.resolveTranslationLanguagePair()
+    }
+
+    private var currentQueueProgress: QueueProgress? {
+        guard queueService.currentRecordingId == currentRecording.id else { return nil }
+        return queueService.currentProgress
+    }
+
+    private var queueProgressView: some View {
+        let progress = currentQueueProgress
+        let fraction = progress.flatMap(QueueProgressFormatter.barFraction)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                ProgressView().controlSize(.small)
+                Text(
+                    progress.map(QueueProgressFormatter.detailLine)
+                        ?? (queueService.isQueued(currentRecording.id) ? String(localized: "Queued") : nil)
+                        ?? queueStatusText
+                        ?? "Processing..."
+                )
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                Spacer()
+                if let timeLeft = progress.flatMap(QueueProgressFormatter.timeLeft) {
+                    Text(timeLeft)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            if let fraction {
+                ProgressView(value: fraction)
+                    .progressViewStyle(.linear)
+                    .controlSize(.small)
+                    .tint(Color("BrandAccentDeep"))
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: fraction)
+            }
+        }
     }
 
     private var queueStatusText: String? {
@@ -472,10 +510,7 @@ struct RecordingDetailView: View {
             }
 
             if currentRecording.status == .processing {
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text(queueStatusText ?? "Processing...").foregroundStyle(.secondary)
-                }
+                queueProgressView
             } else if currentRecording.status == .failed {
                 Label(
                     currentRecording.errorMessage ?? String(localized: "Transcription failed"),

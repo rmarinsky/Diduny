@@ -1419,3 +1419,14 @@
 "%lld min %lld s" = "%lld хв %lld с";
 "Stops dictation and translation after this much silence, once you have spoken. A countdown shows for the last 3 seconds; speak to keep recording. Ignored while you hold the push-to-talk key." = "Зупиняє диктування й переклад після такої тиші, коли ви вже щось сказали. Останні 3 секунди видно відлік; заговоріть, щоб продовжити запис. Не діє, поки ви тримаєте клавішу push-to-talk.";
 "Stops the meeting recording when both your microphone and the meeting audio stay quiet this long, once someone has spoken. A countdown shows for the last 3 seconds." = "Зупиняє запис зустрічі, коли і ваш мікрофон, і звук зустрічі мовчать так довго, після того як хтось уже говорив. Останні 3 секунди видно відлік.";
+"Preparing audio" = "Підготовка аудіо";
+"Uploading" = "Завантаження";
+"Finishing" = "Завершення";
+"~%lld min left" = "ще ~%lld хв";
+"~%lld s left" = "ще ~%lld с";
+"≈ %lld of %lld min" = "≈ %lld з %lld хв";
+"%lld of %lld min" = "%lld з %lld хв";
+"≈ %lld of %lld s" = "≈ %lld з %lld с";
+"%lld of %lld s" = "%lld з %lld с";
+"Transcribing in background" = "Транскрибуємо у фоні";
+"The transcript will appear in Recordings." = "Транскрипт з’явиться в Записах.";

@@ -22,6 +22,10 @@ final class LiveDictationOverlayStore {
     /// Seconds left before "Stop after silence" ends the recording; nil when not counting down.
     var silenceCountdown: Int?
     var startedAt = Date()
+    /// Set when a meeting is stopped; the timer shows the recorded length instead of counting.
+    var endedAt: Date?
+    /// Box text while the "Transcribing in background" hand-off is shown; nil otherwise.
+    var backgroundHandoffDetail: String?
     var finalText = ""
     var provisionalText = ""
     var copiedAt: Date?
@@ -216,6 +220,8 @@ final class LiveDictationOverlayStore {
         connectionStatus = .disconnected
         audioLevel = 0
         startedAt = Date()
+        endedAt = nil
+        backgroundHandoffDetail = nil
         finalText = ""
         provisionalText = ""
         fallbackFinalText = ""
