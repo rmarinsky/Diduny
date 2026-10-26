@@ -12,6 +12,14 @@ struct RecordingRowView: View {
     var onToggleSelection: (() -> Void)?
 
     @State private var playbackService = AudioPlaybackService.shared
+    @State private var queueService = RecordingQueueService.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Progress while this recording is the queue's current item.
+    private var queueProgress: QueueProgress? {
+        guard recording.status == .processing, queueService.currentRecordingId == recording.id else { return nil }
+        return queueService.currentProgress
+    }
 
     private var isPlaying: Bool {
         playbackService.playingRecordingId == recording.id && playbackService.isPlaying
@@ -73,13 +81,40 @@ struct RecordingRowView: View {
             if let meeting = recording.calendarMeeting {
                 calendarLine(meeting)
             }
-            Text(previewText)
-                .font(.system(size: 12))
-                .foregroundColor(previewColor)
-                .lineLimit(1)
+            if let queueProgress {
+                progressLine(queueProgress)
+            } else {
+                Text(previewText)
+                    .font(.system(size: 12))
+                    .foregroundColor(previewColor)
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    private func progressLine(_ progress: QueueProgress) -> some View {
+        let line = QueueProgressFormatter.rowLine(progress)
+        let fraction = QueueProgressFormatter.barFraction(progress)
+        return VStack(alignment: .leading, spacing: 3) {
+            Text(line)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+            if let fraction {
+                ProgressView(value: fraction)
+                    .progressViewStyle(.linear)
+                    .controlSize(.mini)
+                    .tint(Color("BrandAccentDeep"))
+                    .frame(maxWidth: 240)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: fraction)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(line))
     }
 
     private var selectionButton: some View {
@@ -260,7 +295,9 @@ struct RecordingRowView: View {
             return String(localized: "Needs processing — recover audio from this session")
         }
         if recording.status == .processing {
-            return String(localized: "Transcribing...")
+            return queueService.isQueued(recording.id)
+                ? String(localized: "Queued")
+                : String(localized: "Transcribing...")
         }
         if recording.status == .failed {
             return recording.errorMessage ?? String(localized: "Transcription failed")

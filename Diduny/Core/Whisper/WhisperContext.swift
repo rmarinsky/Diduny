@@ -26,7 +26,20 @@ actor WhisperContext {
         Int(timestamp) * 10
     }
 
-    func transcribe(samples: [Float], language: String? = nil, initialPrompt: String? = nil, translate: Bool = false) throws -> GeneratedTranscript {
+    /// Holds the progress handler for whisper.cpp's C callback, which can't capture context.
+    private final class ProgressHandlerBox {
+        let handler: (Int) -> Void
+        init(_ handler: @escaping (Int) -> Void) { self.handler = handler }
+    }
+
+    /// `onProgress` receives 0…100 from whisper.cpp's worker thread.
+    func transcribe(
+        samples: [Float],
+        language: String? = nil,
+        initialPrompt: String? = nil,
+        translate: Bool = false,
+        onProgress: ((Int) -> Void)? = nil
+    ) throws -> GeneratedTranscript {
         guard let context else {
             throw WhisperError.contextNotInitialized
         }
@@ -42,6 +55,16 @@ actor WhisperContext {
         params.no_timestamps = false
         params.single_segment = false
         params.translate = translate
+
+        let progressBox = onProgress.map(ProgressHandlerBox.init)
+        if let progressBox {
+            params.progress_callback = { _, _, progress, userData in
+                guard let userData else { return }
+                Unmanaged<ProgressHandlerBox>.fromOpaque(userData).takeUnretainedValue().handler(Int(progress))
+            }
+            params.progress_callback_user_data = Unmanaged.passUnretained(progressBox).toOpaque()
+        }
+        defer { withExtendedLifetime(progressBox) {} }
 
         let languageCString = Array((language ?? "auto").utf8CString)
         let promptCString = initialPrompt.map { Array($0.utf8CString) }

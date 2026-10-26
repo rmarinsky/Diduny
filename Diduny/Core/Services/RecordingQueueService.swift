@@ -15,6 +15,8 @@ final class RecordingQueueService {
     private(set) var currentRecordingId: UUID?
     private(set) var queueCount = 0
     private(set) var currentJobStatus: JobStatus?
+    /// Stage and progress of the current item; nil between items.
+    private(set) var currentProgress: QueueProgress?
 
     private struct QueueItem {
         let id: UUID
@@ -22,9 +24,13 @@ final class RecordingQueueService {
         let providerOverride: TranscriptionProvider?
         let whisperModelOverride: String?
         let targetLanguage: String?
+        var localFallbackOnUsageLimit = false
     }
 
     private var processingTask: Task<Void, Never>?
+    private var progressTickTask: Task<Void, Never>?
+    private var lastProgressPublishedAt = Date.distantPast
+    private var stageStartedAt = Date()
     private var pendingItems: [QueueItem] = []
     private var currentItem: QueueItem?
     private let storage: RecordingsLibraryStorage
@@ -55,7 +61,8 @@ final class RecordingQueueService {
         action: QueueAction,
         providerOverride: TranscriptionProvider? = nil,
         whisperModelOverride: String? = nil,
-        targetLanguage: String? = nil
+        targetLanguage: String? = nil,
+        localFallbackOnUsageLimit: Bool = false
     ) {
         guard !ids.isEmpty else { return }
 
@@ -65,7 +72,8 @@ final class RecordingQueueService {
                 action: action,
                 providerOverride: providerOverride,
                 whisperModelOverride: whisperModelOverride,
-                targetLanguage: targetLanguage
+                targetLanguage: targetLanguage,
+                localFallbackOnUsageLimit: localFallbackOnUsageLimit
             )
         }
         guard !newItems.isEmpty else { return }
@@ -127,8 +135,10 @@ final class RecordingQueueService {
 
             await processRecording(item)
 
+            stopProgressTicks()
             currentItem = nil
             currentJobStatus = nil
+            currentProgress = nil
             currentRecordingId = nil
             refreshQueueState()
         }
@@ -138,6 +148,9 @@ final class RecordingQueueService {
         guard let recording = storage.recordings.first(where: { $0.id == item.id }) else {
             return
         }
+        let provider = configuredProvider(for: item)
+        let totalSeconds = recording.effectiveDurationSeconds
+        publishProgress(QueueProgress(stage: .preparing, provider: provider, totalSeconds: totalSeconds), itemID: item.id)
 
         let originalAudioURL = await storage.optimizeStoredRecordingIfNeeded(id: item.id) ?? storage
             .audioFileURL(for: recording)
@@ -155,7 +168,6 @@ final class RecordingQueueService {
                 if audioURL != originalAudioURL { try? FileManager.default.removeItem(at: audioURL) }
             }
             try Task.checkCancellation()
-            let provider = configuredProvider(for: item)
 
             if let error = preflightError(for: item, provider: provider) {
                 storage.updateRecording(id: item.id, status: .failed, error: error)
@@ -166,6 +178,13 @@ final class RecordingQueueService {
                 for: provider,
                 whisperModelOverride: item.whisperModelOverride
             )
+            if let whisper = service as? WhisperTranscriptionService {
+                whisper.onProgress = { [weak self] fraction in
+                    Task { @MainActor in
+                        self?.publishLocalProgress(fraction, totalSeconds: totalSeconds, itemID: item.id)
+                    }
+                }
+            }
 
             let transcript: GeneratedTranscript
             let status: Recording.ProcessingStatus
@@ -179,7 +198,8 @@ final class RecordingQueueService {
                         audioFileURL: audioURL,
                         config: buildCloudTranscriptionConfig(enableSpeakerDiarization: false),
                         source: recording.audioFileName,
-                        sourceDurationSeconds: recording.effectiveDurationSeconds
+                        sourceDurationSeconds: recording.effectiveDurationSeconds,
+                        itemID: item.id
                     )
                 } else {
                     let audioData = try await loadAudioData(from: audioURL)
@@ -195,7 +215,8 @@ final class RecordingQueueService {
                         audioFileURL: audioURL,
                         config: buildCloudTranscriptionConfig(enableSpeakerDiarization: true),
                         source: recording.audioFileName,
-                        sourceDurationSeconds: recording.effectiveDurationSeconds
+                        sourceDurationSeconds: recording.effectiveDurationSeconds,
+                        itemID: item.id
                     )
                 } else {
                     let audioData = try await loadAudioData(from: audioURL)
@@ -232,7 +253,8 @@ final class RecordingQueueService {
                         audioFileURL: audioURL,
                         config: config,
                         source: recording.audioFileName,
-                        sourceDurationSeconds: recording.effectiveDurationSeconds
+                        sourceDurationSeconds: recording.effectiveDurationSeconds,
+                        itemID: item.id
                     )
                 } else {
                     let audioData = try await loadAudioData(from: audioURL)
@@ -266,6 +288,9 @@ final class RecordingQueueService {
                 return
             }
 
+            stopProgressTicks()
+            publishProgress(QueueProgress(stage: .finishing, provider: provider, totalSeconds: totalSeconds), itemID: item.id)
+
             let provenance = recording.remoteSource != nil && status == .transcribed
                 ? GeneratedTranscriptProvenance(provider: provider.rawValue)
                 : nil
@@ -291,6 +316,23 @@ final class RecordingQueueService {
             storage.updateRecording(id: item.id, status: .unprocessed, error: nil)
             currentJobStatus = nil
             Log.app.info("Queue cancelled recording \(item.id)")
+        } catch let error as TranscriptionError where Self.usageLimitFallbackProvider(
+            for: error,
+            provider: provider,
+            allowsLocalFallback: item.localFallbackOnUsageLimit,
+            hasLocalModel: localModelIsAvailable(SettingsStorage.shared.selectedWhisperModel)
+        ) == .local {
+            // Cloud ran out at Stop time: the meeting is transcribed on this Mac instead.
+            let localItem = QueueItem(
+                id: item.id,
+                action: item.action,
+                providerOverride: .local,
+                whisperModelOverride: item.whisperModelOverride,
+                targetLanguage: item.targetLanguage
+            )
+            pendingItems.insert(localItem, at: 0)
+            currentJobStatus = nil
+            Log.app.notice("Queue: cloud usage limit for \(item.id, privacy: .public), retrying on this Mac")
         } catch {
             storage.updateRecording(id: item.id, status: .failed, error: error.localizedDescription)
             currentJobStatus = nil
@@ -330,19 +372,126 @@ final class RecordingQueueService {
         audioFileURL: URL,
         config: [String: Any],
         source: String,
-        sourceDurationSeconds: TimeInterval
+        sourceDurationSeconds: TimeInterval,
+        itemID: UUID
     ) async throws -> GeneratedTranscript {
         let asyncJobService = AsyncTranscriptionJobService()
         return try await asyncJobService.transcribeFileDetailedWithRetry(
             audioFileURL: audioFileURL,
             config: config,
             source: source,
-            sourceDurationSeconds: sourceDurationSeconds
+            sourceDurationSeconds: sourceDurationSeconds,
+            onUploadProgress: { [weak self] fraction in
+                Task { @MainActor in
+                    self?.publishProgress(
+                        QueueProgress(
+                            stage: .uploading,
+                            provider: .cloud,
+                            totalSeconds: sourceDurationSeconds,
+                            fraction: fraction
+                        ),
+                        itemID: itemID
+                    )
+                }
+            }
         ) { [weak self] update in
             Task { @MainActor in
                 self?.currentJobStatus = update.status
+                self?.handleCloudJobStatus(update.status, totalSeconds: sourceDurationSeconds, itemID: itemID)
             }
         }
+    }
+
+    // MARK: - Progress
+
+    /// Cloud fallback to Local applies only to items queued with it, only for the usage limit,
+    /// and only when a local model is ready.
+    nonisolated static func usageLimitFallbackProvider(
+        for error: TranscriptionError,
+        provider: TranscriptionProvider,
+        allowsLocalFallback: Bool,
+        hasLocalModel: Bool
+    ) -> TranscriptionProvider? {
+        guard error.isUsageLimitExceeded, provider == .cloud, allowsLocalFallback, hasLocalModel else { return nil }
+        return .local
+    }
+
+    func isQueued(_ id: UUID) -> Bool {
+        pendingItems.contains { $0.id == id }
+    }
+
+    private func handleCloudJobStatus(_ status: JobStatus, totalSeconds: TimeInterval, itemID: UUID) {
+        // Status callbacks hop to the main actor and can arrive after the item finished.
+        guard currentRecordingId == itemID else { return }
+        switch status {
+        case .queued, .processing:
+            guard progressTickTask == nil, currentProgress?.stage != .finishing else { return }
+            let estimate = CloudTranscriptionEstimate(audioSeconds: totalSeconds, startedAt: Date())
+            progressTickTask = Task { [weak self] in
+                while !Task.isCancelled, self?.currentRecordingId == itemID {
+                    let now = Date()
+                    let fraction = estimate.fraction(at: now)
+                    self?.publishProgress(
+                        QueueProgress(
+                            stage: .transcribing,
+                            provider: .cloud,
+                            totalSeconds: totalSeconds,
+                            fraction: fraction,
+                            processedSeconds: fraction * totalSeconds,
+                            secondsLeft: estimate.secondsLeft(at: now)
+                        ),
+                        itemID: itemID
+                    )
+                    try? await Task.sleep(for: .seconds(1))
+                }
+            }
+        case .finalizing:
+            stopProgressTicks()
+            publishProgress(QueueProgress(stage: .finishing, provider: .cloud, totalSeconds: totalSeconds), itemID: itemID)
+        default:
+            break
+        }
+    }
+
+    private func publishLocalProgress(_ fraction: Double, totalSeconds: TimeInterval, itemID: UUID) {
+        let elapsed = currentProgress?.stage == .transcribing ? Date().timeIntervalSince(stageStartedAt) : 0
+        // Rate-based time left once there is enough progress to measure a rate.
+        let secondsLeft: TimeInterval? = fraction >= 0.05 && fraction < 1 ? elapsed / fraction * (1 - fraction) : nil
+        publishProgress(
+            QueueProgress(
+                stage: .transcribing,
+                provider: .local,
+                totalSeconds: totalSeconds,
+                fraction: fraction,
+                processedSeconds: fraction * totalSeconds,
+                secondsLeft: secondsLeft
+            ),
+            itemID: itemID
+        )
+    }
+
+    /// Publishes at most twice a second within a stage; stage changes always go through and are logged.
+    private func publishProgress(_ progress: QueueProgress, itemID: UUID) {
+        guard currentRecordingId == itemID else { return }
+        // Stages only move forward within an item; a late upload event must not undo "Transcribing".
+        if let current = currentProgress, progress.stage.order < current.stage.order { return }
+        let now = Date()
+        let stageChanged = currentProgress?.stage != progress.stage
+        guard stageChanged || now.timeIntervalSince(lastProgressPublishedAt) >= 0.5 else { return }
+        if stageChanged {
+            let previousElapsed = Int(now.timeIntervalSince(stageStartedAt))
+            Log.app.notice(
+                "Queue stage \(progress.stage.rawValue, privacy: .public) for \(itemID, privacy: .public), provider=\(progress.provider.rawValue, privacy: .public), audio=\(Int(progress.totalSeconds))s, previousStage=\(self.currentProgress?.stage.rawValue ?? "none", privacy: .public) took \(previousElapsed)s"
+            )
+            stageStartedAt = now
+        }
+        lastProgressPublishedAt = now
+        currentProgress = progress
+    }
+
+    private func stopProgressTicks() {
+        progressTickTask?.cancel()
+        progressTickTask = nil
     }
 
     private func loadAudioData(from url: URL) async throws -> Data {
@@ -356,7 +505,8 @@ final class RecordingQueueService {
         action: QueueAction,
         providerOverride: TranscriptionProvider?,
         whisperModelOverride: String?,
-        targetLanguage: String?
+        targetLanguage: String?,
+        localFallbackOnUsageLimit: Bool
     ) -> QueueItem? {
         guard currentItem?.id != id else {
             Log.app.info("Queue skipped duplicate active recording \(id)")
@@ -373,7 +523,8 @@ final class RecordingQueueService {
             action: action,
             providerOverride: providerOverride,
             whisperModelOverride: whisperModelOverride,
-            targetLanguage: targetLanguage
+            targetLanguage: targetLanguage,
+            localFallbackOnUsageLimit: localFallbackOnUsageLimit
         )
     }
 

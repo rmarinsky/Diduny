@@ -62,6 +62,10 @@ final class DictationOverlayController {
             store.mode = mode
         }
         cancelOutputPreview()
+        if mode.isMeeting {
+            // The meeting timer stops at Stop; finalizing and the hand-off show the recorded length.
+            store.endedAt = Date()
+        }
         store.phase = .finalizing
         store.audioLevel = 0
         if usesNotch {
@@ -140,6 +144,33 @@ final class DictationOverlayController {
         scheduleAutoHide(delay: duration)
     }
 
+    /// True while the "Transcribing in background" hand-off is on screen.
+    var isShowingBackgroundHandoff: Bool {
+        store.backgroundHandoffDetail != nil
+    }
+
+    /// Stop handed the meeting to the transcription queue: say so for 2 s, then close.
+    func showBackgroundHandoff(duration: TimeInterval = 2.0) {
+        let message = String(localized: "Transcribing in background")
+        autoHideTask?.cancel()
+        cancelOutputPreview()
+        store.audioLevel = 0
+        if usesNotch {
+            NotchManager.shared.showInfo(message: message, duration: duration)
+            endSurfaceSession()
+            return
+        }
+        // A panel the person minimized stays out of the way.
+        if EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
+            dismiss()
+            return
+        }
+        store.backgroundHandoffDetail = String(localized: "The transcript will appear in Recordings.")
+        store.phase = .info(message)
+        showPanel()
+        scheduleAutoHide(delay: duration)
+    }
+
     func showInfoDuringRecording(message: String, mode: RecordingMode, duration: TimeInterval = 1.5) {
         if usesNotch {
             NotchManager.shared.showInfoDuringRecording(message: message, mode: mode, duration: duration)
@@ -183,6 +214,7 @@ final class DictationOverlayController {
         cancelOutputPreview()
         autoHideTask = nil
         store.audioLevel = 0
+        store.backgroundHandoffDetail = nil
         if usesNotch {
             NotchManager.shared.hide()
         }

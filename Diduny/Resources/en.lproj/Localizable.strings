@@ -1419,3 +1419,14 @@
 "%lld min %lld s" = "%lld min %lld s";
 "Stops dictation and translation after this much silence, once you have spoken. A countdown shows for the last 3 seconds; speak to keep recording. Ignored while you hold the push-to-talk key." = "Stops dictation and translation after this much silence, once you have spoken. A countdown shows for the last 3 seconds; speak to keep recording. Ignored while you hold the push-to-talk key.";
 "Stops the meeting recording when both your microphone and the meeting audio stay quiet this long, once someone has spoken. A countdown shows for the last 3 seconds." = "Stops the meeting recording when both your microphone and the meeting audio stay quiet this long, once someone has spoken. A countdown shows for the last 3 seconds.";
+"Preparing audio" = "Preparing audio";
+"Uploading" = "Uploading";
+"Finishing" = "Finishing";
+"~%lld min left" = "~%lld min left";
+"~%lld s left" = "~%lld s left";
+"≈ %lld of %lld min" = "≈ %lld of %lld min";
+"%lld of %lld min" = "%lld of %lld min";
+"≈ %lld of %lld s" = "≈ %lld of %lld s";
+"%lld of %lld s" = "%lld of %lld s";
+"Transcribing in background" = "Transcribing in background";
+"The transcript will appear in Recordings." = "The transcript will appear in Recordings.";

@@ -1182,7 +1182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .success:
             if let text = appState.lastTranscription {
                 showFeedbackSuccess(text: text, mode: mode)
-            } else {
+            } else if !DictationOverlayController.shared.isShowingBackgroundHandoff {
                 hideFeedback(mode: mode)
             }
             let task = Task {
