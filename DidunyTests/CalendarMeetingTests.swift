@@ -159,6 +159,25 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertEqual(timeline.segments.first?.from, 0, "Meetings before the window are clipped")
         XCTAssertEqual(timeline.segments.last?.to, 1, "Meetings after the window are clipped")
         XCTAssertEqual(timeline.segments[1].from, 90 / 480.0, accuracy: 0.0001)
+        XCTAssertEqual(timeline.lanes, 1)
+    }
+
+    func testTimelinePutsOverlappingMeetingsInSeparateLanes() {
+        let calendar = Calendar(identifier: .gregorian)
+        let at = { (hour: Int, minute: Int) in
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: hour, minute: minute))!
+        }
+        let event = { (id: String, start: Date, end: Date) in
+            CalendarMeeting(id: id, calendarID: "work", title: id, start: start, end: end)
+        }
+        let timeline = CalendarTimeline(meetings: [
+            event("a", at(11, 0), at(12, 0)), event("b", at(11, 30), at(12, 30)),
+            event("c", at(11, 45), at(12, 15)), event("d", at(12, 0), at(13, 0)), event("e", at(13, 0), at(14, 0))
+        ], now: at(12, 0), calendar: calendar)
+
+        XCTAssertEqual(timeline.segments.map(\.id), ["a", "b", "c", "d", "e"])
+        XCTAssertEqual(timeline.segments.map(\.lane), [0, 1, 2, 0, 0], "Back-to-back meetings reuse the freed lane")
+        XCTAssertEqual(timeline.lanes, 3)
     }
 
     func testAgendaNotesDropMarkupAndJoinBoilerplate() {

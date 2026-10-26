@@ -216,8 +216,13 @@ struct CalendarSettingsSection: View {
 
 /// Today's meetings around now, at the top of the menu bar menu.
 struct CalendarTimelineView: View {
-    static let size = CGSize(width: 320, height: 44)
+    private static let width: CGFloat = 320
     private static let inset: CGFloat = 12
+    private static let laneStep: CGFloat = 17
+    static func size(_ timeline: CalendarTimeline) -> CGSize {
+        CGSize(width: width, height: 44 + extraHeight(timeline))
+    }
+    private static func extraHeight(_ timeline: CalendarTimeline) -> CGFloat { CGFloat(timeline.lanes - 1) * laneStep }
     let timeline: CalendarTimeline
     var hideNames = false
     var onOpen: (() -> Void)? = nil
@@ -231,7 +236,8 @@ struct CalendarTimelineView: View {
     }
 
     var body: some View {
-        let x = { (position: Double) in Self.inset + position * (Self.size.width - 2 * Self.inset) }
+        let x = { (position: Double) in Self.inset + position * (Self.width - 2 * Self.inset) }
+        let extra = Self.extraHeight(timeline)
         ZStack(alignment: .topLeading) {
             ForEach(timeline.hours, id: \.position) { hour in
                 Text(verbatim: String(hour.hour))
@@ -239,8 +245,8 @@ struct CalendarTimelineView: View {
                     .foregroundStyle(.secondary)
                     .position(x: x(hour.position), y: 8)
                 Rectangle().fill(Color.secondary.opacity(0.3))
-                    .frame(width: 1, height: 22)
-                    .position(x: x(hour.position), y: 30)
+                    .frame(width: 1, height: 22 + extra)
+                    .position(x: x(hour.position), y: 30 + extra / 2)
             }
             ForEach(timeline.segments) { segment in
                 let width = max(6, x(segment.to) - x(segment.from) - 2)
@@ -248,13 +254,13 @@ struct CalendarTimelineView: View {
                     .overlay(Capsule().strokeBorder(stroke(segment.phase), lineWidth: 1.5))
                     .frame(width: width, height: 14)
                     .help(hideNames ? "" : segment.title)
-                    .position(x: x(segment.from) + 1 + width / 2, y: 30)
+                    .position(x: x(segment.from) + 1 + width / 2, y: 30 + CGFloat(segment.lane) * Self.laneStep)
             }
             Capsule().fill(Color.primary)
-                .frame(width: 2.5, height: 26)
-                .position(x: x(timeline.now), y: 30)
+                .frame(width: 2.5, height: 26 + extra)
+                .position(x: x(timeline.now), y: 30 + extra / 2)
         }
-        .frame(width: Self.size.width, height: Self.size.height)
+        .frame(width: Self.width, height: Self.size(timeline).height)
         .contentShape(Rectangle())
         .onTapGesture { onOpen?() }
         .accessibilityElement(children: .ignore)
