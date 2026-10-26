@@ -330,14 +330,18 @@ struct CalendarAgendaDay: Identifiable, Equatable {
 }
 
 /// Positions are fractions of an eight-hour window starting two hours before the current hour.
+/// Overlapping meetings go to separate lanes; each meeting takes the first lane free at its start.
 struct CalendarTimeline: Equatable {
     enum Phase: Equatable { case past, current, upcoming }
     struct Hour: Equatable { let hour: Int; let position: Double }
-    struct Segment: Equatable, Identifiable { let id: String; let from: Double; let to: Double; let phase: Phase; var title = "" }
+    struct Segment: Equatable, Identifiable {
+        let id: String; let from: Double; let to: Double; let phase: Phase; var title = ""; var lane = 0
+    }
 
     let hours: [Hour]
     let now: Double
     let segments: [Segment]
+    var lanes: Int { (segments.map(\.lane).max() ?? 0) + 1 }
 
     init(meetings: [CalendarMeeting], now: Date, calendar: Calendar = .current) {
         let start = (calendar.dateInterval(of: .hour, for: now)?.start ?? now).addingTimeInterval(-2 * 3600)
@@ -346,9 +350,15 @@ struct CalendarTimeline: Equatable {
         hours = (0...8).map { Hour(hour: calendar.component(.hour, from: start.addingTimeInterval(Double($0) * 3600)),
                                    position: Double($0) / 8) }
         self.now = position(now)
+        var laneEnds: [Date] = []
         segments = meetings.filter { $0.canRemind && $0.end > start && $0.start < start.addingTimeInterval(span) }
             .sorted { $0.start < $1.start }
-            .map { Segment(id: $0.id, from: position($0.start), to: position($0.end), phase: $0.phase(at: now), title: $0.title) }
+            .map { meeting in
+                let lane = laneEnds.firstIndex { $0 <= meeting.start } ?? laneEnds.count
+                if lane == laneEnds.count { laneEnds.append(meeting.end) } else { laneEnds[lane] = meeting.end }
+                return Segment(id: meeting.id, from: position(meeting.start), to: position(meeting.end),
+                               phase: meeting.phase(at: now), title: meeting.title, lane: lane)
+            }
     }
 }
 
