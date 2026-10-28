@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "headline": "Meetings finish in the background",
+  "headline": "Voice notes take up 8 times less space",
   "highlights": [
-    "After you stop a meeting, the panel closes in a couple of seconds and transcription keeps going in the background.",
-    "Recordings shows how far along it is: the stage, how many minutes are done, and roughly how much time is left."
+    "Dictation and voice notes are now saved at 16 kHz mono, the same format meetings already use: about 1 MB per minute instead of 8.6 MB.",
+    "Transcription quality stays the same: Cloud and Local already converted audio to 16 kHz before transcribing."
   ]
 }
