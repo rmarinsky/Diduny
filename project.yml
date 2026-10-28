@@ -18,6 +18,9 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     exactVersion: 2.9.0
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio
+    exactVersion: 0.17.7
 
 configs:
   Debug: debug
@@ -97,6 +100,7 @@ targets:
       - package: DynamicNotchKit
       - package: LaunchAtLogin
       - package: Sparkle
+      - package: FluidAudio
       - framework: Frameworks/whisper.xcframework
         embed: false
       - sdk: Accelerate.framework

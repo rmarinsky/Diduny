@@ -122,6 +122,8 @@ struct MeetingAudioSettingsView: View {
                 .foregroundColor(.secondary)
             }
 
+            SpeakerLabelsSection(audioSource: audioSource)
+
             if audioSource == .systemPlusMicrophone {
                 Section {
                     VStack(alignment: .leading, spacing: 12) {

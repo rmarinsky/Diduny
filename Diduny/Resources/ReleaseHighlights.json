@@ -1,8 +1,9 @@
 {
   "schemaVersion": 1,
-  "headline": "Voice notes take up 8 times less space",
+  "headline": "Local transcripts know who said what",
   "highlights": [
-    "Dictation and voice notes are now saved at 16 kHz mono, the same format meetings already use: about 1 MB per minute instead of 8.6 MB.",
-    "Transcription quality stays the same: Cloud and Local already converted audio to 16 kHz before transcribing."
+    "Meetings transcribed on your Mac now label your lines as Me and the call as Others.",
+    "On Apple silicon with macOS 15, Diduny also tells voices apart, such as Speaker 2 (remote) or Speaker 3 (room). It runs on your Mac only.",
+    "An optional voice profile in meeting settings helps when other people share your microphone."
   ]
 }

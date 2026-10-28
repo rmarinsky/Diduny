@@ -191,7 +191,7 @@ final class RecordingQueueService {
                 }
             }
 
-            let transcript: GeneratedTranscript
+            var transcript: GeneratedTranscript
             let status: Recording.ProcessingStatus
             let translationTargetLanguageCode: String?
             let historyKind: TranscriptVersion.Kind
@@ -285,6 +285,20 @@ final class RecordingQueueService {
                 translationTargetLanguageCode = targetLanguage
                 historyKind = .translation
                 sourceLanguageCode = pair.languageA
+            }
+
+            if provider == .local, status == .transcribed {
+                transcript = await LocalSpeakerLabelService.label(
+                    transcript,
+                    recording: recording,
+                    tracksURL: storage.tracksFileURL(for: item.id),
+                    audioURL: audioURL
+                ) {
+                    publishProgress(
+                        QueueProgress(stage: .identifyingSpeakers, provider: provider, totalSeconds: totalSeconds),
+                        itemID: item.id
+                    )
+                }
             }
 
             guard !Task.isCancelled else {
