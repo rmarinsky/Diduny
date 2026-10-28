@@ -19,6 +19,9 @@ struct AudioDictationSettingsView: View {
     @State private var disabledDetectedLanguageCodes = Set(SettingsStorage.shared.disabledDetectedSpeechLanguageHints)
     @State private var translationPairs = SettingsStorage.shared.translationLanguagePairs
     @State private var defaultPairID = SettingsStorage.shared.defaultTranslationLanguagePairID
+    @State private var voiceCommandsEnabled = SettingsStorage.shared.voiceTranslationCommandsEnabled
+    @State private var voiceCommandPosition = SettingsStorage.shared.voiceTranslationCommandPosition
+    @State private var voiceCommandTargets = SettingsStorage.shared.voiceTranslationCommandTargets
     @State private var isManagingSpeechLanguages = false
     @State private var isEditingPair = false
     @State private var pairBeingEdited: TranslationLanguagePair?
@@ -80,6 +83,7 @@ struct AudioDictationSettingsView: View {
                 localWhisperSection
                 translationPairsSection(isDisabled: true)
             }
+            voiceTranslationCommandsSection
         }
         .formStyle(.grouped)
         .onAppear(perform: refreshState)
@@ -296,6 +300,64 @@ struct AudioDictationSettingsView: View {
         }
     }
 
+    private var voiceTranslationCommandsSection: some View {
+        let isAvailable = translationProvider == .cloud
+        return Section {
+            Toggle(isOn: $voiceCommandsEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Translate by voice")
+                    Text("Say “Translate into Spanish” or “Українською” at the start or end of a dictation. The command words are removed and the text is translated when you stop.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .onChange(of: voiceCommandsEnabled) { _, value in
+                SettingsStorage.shared.voiceTranslationCommandsEnabled = value
+            }
+
+            Group {
+                Picker("Listen for commands", selection: $voiceCommandPosition) {
+                    ForEach(VoiceTranslationCommandPosition.allCases) { position in
+                        Text(position.displayName).tag(position)
+                    }
+                }
+                .onChange(of: voiceCommandPosition) { _, value in
+                    SettingsStorage.shared.voiceTranslationCommandPosition = value
+                }
+
+                Picker(selection: $voiceCommandTargets) {
+                    ForEach(VoiceTranslationCommandTargets.allCases) { targets in
+                        Text(targets.displayName).tag(targets)
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Target languages")
+                        Text("“Only my translation pairs” ignores other language names, so fewer false triggers.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: voiceCommandTargets) { _, value in
+                    SettingsStorage.shared.voiceTranslationCommandTargets = value
+                }
+            }
+            .disabled(!voiceCommandsEnabled)
+        } header: {
+            Text("Voice Translation Commands")
+        } footer: {
+            Group {
+                if isAvailable {
+                    Label("Examples: “Translate into English”, “In English”, “Переклади іспанською”, “Return it to Ukrainian”. If it misfires, pick Original in the live panel before you stop.", systemImage: "info.circle")
+                } else {
+                    Label("Voice commands need Cloud translation. Local Whisper translates to English only.", systemImage: "info.circle")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .disabled(!isAvailable)
+    }
+
     private var localWhisperSection: some View {
         Section("Local Whisper Translation") {
             Label("Voice translation target: English", systemImage: "info.circle")
@@ -397,6 +459,9 @@ struct AudioDictationSettingsView: View {
         disabledDetectedLanguageCodes = Set(SettingsStorage.shared.disabledDetectedSpeechLanguageHints)
         translationPairs = SettingsStorage.shared.translationLanguagePairs
         defaultPairID = SettingsStorage.shared.defaultTranslationLanguagePairID
+        voiceCommandsEnabled = SettingsStorage.shared.voiceTranslationCommandsEnabled
+        voiceCommandPosition = SettingsStorage.shared.voiceTranslationCommandPosition
+        voiceCommandTargets = SettingsStorage.shared.voiceTranslationCommandTargets
     }
 
     private func persistSpeechLanguages() {

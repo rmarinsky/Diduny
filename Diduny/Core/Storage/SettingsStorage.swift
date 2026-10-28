@@ -163,6 +163,9 @@ final class SettingsStorage {
         case translationLanguagePairs
         case defaultTranslationLanguagePairID
         case lastUsedTranslationLanguagePairID
+        case voiceTranslationCommandsEnabled
+        case voiceTranslationCommandPosition
+        case voiceTranslationCommandTargets
         case translationTargetLanguages
         case voiceTranslationTargetLanguage
         case textTranslationSourceLanguage
@@ -1168,6 +1171,37 @@ final class SettingsStorage {
         set {
             guard translationLanguagePairs.contains(where: { $0.id == newValue }) else { return }
             defaults.set(newValue, forKey: Key.defaultTranslationLanguagePairID.rawValue)
+        }
+    }
+
+    var voiceTranslationCommandsEnabled: Bool {
+        get { defaults.object(forKey: Key.voiceTranslationCommandsEnabled.rawValue) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.voiceTranslationCommandsEnabled.rawValue) }
+    }
+
+    var voiceTranslationCommandPosition: VoiceTranslationCommandPosition {
+        get {
+            defaults.string(forKey: Key.voiceTranslationCommandPosition.rawValue)
+                .flatMap(VoiceTranslationCommandPosition.init(rawValue:)) ?? .startAndEnd
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.voiceTranslationCommandPosition.rawValue) }
+    }
+
+    var voiceTranslationCommandTargets: VoiceTranslationCommandTargets {
+        get {
+            defaults.string(forKey: Key.voiceTranslationCommandTargets.rawValue)
+                .flatMap(VoiceTranslationCommandTargets.init(rawValue:)) ?? .anySupported
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.voiceTranslationCommandTargets.rawValue) }
+    }
+
+    /// Languages a spoken translation command may name.
+    var voiceTranslationCommandLanguages: Set<String> {
+        switch voiceTranslationCommandTargets {
+        case .anySupported:
+            Set(SupportedLanguage.cloudLanguages.map(\.code))
+        case .translationPairsOnly:
+            Set(translationLanguagePairs.flatMap(\.codes))
         }
     }
 

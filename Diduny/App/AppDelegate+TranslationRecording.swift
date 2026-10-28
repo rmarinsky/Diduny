@@ -447,7 +447,6 @@ extension AppDelegate {
         let recordingStartTime = appState.translationRecordingStartTime
         let pair = activeTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
         let targetLanguage = activeTranslationTargetLanguage ?? pair.languageB
-        let output = await selectedRecordingFeedbackOutput()
 
         // Capture stop time immediately for accurate duration
         let stopTime = Date()
@@ -473,18 +472,26 @@ extension AppDelegate {
             capturedAudioData = audioData
 
             let realtimeResult = await realtimeStopTask.value
-            let switchedText = try await switchedOutputText(
-                output,
-                native: .translation(targetLanguage: targetLanguage),
-                nativeText: realtimeResult.text,
-                originalText: realtimeResult.originalText,
-                audioData: audioData,
-                languageHints: SettingsStorage.shared.translationLanguageHints(for: pair)
-            )
-
-            let producedOutput: DictationOutput = switchedText == nil
-                ? .translation(targetLanguage: targetLanguage)
-                : output
+            let switchedText: String?
+            let producedOutput: DictationOutput
+            if let voiceCommand = await voiceTranslationCommand(in: realtimeResult.originalText) {
+                let commandResult = await voiceCommandOutputText(voiceCommand)
+                switchedText = commandResult.text
+                producedOutput = commandResult.output
+            } else {
+                let output = await selectedRecordingFeedbackOutput()
+                switchedText = try await switchedOutputText(
+                    output,
+                    native: .translation(targetLanguage: targetLanguage),
+                    nativeText: realtimeResult.text,
+                    originalText: realtimeResult.originalText,
+                    audioData: audioData,
+                    languageHints: SettingsStorage.shared.translationLanguageHints(for: pair)
+                )
+                producedOutput = switchedText == nil
+                    ? .translation(targetLanguage: targetLanguage)
+                    : output
+            }
             let rawText: String
             if let switchedText {
                 rawText = switchedText
