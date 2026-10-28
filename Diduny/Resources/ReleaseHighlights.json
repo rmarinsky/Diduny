@@ -1,9 +1,8 @@
 {
   "schemaVersion": 1,
-  "headline": "Local transcripts know who said what",
+  "headline": "Say the language, get the translation",
   "highlights": [
-    "Meetings transcribed on your Mac now label your lines as Me and the call as Others.",
-    "On Apple silicon with macOS 15, Diduny also tells voices apart, such as Speaker 2 (remote) or Speaker 3 (room). It runs on your Mac only.",
-    "An optional voice profile in meeting settings helps when other people share your microphone."
+    "End a dictation with “Translate into Spanish” or start it with “In English”, and Diduny pastes the text in that language without the command words.",
+    "The live panel shows the recognised command and an Undo button before you stop. Turn it off or limit it to your translation pairs in Audio & Dictation."
   ]
 }

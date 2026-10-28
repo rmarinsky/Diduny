@@ -1430,6 +1430,24 @@
 "%lld of %lld s" = "%lld of %lld s";
 "Transcribing in background" = "Transcribing in background";
 "The transcript will appear in Recordings." = "The transcript will appear in Recordings.";
+"Voice Translation Commands" = "Voice Translation Commands";
+"Translate by voice" = "Translate by voice";
+"Say “Translate into Spanish” or “Українською” at the start or end of a dictation. The command words are removed and the text is translated when you stop." = "Say “Translate into Spanish” or “Українською” at the start or end of a dictation. The command words are removed and the text is translated when you stop.";
+"Listen for commands" = "Listen for commands";
+"Target languages" = "Target languages";
+"“Only my translation pairs” ignores other language names, so fewer false triggers." = "“Only my translation pairs” ignores other language names, so fewer false triggers.";
+"Examples: “Translate into English”, “In English”, “Переклади іспанською”, “Return it to Ukrainian”. If it misfires, pick Original in the live panel before you stop." = "Examples: “Translate into English”, “In English”, “Переклади іспанською”, “Return it to Ukrainian”. If it misfires, pick Original in the live panel before you stop.";
+"Voice commands need Cloud translation. Local Whisper translates to English only." = "Voice commands need Cloud translation. Local Whisper translates to English only.";
+"Start and end" = "Start and end";
+"End only" = "End only";
+"Any supported language" = "Any supported language";
+"Only my translation pairs" = "Only my translation pairs";
+"by voice" = "by voice";
+"Undo" = "Undo";
+"Output language, set by voice command" = "Output language, set by voice command";
+"Keep the original output; the command words stay in the text." = "Keep the original output; the command words stay in the text.";
+"Command:" = "Command:";
+"Removed command:" = "Removed command:";
 
 /* Speaker labels */
 "Speaker Labels" = "Speaker Labels";

@@ -259,17 +259,25 @@ final class DictationOverlayController {
         guard !usesNotch else { return }
         guard !tokens.isEmpty else { return }
         store.processTokens(tokens)
-        scheduleOutputPreview()
+        let output = store.selectedOutput
+        store.updateVoiceCommand()
+        if store.selectedOutput != output {
+            cancelOutputPreview()
+            scheduleOutputPreview(delay: .zero)
+        } else {
+            scheduleOutputPreview()
+        }
     }
 
-    func configureOutput(native: DictationOutput, options: [DictationOutput]) {
+    func configureOutput(native: DictationOutput, options: [DictationOutput], listensForVoiceCommands: Bool) {
         cancelOutputPreview()
-        store.configureOutput(native: native, options: options)
+        store.configureOutput(native: native, options: options, listensForVoiceCommands: listensForVoiceCommands)
     }
 
+    /// Also serves Undo: picking any output ends a spoken command for this recording.
     func selectOutput(_ output: DictationOutput) {
-        guard store.selectedOutput != output else { return }
-        store.selectedOutput = output
+        guard store.selectedOutput != output || store.voiceCommand != nil else { return }
+        store.pickOutput(output)
         cancelOutputPreview()
         scheduleOutputPreview(delay: .zero)
     }

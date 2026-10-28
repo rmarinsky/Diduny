@@ -484,7 +484,6 @@ extension AppDelegate {
 
         // Capture recording start time for duration calculation
         let recordingStartTime = appState.recordingStartTime
-        let output = await selectedRecordingFeedbackOutput()
 
         // Capture stop time immediately for accurate duration
         let stopTime = Date()
@@ -521,16 +520,24 @@ extension AppDelegate {
             capturedAudioData = audioData
 
             let realtimeResult = await realtimeStopTask.value
-            let switchedText = try await switchedOutputText(
-                output,
-                native: .original,
-                nativeText: realtimeResult.text,
-                originalText: realtimeResult.text,
-                audioData: audioData,
-                languageHints: SettingsStorage.shared.speechLanguageHints
-            )
-
-            let producedOutput: DictationOutput = switchedText == nil ? .original : output
+            let switchedText: String?
+            let producedOutput: DictationOutput
+            if let voiceCommand = await voiceTranslationCommand(in: realtimeResult.text) {
+                let commandResult = await voiceCommandOutputText(voiceCommand)
+                switchedText = commandResult.text
+                producedOutput = commandResult.output
+            } else {
+                let output = await selectedRecordingFeedbackOutput()
+                switchedText = try await switchedOutputText(
+                    output,
+                    native: .original,
+                    nativeText: realtimeResult.text,
+                    originalText: realtimeResult.text,
+                    audioData: audioData,
+                    languageHints: SettingsStorage.shared.speechLanguageHints
+                )
+                producedOutput = switchedText == nil ? .original : output
+            }
             let rawText: String
             var transcriptSegments: [TimedTranscriptSegment]?
             if let switchedText {
@@ -1084,11 +1091,53 @@ extension AppDelegate {
         let options = provider == .cloud
             ? DictationOutput.options(pairs: SettingsStorage.shared.translationLanguagePairs, native: native)
             : []
-        DictationOverlayController.shared.configureOutput(native: native, options: options)
+        let listensForVoiceCommands = !options.isEmpty
+            && SettingsStorage.shared.voiceTranslationCommandsEnabled
+            && SettingsStorage.shared.effectiveTranslationProvider == .cloud
+        DictationOverlayController.shared.configureOutput(
+            native: native,
+            options: options,
+            listensForVoiceCommands: listensForVoiceCommands
+        )
     }
 
     func selectedRecordingFeedbackOutput() async -> DictationOutput {
         await MainActor.run { DictationOverlayController.shared.store.selectedOutput }
+    }
+
+    /// The spoken translation command in the final words, found again at Stop
+    /// so it also applies when the live panel is not shown.
+    func voiceTranslationCommand(in spokenText: String) async -> VoiceTranslationCommand? {
+        await MainActor.run {
+            let store = DictationOverlayController.shared.store
+            guard store.listensForVoiceCommands else { return nil }
+            let command = VoiceTranslationCommand.detect(
+                in: spokenText,
+                position: SettingsStorage.shared.voiceTranslationCommandPosition,
+                languages: SettingsStorage.shared.voiceTranslationCommandLanguages
+            )
+            store.applyVoiceCommand(command)
+            return command
+        }
+    }
+
+    /// The words around a spoken command, translated to its language. When
+    /// translation fails they are pasted as spoken, so the command itself
+    /// never is.
+    func voiceCommandOutputText(_ command: VoiceTranslationCommand) async -> (text: String, output: DictationOutput) {
+        Log.app.info("Voice command switched output to \(command.targetLanguage)")
+        guard !command.remainingText.isEmpty else { return ("", .original) }
+        do {
+            let text = try await TextTranslationClient.requestTranslation(
+                sourceText: command.remainingText,
+                sourceLanguage: "auto",
+                targetLanguage: command.targetLanguage
+            )
+            return (text, command.output)
+        } catch {
+            Log.app.warning("Voice command translation failed, pasting spoken words: \(error.localizedDescription)")
+            return (command.remainingText, .original)
+        }
     }
 
     /// Text for an output picked mid-recording, or nil when the session's own
