@@ -234,7 +234,7 @@ import SwiftUI
                             start: hour.addingTimeInterval(from * 3600), end: hour.addingTimeInterval(to * 3600))
         }
         let timeline = CalendarTimeline(meetings: [event("past", -1.5, -1.25), event("current", 0, 1),
-                                                   event("a", 3, 3.5), event("b", 3.5, 4), event("c", 4, 4.5)], now: now)
+                                                   event("overlap", 0.5, 1.5), event("a", 3, 3.5), event("b", 3.5, 4), event("c", 4, 4.5)], now: now)
         let outputDirectory = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"].map { URL(fileURLWithPath: $0) }
         if let outputDirectory {
             try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
