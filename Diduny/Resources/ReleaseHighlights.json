@@ -1,8 +1,7 @@
 {
   "schemaVersion": 1,
-  "headline": "Meetings finish in the background",
+  "headline": "Overlapping meetings are easy to see",
   "highlights": [
-    "After you stop a meeting, the panel closes in a couple of seconds and transcription keeps going in the background.",
-    "Recordings shows how far along it is: the stage, how many minutes are done, and roughly how much time is left."
+    "Meetings that overlap now sit on their own rows in the menu bar timeline instead of covering each other."
   ]
 }
