@@ -10,7 +10,7 @@ struct SpeakerLabelsSection: View {
     @State private var profile = VoiceProfileStore.shared.load()
     @State private var isEnrolling = false
     @State private var isConfirmingDelete = false
-    private var models = SpeakerModelManager.shared
+    private let models = SpeakerModelManager.shared
 
     var body: some View {
         if !LocalSpeakerDiarizer.isRunningOnIntel {
@@ -116,7 +116,7 @@ struct SpeakerLabelsSection: View {
 struct VoiceEnrollmentView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var recorder = VoiceEnrollmentRecorder()
-    private var models = SpeakerModelManager.shared
+    private let models = SpeakerModelManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

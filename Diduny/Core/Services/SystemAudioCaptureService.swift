@@ -765,23 +765,23 @@ final class SystemAudioCaptureService: NSObject {
                     mixed[i] = max(-1.0, min(1.0, systemBuffer[i] + micBuffer[i]))
                 }
                 writeSamples(mixed, allowRotation: false)
-                tracksWriter?.append(mic: Array(micBuffer.prefix(mixCount)), system: Array(systemBuffer.prefix(mixCount)))
+                appendTracks(mic: Array(micBuffer.prefix(mixCount)), system: Array(systemBuffer.prefix(mixCount)))
                 systemBuffer.removeFirst(mixCount)
                 micBuffer.removeFirst(mixCount)
             }
             if !systemBuffer.isEmpty {
                 writeSamples(systemBuffer, allowRotation: false)
-                tracksWriter?.append(mic: [], system: systemBuffer)
+                appendTracks(mic: [], system: systemBuffer)
                 systemBuffer.removeAll()
             }
             if !micBuffer.isEmpty {
                 writeSamples(micBuffer, allowRotation: false)
-                tracksWriter?.append(mic: micBuffer, system: [])
+                appendTracks(mic: micBuffer, system: [])
                 micBuffer.removeAll()
             }
         } else if !systemBuffer.isEmpty {
             writeSamples(systemBuffer, allowRotation: false)
-            tracksWriter?.append(mic: [], system: systemBuffer)
+            appendTracks(mic: [], system: systemBuffer)
             systemBuffer.removeAll()
         }
     }
@@ -874,7 +874,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
             emitRealtimeData(samples)
             fileWriteQueue.async { [weak self] in
                 self?.writeSamples(samples)
-                self?.tracksWriter?.append(mic: [], system: samples)
+                self?.appendTracks(mic: [], system: samples)
             }
         }
     }
@@ -945,7 +945,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
         emitRealtimeData(mixed)
         fileWriteQueue.async { [weak self] in
             self?.writeSamples(mixed)
-            self?.tracksWriter?.append(mic: micPart, system: systemPart)
+            self?.appendTracks(mic: micPart, system: systemPart)
         }
     }
 
@@ -966,7 +966,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
         }
         fileWriteQueue.async { [weak self] in
             self?.writeSamples(stale)
-            self?.tracksWriter?.append(mic: isMicrophone ? stale : [], system: isMicrophone ? [] : stale)
+            self?.appendTracks(mic: isMicrophone ? stale : [], system: isMicrophone ? [] : stale)
         }
     }
 
@@ -1036,6 +1036,18 @@ extension SystemAudioCaptureService: SCStreamOutput {
         if allowRotation {
             rotateChunkIfNeededOnFileWriteQueue()
         }
+    }
+
+    /// Writes to the tracks file with the mix gains undone, so channel loudness compares the real
+    /// signals (speaker labels) rather than the user's mix settings. Call on fileWriteQueue.
+    private func appendTracks(mic: [Float], system: [Float]) {
+        guard let tracksWriter else { return }
+        tracksWriter.append(mic: Self.ungained(mic, gain: micGain), system: Self.ungained(system, gain: systemGain))
+    }
+
+    static func ungained(_ samples: [Float], gain: Float) -> [Float] {
+        guard gain > 0.01, gain != 1 else { return samples }
+        return samples.map { max(-1, min(1, $0 / gain)) }
     }
 
     // MARK: - Chunk Rotation (RLR-M3b)

@@ -123,9 +123,9 @@ enum SpeakerLabeling {
         return vector.map { $0 / norm }
     }
 
-    static func cosineDistance(_ a: [Float], _ b: [Float]) -> Float? {
-        guard a.count == b.count, let a = normalized(a), let b = normalized(b) else { return nil }
-        return 1 - zip(a, b).reduce(0) { $0 + $1.0 * $1.1 }
+    static func cosineDistance(_ lhs: [Float], _ rhs: [Float]) -> Float? {
+        guard lhs.count == rhs.count, let lhs = normalized(lhs), let rhs = normalized(rhs) else { return nil }
+        return 1 - zip(lhs, rhs).reduce(0) { $0 + $1.0 * $1.1 }
     }
 
     // MARK: - Helpers

@@ -48,15 +48,24 @@ actor LocalSpeakerDiarizer {
     }
 
     #if arch(arm64)
-    private var manager: OfflineDiarizerManager?
+    /// One shared preparation: Settings and the queue may ask at the same time.
+    private var preparation: Task<OfflineDiarizerManager, Error>?
 
     private func preparedManager() async throws -> OfflineDiarizerManager {
         guard Self.isSupported else { throw DiarizerError.unsupported }
-        if let manager { return manager }
-        let manager = OfflineDiarizerManager()
-        try await manager.prepareModels()
-        self.manager = manager
-        return manager
+        if preparation == nil {
+            preparation = Task {
+                let manager = OfflineDiarizerManager()
+                try await manager.prepareModels()
+                return manager
+            }
+        }
+        do {
+            return try await preparation!.value
+        } catch {
+            preparation = nil // allow a retry after a failed download
+            throw error
+        }
     }
     #endif
 

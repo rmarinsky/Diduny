@@ -187,6 +187,31 @@ final class SpeakerLabelsTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: tracks.path))
     }
 
+    @MainActor
+    func test_library_productionCompressionKeepsTwoChannelsForTheReader() async throws {
+        let directory = try temporaryDirectory()
+        let store = RecordingsLibraryStorage(baseDirectory: directory)
+        let id = try XCTUnwrap(store.saveRecording(audioData: Data([1]), type: .meeting, duration: 4, forceSave: true))
+        let wav = directory.appendingPathComponent("tracks.wav")
+        let writer = try MeetingTracksWriter(url: wav)
+        let tone = (0 ..< 16000 * 20).map { Float(sin(Double($0) * 0.05)) * 0.5 } // above the compression threshold
+        writer.append(mic: tone, system: [])
+        writer.close()
+
+        await store.attachTracks(from: wav, to: id)
+        let stored = try XCTUnwrap(store.tracksFileURL(for: id))
+        XCTAssertEqual(stored.pathExtension, "flac")
+        let output = try MeetingTracksReader.read(stored, range: nil, channelFilesDirectory: nil)
+        XCTAssertEqual(output.envelope.mic.count, 2000)
+        XCTAssertGreaterThan(output.envelope.micTotal, 0)
+        XCTAssertEqual(output.envelope.systemTotal, 0)
+    }
+
+    func test_tracksUndoMixGainSoChannelsCompareRealLevels() {
+        XCTAssertEqual(SystemAudioCaptureService.ungained([0.03, -0.3], gain: 0.3), [0.1, -1.0], accuracy: 0.0001)
+        XCTAssertEqual(SystemAudioCaptureService.ungained([0.5], gain: 0), [0.5])
+    }
+
     // MARK: - Enrollment and settings
 
     func test_voiceProfile_savesLoadsAndDeletes() throws {
@@ -212,5 +237,12 @@ final class SpeakerLabelsTests: XCTestCase {
         XCTAssertEqual(QueueProgressFormatter.rowLine(progress), "Identifying speakers")
         XCTAssertNil(QueueProgressFormatter.barFraction(progress))
         XCTAssertNil(QueueProgressFormatter.timeLeft(progress))
+    }
+}
+
+private func XCTAssertEqual(_ lhs: [Float], _ rhs: [Float], accuracy: Float, file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertEqual(lhs.count, rhs.count, file: file, line: line)
+    for (left, right) in zip(lhs, rhs) {
+        XCTAssertEqual(left, right, accuracy: accuracy, file: file, line: line)
     }
 }
