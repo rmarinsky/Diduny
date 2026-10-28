@@ -9,16 +9,18 @@ struct QueueProgress: Equatable {
         case preparing
         case uploading
         case transcribing
+        case identifyingSpeakers
         case finishing
 
-        /// Pipeline order: preparing → uploading → transcribing → finishing.
+        /// Pipeline order: preparing → uploading → transcribing → identifying speakers → finishing.
         var order: Int {
             switch self {
             case .queued: 0
             case .preparing: 1
             case .uploading: 2
             case .transcribing: 3
-            case .finishing: 4
+            case .identifyingSpeakers: 4
+            case .finishing: 5
             }
         }
     }
@@ -84,6 +86,7 @@ enum QueueProgressFormatter {
         case .preparing: String(localized: "Preparing audio")
         case .uploading: String(localized: "Uploading")
         case .transcribing: String(localized: "Transcribing")
+        case .identifyingSpeakers: String(localized: "Identifying speakers")
         case .finishing: String(localized: "Finishing")
         }
     }

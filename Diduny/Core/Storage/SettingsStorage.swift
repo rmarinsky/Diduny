@@ -138,6 +138,7 @@ final class SettingsStorage {
         case pushToTalkHoldStartDelaySeconds
         case meetingAudioSource
         case meetingSuggestionsEnabled
+        case speakerIdentificationEnabled
         case meetingMicGain
         case meetingSystemGain
         case translationPushToTalkKey
@@ -598,6 +599,16 @@ final class SettingsStorage {
     }
 
     // MARK: - Meeting Recording
+
+    /// Voice detection for local speaker labels (Apple silicon, macOS 15+). On by default.
+    /// "Me / Others" by channel doesn't depend on it.
+    var speakerIdentificationEnabled: Bool {
+        get {
+            defaults.object(forKey: Key.speakerIdentificationEnabled.rawValue) == nil
+                || defaults.bool(forKey: Key.speakerIdentificationEnabled.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.speakerIdentificationEnabled.rawValue) }
+    }
 
     var meetingSuggestionsEnabled: Bool {
         get {
