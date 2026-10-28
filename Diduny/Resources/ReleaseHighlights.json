@@ -1,7 +1,9 @@
 {
   "schemaVersion": 1,
-  "headline": "Overlapping meetings are easy to see",
+  "headline": "Local transcripts know who said what",
   "highlights": [
-    "Meetings that overlap now sit on their own rows in the menu bar timeline instead of covering each other."
+    "Meetings transcribed on your Mac now label your lines as Me and the call as Others.",
+    "On Apple silicon with macOS 15, Diduny also tells voices apart, such as Speaker 2 (remote) or Speaker 3 (room). It runs on your Mac only.",
+    "An optional voice profile in meeting settings helps when other people share your microphone."
   ]
 }

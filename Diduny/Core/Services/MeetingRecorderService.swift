@@ -121,6 +121,8 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
             self?.onStatusMessage?(message)
         }
 
+        service.tracksURL = directoryURL.appendingPathComponent(Self.tracksFilename)
+
         // Chunk rotation wiring (RLR-M3b).
         service.chunkDurationSeconds = chunkDurationSeconds
         service.chunkURLProvider = { [directoryURL] index in
@@ -424,6 +426,9 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
     static func chunkFilename(forIndex index: Int) -> String {
         String(format: "chunk_%03d.wav", index)
     }
+
+    /// 2-channel (mic, system) file in the in-progress directory, for speaker labels.
+    static let tracksFilename = "tracks.wav"
 
     // MARK: - Get Recording Data
 

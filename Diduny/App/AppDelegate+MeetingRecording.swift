@@ -867,6 +867,12 @@ extension AppDelegate {
 
             Log.app.info("Meeting recording stopped")
 
+            // The 2-channel file for speaker labels compresses alongside the mixed file.
+            async let tracksAttached: Void = RecordingsLibraryStorage.shared.attachInProgressTracks(
+                from: inProgressRecordingId,
+                to: recordingId
+            )
+
             // Compress WAV → FLAC before loading into memory (saves RAM and upload time)
             let compressedURL = await AudioCompressionService.compressToFLAC(wavURL: audioURL)
             let didCompress = compressedURL != audioURL
@@ -912,6 +918,7 @@ extension AppDelegate {
                     durationSeconds: duration
                 )
             }
+            await tracksAttached
 
             let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
             let cloudModeEnabled = activeMeetingTranscriptionProvider == .cloud
