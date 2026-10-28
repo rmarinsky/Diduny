@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
-  "headline": "Overlapping meetings are easy to see",
+  "headline": "Voice notes take up 8 times less space",
   "highlights": [
-    "Meetings that overlap now sit on their own rows in the menu bar timeline instead of covering each other."
+    "Dictation and voice notes are now saved at 16 kHz mono, the same format meetings already use: about 1 MB per minute instead of 8.6 MB.",
+    "Transcription quality stays the same: Cloud and Local already converted audio to 16 kHz before transcribing."
   ]
 }

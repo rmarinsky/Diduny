@@ -177,16 +177,27 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
             throw AudioError.recordingFailed("Could not create recording file")
         }
 
-        // Create audio file for writing - use the INPUT format to avoid realtime conversion
-        // The transcription service can handle various formats
+        // Write the file as 16 kHz mono Int16 (what transcription needs) instead of the mic's
+        // native format, which is ~8x larger.
+        guard let fileConverter = Mono16kConverter(inputFormat: tapFormat) else {
+            Log.audio.error("startRecording: Failed to create 16 kHz converter for \(outputFormatDescription)")
+            audioEngine = nil
+            throw AudioError.recordingFailed("Could not create audio converter")
+        }
+
         do {
-            audioFile = try AVAudioFile(forWriting: url, settings: tapFormat.settings)
+            audioFile = try AVAudioFile(
+                forWriting: url,
+                settings: Mono16kConverter.outputFormat.settings,
+                commonFormat: .pcmFormatInt16,
+                interleaved: true
+            )
         } catch {
             Log.audio.error("startRecording: Failed to create audio file: \(error.localizedDescription)")
             throw AudioError.recordingFailed("Could not create audio file: \(error.localizedDescription)")
         }
 
-        Log.audio.info("startRecording: Audio file created with input format settings")
+        Log.audio.info("startRecording: Audio file created as 16kHz mono Int16")
 
         // Capture file reference for use in tap callback (runs on audio thread)
         guard let file = audioFile else {
@@ -200,7 +211,6 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
 
         // Install tap on input node to capture audio
         // IMPORTANT: This callback runs on a realtime audio thread, NOT the main thread
-        // Write directly in the input format - no conversion needed
         // NOTE: installTap is synchronous and must be called on the main thread.
         // Do NOT wrap this in withAudioTimeout as it causes threading issues on Intel Macs.
         Log.audio.info("startRecording: Installing tap on input node...")
@@ -210,9 +220,10 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
                     // Update audio level from buffer (thread-safe method)
                     self?.updateAudioLevelFromBuffer(buffer)
 
-                    // Write buffer directly to file - no format conversion
                     do {
-                        try file.write(from: buffer)
+                        if let converted = fileConverter.convert(buffer) {
+                            try file.write(from: converted)
+                        }
                     } catch {
                         Log.audio.error("Failed to write audio buffer: \(error.localizedDescription)")
                     }
@@ -522,44 +533,28 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     }
 }
 
-private final class RealtimeAudioStreamer {
-    private let queue = DispatchQueue(label: "ua.com.rmarinsky.diduny.realtime.mic", qos: .userInitiated)
+/// Converts mic buffers to 16 kHz mono Int16, the format of the recording file and the realtime stream.
+/// Stateful (keeps resampler history between buffers), so use one instance per stream from one thread.
+final class Mono16kConverter {
+    static let outputFormat = AVAudioFormat(
+        commonFormat: .pcmFormatInt16,
+        sampleRate: 16000,
+        channels: 1,
+        interleaved: true
+    )!
+
     private let converter: AVAudioConverter
-    private let outputFormat: AVAudioFormat
-    private let onAudioData: (Data) -> Void
 
-    init?(inputFormat: AVAudioFormat, onAudioData: @escaping (Data) -> Void) {
-        guard let outputFormat = AVAudioFormat(
-            commonFormat: .pcmFormatInt16,
-            sampleRate: 16000,
-            channels: 1,
-            interleaved: true
-        ) else {
+    init?(inputFormat: AVAudioFormat) {
+        guard let converter = AVAudioConverter(from: inputFormat, to: Self.outputFormat) else {
             return nil
         }
-
-        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
-            return nil
-        }
-
         self.converter = converter
-        self.outputFormat = outputFormat
-        self.onAudioData = onAudioData
     }
 
-    func process(buffer: AVAudioPCMBuffer) {
-        guard let copiedBuffer = copyBuffer(buffer) else { return }
-
-        queue.async { [weak self] in
-            guard let self else { return }
-            guard let data = convertToRealtimePCM(buffer: copiedBuffer) else { return }
-            onAudioData(data)
-        }
-    }
-
-    private func convertToRealtimePCM(buffer: AVAudioPCMBuffer) -> Data? {
-        let inputFormat = buffer.format
-        let ratio = outputFormat.sampleRate / inputFormat.sampleRate
+    func convert(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        let outputFormat = Self.outputFormat
+        let ratio = outputFormat.sampleRate / buffer.format.sampleRate
         let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
         guard outputFrameCapacity > 0 else { return nil }
 
@@ -586,10 +581,41 @@ private final class RealtimeAudioStreamer {
 
         guard error == nil, status != .error, outputBuffer.frameLength > 0 else {
             if let error {
-                Log.audio.error("RealtimeAudioStreamer conversion error: \(error.localizedDescription)")
+                Log.audio.error("Mono16kConverter conversion error: \(error.localizedDescription)")
             }
             return nil
         }
+
+        return outputBuffer
+    }
+}
+
+private final class RealtimeAudioStreamer {
+    private let queue = DispatchQueue(label: "ua.com.rmarinsky.diduny.realtime.mic", qos: .userInitiated)
+    private let converter: Mono16kConverter
+    private let onAudioData: (Data) -> Void
+
+    init?(inputFormat: AVAudioFormat, onAudioData: @escaping (Data) -> Void) {
+        guard let converter = Mono16kConverter(inputFormat: inputFormat) else {
+            return nil
+        }
+
+        self.converter = converter
+        self.onAudioData = onAudioData
+    }
+
+    func process(buffer: AVAudioPCMBuffer) {
+        guard let copiedBuffer = copyBuffer(buffer) else { return }
+
+        queue.async { [weak self] in
+            guard let self else { return }
+            guard let data = convertToRealtimePCM(buffer: copiedBuffer) else { return }
+            onAudioData(data)
+        }
+    }
+
+    private func convertToRealtimePCM(buffer: AVAudioPCMBuffer) -> Data? {
+        guard let outputBuffer = converter.convert(buffer) else { return nil }
 
         let audioBufferPointer = UnsafeMutableAudioBufferListPointer(outputBuffer.mutableAudioBufferList)
         guard let audioBuffer = audioBufferPointer.first,
