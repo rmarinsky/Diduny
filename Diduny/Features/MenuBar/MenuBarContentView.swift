@@ -141,7 +141,7 @@ private struct StatusItemLabel: View {
         guard configuration.connected else { return [] }
         let meetings = connection.agendaMeetings.filter { configuration.showWithoutLink || $0.meetingURL != nil }
         let timeline = CalendarTimeline(meetings: meetings, now: now)
-        var items = [hosted(size: CalendarTimelineView.size) { close in
+        var items = [hosted(size: CalendarTimelineView.size(timeline)) { close in
             CalendarTimelineView(timeline: timeline, hideNames: configuration.hideNames,
                                  onOpen: { close(); actions.openMainWindow(.meetings) })
         }]
