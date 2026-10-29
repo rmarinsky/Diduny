@@ -113,6 +113,8 @@ struct SidebarView: View {
             SidebarRow(section: section, isSelected: selectedSection == section)
         }
         .buttonStyle(.plain)
+        // The window gives the first row keyboard focus on open; its ring read as a second selection.
+        .focusEffectDisabled()
         .accessibilityLabel(Text(section.label))
         .accessibilityValue(Text(selectedSection == section ? "Selected" : ""))
         .accessibilityIdentifier("Sidebar \(section.label)")
