@@ -265,7 +265,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 toggleMeeting: { self.toggleMeetingRecording() },
                 toggleMeetingTranslation: { self.toggleMeetingTranslationRecording() },
                 batchFilesAndURLs: { self.batchFilesAndURLs() },
-                openMainWindow: { self.openMainWindow(section: $0) }
+                openMainWindow: { self.openMainWindow(section: $0) },
+                checkForUpdates: { self.updaterManager.checkForUpdates() }
             ))
         }
         EdgeCommandPanelController.shared.configure(appDelegate: self)
