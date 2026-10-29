@@ -515,6 +515,16 @@ final class AppLaunchLifecycleTests: XCTestCase {
                        "The salt persists, so launches in one boot share a boot id")
     }
 
+    func test_hardwareArchitectureReportsTheMacNotTheProcess() {
+        XCTAssertEqual(AppLaunchTracker.hardwareArchitecture(arm64Flag: 1), "arm64")
+        XCTAssertEqual(AppLaunchTracker.hardwareArchitecture(arm64Flag: 0), "x86_64")
+        XCTAssertEqual(AppLaunchTracker.hardwareArchitecture(arm64Flag: nil), "x86_64",
+                       "Intel Macs may not define hw.optional.arm64 at all")
+        #if arch(arm64)
+            XCTAssertEqual(AppLaunchTracker.hardwareArchitecture(), "arm64")
+        #endif
+    }
+
     func test_launchCarriesTheAppSessionOnlyWithConsent() async throws {
         let sessionID = UUID()
         var bodies: [String: [String: Any]] = [:]
@@ -530,21 +540,22 @@ final class AppLaunchLifecycleTests: XCTestCase {
         let launch = AppLaunch(sessionID: sessionID, bootID: String(repeating: "a", count: 64),
                                previousExit: .clean, previousSessionMs: 1234, rebootedSinceLast: false)
 
-        await service.recordLaunch(launch, appVersion: "1.15.0", osVersion: "15.1")
+        await service.recordLaunch(launch, appVersion: "1.15.0", osVersion: "15.1", arch: "arm64")
         XCTAssertTrue(bodies.isEmpty, "Nothing is sent before consent")
 
         await service.setEnabled(true)
-        await service.recordLaunch(launch, appVersion: "1.15.0", osVersion: "15.1")
+        await service.recordLaunch(launch, appVersion: "1.15.0", osVersion: "15.1", arch: "arm64")
         await service.record(duration: 3, mode: "cloud", scenario: "dictation")
 
         let sent = try XCTUnwrap(bodies["launches"])
         XCTAssertEqual(Set(sent.keys), ["id", "revision", "appSessionId", "bootId", "previousExit",
-                                        "previousSessionMs", "rebootedSinceLast", "appVersion", "osVersion"])
+                                        "previousSessionMs", "rebootedSinceLast", "appVersion", "osVersion", "arch"])
         XCTAssertEqual(sent["revision"] as? String, "rev-1")
         XCTAssertEqual(sent["appSessionId"] as? String, sessionID.uuidString.lowercased())
         XCTAssertEqual(sent["previousExit"] as? String, "clean")
         XCTAssertEqual(sent["previousSessionMs"] as? Int, 1234)
         XCTAssertEqual(sent["rebootedSinceLast"] as? Bool, false)
+        XCTAssertEqual(sent["arch"] as? String, "arm64")
         XCTAssertNil(bodies["events"]?["appSessionId"], "Usage events keep the shipped schema")
     }
 }

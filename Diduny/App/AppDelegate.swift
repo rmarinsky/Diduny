@@ -236,7 +236,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await AnalyticsService.shared.recordLaunch(
                 launch,
                 appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0",
-                osVersion: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
+                osVersion: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
+                arch: AppLaunchTracker.hardwareArchitecture()
             )
         }
         launchedAtLogin = LaunchAtLogin.wasLaunchedAtLogin
