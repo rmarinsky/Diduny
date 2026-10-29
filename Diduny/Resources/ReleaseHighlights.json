@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "headline": "Check for Updates is back in the menu",
+  "headline": "Cleaner sidebar",
   "highlights": [
-    "The menu bar menu has “Check for Updates…” again, just above Settings."
+    "Overview no longer looks half-selected with a focus outline when you open Diduny; only the section you are on is highlighted."
   ]
 }
