@@ -583,7 +583,7 @@
 "Open the selected browser and select its calendar tab." = "Відкрийте вибраний браузер і зробіть вкладку календаря активною.";
 "Opening the calendar in the selected profile. Connect its window after loading." = "Календар відкривається у вибраному профілі. Підключіть його вікно після завантаження.";
 "Opens the setup guide in a separate window" = "Відкриває початкове налаштування в окремому вікні";
-"Optional on Free and Pro. Shares duration, local/cloud mode and feature category linked to your account. No audio, text or file names. Cloud limits, payments and necessary security records are handled separately." = "Необов’язково для Free та Pro. Передає тривалість, локальний чи хмарний режим і категорію функції, пов’язані з обліковим записом. Без аудіо, текстів і назв файлів. Облік хмарних лімітів, платежів і даних безпеки ведеться окремо.";
+"Optional on Free and Pro. Shares duration, local/cloud mode and feature category, plus app launches and unexpected quits with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days. No audio, text or file names. Cloud limits, payments and necessary security records are handled separately." = "Необов’язково для Free та Pro. Передає тривалість, локальний чи хмарний режим і категорію функції, а також запуски й неочікувані завершення застосунку з версією Diduny, версією macOS і типом чипа Mac (Apple silicon чи Intel), пов’язані з обліковим записом; дані зберігаються 30 днів. Без аудіо, текстів і назв файлів. Облік хмарних лімітів, платежів і даних безпеки ведеться окремо.";
 "Or use Menu → Transcribe Meeting" = "Або виберіть у меню «Транскрибувати зустріч»";
 "Original %@" = "Оригінал %@";
 "Outlook" = "Outlook";

@@ -583,7 +583,7 @@
 "Open the selected browser and select its calendar tab." = "Open the selected browser and select its calendar tab.";
 "Opening the calendar in the selected profile. Connect its window after loading." = "Opening the calendar in the selected profile. Connect its window after loading.";
 "Opens the setup guide in a separate window" = "Opens the setup guide in a separate window";
-"Optional on Free and Pro. Shares duration, local/cloud mode and feature category linked to your account. No audio, text or file names. Cloud limits, payments and necessary security records are handled separately." = "Optional on Free and Pro. Shares duration, local/cloud mode and feature category linked to your account. No audio, text or file names. Cloud limits, payments and necessary security records are handled separately.";
+"Optional on Free and Pro. Shares duration, local/cloud mode and feature category, plus app launches and unexpected quits with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days. No audio, text or file names. Cloud limits, payments and necessary security records are handled separately." = "Optional on Free and Pro. Shares duration, local/cloud mode and feature category, plus app launches and unexpected quits with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days. No audio, text or file names. Cloud limits, payments and necessary security records are handled separately.";
 "Or use Menu → Transcribe Meeting" = "Or use Menu → Transcribe Meeting";
 "Original %@" = "Original %@";
 "Outlook" = "Outlook";

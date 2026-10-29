@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
-  "headline": "Cleaner sidebar",
+  "headline": "Clearer statistics sharing",
   "highlights": [
-    "Overview no longer looks half-selected with a focus outline when you open Diduny; only the section you are on is highlighted."
+    "Settings now list everything optional usage statistics include, and that they are kept for 30 days.",
+    "If you share statistics, Diduny also reports whether your Mac has Apple silicon or Intel, so we know how long to keep supporting Intel Macs. Nothing is sent when sharing is off."
   ]
 }

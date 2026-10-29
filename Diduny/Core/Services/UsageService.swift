@@ -232,16 +232,16 @@ final class AnalyticsService {
         ))
     }
 
-    func recordLaunch(_ launch: AppLaunch, appVersion: String, osVersion: String) async {
+    func recordLaunch(_ launch: AppLaunch, appVersion: String, osVersion: String, arch: String) async {
         guard enabled, owner == account(), owner != nil, let revision else { return }
         struct Launch: Encodable {
             let id: String; let revision: String; let appSessionId: String; let bootId: String
             let previousExit: AppPreviousExit; let previousSessionMs: Int?; let rebootedSinceLast: Bool
-            let appVersion: String; let osVersion: String
+            let appVersion: String; let osVersion: String; let arch: String
 
             enum CodingKeys: String, CodingKey {
                 case id, revision, appSessionId, bootId, previousExit, previousSessionMs, rebootedSinceLast
-                case appVersion, osVersion
+                case appVersion, osVersion, arch
             }
 
             func encode(to encoder: Encoder) throws {
@@ -256,6 +256,7 @@ final class AnalyticsService {
                 try container.encode(rebootedSinceLast, forKey: .rebootedSinceLast)
                 try container.encode(appVersion, forKey: .appVersion)
                 try container.encode(osVersion, forKey: .osVersion)
+                try container.encode(arch, forKey: .arch)
             }
         }
         await post(path: "launches", Launch(
@@ -267,7 +268,8 @@ final class AnalyticsService {
             previousSessionMs: launch.previousSessionMs,
             rebootedSinceLast: launch.rebootedSinceLast,
             appVersion: appVersion,
-            osVersion: osVersion
+            osVersion: osVersion,
+            arch: arch
         ))
     }
 
@@ -387,6 +389,18 @@ final class AppLaunchTracker {
         let salt = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
         defaults.set(salt, forKey: saltKey)
         return salt
+    }
+
+    /// Mac hardware architecture: `hw.optional.arm64` is 1 on Apple silicon even when
+    /// the app runs under Rosetta, so it reports the Mac rather than the process.
+    nonisolated static func hardwareArchitecture(arm64Flag: Int32? = readARM64Flag()) -> String {
+        arm64Flag == 1 ? "arm64" : "x86_64"
+    }
+
+    nonisolated static func readARM64Flag() -> Int32? {
+        var value: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        return sysctlbyname("hw.optional.arm64", &value, &size, nil, 0) == 0 ? value : nil
     }
 
     nonisolated static func hashedBootSessionID(salt: Data) -> String {
