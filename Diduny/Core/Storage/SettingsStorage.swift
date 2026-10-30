@@ -172,7 +172,6 @@ final class SettingsStorage {
         case textTranslationSourceLanguage
         case textTranslationTargetLanguage
         case inplaceTranslationEnabled
-        case inplaceTranslationTargetLanguage
         case translationProvider
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
@@ -1352,16 +1351,6 @@ final class SettingsStorage {
         }
     }
 
-    var inplaceTranslationTargetLanguage: String {
-        get {
-            let stored = defaults.string(forKey: Key.inplaceTranslationTargetLanguage.rawValue)
-            if let stored = Self.normalizedLanguageCode(stored), translationTargetLanguages.contains(stored) {
-                return stored
-            }
-            return "en"
-        }
-        set { setTranslationTargetLanguage(newValue, key: .inplaceTranslationTargetLanguage) }
-    }
 
     /// True when a modifier push-to-talk (dictation or translation) is active on a ⌥ or ⌘ key,
     /// which would fire alongside the ⌥⌘ double-tap.

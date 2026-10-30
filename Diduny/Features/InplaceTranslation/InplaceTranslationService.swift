@@ -1,4 +1,5 @@
 import AppKit
+import NaturalLanguage
 
 /// Snapshot of the general pasteboard so the user's clipboard survives the capture/paste round trip.
 struct PasteboardSnapshot {
@@ -36,8 +37,19 @@ final class InplaceTranslationService {
         case timeout
     }
 
-    static let badgeDelay: Duration = .milliseconds(150)
+    static let badgeDelay: Duration = .zero
     static let translationTimeoutSeconds: Double = 8
+
+    /// Picks the direction within the default pair: text detected as one pair language goes to the other.
+    /// Detection is constrained to the pair, so the result is always A→B or B→A.
+    nonisolated static func direction(for text: String, pair: TranslationLanguagePair) -> (source: String, target: String) {
+        let recognizer = NLLanguageRecognizer()
+        recognizer.languageConstraints = pair.codes.map { NLLanguage(rawValue: $0) }
+        recognizer.processString(text)
+        let detected = recognizer.dominantLanguage?.rawValue
+        let source = pair.contains(detected) ? (SupportedLanguage.normalizedCode(detected) ?? pair.languageA) : pair.languageA
+        return (source, pair.opposite(of: source) ?? pair.languageB)
+    }
     private static let clipboardRestoreDelay: Duration = .milliseconds(400)
 
     private var isRunning = false
@@ -92,7 +104,9 @@ final class InplaceTranslationService {
             return
         }
 
-        let target = SettingsStorage.shared.inplaceTranslationTargetLanguage
+        let (sourceLanguage, target) = Self.direction(
+            for: source, pair: SettingsStorage.shared.defaultTranslationLanguagePair
+        )
         let badgeTask = Task { @MainActor in
             try? await Task.sleep(for: Self.badgeDelay)
             guard !Task.isCancelled else { return }
@@ -102,7 +116,7 @@ final class InplaceTranslationService {
         do {
             let translated = try await Self.withTimeout(seconds: Self.translationTimeoutSeconds) {
                 try await TextTranslationClient.requestTranslation(
-                    sourceText: source, sourceLanguage: "auto", targetLanguage: target
+                    sourceText: source, sourceLanguage: sourceLanguage, targetLanguage: target
                 )
             }
             badgeTask.cancel()

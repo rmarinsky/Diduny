@@ -157,3 +157,19 @@ struct InplaceTranslationPolicyTests {
         #expect(!PushToTalkKey.none.isOptionOrCommand)
     }
 }
+
+struct InplaceTranslationDirectionTests {
+    private let pair = TranslationLanguagePair(languageA: "en", languageB: "uk")
+
+    @Test func englishTextGoesToUkrainian() {
+        let result = InplaceTranslationService.direction(for: "Good morning, how are you doing today?", pair: pair)
+        #expect(result.source == "en")
+        #expect(result.target == "uk")
+    }
+
+    @Test func ukrainianTextGoesToEnglish() {
+        let result = InplaceTranslationService.direction(for: "Доброго ранку, як у тебе справи сьогодні?", pair: pair)
+        #expect(result.source == "uk")
+        #expect(result.target == "en")
+    }
+}

@@ -24,7 +24,6 @@ struct ShortcutsSettingsView: View {
     @State private var escapeCancelPressCount = SettingsStorage.shared.escapeCancelPressCount
     @State private var escapeCancelSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
     @State private var inplaceTranslationEnabled = SettingsStorage.shared.inplaceTranslationEnabled
-    @State private var inplaceTranslationLanguage = SettingsStorage.shared.inplaceTranslationTargetLanguage
     @State private var shortcutDisplayRefresh = 0
 
     private let hotkeyPressCountOptions = [1, 2, 3]
@@ -291,54 +290,17 @@ struct ShortcutsSettingsView: View {
             divider
 
             HStack(spacing: 0) {
-                rowTitle("Instant translation language", width: 300)
+                rowTitle("Language pair", width: 300)
                 Spacer(minLength: 0)
-                inplaceLanguageMenu
-                    .padding(.trailing, 14)
-            }
-            .frame(height: 48)
-            .disabled(!active)
-            .opacity(active ? 1.0 : 0.5)
-        }
-    }
-
-    private var inplaceLanguageMenu: some View {
-        var languages = SettingsStorage.shared.translationTargetLanguages.compactMap {
-            SupportedLanguage.language(for: $0)
-        }
-        if languages.isEmpty { languages = SupportedLanguage.cloudLanguages }
-        let current = SupportedLanguage.language(for: inplaceTranslationLanguage)
-
-        return Menu {
-            ForEach(languages) { language in
-                Button(language.name) {
-                    inplaceTranslationLanguage = language.code
-                    SettingsStorage.shared.inplaceTranslationTargetLanguage = language.code
-                }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Text(current?.name ?? inplaceTranslationLanguage)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(ShortcutStyle.primaryText)
-                    .lineLimit(1)
-
-                Spacer(minLength: 4)
-
-                Text("⌄")
+                Text(SettingsStorage.shared.defaultTranslationLanguagePair.displayLabel)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(ShortcutStyle.secondaryText)
+                    .padding(.trailing, 14)
+                    .accessibilityLabel("Uses the default translation pair, \(SettingsStorage.shared.defaultTranslationLanguagePair.displayLabel)")
             }
-            .padding(.horizontal, 10)
-            .frame(width: 136, height: 30)
-            .background(ShortcutStyle.inputBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .stroke(ShortcutStyle.inputBorder, lineWidth: 1)
-            }
+            .frame(height: 48)
+            .opacity(active ? 1.0 : 0.5)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Instant translation language, \(current?.name ?? inplaceTranslationLanguage)")
     }
 
     // MARK: - Modifier Key Recording
