@@ -23,6 +23,8 @@ struct ShortcutsSettingsView: View {
     @State private var escapeCancelEnabled = SettingsStorage.shared.escapeCancelEnabled
     @State private var escapeCancelPressCount = SettingsStorage.shared.escapeCancelPressCount
     @State private var escapeCancelSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
+    @State private var inplaceTranslationEnabled = SettingsStorage.shared.inplaceTranslationEnabled
+    @State private var inplaceTranslationLanguage = SettingsStorage.shared.inplaceTranslationTargetLanguage
     @State private var shortcutDisplayRefresh = 0
 
     private let hotkeyPressCountOptions = [1, 2, 3]
@@ -34,6 +36,7 @@ struct ShortcutsSettingsView: View {
             ShortcutStyle.windowBackground
                 .ignoresSafeArea()
 
+            ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header
 
@@ -46,6 +49,11 @@ struct ShortcutsSettingsView: View {
                     .frame(height: 10)
 
                 actionHotkeysCard
+
+                Spacer()
+                    .frame(height: 10)
+
+                inplaceTranslationCard
 
                 Spacer()
                     .frame(height: 10)
@@ -70,6 +78,9 @@ struct ShortcutsSettingsView: View {
             .frame(width: ShortcutLayout.contentWidth, alignment: .topLeading)
             .padding(.leading, ShortcutLayout.contentLeading)
             .padding(.top, ShortcutLayout.contentTop)
+            .padding(.bottom, ShortcutLayout.contentTop)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -237,6 +248,97 @@ struct ShortcutsSettingsView: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(ShortcutStyle.keycapBorder, lineWidth: 1)
             }
+    }
+
+    // MARK: - In-place Translation
+
+    private var inplaceTranslationBlocked: Bool {
+        (pushToTalkKey.isOptionOrCommand && (pushToTalkHoldEnabled || pushToTalkToggleEnabled))
+            || (translationPushToTalkKey.isOptionOrCommand
+                && (translationPushToTalkHoldEnabled || translationPushToTalkToggleEnabled))
+    }
+
+    private var inplaceTranslationCard: some View {
+        let blocked = inplaceTranslationBlocked
+        let active = inplaceTranslationEnabled && !blocked
+        return settingsCard {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Double-tap ⌥⌘ to translate selection in place")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(ShortcutStyle.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(blocked
+                        ? "Unavailable while a modifier-key shortcut uses Option or Command."
+                        : "Select text, then tap Option and Command twice. The selection is replaced by its translation.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(ShortcutStyle.tertiaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Toggle("", isOn: $inplaceTranslationEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(blocked)
+                    .accessibilityLabel("Double-tap Option Command to translate selection in place")
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 48)
+            .onChange(of: inplaceTranslationEnabled) { _, newValue in
+                SettingsStorage.shared.inplaceTranslationEnabled = newValue
+            }
+            divider
+
+            HStack(spacing: 0) {
+                rowTitle("Instant translation language", width: 300)
+                Spacer(minLength: 0)
+                inplaceLanguageMenu
+                    .padding(.trailing, 14)
+            }
+            .frame(height: 48)
+            .disabled(!active)
+            .opacity(active ? 1.0 : 0.5)
+        }
+    }
+
+    private var inplaceLanguageMenu: some View {
+        var languages = SettingsStorage.shared.translationTargetLanguages.compactMap {
+            SupportedLanguage.language(for: $0)
+        }
+        if languages.isEmpty { languages = SupportedLanguage.cloudLanguages }
+        let current = SupportedLanguage.language(for: inplaceTranslationLanguage)
+
+        return Menu {
+            ForEach(languages) { language in
+                Button(language.name) {
+                    inplaceTranslationLanguage = language.code
+                    SettingsStorage.shared.inplaceTranslationTargetLanguage = language.code
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(current?.name ?? inplaceTranslationLanguage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(ShortcutStyle.primaryText)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                Text("⌄")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(ShortcutStyle.secondaryText)
+            }
+            .padding(.horizontal, 10)
+            .frame(width: 136, height: 30)
+            .background(ShortcutStyle.inputBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(ShortcutStyle.inputBorder, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Instant translation language, \(current?.name ?? inplaceTranslationLanguage)")
     }
 
     // MARK: - Modifier Key Recording

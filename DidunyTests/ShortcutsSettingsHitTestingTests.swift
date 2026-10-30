@@ -22,9 +22,9 @@ struct ShortcutsSettingsHitTestingTests {
         static let dictationEditLabel = NSPoint(x: 453, y: 124)
         static let dictationFieldBody = NSPoint(x: 400, y: 124) // between keycaps and "edit"
 
-        // Dictation row of the "Modifier key recording" card (row centre y = 446).
-        static let dictationOffGlyph = NSPoint(x: 374, y: 446)
-        static let dictationOffPadding = NSPoint(x: 356, y: 446)
+        // Dictation row of the "Modifier key recording" card (row centre y = 553).
+        static let dictationOffGlyph = NSPoint(x: 374, y: 553)
+        static let dictationOffPadding = NSPoint(x: 356, y: 553)
     }
 
     private final class Harness {
