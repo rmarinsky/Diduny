@@ -171,6 +171,8 @@ final class SettingsStorage {
         case voiceTranslationTargetLanguage
         case textTranslationSourceLanguage
         case textTranslationTargetLanguage
+        case inplaceTranslationEnabled
+        case inplaceTranslationTargetLanguage
         case translationProvider
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
@@ -1337,6 +1339,43 @@ final class SettingsStorage {
         set { setTranslationTargetLanguage(newValue, key: .textTranslationTargetLanguage) }
     }
 
+    // MARK: - In-place Selection Translation
+
+    var inplaceTranslationEnabled: Bool {
+        get {
+            defaults.object(forKey: Key.inplaceTranslationEnabled.rawValue) == nil
+                || defaults.bool(forKey: Key.inplaceTranslationEnabled.rawValue)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.inplaceTranslationEnabled.rawValue)
+            NotificationCenter.default.post(name: .inplaceTranslationSettingsChanged, object: nil)
+        }
+    }
+
+    var inplaceTranslationTargetLanguage: String {
+        get {
+            let stored = defaults.string(forKey: Key.inplaceTranslationTargetLanguage.rawValue)
+            if let stored = Self.normalizedLanguageCode(stored), translationTargetLanguages.contains(stored) {
+                return stored
+            }
+            return "en"
+        }
+        set { setTranslationTargetLanguage(newValue, key: .inplaceTranslationTargetLanguage) }
+    }
+
+    /// True when a modifier push-to-talk (dictation or translation) is active on a ⌥ or ⌘ key,
+    /// which would fire alongside the ⌥⌘ double-tap.
+    var inplaceTranslationBlockedByPushToTalk: Bool {
+        (pushToTalkKey.isOptionOrCommand && (pushToTalkHoldEnabled || pushToTalkToggleEnabled))
+            || (translationPushToTalkKey.isOptionOrCommand
+                && (translationPushToTalkHoldEnabled || translationPushToTalkToggleEnabled))
+    }
+
+    /// The monitor runs only when the switch is on and no push-to-talk conflicts.
+    var inplaceTranslationActive: Bool {
+        inplaceTranslationEnabled && !inplaceTranslationBlockedByPushToTalk
+    }
+
     private func setTranslationTargetLanguage(_ rawValue: String, key: Key) {
         guard let language = Self.normalizedLanguageCode(rawValue) else { return }
         if !translationTargetLanguages.contains(language) {
@@ -1480,6 +1519,7 @@ extension Notification.Name {
     static let meetingSuggestionsEnabledChanged = Notification.Name("meetingSuggestionsEnabledChanged")
     static let textCleanupSettingsChanged = Notification.Name("textCleanupSettingsChanged")
     static let historyRetentionSettingsChanged = Notification.Name("historyRetentionSettingsChanged")
+    static let inplaceTranslationSettingsChanged = Notification.Name("inplaceTranslationSettingsChanged")
     static let typingSpeedSettingsChanged = Notification.Name("typingSpeedSettingsChanged")
     static let whisperModelUnloadPolicyChanged = Notification.Name("whisperModelUnloadPolicyChanged")
 }

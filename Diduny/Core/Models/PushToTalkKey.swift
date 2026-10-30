@@ -67,6 +67,13 @@ enum PushToTalkKey: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    var isOptionOrCommand: Bool {
+        switch self {
+        case .leftOption, .rightOption, .leftCommand, .rightCommand: true
+        default: false
+        }
+    }
+
     /// Label for picker display (symbol + name)
     var pickerLabel: String {
         switch self {
