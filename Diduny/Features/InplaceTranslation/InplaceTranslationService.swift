@@ -129,7 +129,7 @@ final class InplaceTranslationService {
             lastFlowChangeCount = NSPasteboard.general.changeCount
             // Success pop lands with the paste.
             async let pop: Void = feedback.finishBadge(success: true)
-            try await ClipboardService.shared.paste()
+            try await ClipboardService.shared.paste(expectedProcessIdentifier: targetPID)
             await pop
             Task { await feedback.dismissBadge() }
 

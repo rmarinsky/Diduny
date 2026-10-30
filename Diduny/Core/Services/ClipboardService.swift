@@ -115,7 +115,12 @@ final class ClipboardService: ClipboardServiceProtocol {
         AXIsProcessTrustedWithOptions(options)
     }
 
+    /// - Parameter expectedProcessIdentifier: when set, ⌘V is posted only if that app is still frontmost after the delay.
     func paste() async throws {
+        try await paste(expectedProcessIdentifier: nil)
+    }
+
+    func paste(expectedProcessIdentifier: pid_t?) async throws {
         // Check accessibility permission first
         let isGranted = ClipboardService.isAccessibilityGranted()
         Log.app.info("Accessibility permission check: \(isGranted)")
@@ -127,6 +132,11 @@ final class ClipboardService: ClipboardServiceProtocol {
 
         // Keep only a short focus handoff delay. NSPasteboard writes above are synchronous.
         try await Task.sleep(nanoseconds: Self.pasteReadinessDelayNanoseconds)
+
+        if let expectedProcessIdentifier,
+           NSWorkspace.shared.frontmostApplication?.processIdentifier != expectedProcessIdentifier {
+            throw ClipboardError.pasteEventFailed
+        }
 
         try await postCommandShortcut(keyCode: CGKeyCode(9), error: .pasteEventFailed)
 
