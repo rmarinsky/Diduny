@@ -35,6 +35,7 @@ final class InplaceTranslationService {
 
     enum FlowError: Error {
         case timeout
+        case focusChanged
     }
 
     static let translationTimeoutSeconds: Double = 8
@@ -93,6 +94,7 @@ final class InplaceTranslationService {
         let selectionEnd = await Task.detached { InplaceTranslationAnchor.selectionEndRect() }.value
         feedback.moveBadge(selectionEnd: selectionEnd)
         let snapshot = PasteboardSnapshot.capture()
+        let targetPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
 
         let source: String
         do {
@@ -102,13 +104,14 @@ final class InplaceTranslationService {
             PermissionManager.shared.showPermissionAlert(for: .accessibility)
             return
         } catch {
-            snapshot.restore()
+            // No restore: a changed pasteboard here may be the user's own copy, not ours.
             Log.app.info("[InplaceTranslation] No selection captured")
             await feedback.dismissBadge()
             feedback.showToast(.nothingSelected, selectionEnd: selectionEnd)
             return
         }
 
+        var lastFlowChangeCount = NSPasteboard.general.changeCount
         let (sourceLanguage, target) = Self.direction(
             for: source, pair: SettingsStorage.shared.defaultTranslationLanguagePair
         )
@@ -118,8 +121,12 @@ final class InplaceTranslationService {
                     sourceText: source, sourceLanguage: sourceLanguage, targetLanguage: target
                 )
             }
+            // Never paste into an app the user switched to while translating.
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == targetPID else {
+                throw FlowError.focusChanged
+            }
             ClipboardService.shared.copy(text: translated)
-            let changeCount = NSPasteboard.general.changeCount
+            lastFlowChangeCount = NSPasteboard.general.changeCount
             // Success pop lands with the paste.
             async let pop: Void = feedback.finishBadge(success: true)
             try await ClipboardService.shared.paste()
@@ -128,10 +135,10 @@ final class InplaceTranslationService {
 
             // Give the target app time to read the pasteboard before restoring it.
             try? await Task.sleep(for: Self.clipboardRestoreDelay)
-            if NSPasteboard.general.changeCount == changeCount { snapshot.restore() }
+            if NSPasteboard.general.changeCount == lastFlowChangeCount { snapshot.restore() }
             Log.app.info("[InplaceTranslation] Replaced selection (\(source.count) chars)")
         } catch {
-            snapshot.restore()
+            if NSPasteboard.general.changeCount == lastFlowChangeCount { snapshot.restore() }
             Log.app.error("[InplaceTranslation] Failed: \(String(describing: type(of: error)), privacy: .public)")
             await feedback.finishBadge(success: false)
             await feedback.dismissBadge()
