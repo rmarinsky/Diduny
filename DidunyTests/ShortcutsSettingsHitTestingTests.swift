@@ -11,7 +11,9 @@ import Testing
 /// Coordinates are top-left based, derived from `ShortcutLayout` in
 /// ShortcutsSettingsView.swift (content x=22, y=6; action card rows are 48pt;
 /// modifier card rows are 77pt). Update them if that layout changes.
+/// Drives a real key window, so it runs only on CI (`DIDUNY_UI_TESTS=1`), never on a dev Mac.
 @MainActor
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["DIDUNY_UI_TESTS"] == "1", "UI tests run on CI only"))
 struct ShortcutsSettingsHitTestingTests {
     nonisolated private static let windowSize = NSSize(width: 759, height: 666)
 
