@@ -174,6 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var hotkeyService = HotkeyService()
     lazy var pushToTalkService = PushToTalkService()
     lazy var translationPushToTalkService = PushToTalkService()
+    lazy var inplaceTranslationMonitor = InplaceTranslationHotkeyMonitor()
     lazy var meetingRecorderService = MeetingRecorderService()
     lazy var meetingJoinMonitor = MeetingJoinMonitor()
     let calendarReminderController = CalendarReminderController()
@@ -369,6 +370,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupHotkeys()
         setupPushToTalk()
         setupTranslationPushToTalk()
+        setupInplaceTranslation()
 
         // Setup sleep handling for all recording modes (RLR-M2).
         // Must be registered before OrphanedRecordingDetector (M5a) to ensure the
@@ -756,6 +758,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyService.unregisterAll()
         pushToTalkService.stop()
         translationPushToTalkService.stop()
+        inplaceTranslationMonitor.stop()
         NotificationCenter.default.removeObserver(self)
         // Release all activity tokens on termination to avoid leaking wake locks.
         if let token = recordingActivityToken { ProcessInfo.processInfo.endActivity(token) }

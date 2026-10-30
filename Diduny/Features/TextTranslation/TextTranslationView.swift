@@ -3,8 +3,9 @@ import SwiftUI
 
 // MARK: - Translation Error
 
-private enum TranslationError: LocalizedError {
+enum TranslationError: LocalizedError {
     case invalidRequest
+    case quotaExceeded
     case requestFailed(String)
     case emptyResult
 
@@ -12,6 +13,8 @@ private enum TranslationError: LocalizedError {
         switch self {
         case .invalidRequest:
             String(localized: "Failed to prepare translation request")
+        case .quotaExceeded:
+            String(localized: "Translation limit reached")
         case let .requestFailed(message):
             String(localized: "Translation failed: \(message)")
         case .emptyResult:
@@ -68,6 +71,10 @@ enum TextTranslationClient {
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TranslationError.requestFailed("invalid response")
+        }
+
+        if httpResponse.statusCode == 402 {
+            throw TranslationError.quotaExceeded
         }
 
         guard httpResponse.statusCode == 200 else {

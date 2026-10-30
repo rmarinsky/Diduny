@@ -23,6 +23,7 @@ struct ShortcutsSettingsView: View {
     @State private var escapeCancelEnabled = SettingsStorage.shared.escapeCancelEnabled
     @State private var escapeCancelPressCount = SettingsStorage.shared.escapeCancelPressCount
     @State private var escapeCancelSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
+    @State private var inplaceTranslationEnabled = SettingsStorage.shared.inplaceTranslationEnabled
     @State private var shortcutDisplayRefresh = 0
 
     private let hotkeyPressCountOptions = [1, 2, 3]
@@ -34,6 +35,7 @@ struct ShortcutsSettingsView: View {
             ShortcutStyle.windowBackground
                 .ignoresSafeArea()
 
+            ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header
 
@@ -46,6 +48,11 @@ struct ShortcutsSettingsView: View {
                     .frame(height: 10)
 
                 actionHotkeysCard
+
+                Spacer()
+                    .frame(height: 10)
+
+                inplaceTranslationCard
 
                 Spacer()
                     .frame(height: 10)
@@ -70,6 +77,9 @@ struct ShortcutsSettingsView: View {
             .frame(width: ShortcutLayout.contentWidth, alignment: .topLeading)
             .padding(.leading, ShortcutLayout.contentLeading)
             .padding(.top, ShortcutLayout.contentTop)
+            .padding(.bottom, ShortcutLayout.contentTop)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -237,6 +247,60 @@ struct ShortcutsSettingsView: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(ShortcutStyle.keycapBorder, lineWidth: 1)
             }
+    }
+
+    // MARK: - In-place Translation
+
+    private var inplaceTranslationBlocked: Bool {
+        (pushToTalkKey.isOptionOrCommand && (pushToTalkHoldEnabled || pushToTalkToggleEnabled))
+            || (translationPushToTalkKey.isOptionOrCommand
+                && (translationPushToTalkHoldEnabled || translationPushToTalkToggleEnabled))
+    }
+
+    private var inplaceTranslationCard: some View {
+        let blocked = inplaceTranslationBlocked
+        let active = inplaceTranslationEnabled && !blocked
+        return settingsCard {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Double-tap ⌥⌘ to translate selection in place")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(ShortcutStyle.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(blocked
+                        ? "Unavailable while a modifier-key shortcut uses Option or Command."
+                        : "Select text, then tap Option and Command twice. The selection is replaced by its translation.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(ShortcutStyle.tertiaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Toggle("", isOn: $inplaceTranslationEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(blocked)
+                    .accessibilityLabel("Double-tap Option Command to translate selection in place")
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 48)
+            .onChange(of: inplaceTranslationEnabled) { _, newValue in
+                SettingsStorage.shared.inplaceTranslationEnabled = newValue
+            }
+            divider
+
+            HStack(spacing: 0) {
+                rowTitle("Language pair", width: 300)
+                Spacer(minLength: 0)
+                Text(SettingsStorage.shared.defaultTranslationLanguagePair.displayLabel)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(ShortcutStyle.secondaryText)
+                    .padding(.trailing, 14)
+                    .accessibilityLabel("Uses the default translation pair, \(SettingsStorage.shared.defaultTranslationLanguagePair.displayLabel)")
+            }
+            .frame(height: 48)
+            .opacity(active ? 1.0 : 0.5)
+        }
     }
 
     // MARK: - Modifier Key Recording

@@ -122,6 +122,37 @@ extension AppDelegate {
         Log.app.info("Dictation modifier hold delay changed to: \(String(format: "%.1f", delay))s")
     }
 
+    // MARK: - In-place Selection Translation (double-tap ⌥⌘)
+
+    func setupInplaceTranslation() {
+        inplaceTranslationMonitor.onTrigger = {
+            Task { @MainActor in
+                await InplaceTranslationService.shared.run()
+            }
+        }
+        refreshInplaceTranslationMonitor()
+
+        // The switch and both push-to-talk configs decide whether the monitor runs.
+        let names: [Notification.Name] = [
+            .inplaceTranslationSettingsChanged,
+            .pushToTalkKeyChanged, .pushToTalkModeChanged,
+            .translationPushToTalkKeyChanged, .translationPushToTalkModeChanged
+        ]
+        for name in names {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshInplaceTranslationMonitor() }
+            }
+        }
+    }
+
+    private func refreshInplaceTranslationMonitor() {
+        if SettingsStorage.shared.inplaceTranslationActive {
+            inplaceTranslationMonitor.start()
+        } else {
+            inplaceTranslationMonitor.stop()
+        }
+    }
+
     // MARK: - Translation Push to Talk
 
     func setupTranslationPushToTalk() {

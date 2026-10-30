@@ -2,25 +2,38 @@ import XCTest
 @testable import Diduny
 
 final class ReleaseHighlightsTests: XCTestCase {
+    private static let english = #"{"headline":"A clearer update","highlights":["First","Second","Third"]}"#
+    private static let ukrainian = #"{"headline":"Зрозуміліше оновлення","highlights":["Перше"]}"#
+
     func testDecodePreservesCuratedHighlightOrder() throws {
-        let data = Data(
-            #"{"schemaVersion":1,"headline":"A clearer update","highlights":["First","Second","Third"]}"#.utf8
-        )
+        let data = Data(#"{"schemaVersion":2,"en":\#(Self.english),"uk":\#(Self.ukrainian)}"#.utf8)
 
-        let highlights = try JSONDecoder().decode(ReleaseHighlights.self, from: data)
+        var highlights = try JSONDecoder().decode(ReleaseHighlights.self, from: data)
+        highlights.languageCode = "en"
 
-        XCTAssertEqual(highlights.schemaVersion, 1)
+        XCTAssertEqual(highlights.schemaVersion, 2)
         XCTAssertEqual(highlights.headline, "A clearer update")
         XCTAssertEqual(highlights.highlights, ["First", "Second", "Third"])
     }
 
+    func testUkrainianInterfaceShowsUkrainianEntry() throws {
+        let data = Data(#"{"schemaVersion":2,"en":\#(Self.english),"uk":\#(Self.ukrainian)}"#.utf8)
+
+        var highlights = try JSONDecoder().decode(ReleaseHighlights.self, from: data)
+        highlights.languageCode = "uk"
+
+        XCTAssertEqual(highlights.headline, "Зрозуміліше оновлення")
+        XCTAssertEqual(highlights.highlights, ["Перше"])
+    }
+
     func testDecodeRejectsUnsupportedOrEmptyPayloads() {
         let invalidPayloads = [
-            #"{"schemaVersion":2,"headline":"Headline","highlights":["One"]}"#,
-            #"{"schemaVersion":1,"headline":"   ","highlights":["One"]}"#,
-            #"{"schemaVersion":1,"headline":"Headline","highlights":[]}"#,
-            #"{"schemaVersion":1,"headline":"Headline","highlights":["One","Two","Three","Four"]}"#,
-            #"{"schemaVersion":1,"headline":"Headline","highlights":[" "]}"#,
+            #"{"schemaVersion":1,"headline":"Headline","highlights":["One"]}"#,
+            #"{"schemaVersion":2,"en":\#(Self.english)}"#,
+            #"{"schemaVersion":2,"en":{"headline":"   ","highlights":["One"]},"uk":\#(Self.ukrainian)}"#,
+            #"{"schemaVersion":2,"en":{"headline":"Headline","highlights":[]},"uk":\#(Self.ukrainian)}"#,
+            #"{"schemaVersion":2,"en":\#(Self.english),"uk":{"headline":"H","highlights":["1","2","3","4"]}}"#,
+            #"{"schemaVersion":2,"en":\#(Self.english),"uk":{"headline":"H","highlights":[" "]}}"#,
         ]
 
         for payload in invalidPayloads {

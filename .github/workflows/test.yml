@@ -33,6 +33,7 @@ jobs:
           mkdir -p build/screenshots
           # TEST_RUNNER_ variables reach the test process without the prefix.
           TEST_RUNNER_SCREENSHOT_DIR="$PWD/build/screenshots" \
+          TEST_RUNNER_DIDUNY_UI_TESTS=1 \
           xcodebuild test \
             -project Diduny.xcodeproj \
             -derivedDataPath build/DerivedData \
@@ -118,6 +119,8 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p build
+          # UI tests take over the screen, so they only run when this is set (CI only).
+          TEST_RUNNER_DIDUNY_UI_TESTS=1 \
           xcodebuild test \
             -project Diduny.xcodeproj \
             -scheme "Diduny UI Tests" \
