@@ -37,7 +37,6 @@ final class InplaceTranslationService {
         case timeout
     }
 
-    static let badgeDelay: Duration = .zero
     static let translationTimeoutSeconds: Double = 8
 
     /// Picks the direction within the default pair: text detected as one pair language goes to the other.
@@ -88,18 +87,24 @@ final class InplaceTranslationService {
         }
 
         let feedback = InplaceTranslationFeedbackController.shared
+        // Badge first (at the mouse), then glide to the selection once its bounds are known.
+        // The panel is non-activating, so showing it before ⌘C keeps focus in the target app.
+        feedback.showBadge(selectionEnd: nil)
         let selectionEnd = await Task.detached { InplaceTranslationAnchor.selectionEndRect() }.value
+        feedback.moveBadge(selectionEnd: selectionEnd)
         let snapshot = PasteboardSnapshot.capture()
 
         let source: String
         do {
             source = try await ClipboardService.shared.captureSelectedText()
         } catch ClipboardError.accessibilityNotGranted {
+            await feedback.dismissBadge()
             PermissionManager.shared.showPermissionAlert(for: .accessibility)
             return
         } catch {
             snapshot.restore()
             Log.app.info("[InplaceTranslation] No selection captured")
+            await feedback.dismissBadge()
             feedback.showToast(.nothingSelected, selectionEnd: selectionEnd)
             return
         }
@@ -107,24 +112,18 @@ final class InplaceTranslationService {
         let (sourceLanguage, target) = Self.direction(
             for: source, pair: SettingsStorage.shared.defaultTranslationLanguagePair
         )
-        let badgeTask = Task { @MainActor in
-            try? await Task.sleep(for: Self.badgeDelay)
-            guard !Task.isCancelled else { return }
-            feedback.showBadge(selectionEnd: selectionEnd)
-        }
-
         do {
             let translated = try await Self.withTimeout(seconds: Self.translationTimeoutSeconds) {
                 try await TextTranslationClient.requestTranslation(
                     sourceText: source, sourceLanguage: sourceLanguage, targetLanguage: target
                 )
             }
-            badgeTask.cancel()
-            await feedback.finishBadge(success: true)
-
             ClipboardService.shared.copy(text: translated)
             let changeCount = NSPasteboard.general.changeCount
+            // Success pop lands with the paste.
+            async let pop: Void = feedback.finishBadge(success: true)
             try await ClipboardService.shared.paste()
+            await pop
             Task { await feedback.dismissBadge() }
 
             // Give the target app time to read the pasteboard before restoring it.
@@ -132,7 +131,6 @@ final class InplaceTranslationService {
             if NSPasteboard.general.changeCount == changeCount { snapshot.restore() }
             Log.app.info("[InplaceTranslation] Replaced selection (\(source.count) chars)")
         } catch {
-            badgeTask.cancel()
             snapshot.restore()
             Log.app.error("[InplaceTranslation] Failed: \(String(describing: type(of: error)), privacy: .public)")
             await feedback.finishBadge(success: false)
