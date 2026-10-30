@@ -1,8 +1,9 @@
 {
   "schemaVersion": 1,
-  "headline": "Clearer statistics sharing",
+  "headline": "Translate selected text in place",
   "highlights": [
-    "Settings now list everything optional usage statistics include, and that they are kept for 30 days.",
-    "If you share statistics, Diduny also reports whether your Mac has Apple silicon or Intel, so we know how long to keep supporting Intel Macs. Nothing is sent when sharing is off."
+    "Select text in any app and tap Option and Command twice: the selection is replaced by its translation, right where it was.",
+    "It follows your default language pair both ways, so English becomes Ukrainian and Ukrainian becomes English. Your clipboard is put back afterwards.",
+    "A small Diduny badge next to the text shows the translation is on its way. Turn it off in Settings → Shortcuts."
   ]
 }
