@@ -5,6 +5,7 @@
 
 | date | weekday | product | in_action | topic_id | hook | status | notes |
 |---|---|---|---|---|---|---|---|
+| 2026-11-01 | Sun | X | yoy | y-x2 | Анонс на тиждень. Дві хвилини | drafted | |
 | 2026-11-02 | Mon | diduny |  | d-a1 | Промпт на 300 слів. Нуль натискань. | planned | |
 | 2026-11-03 | Tue | yoy |  | y-promo1 | Один лінк замість трьох повідомлень | planned | |
 | 2026-11-04 | Wed | diduny |  | d-v1 | Не знаю, як це англійською. Байдуже. | planned | |
