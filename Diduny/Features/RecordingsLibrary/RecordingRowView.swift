@@ -15,6 +15,7 @@ struct RecordingRowView: View {
     @State private var queueService = RecordingQueueService.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var didCopy = false
+    @State private var copyConfirmation: Task<Void, Never>?
 
     /// Progress while this recording is the queue's current item.
     private var queueProgress: QueueProgress? {
@@ -245,9 +246,11 @@ struct RecordingRowView: View {
                         label: didCopy ? String(localized: "Copied") : String(localized: "Copy transcript")
                     ) {
                         ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
+                        copyConfirmation?.cancel()
                         didCopy = true
-                        Task { @MainActor in
+                        copyConfirmation = Task { @MainActor in
                             try? await Task.sleep(for: .seconds(1.2))
+                            guard !Task.isCancelled else { return }
                             didCopy = false
                         }
                     }
