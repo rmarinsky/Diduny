@@ -77,6 +77,46 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertEqual(try recording().displayTitle, typeName)
     }
 
+    func testOlderTimeNamedMeetingRecordingsTakeTheNameOfTheMeetingRunningThen() async throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func record(_ id: UUID, at offset: TimeInterval, savedTitle: String? = nil) throws {
+            XCTAssertNotNil(storage.beginMeetingRecording(id: id, type: .meeting, createdAt: start.addingTimeInterval(offset)))
+            let wav = directory.appendingPathComponent("\(id).wav")
+            try Data("RIFF....WAVEfmt ".utf8).write(to: wav)
+            XCTAssertTrue(storage.finalizeInProgressRecording(id: id, audioURL: wav, duration: 1800,
+                          endedAt: start.addingTimeInterval(offset + 1800), status: .unprocessed, forceSave: true))
+            if let savedTitle { XCTAssertTrue(storage.updateDetails(id: id, title: savedTitle, description: "Notes")) }
+        }
+        func event(_ id: String, _ title: String, at offset: TimeInterval) -> CalendarMeeting {
+            CalendarMeeting(id: id, calendarID: "work", title: title,
+                            start: start.addingTimeInterval(offset), end: start.addingTimeInterval(offset + 1800))
+        }
+        // Older releases prefilled the title field with the type's name, so "Save Details" stored it,
+        // in whichever language the app ran in then.
+        let plain = UUID(), savedEnglish = UUID(), savedUkrainian = UUID(), named = UUID()
+        try record(plain, at: 0)
+        try record(savedEnglish, at: 7200, savedTitle: "Meeting")
+        try record(savedUkrainian, at: 14400, savedTitle: "Зустріч")
+        try record(named, at: 21600, savedTitle: "Board sync")
+        let events = [event("standup", "Daily standup", at: 0), event("review", "Design review", at: 7200),
+                      event("retro", "Sprint retro", at: 14400), event("planning", "Quarter planning", at: 21600)]
+        XCTAssertTrue(RecordingRowView.title(for: try XCTUnwrap(storage.recordings.first { $0.id == plain })).hasPrefix("Meeting — "))
+
+        let connection = CalendarConnection(defaults: UserDefaults(suiteName: "CalendarRename-\(UUID())")!, authorize: { true },
+                                            read: { _ in ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: []) },
+                                            readRange: { _, _, _ in events })
+        defer { connection.disconnect() }
+        await connection.connect()
+        await CalendarRecordingLinker().run(storage: storage, connection: connection)
+
+        let restored = RecordingsLibraryStorage(baseDirectory: directory, batchStorage: try TranscriptionBatchStorage(baseDirectory: directory))
+        func rowTitle(_ id: UUID) throws -> String { RecordingRowView.title(for: try XCTUnwrap(restored.recordings.first { $0.id == id })) }
+        XCTAssertEqual(try rowTitle(plain), "Daily standup", "An older recording is named after the meeting running then")
+        XCTAssertEqual(try rowTitle(savedEnglish), "Design review", "A saved type name is not the person's title")
+        XCTAssertEqual(try rowTitle(savedUkrainian), "Sprint retro", "Nor is the type name saved in another language")
+        XCTAssertEqual(try rowTitle(named), "Board sync", "A title the person typed is kept")
+    }
+
     func testPastMeetingRecordingsLinkToCalendarEventsWithoutOverridingThePerson() async throws {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         func record(_ id: UUID, from: TimeInterval, to: TimeInterval) throws {
