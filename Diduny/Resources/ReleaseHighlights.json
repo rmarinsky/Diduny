@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Translate selected text in place",
+    "headline": "Meeting recordings are named after the meeting",
     "highlights": [
-      "Select text in any app and tap Option and Command twice: the selection is replaced by its translation, right where it was.",
-      "It follows your default language pair both ways, so English becomes Ukrainian and Ukrainian becomes English. Your clipboard is put back afterwards.",
-      "A small Diduny badge next to the text shows the translation is on its way. Turn it off in Settings → Shortcuts."
+      "A recording linked to a calendar event now shows the event's name in the Recordings list, the Overview and its details, instead of “Meeting — 10:00–10:45”.",
+      "Older meeting recordings that Diduny matched to a calendar event get its name too, even if you once saved details on them.",
+      "A title you type yourself still wins. Leave the title field empty to keep the event's name, and unlinking the event takes its name with it."
     ]
   },
   "uk": {
-    "headline": "Переклад виділеного тексту на місці",
+    "headline": "Записи зустрічей тепер називаються як зустріч",
     "highlights": [
-      "Виділи текст у будь-якій програмі й двічі натисни Option і Command: на місці виділеного з'явиться переклад.",
-      "Працює в обидва боки в межах твоєї основної мовної пари: англійська стає українською, українська — англійською. Буфер обміну потім повертається як був.",
-      "Маленький значок Дідуні поруч із текстом показує, що переклад уже в дорозі. Вимкнути можна в Налаштуваннях → Шорткати."
+      "Запис, пов'язаний з подією календаря, у списку записів, в огляді та в деталях показує назву події, а не «Meeting — 10:00–10:45».",
+      "Старі записи зустрічей, які Дідуня пов'язала з подією календаря, теж отримують її назву, навіть якщо ти колись зберігав у них деталі.",
+      "Твоя власна назва й далі головніша. Залиш поле назви порожнім, щоб зберегти назву події, а якщо від'єднати подію, її назва зникне разом із нею."
     ]
   }
 }
