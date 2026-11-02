@@ -146,6 +146,7 @@ extension AppDelegate {
     }
 
     private func refreshInplaceTranslationMonitor() {
+        inplaceTranslationMonitor.reservedKeys = SettingsStorage.shared.inplaceTranslationReservedKeys
         if SettingsStorage.shared.inplaceTranslationActive {
             inplaceTranslationMonitor.start()
         } else {

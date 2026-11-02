@@ -14,6 +14,8 @@ struct RecordingRowView: View {
     @State private var playbackService = AudioPlaybackService.shared
     @State private var queueService = RecordingQueueService.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var didCopy = false
+    @State private var copyConfirmation: Task<Void, Never>?
 
     /// Progress while this recording is the queue's current item.
     private var queueProgress: QueueProgress? {
@@ -236,12 +238,31 @@ struct RecordingRowView: View {
                         action: onSaveRecoveryAudio
                     )
                 }
-            } else if Self.primaryAction(for: recording) == .transcribe {
-                RecordingActionButton(
-                    systemName: "text.bubble",
-                    label: String(localized: "Transcribe recording"),
-                    action: onTranscribe
-                )
+            } else {
+                switch Self.primaryAction(for: recording) {
+                case let .copy(text):
+                    RecordingActionButton(
+                        systemName: didCopy ? "checkmark" : "doc.on.doc",
+                        label: didCopy ? String(localized: "Copied") : String(localized: "Copy transcript")
+                    ) {
+                        ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
+                        copyConfirmation?.cancel()
+                        didCopy = true
+                        copyConfirmation = Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(1.2))
+                            guard !Task.isCancelled else { return }
+                            didCopy = false
+                        }
+                    }
+                case .transcribe:
+                    RecordingActionButton(
+                        systemName: "text.bubble",
+                        label: String(localized: "Transcribe recording"),
+                        action: onTranscribe
+                    )
+                case .hidden:
+                    EmptyView()
+                }
             }
 
             RecordingActionButton(
@@ -277,7 +298,7 @@ struct RecordingRowView: View {
     static func primaryAction(for recording: Recording) -> PrimaryAction {
         switch recording.status {
         case .processing, .recording, .needsRecovery: .hidden
-        default: .transcribe
+        default: recording.displayTranscriptText.map(PrimaryAction.copy) ?? .transcribe
         }
     }
 

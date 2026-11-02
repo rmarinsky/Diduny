@@ -254,7 +254,7 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     // family bits (.shift/.option/.command/.control) don't tell left from right,
     // so a side-specific key can't detect its own key-up while the opposite-side
     // key is still held. These raw masks distinguish the physical side.
-    private enum DeviceModifierMask {
+    enum DeviceModifierMask {
         static let leftControl: UInt = 0x0000_0001
         static let leftShift: UInt = 0x0000_0002
         static let rightShift: UInt = 0x0000_0004

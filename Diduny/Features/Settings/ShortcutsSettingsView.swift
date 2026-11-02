@@ -251,10 +251,15 @@ struct ShortcutsSettingsView: View {
 
     // MARK: - In-place Translation
 
+    private var inplaceTranslationReservedKeys: Set<PushToTalkKey> {
+        PushToTalkKey.reservedForInplaceTranslation([
+            (pushToTalkKey, pushToTalkHoldEnabled || pushToTalkToggleEnabled),
+            (translationPushToTalkKey, translationPushToTalkHoldEnabled || translationPushToTalkToggleEnabled)
+        ])
+    }
+
     private var inplaceTranslationBlocked: Bool {
-        (pushToTalkKey.isOptionOrCommand && (pushToTalkHoldEnabled || pushToTalkToggleEnabled))
-            || (translationPushToTalkKey.isOptionOrCommand
-                && (translationPushToTalkHoldEnabled || translationPushToTalkToggleEnabled))
+        PushToTalkKey.blocksInplaceTranslation(inplaceTranslationReservedKeys)
     }
 
     private var inplaceTranslationCard: some View {
@@ -268,8 +273,10 @@ struct ShortcutsSettingsView: View {
                         .foregroundStyle(ShortcutStyle.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(blocked
-                        ? "Unavailable while a modifier-key shortcut uses Option or Command."
-                        : "Select text, then tap Option and Command twice. The selection is replaced by its translation.")
+                        ? "Unavailable while modifier-key shortcuts use both Option keys or both Command keys."
+                        : inplaceTranslationReservedKeys.isEmpty
+                        ? "Select text, then tap Option and Command twice. The selection is replaced by its translation."
+                        : "Select text, then tap Option and Command twice, using the side your modifier-key shortcut doesn't use.")
                         .font(.system(size: 11))
                         .foregroundStyle(ShortcutStyle.tertiaryText)
                         .fixedSize(horizontal: false, vertical: true)

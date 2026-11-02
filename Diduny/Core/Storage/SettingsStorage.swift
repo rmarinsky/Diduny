@@ -1352,12 +1352,17 @@ final class SettingsStorage {
     }
 
 
-    /// True when a modifier push-to-talk (dictation or translation) is active on a ⌥ or ⌘ key,
-    /// which would fire alongside the ⌥⌘ double-tap.
+    /// ⌥/⌘ keys that dictation or translation push-to-talk listens to; the double-tap avoids them.
+    var inplaceTranslationReservedKeys: Set<PushToTalkKey> {
+        PushToTalkKey.reservedForInplaceTranslation([
+            (pushToTalkKey, pushToTalkHoldEnabled || pushToTalkToggleEnabled),
+            (translationPushToTalkKey, translationPushToTalkHoldEnabled || translationPushToTalkToggleEnabled)
+        ])
+    }
+
+    /// True when push-to-talk takes both Option keys or both Command keys.
     var inplaceTranslationBlockedByPushToTalk: Bool {
-        (pushToTalkKey.isOptionOrCommand && (pushToTalkHoldEnabled || pushToTalkToggleEnabled))
-            || (translationPushToTalkKey.isOptionOrCommand
-                && (translationPushToTalkHoldEnabled || translationPushToTalkToggleEnabled))
+        PushToTalkKey.blocksInplaceTranslation(inplaceTranslationReservedKeys)
     }
 
     /// The monitor runs only when the switch is on and no push-to-talk conflicts.

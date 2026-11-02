@@ -7,6 +7,8 @@ final class InplaceTranslationHotkeyMonitor {
     private var monitors: [Any] = []
 
     var onTrigger: (() -> Void)?
+    /// Keys a push-to-talk shortcut owns. A tap that uses one of them is not part of the gesture.
+    var reservedKeys: Set<PushToTalkKey> = []
 
     var isRunning: Bool {
         !monitors.isEmpty
@@ -45,7 +47,7 @@ final class InplaceTranslationHotkeyMonitor {
         case .keyDown:
             gestureEvent = .keyDown
         case .flagsChanged:
-            gestureEvent = .modifiersChanged(Self.modifiers(from: event.modifierFlags), at: event.timestamp)
+            gestureEvent = .modifiersChanged(Self.modifiers(from: event.modifierFlags, reserved: reservedKeys), at: event.timestamp)
         default:
             return
         }
@@ -55,11 +57,28 @@ final class InplaceTranslationHotkeyMonitor {
         }
     }
 
-    static func modifiers(from flags: NSEvent.ModifierFlags) -> InplaceTranslationGesture.Modifiers {
+    static func modifiers(
+        from flags: NSEvent.ModifierFlags,
+        reserved: Set<PushToTalkKey> = []
+    ) -> InplaceTranslationGesture.Modifiers {
         var result: InplaceTranslationGesture.Modifiers = []
+        if reserved.contains(where: { key in sideMask(key).map { flags.rawValue & $0 != 0 } ?? false }) {
+            result.insert(.other)
+        }
         if flags.contains(.option) { result.insert(.option) }
         if flags.contains(.command) { result.insert(.command) }
         if flags.contains(.shift) || flags.contains(.control) { result.insert(.other) }
         return result
+    }
+
+    private static func sideMask(_ key: PushToTalkKey) -> UInt? {
+        typealias Mask = PushToTalkService.DeviceModifierMask
+        switch key {
+        case .leftOption: return Mask.leftOption
+        case .rightOption: return Mask.rightOption
+        case .leftCommand: return Mask.leftCommand
+        case .rightCommand: return Mask.rightCommand
+        default: return nil
+        }
     }
 }

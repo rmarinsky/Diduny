@@ -322,6 +322,8 @@
 "Done" = "Готово";
 "Double Option" = "Подвійний Option";
 "Double Shift" = "Подвійний Shift";
+"Double-tap Option Command to translate selection in place" = "Подвійне натискання Option Command перекладає виділене на місці";
+"Double-tap ⌥⌘ to translate selection in place" = "Подвійне натискання ⌥⌘ перекладає виділене на місці";
 "Download" = "Завантажити";
 "Download a Whisper model in Settings first." = "Спочатку завантажте модель Whisper у налаштуваннях.";
 "Download a local Whisper model in Settings to transcribe files and YouTube." = "Завантажте локальну модель Whisper у налаштуваннях для транскрипції файлів і YouTube.";
@@ -752,6 +754,7 @@
 "Select a multilingual model in Models." = "Виберіть багатомовну модель у розділі «Моделі».";
 "Select meeting" = "Вибрати зустріч";
 "Select recording" = "Вибрати запис";
+"Select text, then tap Option and Command twice. The selection is replaced by its translation." = "Виділіть текст, потім двічі натисніть Option і Command. Виділене буде замінено перекладом.";
 "Select the part to keep" = "Виберіть частину, яку потрібно залишити";
 "Selected" = "Вибрано";
 "Selected audio device not found" = "Вибраний аудіопристрій не знайдено";
@@ -949,6 +952,8 @@
 "USB" = "USB";
 "Ukrainian" = "Українська";
 "Unavailable -> System Default" = "Недоступно → як у системі";
+"Unavailable while modifier-key shortcuts use both Option keys or both Command keys." = "Недоступно, поки скорочення з клавішами-модифікаторами використовують обидві клавіші Option або обидві Command.";
+"Select text, then tap Option and Command twice, using the side your modifier-key shortcut doesn't use." = "Виділіть текст і двічі натисніть Option і Command з того боку, який не зайнятий скороченням із клавішею-модифікатором.";
 "Undo (⌘Z)" = "Скасувати (⌘Z)";
 "Undo trim change" = "Скасувати зміну обрізання";
 "Unknown" = "Невідомо";
