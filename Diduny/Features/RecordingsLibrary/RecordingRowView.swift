@@ -236,7 +236,7 @@ struct RecordingRowView: View {
                         action: onSaveRecoveryAudio
                     )
                 }
-            } else if recording.status != .processing, recording.status != .recording {
+            } else if Self.primaryAction(for: recording) == .transcribe {
                 RecordingActionButton(
                     systemName: "text.bubble",
                     label: String(localized: "Transcribe recording"),
@@ -267,7 +267,26 @@ struct RecordingRowView: View {
 
     // MARK: - Computed
 
-    private var rowTitle: String {
+    enum PrimaryAction: Equatable {
+        case hidden
+        case transcribe
+        case copy(String)
+    }
+
+    /// The row's main action button, next to Delete.
+    static func primaryAction(for recording: Recording) -> PrimaryAction {
+        switch recording.status {
+        case .processing, .recording, .needsRecovery: .hidden
+        default: .transcribe
+        }
+    }
+
+    private var rowTitle: String { Self.title(for: recording) }
+
+    /// The recording's own name (the person's title, the linked meeting, the imported file);
+    /// otherwise its type and the time it was recorded.
+    static func title(for recording: Recording) -> String {
+        if let specificTitle = recording.specificTitle { return specificTitle }
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         let start = formatter.string(from: recording.createdAt)
@@ -283,7 +302,7 @@ struct RecordingRowView: View {
         case .translation: return "Translation — \(timeRange)"
         case .meeting: return "Meeting — \(timeRange)"
         case .meetingTranslation: return "Meeting translation — \(timeRange)"
-        case .fileTranscription: return recording.sourceFileName ?? "File — \(timeRange)"
+        case .fileTranscription: return "File — \(timeRange)"
         }
     }
 
