@@ -49,9 +49,10 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
                                     end: Date(timeIntervalSince1970: 1_800_003_600))
         XCTAssertNotNil(storage.beginMeetingRecording(id: id, type: .meeting))
         func recording() throws -> Recording { try XCTUnwrap(storage.recordings.first { $0.id == id }) }
+        let typeName = Recording.RecordingType.meeting.displayName
 
         XCTAssertNil(try recording().specificTitle)
-        XCTAssertEqual(try recording().displayTitle, "Meeting")
+        XCTAssertEqual(try recording().displayTitle, typeName)
         XCTAssertTrue(RecordingRowView.title(for: try recording()).hasPrefix("Meeting — "),
                       "Without a name the library row falls back to the type and time")
 
@@ -66,14 +67,14 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
 
         XCTAssertTrue(storage.updateDetails(id: id, title: "", description: ""))
         XCTAssertTrue(storage.linkCalendarMeeting(id: id, meeting: nil))
-        XCTAssertEqual(try recording().displayTitle, "Meeting", "Unlinking takes the meeting's name with it")
+        XCTAssertEqual(try recording().displayTitle, typeName, "Unlinking takes the meeting's name with it")
         XCTAssertTrue(RecordingRowView.title(for: try recording()).hasPrefix("Meeting — "))
 
         var untitled = event
         untitled.title = "  "
         XCTAssertTrue(storage.linkCalendarMeeting(id: id, meeting: untitled))
         XCTAssertNil(try recording().specificTitle, "A blank event title does not name the recording")
-        XCTAssertEqual(try recording().displayTitle, "Meeting")
+        XCTAssertEqual(try recording().displayTitle, typeName)
     }
 
     func testPastMeetingRecordingsLinkToCalendarEventsWithoutOverridingThePerson() async throws {

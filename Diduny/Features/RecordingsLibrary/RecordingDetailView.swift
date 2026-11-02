@@ -36,7 +36,7 @@ struct RecordingDetailView: View {
         self.onBack = onBack
         self.onClose = onClose
         self.onNavigationGuardChanged = onNavigationGuardChanged
-        _title = State(initialValue: recording.title ?? recording.displayTitle)
+        _title = State(initialValue: recording.title ?? "")
         _description = State(initialValue: recording.description ?? recording.remoteSource?.description ?? "")
     }
 
@@ -364,7 +364,9 @@ struct RecordingDetailView: View {
             Text("DETAILS")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            TextField("Recording title", text: $title)
+            // Only the person's own title is editable; the derived name (calendar event, imported
+            // file) stays a prompt so saving the description never freezes it into a custom title.
+            TextField("Recording title", text: $title, prompt: Text(currentRecording.displayTitle))
             TextField("Description", text: $description, axis: .vertical)
                 .lineLimit(2 ... 4)
             HStack {

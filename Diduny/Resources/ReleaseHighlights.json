@@ -3,17 +3,15 @@
   "en": {
     "headline": "Meeting recordings are named after the meeting",
     "highlights": [
-      "A recording linked to a calendar event now carries the event's name in the Recordings list, the Overview and its details, instead of “Meeting — 10:00–10:45”.",
-      "A title you type yourself still comes first, and unlinking the event takes its name with it.",
-      "The same applies to exported transcripts, where the heading is the meeting's name."
+      "A recording linked to a calendar event now shows the event's name in the Recordings list, the Overview and its details, instead of “Meeting — 10:00–10:45”.",
+      "A title you type yourself still wins. Leave the title field empty to keep the event's name, and unlinking the event takes its name with it."
     ]
   },
   "uk": {
     "headline": "Записи зустрічей тепер називаються як зустріч",
     "highlights": [
       "Запис, пов'язаний з подією календаря, у списку записів, в огляді та в деталях показує назву події, а не «Meeting — 10:00–10:45».",
-      "Твоя власна назва й далі головніша, а якщо від'єднати подію, її назва зникне разом із нею.",
-      "Так само в експортованих транскриптах: заголовок — це назва зустрічі."
+      "Твоя власна назва й далі головніша. Залиш поле назви порожнім, щоб зберегти назву події, а якщо від'єднати подію, її назва зникне разом із нею."
     ]
   }
 }
