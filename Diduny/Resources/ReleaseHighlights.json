@@ -3,13 +3,15 @@
   "en": {
     "headline": "Copy a transcript straight from the Recordings list",
     "highlights": [
-      "The button next to Delete now copies the recording's transcript, with times and speakers as shown. Recordings without a transcript still get the Transcribe button."
+      "The button next to Delete now copies the recording's transcript, with times and speakers as shown. Recordings without a transcript still get the Transcribe button.",
+      "The in-place selection translation option in Settings → Shortcuts is now fully translated into Ukrainian."
     ]
   },
   "uk": {
     "headline": "Копіюй транскрипт просто зі списку записів",
     "highlights": [
-      "Кнопка поруч із «Видалити» тепер копіює транскрипт запису з часом і мовцями, як на екрані. Для записів без транскрипту там і далі кнопка «Транскрибувати»."
+      "Кнопка поруч із «Видалити» тепер копіює транскрипт запису з часом і мовцями, як на екрані. Для записів без транскрипту там і далі кнопка «Транскрибувати».",
+      "Опція перекладу виділеного тексту на місці в Налаштуваннях → Клавіатурні скорочення тепер повністю перекладена українською."
     ]
   }
 }
