@@ -36,7 +36,7 @@ struct RecordingDetailView: View {
         self.onBack = onBack
         self.onClose = onClose
         self.onNavigationGuardChanged = onNavigationGuardChanged
-        _title = State(initialValue: recording.title ?? "")
+        _title = State(initialValue: recording.customTitle ?? "")
         _description = State(initialValue: recording.description ?? recording.remoteSource?.description ?? "")
     }
 

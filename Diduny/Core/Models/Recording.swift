@@ -215,7 +215,14 @@ struct Recording: Identifiable, Codable, Equatable {
     /// meeting's title, else the remote media title or imported file name. `nil` when nothing
     /// but the recording type is known.
     var specificTitle: String? {
-        title?.nilIfBlank ?? calendarMeeting?.title.nilIfBlank ?? remoteSource?.title ?? sourceFileName
+        customTitle ?? calendarMeeting?.title.nilIfBlank ?? remoteSource?.title ?? sourceFileName
+    }
+
+    /// The title the person typed. Older releases prefilled the title field with the type's name, so
+    /// "Save Details" stored "Meeting" or "Зустріч" as a title; a stored type name is not one.
+    var customTitle: String? {
+        guard let title = title?.nilIfBlank, !RecordingType.storedNamePlaceholders.contains(title) else { return nil }
+        return title
     }
 
     var displayTitle: String {
@@ -280,6 +287,17 @@ struct Recording: Identifiable, Codable, Equatable {
         case meeting
         case meetingTranslation
         case fileTranscription
+
+        /// Every type's name in each language the app ships, as older releases saved it into titles.
+        static let storedNamePlaceholders: Set<String> = {
+            let keys = ["Voice", "Translation", "Meeting", "Meeting Translation", "File Transcription"]
+            let bundles = Bundle.main.localizations
+                .compactMap { Bundle.main.path(forResource: $0, ofType: "lproj") }
+                .compactMap(Bundle.init(path:))
+            return Set(keys + bundles.flatMap { bundle in
+                keys.map { bundle.localizedString(forKey: $0, value: $0, table: nil) }
+            })
+        }()
 
         var displayName: String {
             switch self {

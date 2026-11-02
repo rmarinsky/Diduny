@@ -115,6 +115,8 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertEqual(try rowTitle(savedEnglish), "Design review", "A saved type name is not the person's title")
         XCTAssertEqual(try rowTitle(savedUkrainian), "Sprint retro", "Nor is the type name saved in another language")
         XCTAssertEqual(try rowTitle(named), "Board sync", "A title the person typed is kept")
+        XCTAssertTrue(Recording.RecordingType.allCases.allSatisfy { Recording.RecordingType.storedNamePlaceholders.contains($0.displayName) },
+                      "Every type's name is recognized when it was saved as a title")
     }
 
     func testPastMeetingRecordingsLinkToCalendarEventsWithoutOverridingThePerson() async throws {
