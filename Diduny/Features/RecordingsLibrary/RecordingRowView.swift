@@ -236,7 +236,7 @@ struct RecordingRowView: View {
                         action: onSaveRecoveryAudio
                     )
                 }
-            } else if recording.status != .processing, recording.status != .recording {
+            } else if Self.primaryAction(for: recording) == .transcribe {
                 RecordingActionButton(
                     systemName: "text.bubble",
                     label: String(localized: "Transcribe recording"),
@@ -266,6 +266,20 @@ struct RecordingRowView: View {
     }
 
     // MARK: - Computed
+
+    enum PrimaryAction: Equatable {
+        case hidden
+        case transcribe
+        case copy(String)
+    }
+
+    /// The row's main action button, next to Delete.
+    static func primaryAction(for recording: Recording) -> PrimaryAction {
+        switch recording.status {
+        case .processing, .recording, .needsRecovery: .hidden
+        default: .transcribe
+        }
+    }
 
     private var rowTitle: String { Self.title(for: recording) }
 

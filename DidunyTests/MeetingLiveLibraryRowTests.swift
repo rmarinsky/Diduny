@@ -77,6 +77,26 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertEqual(try recording().displayTitle, typeName)
     }
 
+    func testRowButtonCopiesTheTranscriptAndTranscribesOnlyWithoutOne() {
+        func recording(_ status: Recording.ProcessingStatus, text: String? = nil,
+                       segments: [TimedTranscriptSegment]? = nil) -> Recording {
+            Recording(id: UUID(), createdAt: Date(timeIntervalSince1970: 1_800_000_000), type: .meeting,
+                      audioFileName: "a.wav", durationSeconds: 60, fileSizeBytes: 1, status: status,
+                      transcriptionText: text, sourceDevice: nil, transcriptSegments: segments)
+        }
+        let segment = TimedTranscriptSegment(startMilliseconds: 65_000, speaker: "1", text: "Ship it")
+
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.transcribed, text: "Ship it")), .copy("Ship it"))
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.transcribed, text: "Ship it", segments: [segment])),
+                       .copy("[01:05] Speaker 1: Ship it"), "Copies the transcript as shown, with time and speaker")
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.unprocessed)), .transcribe,
+                       "Without a transcript the button still transcribes")
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.failed, text: "")), .transcribe)
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.processing, text: "Ship it")), .hidden)
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.recording)), .hidden)
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.needsRecovery)), .hidden)
+    }
+
     func testOlderTimeNamedMeetingRecordingsTakeTheNameOfTheMeetingRunningThen() async throws {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         func record(_ id: UUID, at offset: TimeInterval, savedTitle: String? = nil) throws {
