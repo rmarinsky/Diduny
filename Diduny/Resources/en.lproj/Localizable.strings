@@ -322,6 +322,8 @@
 "Done" = "Done";
 "Double Option" = "Double Option";
 "Double Shift" = "Double Shift";
+"Double-tap Option Command to translate selection in place" = "Double-tap Option Command to translate selection in place";
+"Double-tap ⌥⌘ to translate selection in place" = "Double-tap ⌥⌘ to translate selection in place";
 "Download" = "Download";
 "Download a Whisper model in Settings first." = "Download a Whisper model in Settings first.";
 "Download a local Whisper model in Settings to transcribe files and YouTube." = "Download a local Whisper model in Settings to transcribe files and YouTube.";
@@ -752,6 +754,7 @@
 "Select a multilingual model in Models." = "Select a multilingual model in Models.";
 "Select meeting" = "Select meeting";
 "Select recording" = "Select recording";
+"Select text, then tap Option and Command twice. The selection is replaced by its translation." = "Select text, then tap Option and Command twice. The selection is replaced by its translation.";
 "Select the part to keep" = "Select the part to keep";
 "Selected" = "Selected";
 "Selected audio device not found" = "Selected audio device not found";
@@ -949,6 +952,7 @@
 "USB" = "USB";
 "Ukrainian" = "Ukrainian";
 "Unavailable -> System Default" = "Unavailable -> System Default";
+"Unavailable while a modifier-key shortcut uses Option or Command." = "Unavailable while a modifier-key shortcut uses Option or Command.";
 "Undo (⌘Z)" = "Undo (⌘Z)";
 "Undo trim change" = "Undo trim change";
 "Unknown" = "Unknown";
