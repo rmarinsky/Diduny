@@ -115,8 +115,13 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertEqual(try rowTitle(savedEnglish), "Design review", "A saved type name is not the person's title")
         XCTAssertEqual(try rowTitle(savedUkrainian), "Sprint retro", "Nor is the type name saved in another language")
         XCTAssertEqual(try rowTitle(named), "Board sync", "A title the person typed is kept")
-        XCTAssertTrue(Recording.RecordingType.allCases.allSatisfy { Recording.RecordingType.storedNamePlaceholders.contains($0.displayName) },
+        XCTAssertTrue(Recording.RecordingType.allCases.allSatisfy { $0.storedNamePlaceholders.contains($0.displayName) },
                       "Every type's name is recognized when it was saved as a title")
+        var voiceNote = try XCTUnwrap(restored.recordings.first { $0.id == plain })
+        voiceNote = Recording(id: voiceNote.id, createdAt: voiceNote.createdAt, type: .voice, audioFileName: voiceNote.audioFileName,
+                              durationSeconds: voiceNote.durationSeconds, fileSizeBytes: voiceNote.fileSizeBytes,
+                              status: voiceNote.status, sourceDevice: nil, title: "Meeting")
+        XCTAssertEqual(voiceNote.displayTitle, "Meeting", "Another type's name is a real title")
     }
 
     func testPastMeetingRecordingsLinkToCalendarEventsWithoutOverridingThePerson() async throws {

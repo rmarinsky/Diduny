@@ -4,7 +4,7 @@
     "headline": "Meeting recordings are named after the meeting",
     "highlights": [
       "A recording linked to a calendar event now shows the event's name in the Recordings list, the Overview and its details, instead of “Meeting — 10:00–10:45”.",
-      "Older meeting recordings get the name of the calendar event that was running when they were recorded, including ones that only said “Meeting”.",
+      "Older meeting recordings that Diduny matched to a calendar event get its name too, even if you once saved details on them.",
       "A title you type yourself still wins. Leave the title field empty to keep the event's name, and unlinking the event takes its name with it."
     ]
   },
@@ -12,7 +12,7 @@
     "headline": "Записи зустрічей тепер називаються як зустріч",
     "highlights": [
       "Запис, пов'язаний з подією календаря, у списку записів, в огляді та в деталях показує назву події, а не «Meeting — 10:00–10:45».",
-      "Старі записи зустрічей теж отримують назву події з календаря, що йшла під час запису, навіть ті, що називалися просто «Зустріч».",
+      "Старі записи зустрічей, які Дідуня пов'язала з подією календаря, теж отримують її назву, навіть якщо ти колись зберігав у них деталі.",
       "Твоя власна назва й далі головніша. Залиш поле назви порожнім, щоб зберегти назву події, а якщо від'єднати подію, її назва зникне разом із нею."
     ]
   }

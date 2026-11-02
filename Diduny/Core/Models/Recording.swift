@@ -219,9 +219,10 @@ struct Recording: Identifiable, Codable, Equatable {
     }
 
     /// The title the person typed. Older releases prefilled the title field with the type's name, so
-    /// "Save Details" stored "Meeting" or "Зустріч" as a title; a stored type name is not one.
+    /// "Save Details" stored "Meeting" or "Зустріч" as a title; that stored name is not one.
+    /// Ceiling: a person who now types exactly their recording's type name sees the derived name instead.
     var customTitle: String? {
-        guard let title = title?.nilIfBlank, !RecordingType.storedNamePlaceholders.contains(title) else { return nil }
+        guard let title = title?.nilIfBlank, !type.storedNamePlaceholders.contains(title) else { return nil }
         return title
     }
 
@@ -288,16 +289,17 @@ struct Recording: Identifiable, Codable, Equatable {
         case meetingTranslation
         case fileTranscription
 
-        /// Every type's name in each language the app ships, as older releases saved it into titles.
-        static let storedNamePlaceholders: Set<String> = {
-            let keys = ["Voice", "Translation", "Meeting", "Meeting Translation", "File Transcription"]
-            let bundles = Bundle.main.localizations
-                .compactMap { Bundle.main.path(forResource: $0, ofType: "lproj") }
-                .compactMap(Bundle.init(path:))
-            return Set(keys + bundles.flatMap { bundle in
-                keys.map { bundle.localizedString(forKey: $0, value: $0, table: nil) }
-            })
-        }()
+        /// This type's name as releases up to v2.17.0 saved it into titles, in English or Ukrainian.
+        /// A fixed record of what shipped, so later translations never hide a title the person typed.
+        var storedNamePlaceholders: Set<String> {
+            switch self {
+            case .voice: ["Voice", "Голос"]
+            case .translation: ["Translation", "Переклад"]
+            case .meeting: ["Meeting", "Зустріч"]
+            case .meetingTranslation: ["Meeting Translation", "Переклад зустрічі"]
+            case .fileTranscription: ["File Transcription", "Транскрипція файлу"]
+            }
+        }
 
         var displayName: String {
             switch self {
