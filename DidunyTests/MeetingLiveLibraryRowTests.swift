@@ -42,6 +42,40 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
                        "An unlinked recording is not linked again automatically")
     }
 
+    func testLinkedCalendarMeetingNamesTheRecording() throws {
+        let id = UUID()
+        let event = CalendarMeeting(id: "event/occurrence", calendarID: "work", title: "Design review",
+                                    start: Date(timeIntervalSince1970: 1_800_000_000),
+                                    end: Date(timeIntervalSince1970: 1_800_003_600))
+        XCTAssertNotNil(storage.beginMeetingRecording(id: id, type: .meeting))
+        func recording() throws -> Recording { try XCTUnwrap(storage.recordings.first { $0.id == id }) }
+
+        XCTAssertNil(try recording().specificTitle)
+        XCTAssertEqual(try recording().displayTitle, "Meeting")
+        XCTAssertTrue(RecordingRowView.title(for: try recording()).hasPrefix("Meeting — "),
+                      "Without a name the library row falls back to the type and time")
+
+        XCTAssertTrue(storage.linkCalendarMeeting(id: id, meeting: event))
+        XCTAssertEqual(try recording().displayTitle, "Design review")
+        XCTAssertEqual(RecordingRowView.title(for: try recording()), "Design review",
+                       "The library row is named after the meeting, not the time it was recorded")
+
+        XCTAssertTrue(storage.updateDetails(id: id, title: "Pilot kickoff", description: ""))
+        XCTAssertEqual(try recording().displayTitle, "Pilot kickoff", "The person's own title wins over the calendar")
+        XCTAssertEqual(RecordingRowView.title(for: try recording()), "Pilot kickoff")
+
+        XCTAssertTrue(storage.updateDetails(id: id, title: "", description: ""))
+        XCTAssertTrue(storage.linkCalendarMeeting(id: id, meeting: nil))
+        XCTAssertEqual(try recording().displayTitle, "Meeting", "Unlinking takes the meeting's name with it")
+        XCTAssertTrue(RecordingRowView.title(for: try recording()).hasPrefix("Meeting — "))
+
+        var untitled = event
+        untitled.title = "  "
+        XCTAssertTrue(storage.linkCalendarMeeting(id: id, meeting: untitled))
+        XCTAssertNil(try recording().specificTitle, "A blank event title does not name the recording")
+        XCTAssertEqual(try recording().displayTitle, "Meeting")
+    }
+
     func testPastMeetingRecordingsLinkToCalendarEventsWithoutOverridingThePerson() async throws {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         func record(_ id: UUID, from: TimeInterval, to: TimeInterval) throws {

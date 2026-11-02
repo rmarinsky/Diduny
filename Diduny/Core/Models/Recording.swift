@@ -211,11 +211,15 @@ struct Recording: Identifiable, Codable, Equatable {
         isYouTubeVideo ? .red : type.brandColor
     }
 
+    /// What names this particular recording: the person's own title, else the linked calendar
+    /// meeting's title, else the remote media title or imported file name. `nil` when nothing
+    /// but the recording type is known.
+    var specificTitle: String? {
+        title?.nilIfBlank ?? calendarMeeting?.title.nilIfBlank ?? remoteSource?.title ?? sourceFileName
+    }
+
     var displayTitle: String {
-        if let title = title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
-            return title
-        }
-        return remoteSource?.title ?? sourceFileName ?? libraryDisplayName
+        specificTitle ?? libraryDisplayName
     }
 
     /// True when a durable audio file name has been attached (playable once on disk).
