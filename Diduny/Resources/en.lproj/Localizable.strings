@@ -952,7 +952,8 @@
 "USB" = "USB";
 "Ukrainian" = "Ukrainian";
 "Unavailable -> System Default" = "Unavailable -> System Default";
-"Unavailable while a modifier-key shortcut uses Option or Command." = "Unavailable while a modifier-key shortcut uses Option or Command.";
+"Unavailable while modifier-key shortcuts use both Option keys or both Command keys." = "Unavailable while modifier-key shortcuts use both Option keys or both Command keys.";
+"Select text, then tap Option and Command twice, using the side your modifier-key shortcut doesn't use." = "Select text, then tap Option and Command twice, using the side your modifier-key shortcut doesn't use.";
 "Undo (⌘Z)" = "Undo (⌘Z)";
 "Undo trim change" = "Undo trim change";
 "Unknown" = "Unknown";

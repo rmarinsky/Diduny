@@ -952,7 +952,8 @@
 "USB" = "USB";
 "Ukrainian" = "Українська";
 "Unavailable -> System Default" = "Недоступно → як у системі";
-"Unavailable while a modifier-key shortcut uses Option or Command." = "Недоступно, поки скорочення з клавішею-модифікатором використовує Option або Command.";
+"Unavailable while modifier-key shortcuts use both Option keys or both Command keys." = "Недоступно, поки скорочення з клавішами-модифікаторами використовують обидві клавіші Option або обидві Command.";
+"Select text, then tap Option and Command twice, using the side your modifier-key shortcut doesn't use." = "Виділіть текст і двічі натисніть Option і Command з того боку, який не зайнятий скороченням із клавішею-модифікатором.";
 "Undo (⌘Z)" = "Скасувати (⌘Z)";
 "Undo trim change" = "Скасувати зміну обрізання";
 "Unknown" = "Невідомо";

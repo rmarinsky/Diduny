@@ -67,6 +67,18 @@ struct InplaceTranslationGestureTests {
         #expect(tap(&g, at: 0.45) == true)
     }
 
+    @Test func keyTakenByPushToTalkCancelsTheTapWhileTheOtherSideStillWorks() {
+        let left = NSEvent.ModifierFlags(rawValue: NSEvent.ModifierFlags([.option, .command]).rawValue
+            | PushToTalkService.DeviceModifierMask.leftOption | PushToTalkService.DeviceModifierMask.leftCommand)
+        let right = NSEvent.ModifierFlags(rawValue: NSEvent.ModifierFlags([.option, .command]).rawValue
+            | PushToTalkService.DeviceModifierMask.rightOption | PushToTalkService.DeviceModifierMask.leftCommand)
+        #expect(InplaceTranslationHotkeyMonitor.modifiers(from: left, reserved: [.rightOption]) == .optionCommand,
+                "Left Option + Command is free while Right Option records dictation")
+        #expect(InplaceTranslationHotkeyMonitor.modifiers(from: right, reserved: [.rightOption]).contains(.other),
+                "Right Option belongs to dictation, so it does not count as a tap")
+        #expect(InplaceTranslationHotkeyMonitor.modifiers(from: right, reserved: []) == .optionCommand)
+    }
+
     @Test func modifierMappingIgnoresCapsLockAndFlagsOtherModifiers() {
         let m = InplaceTranslationHotkeyMonitor.modifiers(from: [.option, .command, .capsLock])
         #expect(m == .optionCommand)
@@ -148,6 +160,18 @@ struct InplaceTranslationPolicyTests {
     @Test func fastOperationReturnsResult() async throws {
         let v = try await InplaceTranslationService.withTimeout(seconds: 5) { 42 }
         #expect(v == 42)
+    }
+
+    @Test func onlyAPushToTalkOnBothSidesBlocksTheGesture() {
+        let reserved = PushToTalkKey.reservedForInplaceTranslation([
+            (.rightOption, true), (.rightShift, true), (.leftCommand, false)
+        ])
+        #expect(reserved == [.rightOption], "Only active Option/Command push-to-talk keys are taken")
+        #expect(!PushToTalkKey.blocksInplaceTranslation([]))
+        #expect(!PushToTalkKey.blocksInplaceTranslation([.rightOption]), "Left Option is still free")
+        #expect(!PushToTalkKey.blocksInplaceTranslation([.rightOption, .leftCommand]))
+        #expect(PushToTalkKey.blocksInplaceTranslation([.leftOption, .rightOption]))
+        #expect(PushToTalkKey.blocksInplaceTranslation([.leftCommand, .rightCommand]))
     }
 
     @Test func optionAndCommandKeysConflict() {
