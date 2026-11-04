@@ -103,9 +103,11 @@ struct RealtimeFinalizeProfile: Equatable {
         quietWindowSeconds: 0.35
     )
 
+    /// Callers flush the mic tail before finalizing (AudioRecorderService.flushRealtimeAudio),
+    /// so no fixed delay is needed between the finalize and end-of-stream frames.
     static let dictationFast = RealtimeFinalizeProfile(
         name: "dictation_fast",
-        controlMessageDelayMs: 120,
+        controlMessageDelayMs: 0,
         timeoutSeconds: 1.2,
         quietWindowSeconds: 0.18
     )
@@ -150,6 +152,8 @@ struct RealtimeSessionStopResult: Equatable {
     let finalizeResult: RealtimeFinalizeResult
     /// Spoken words of a translation session, used when the output is switched.
     var originalText = ""
+    /// Cleaned text the proxy pushed with `finished`; replaces the cleanup HTTP call.
+    var serverCleanedText: String?
 
     var didReceiveFinalization: Bool {
         finalizeResult.didReceiveFinishedSignal

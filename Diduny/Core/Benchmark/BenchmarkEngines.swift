@@ -65,12 +65,15 @@ struct DidunyBenchmarkEngine: BenchmarkEngine {
         try await service.connect(languageHints: language == BenchmarkRun.autoLanguage ? [] : [language], enableSpeakerDiarization: false)
         let chunk = 1600 // 100ms at 16kHz
         var index = 0
+        let clock = ContinuousClock()
+        let start = clock.now
         while index < samples.count {
             try Task.checkCancellation()
+            // Real-time pacing against the clock, so the tail is still in flight at Stop like live dictation.
+            try await clock.sleep(until: start + .milliseconds(100 * (index / chunk)))
             let end = min(index + chunk, samples.count)
             service.sendAudioData(Self.pcm16(samples[index ..< end]))
             index = end
-            try await Task.sleep(for: .milliseconds(100))
         }
         let (_, seconds) = await timedAsync { await service.finalize(profile: .dictationFast) }
         let text = collector.text

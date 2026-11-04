@@ -282,6 +282,13 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
         Log.audio.info("startRecording: END, isRecording=\(updatedRecordingState)")
     }
 
+    /// Stop path for realtime sessions: wait for the tap buffer that was filling
+    /// when Stop was pressed (at most `timeout`), then for its conversion, so the
+    /// last spoken audio is on the socket before the end-of-stream frame.
+    func flushRealtimeAudio(timeout: Duration = .milliseconds(100)) async {
+        await realtimeAudioStreamer?.flush(timeout: timeout)
+    }
+
     func stopRecording() async throws -> Data {
         let recordingInProgress = isRecording
         Log.audio.info("stopRecording: BEGIN, isRecording=\(recordingInProgress)")
@@ -604,14 +611,36 @@ private final class RealtimeAudioStreamer {
         self.onAudioData = onAudioData
     }
 
+    private let lock = NSLock()
+    private var nextBufferWaiters: [() -> Void] = []
+
     func process(buffer: AVAudioPCMBuffer) {
         guard let copiedBuffer = copyBuffer(buffer) else { return }
 
         queue.async { [weak self] in
             guard let self else { return }
-            guard let data = convertToRealtimePCM(buffer: copiedBuffer) else { return }
-            onAudioData(data)
+            if let data = convertToRealtimePCM(buffer: copiedBuffer) { onAudioData(data) }
+            resumeWaiters()
         }
+    }
+
+    /// Returns once the next tap buffer is converted and delivered, or after `timeout`.
+    func flush(timeout: Duration) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let once = OSAllocatedUnfairLock(initialState: false)
+            let resume = {
+                let first = once.withLock { done in defer { done = true }; return !done }
+                if first { continuation.resume() }
+            }
+            lock.lock(); nextBufferWaiters.append(resume); lock.unlock()
+            let ms = Int(timeout.components.seconds * 1000 + timeout.components.attoseconds / 1_000_000_000_000_000)
+            queue.asyncAfter(deadline: .now() + .milliseconds(ms), execute: resume)
+        }
+    }
+
+    private func resumeWaiters() {
+        lock.lock(); let waiters = nextBufferWaiters; nextBufferWaiters.removeAll(); lock.unlock()
+        waiters.forEach { $0() }
     }
 
     private func convertToRealtimePCM(buffer: AVAudioPCMBuffer) -> Data? {

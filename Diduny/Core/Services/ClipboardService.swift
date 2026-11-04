@@ -65,7 +65,7 @@ enum ClipboardError: LocalizedError {
 
 final class ClipboardService: ClipboardServiceProtocol {
     static let shared = ClipboardService()
-    static let pasteReadinessDelayNanoseconds: UInt64 = 50_000_000
+    static let pasteReadinessDelayNanoseconds: UInt64 = 15_000_000
     static let shortcutKeyHoldMicroseconds: useconds_t = 12000
 
     private let pasteboard = NSPasteboard.general
