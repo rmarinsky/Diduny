@@ -76,6 +76,10 @@ final class MainWindowController {
         appDelegate?.updaterManager.checkForUpdates()
     }
 
+    var canCheckForUpdates: Bool {
+        appDelegate?.updaterManager.canCheckForUpdates ?? false
+    }
+
     private func presentWindow() {
         if window == nil {
             makeWindow()

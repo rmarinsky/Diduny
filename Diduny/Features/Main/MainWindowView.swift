@@ -1,9 +1,8 @@
 import SwiftUI
 
 private enum MainWindowLayout {
-    static let sidebarWidth: CGFloat = 238
+    static let sidebarWidth: CGFloat = DS.Layout.sidebarWidth
     static let sidebarTopInset: CGFloat = 34
-    static let detailTopInset: CGFloat = 14
 }
 
 struct MainWindowView: View {
@@ -34,7 +33,6 @@ struct MainWindowView: View {
             detailView
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("section.\(selectedSection.rawValue)")
-                .padding(.top, MainWindowLayout.detailTopInset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(Color(.windowBackgroundColor))
         }
@@ -95,6 +93,8 @@ struct MainWindowView: View {
             ShortcutsSettingsView()
         case .account:
             AccountSettingsView()
+        case .about:
+            AboutSettingsView()
         }
     }
 }
