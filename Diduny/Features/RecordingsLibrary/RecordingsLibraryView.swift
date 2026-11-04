@@ -480,6 +480,15 @@ struct RecordingsLibraryView: View {
         guard next != inspectorSelection else { return }
         guard trimNavigationGuard?() ?? true else { return }
         trimNavigationGuard = nil
+        if inspectorSelection == nil, next != nil {
+            // Grow the window rightwards first (setFrame animates synchronously), then show the
+            // inspector in the new space without its own right-to-left slide.
+            MainWindowController.shared.setRecordingInspectorExpanded(true)
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { inspectorSelection = next }
+            return
+        }
         inspectorSelection = next
     }
 
