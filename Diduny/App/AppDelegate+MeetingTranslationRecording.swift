@@ -512,7 +512,7 @@ extension AppDelegate {
 
             let text: String
             if !realtimeText.isEmpty {
-                text = realtimeText
+                text = TranscriptCleanupService.replaceSemicolonsWithCommas(realtimeText)
                 Log.app.info("Using real-time meeting translation (\(realtimeText.count) chars)")
             } else {
                 Log.app.info("No real-time meeting translation, falling back to async API...")

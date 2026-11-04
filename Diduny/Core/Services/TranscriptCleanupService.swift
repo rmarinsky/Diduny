@@ -108,4 +108,11 @@ final class TranscriptCleanupService {
     private func localLexiconPostprocess(_ text: String) -> String {
         ProtectedLexiconService.shared.postprocessTranscript(text)
     }
+
+    /// Translation models join clauses with "; " where a comma reads better.
+    /// Mirrors stt-core's `replaceSemicolonsWithCommas` for realtime text,
+    /// which never passes through the backend's translation mapper.
+    static func replaceSemicolonsWithCommas(_ text: String) -> String {
+        text.replacingOccurrences(of: #"[ \t]*;"#, with: ",", options: .regularExpression)
+    }
 }

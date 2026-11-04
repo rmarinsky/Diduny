@@ -514,7 +514,10 @@ extension AppDelegate {
                     fillerWords: SettingsStorage.shared.fillerWords
                 )
             }
-            let text = ClipboardService.preparedMessageText(cleanedRawText)
+            let outputText = producedOutput.targetLanguage == nil
+                ? cleanedRawText
+                : TranscriptCleanupService.replaceSemicolonsWithCommas(cleanedRawText)
+            let text = ClipboardService.preparedMessageText(outputText)
             Log.app.info("stopTranslationRecording: Translation received (\(text.count) chars)")
 
             let processingState = appState.translationRecordingState
