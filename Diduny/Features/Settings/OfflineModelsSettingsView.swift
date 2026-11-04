@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct OfflineModelsSettingsView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedModel: String = SettingsStorage.shared.selectedWhisperModel
     @State private var modelSort: ModelSort = .speed
     @State private var whisperLanguage: String = SettingsStorage.shared.whisperLanguage
@@ -104,6 +105,7 @@ struct OfflineModelsSettingsView: View {
                 Spacer()
 
                 modelActions(model)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
 
             HStack(spacing: 16) {
@@ -140,9 +142,14 @@ struct OfflineModelsSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.mini)
                 }
+                .transition(.opacity)
             }
         }
         .padding(.vertical, 4)
+        .animation(
+            reduceMotion ? nil : .easeOut(duration: 0.25),
+            value: modelManager.isDownloading[model.name] == true
+        )
     }
 
     @ViewBuilder

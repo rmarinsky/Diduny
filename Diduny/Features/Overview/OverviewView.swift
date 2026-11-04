@@ -6,6 +6,8 @@ struct OverviewView: View {
     @State private var playbackService = AudioPlaybackService.shared
     @State private var timePeriod: TimePeriod = .month
     @State private var snapshot = Snapshot()
+    @State private var barHeights: [Double] = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedRecording: Recording? = nil
     @State private var typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
 
@@ -159,6 +161,27 @@ struct OverviewView: View {
 
     private var chartSeries: [DayStat] { snapshot.series }
 
+    /// Grows bars from zero, left to right; the whole wave stays within ~0.3s of stagger.
+    private func revealBars() {
+        let series = chartSeries
+        barHeights = Array(repeating: 0, count: series.count)
+        guard !reduceMotion else { return syncBars() }
+        let step = min(0.03, 0.3 / Double(max(series.count, 1)))
+        for (index, day) in series.enumerated() {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.85).delay(Double(index) * step)) {
+                barHeights[index] = day.minutes
+            }
+        }
+    }
+
+    private func syncBars() {
+        barHeights = chartSeries.map(\.minutes)
+    }
+
+    private func barHeight(_ index: Int, _ day: DayStat) -> Double {
+        barHeights.indices.contains(index) ? barHeights[index] : day.minutes
+    }
+
     private func computeChartSeries() -> [DayStat] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
@@ -273,10 +296,10 @@ struct OverviewView: View {
         .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
             typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
         }
-        .onAppear { rebuildSnapshot() }
-        .onChange(of: timePeriod) { rebuildSnapshot() }
-        .onChange(of: storage.recordings) { rebuildSnapshot() }
-        .onChange(of: typingSpeedWordsPerMinute) { rebuildSnapshot() }
+        .onAppear { rebuildSnapshot(); revealBars() }
+        .onChange(of: timePeriod) { rebuildSnapshot(); revealBars() }
+        .onChange(of: storage.recordings) { rebuildSnapshot(); syncBars() }
+        .onChange(of: typingSpeedWordsPerMinute) { rebuildSnapshot(); syncBars() }
     }
 
     // MARK: - Hero Card
@@ -402,7 +425,7 @@ struct OverviewView: View {
                         }
                 }
 
-                ForEach(chartSeries) { day in
+                ForEach(Array(chartSeries.enumerated()), id: \.element.id) { index, day in
                     if day.isFuture || day.minutes == 0 {
                         BarMark(
                             x: .value("Day", day.label),
@@ -415,7 +438,7 @@ struct OverviewView: View {
                         let opacity = 0.25 + 0.6 * (day.minutes / max(maxMinutes, 1))
                         BarMark(
                             x: .value("Day", day.label),
-                            y: .value("Min", day.minutes)
+                            y: .value("Min", barHeight(index, day))
                         )
                         .foregroundStyle(
                             day.isToday
@@ -424,7 +447,7 @@ struct OverviewView: View {
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                         .annotation(position: .top) {
-                            if day.isToday, day.minutes > 0 {
+                            if day.isToday, day.minutes > 0, barHeight(index, day) >= day.minutes {
                                 Text(String(format: "%dm", Int(day.minutes)))
                                     .font(.system(size: 10, weight: .semibold))
                                     .foregroundColor(Color("BrandAccentDeep"))

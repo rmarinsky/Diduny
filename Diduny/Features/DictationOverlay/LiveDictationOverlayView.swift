@@ -10,6 +10,7 @@ struct LiveDictationOverlayView: View {
     let onDrag: () -> Void
     let onDragEnd: () -> Void
     @State private var autoPaste = SettingsStorage.shared.autoPaste
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private static let transcriptBottomID = "transcript-bottom"
 
     var body: some View {
@@ -336,6 +337,8 @@ struct LiveDictationOverlayView: View {
                     store.copiedAt == nil ? "Copy" : "Copied",
                     systemImage: store.copiedAt == nil ? "doc.on.doc" : "checkmark"
                 )
+                .contentTransition(.symbolEffect(.replace))
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: store.copiedAt)
                 .font(.system(size: 12.5, weight: .semibold))
                 .frame(maxWidth: .infinity, minHeight: EdgeCommandPanelPlacement.liveControlHitTargetHeight)
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))

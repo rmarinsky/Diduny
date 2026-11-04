@@ -10,6 +10,7 @@ struct AudioDictationSettingsView: View {
     @State private var testRecordingURL: URL?
     @State private var testAudioPlayer: AVAudioPlayer?
     @State private var testStatusMessage = String(localized: "")
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var transcriptionProvider: TranscriptionProvider = SettingsStorage.shared.transcriptionProvider
     @State private var translationProvider: TranscriptionProvider = SettingsStorage.shared.translationProvider
@@ -184,8 +185,10 @@ struct AudioDictationSettingsView: View {
                     Text(testStatusMessage)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .transition(.opacity)
                 }
             }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: testStatusMessage.isEmpty)
         } header: {
             Text("Test Recording")
         }

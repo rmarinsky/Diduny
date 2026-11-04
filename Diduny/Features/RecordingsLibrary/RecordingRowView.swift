@@ -247,11 +247,11 @@ struct RecordingRowView: View {
                     ) {
                         ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
                         copyConfirmation?.cancel()
-                        didCopy = true
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) { didCopy = true }
                         copyConfirmation = Task { @MainActor in
                             try? await Task.sleep(for: .seconds(1.2))
                             guard !Task.isCancelled else { return }
-                            didCopy = false
+                            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) { didCopy = false }
                         }
                     }
                 case .transcribe:
@@ -401,6 +401,7 @@ private struct RecordingActionButton: View {
                 Image(systemName: systemName)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(tint)
+                    .contentTransition(.symbolEffect(.replace))
                     .frame(width: 28, height: 28)
                     .background(Color(.quaternaryLabelColor).opacity(0.10), in: Circle())
             }

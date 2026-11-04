@@ -33,6 +33,7 @@ struct MeetingAudioSettingsView: View {
     @State private var testCaptureURL: URL?
     @State private var testAudioPlayer: AVAudioPlayer?
     @State private var testStatusMessage = String(localized: "")
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var captureService: SystemAudioCaptureService?
 
     var body: some View {
@@ -223,8 +224,10 @@ struct MeetingAudioSettingsView: View {
                             .font(.caption)
                             .foregroundColor(testStatusMessage.contains("Error") || testStatusMessage
                                 .contains("permission") ? .red : .secondary)
+                            .transition(.opacity)
                     }
                 }
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: testStatusMessage.isEmpty)
             } header: {
                 Text("Test System Audio Capture")
             } footer: {
