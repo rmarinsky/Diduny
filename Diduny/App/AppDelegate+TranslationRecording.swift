@@ -888,6 +888,8 @@ extension AppDelegate {
             : nil
         var finalizeResult: RealtimeFinalizeResult = .skipped
         if finalize {
+            // Push the mic buffer that was filling at Stop so the last words reach the socket.
+            await audioRecorder.flushRealtimeAudio()
             finalizeResult = await rtService.finalize(profile: .dictationFast)
         }
         await rtService.disconnect()
