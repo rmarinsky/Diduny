@@ -33,17 +33,29 @@ struct ShortcutsSettingsView: View {
     var body: some View {
         PageScaffold(title: "Shortcuts") {
             VStack(alignment: .leading, spacing: DS.Space.xl) {
-                section("Action hotkeys") { actionHotkeysCard }
-                inplaceTranslationCard
+                section("Action hotkeys", footer: "1x, 2x, 3x is how many times you press the shortcut before it triggers.") {
+                    actionHotkeysCard
+                }
                 section("Recording keys") { recordingKeysCard }
+                section("Translate in place") { inplaceTranslationCard }
             }
         }
     }
 
-    private func section(_ title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
+    private func section(
+        _ title: LocalizedStringKey,
+        footer: LocalizedStringKey? = nil,
+        @ViewBuilder content: () -> some View
+    ) -> some View {
         VStack(alignment: .leading, spacing: DS.Space.sm) {
             Text(title).font(DS.Font.headline)
             content()
+            if let footer {
+                Text(footer)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 2)
+            }
         }
     }
 
@@ -68,7 +80,7 @@ struct ShortcutsSettingsView: View {
             divider
 
             actionHotkeyRow(
-                title: "Translate Selected Text",
+                title: "Translate selected text",
                 shortcut: .translateSelectedText,
                 pressCount: $translateSelectedTextHotkeyPressCount,
                 store: { SettingsStorage.shared.translateSelectedTextHotkeyPressCount = $0 }
@@ -84,7 +96,7 @@ struct ShortcutsSettingsView: View {
             divider
 
             actionHotkeyRow(
-                title: "Meeting Translation",
+                title: "Meeting translation",
                 shortcut: .toggleMeetingTranslation,
                 pressCount: $meetingTranslationHotkeyPressCount,
                 store: { SettingsStorage.shared.meetingTranslationHotkeyPressCount = $0 }
@@ -104,10 +116,6 @@ struct ShortcutsSettingsView: View {
             Spacer(minLength: DS.Space.md)
 
             shortcutRecorderField(for: shortcut)
-
-            Text("Trigger after")
-                .font(DS.Font.caption)
-                .foregroundStyle(.secondary)
 
             countSegmentedPicker(
                 selection: pressCount,
@@ -233,37 +241,8 @@ struct ShortcutsSettingsView: View {
 
     // MARK: - Modifier Key Recording
 
-    /// One table for every key that starts or cancels a recording: a single header, one line per row.
-    private enum RecordingKeysColumn {
-        static let title: CGFloat = 104
-        static let key: CGFloat = 150
-        static let tap: CGFloat = 160
-    }
-
-    private var recordingKeysHeader: some View {
-        HStack(spacing: DS.Space.lg) {
-            Color.clear.frame(width: RecordingKeysColumn.title, height: 1)
-            columnCaption("Modifier key").frame(width: RecordingKeysColumn.key, alignment: .leading)
-            columnCaption("Tap trigger").frame(width: RecordingKeysColumn.tap, alignment: .leading)
-            columnCaption("Hold to record").frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, DS.Space.lg)
-        .padding(.top, DS.Space.md)
-        .padding(.bottom, DS.Space.sm)
-    }
-
-    private func columnCaption(_ text: LocalizedStringKey) -> some View {
-        Text(text)
-            .font(.system(size: 10, weight: .semibold))
-            .textCase(.uppercase)
-            .foregroundStyle(.secondary)
-    }
-
     private var recordingKeysCard: some View {
         settingsCard {
-            recordingKeysHeader
-            divider
-
             modifierKeyRow(
                 title: "Dictation",
                 key: $pushToTalkKey,
@@ -344,19 +323,36 @@ struct ShortcutsSettingsView: View {
         let isAvailable = key.wrappedValue != .none
         let isHoldActive = isAvailable && holdEnabled.wrappedValue
 
-        return HStack(spacing: DS.Space.lg) {
-            rowTitle(title)
-                .frame(width: RecordingKeysColumn.title, alignment: .leading)
+        let keyName = key.wrappedValue.displayName
+        let subtitle: String
+        if !isAvailable {
+            subtitle = String(localized: "No modifier key")
+        } else if isHoldActive {
+            subtitle = String(localized: "Hold \(keyName) \(formattedHoldDelay(holdStartDelay.wrappedValue)) to record")
+        } else if toggleEnabled.wrappedValue {
+            subtitle = String(localized: "Tap \(keyName) \(tapCount.wrappedValue)x to start")
+        } else {
+            subtitle = String(localized: "Turn on tap or hold to use \(keyName)")
+        }
+
+        return HStack(spacing: DS.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                rowTitle(title)
+                Text(subtitle)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: DS.Space.md)
 
             modifierKeyMenu(selection: key)
-                .frame(width: RecordingKeysColumn.key, alignment: .leading)
 
             tapTriggerPicker(
                 toggleEnabled: toggleEnabled,
                 tapCount: tapCount,
                 isDisabled: !isAvailable
             )
-            .frame(width: RecordingKeysColumn.tap, alignment: .leading)
 
             HStack(spacing: DS.Space.sm) {
                 Toggle(isOn: holdEnabled) { EmptyView() }
@@ -367,13 +363,13 @@ struct ShortcutsSettingsView: View {
                 Text(isHoldActive ? formattedHoldDelay(holdStartDelay.wrappedValue) : "—")
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(isHoldActive ? DS.Palette.accent : .secondary)
-                    .frame(width: 40, alignment: .trailing)
+                    .frame(width: 36, alignment: .trailing)
             }
+            .frame(width: 150)
             .disabled(!isAvailable)
             .opacity(isAvailable ? 1 : 0.45)
-            .frame(maxWidth: .infinity)
         }
-        .frame(minHeight: 30)
+        .frame(minHeight: DS.Layout.settingRowMinHeight)
         .padding(.horizontal, DS.Space.lg)
         .padding(.vertical, DS.Space.md)
         .onChange(of: key.wrappedValue) { _, newValue in
@@ -496,7 +492,7 @@ struct ShortcutsSettingsView: View {
                     }
             )
         }
-        .frame(width: 198, height: 18)
+        .frame(minWidth: 60, maxWidth: .infinity, minHeight: 18, maxHeight: 18)
     }
 
     private func holdDelayProgress(_ value: TimeInterval) -> CGFloat {
@@ -513,29 +509,35 @@ struct ShortcutsSettingsView: View {
     // MARK: - Cancel Recording
 
     private var cancelRecordingRow: some View {
-        HStack(spacing: DS.Space.lg) {
-            rowTitle("Cancel")
-                .frame(width: RecordingKeysColumn.title, alignment: .leading)
+        HStack(spacing: DS.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                rowTitle("Cancel recording")
+                Text(escapeCancelEnabled
+                    ? String(localized: "Press Esc \(escapeCancelPressCount)x while recording")
+                    : String(localized: "Esc does not cancel recordings"))
+                    .font(DS.Font.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: DS.Space.md)
 
             booleanSegmentedPicker(
                 selection: $escapeCancelEnabled,
                 falseLabel: "None",
                 trueLabel: "Esc",
-                width: 136
+                width: 104
             )
-            .frame(width: RecordingKeysColumn.key, alignment: .leading)
 
             countSegmentedPicker(
                 selection: $escapeCancelPressCount,
                 options: escapePressCountOptions,
-                width: 104
+                width: 84
             )
             .disabled(!escapeCancelEnabled)
             .opacity(escapeCancelEnabled ? 1.0 : 0.45)
-            .frame(width: RecordingKeysColumn.tap, alignment: .leading)
 
             saveAudioControl
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, DS.Space.lg)
         .padding(.vertical, DS.Space.md)
@@ -828,7 +830,7 @@ private struct ShortcutRecorderOverlay: NSViewRepresentable {
             } else {
                 statusLabel.stringValue = ""
                 actionLabel.stringValue = NSLocalizedString("edit", comment: "Starts editing a shortcut")
-                actionLabel.textColor = accent
+                actionLabel.textColor = .secondaryLabelColor
             }
 
             layer?.cornerRadius = 8
