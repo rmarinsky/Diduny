@@ -117,7 +117,7 @@ final class TranscriptCleanupService {
         text.replacingOccurrences(of: #"[ \t]*;"#, with: ",", options: .regularExpression)
     }
 
-    private func localLexiconPostprocess(_ text: String) -> String {
+    func localLexiconPostprocess(_ text: String) -> String {
         ProtectedLexiconService.shared.postprocessTranscript(text)
     }
 }

@@ -975,6 +975,10 @@ extension AppDelegate {
         Task {
             do {
                 let languageHints = SettingsStorage.shared.speechLanguageHints
+                // Ask the proxy to push cleaned text with `finished`: saves the cleanup round trip.
+                if !self.dictationUsesOwnEngine, let cloud = rtService as? CloudRealtimeService {
+                    cloud.nextSessionCleanupFillerWords = SettingsStorage.shared.fillerWords
+                }
 
                 try await rtService.connect(
                     languageHints: languageHints,
@@ -1053,8 +1057,14 @@ extension AppDelegate {
             : nil
         var finalizeResult: RealtimeFinalizeResult = .skipped
         if finalize {
+            // The fixed control-message delay is gone; instead wait for the mic
+            // buffer that was filling at Stop so the last words reach the socket.
+            await audioRecorder.flushRealtimeAudio()
             finalizeResult = await rtService.finalize(profile: .dictationFast)
         }
+        let serverCleanedText = finalize && finalizeResult.didReceiveFinishedSignal
+            ? (rtService as? CloudRealtimeService)?.serverCleanedText
+            : nil
         await rtService.disconnect()
 
         let text = await (accumulator?.bestText(includeProvisional: true) ?? "")
@@ -1063,7 +1073,10 @@ extension AppDelegate {
         let textChangedAfterFinalize = text != preFinalizeTrimmed
         let optimisticCleanedText: String?
 
-        if let optimisticCleanupTask, !textChangedAfterFinalize {
+        if serverCleanedText != nil {
+            optimisticCleanupTask?.cancel()
+            optimisticCleanedText = nil
+        } else if let optimisticCleanupTask, !textChangedAfterFinalize {
             optimisticCleanedText = await optimisticCleanupTask.value
         } else {
             optimisticCleanupTask?.cancel()
@@ -1071,15 +1084,17 @@ extension AppDelegate {
         }
 
         Log.transcription.info(
-            "Dictation RT stop: finalizeProfile=\(finalizeResult.profileName), finished=\(finalizeResult.didReceiveFinishedSignal), timedOut=\(finalizeResult.timedOut), durationMs=\(finalizeResult.durationMs), tokensAfterFinalize=\(finalizeResult.tokensAfterFinalize), charsAfterFinalize=\(finalizeResult.charactersAfterFinalize), textChangedAfterFinalize=\(textChangedAfterFinalize), charsDelta=\(text.count - preFinalizeTrimmed.count), optimisticCleanupReused=\(optimisticCleanedText != nil)"
+            "Dictation RT stop: finalizeProfile=\(finalizeResult.profileName), finished=\(finalizeResult.didReceiveFinishedSignal), timedOut=\(finalizeResult.timedOut), durationMs=\(finalizeResult.durationMs), tokensAfterFinalize=\(finalizeResult.tokensAfterFinalize), charsAfterFinalize=\(finalizeResult.charactersAfterFinalize), textChangedAfterFinalize=\(textChangedAfterFinalize), charsDelta=\(text.count - preFinalizeTrimmed.count), optimisticCleanupReused=\(optimisticCleanedText != nil), serverCleanedOnFinish=\(serverCleanedText != nil)"
         )
 
-        return RealtimeSessionStopResult(
+        var result = RealtimeSessionStopResult(
             text: text,
             preFinalizeText: preFinalizeTrimmed,
             optimisticCleanedText: optimisticCleanedText,
             finalizeResult: finalizeResult
         )
+        result.serverCleanedText = serverCleanedText
+        return result
     }
 
     func startOptimisticRealtimeCleanup(
@@ -1108,6 +1123,11 @@ extension AppDelegate {
         timeoutInterval: TimeInterval = 1.0,
         serverCleanup: Bool = true
     ) async -> String {
+        if serverCleanup, let serverCleaned = realtimeResult.serverCleanedText,
+           !serverCleaned.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Log.app.info("[\(logPrefix)] Using cleaned text pushed with finish")
+            return TranscriptCleanupService.shared.localLexiconPostprocess(serverCleaned)
+        }
         if let optimisticCleanedText = realtimeResult.optimisticCleanedText,
            !realtimeResult.textChangedAfterFinalize
         {
