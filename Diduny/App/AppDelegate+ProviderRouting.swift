@@ -43,15 +43,29 @@ extension AppDelegate {
         return engine?.availability() == .ready ? engine : nil
     }
 
-    /// Dictation runs on the user's own engine (ElevenLabs key or an on-device engine): no Diduny server cleanup.
-    var dictationUsesOwnEngine: Bool {
-        elevenLabsDictationPlan != nil || onDeviceEngine(for: .dictation) != nil
+    /// Parakeet / Apple id when the user picked one for the job, ready or not.
+    func onDeviceSelection(for job: STTJob) -> String? {
+        let id = SettingsStorage.shared.providerDefaults.selection(for: job).providerID
+        return STTProviderID.onDeviceEngines.contains(id) ? id : nil
     }
 
-    /// Transcribes a capture with the job's on-device engine when one is selected, else with ElevenLabs batch.
+    /// Dictation runs on the user's own engine (ElevenLabs key or an on-device engine): no Diduny server cleanup.
+    /// Uses the selection, not readiness, so an on-device choice that stops being ready fails instead of
+    /// silently sending audio to a cloud provider.
+    var dictationUsesOwnEngine: Bool {
+        elevenLabsDictationPlan != nil || onDeviceSelection(for: .dictation) != nil
+    }
+
+    /// Transcribes a capture with the engine the user picked for the job. Never falls back to another provider.
     func transcribeWithOwnEngine(job: STTJob, audioData: Data) async throws -> String {
-        guard let engine = onDeviceEngine(for: job) else {
+        guard onDeviceSelection(for: job) != nil else {
+            guard SettingsStorage.shared.providerDefaults.selection(for: job).providerID == STTProviderID.elevenLabs else {
+                throw TranscriptionError.apiError(String(localized: "The selected engine isn't available. Check Settings › Providers."))
+            }
             return try await transcribeWithElevenLabsBatch(audioData: audioData)
+        }
+        guard let engine = onDeviceEngine(for: job) else {
+            throw TranscriptionError.apiError(String(localized: "The selected on-device engine isn't ready on this Mac. Your recording is saved."))
         }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("diduny-local-\(UUID().uuidString).wav")
         try audioData.write(to: url)
@@ -105,7 +119,7 @@ extension AppDelegate {
 
     /// Whether dictation translation runs on the user's own engine (then the Diduny text translation step).
     var elevenLabsTranslationDecision: ByokTranslationStep.StartDecision {
-        if onDeviceEngine(for: .dictationTranslation) != nil {
+        if onDeviceSelection(for: .dictationTranslation) != nil {
             let availability = EngineOptions.translationAvailability()
             return availability.available
                 ? .run(ExecutionPlan(mode: .afterStop, translation: .didunyStep))

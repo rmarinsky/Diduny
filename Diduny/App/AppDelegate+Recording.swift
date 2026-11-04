@@ -835,7 +835,7 @@ extension AppDelegate {
         }
 
         dictationRealtimeService = nil
-        if onDeviceEngine(for: .dictation) != nil {
+        if onDeviceSelection(for: .dictation) != nil {
             // On-device engine: no live stream; the capture is transcribed on Stop.
             audioRecorder.onRealtimeAudioData = speechGatedAudioDelivery(deliver: { _ in }, onNoSpeech: onNoSpeech)
             localVoiceStreamingService = nil
