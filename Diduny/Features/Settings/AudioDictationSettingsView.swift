@@ -173,26 +173,25 @@ struct AudioDictationSettingsView: View {
     }
 
     private var providerSection: some View {
-        Section("Providers") {
-            Picker("Transcription", selection: $transcriptionProvider) {
-                ForEach(TranscriptionProvider.allCases) { provider in
-                    Text(provider.displayName).tag(provider)
+        Section("Engine") {
+            EnginePickerRow(
+                label: "Transcription",
+                request: JobRequest(job: .dictation),
+                legacyIsLocal: { transcriptionProvider == .local },
+                setLegacyLocal: { isLocal in
+                    transcriptionProvider = isLocal ? .local : .cloud
+                    SettingsStorage.shared.transcriptionProvider = transcriptionProvider
                 }
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: transcriptionProvider) { _, value in
-                SettingsStorage.shared.transcriptionProvider = value
-            }
-
-            Picker("Translation", selection: $translationProvider) {
-                ForEach(TranscriptionProvider.allCases) { provider in
-                    Text(provider.displayName).tag(provider)
+            )
+            EnginePickerRow(
+                label: "Translation",
+                request: JobRequest(job: .dictationTranslation),
+                legacyIsLocal: { translationProvider == .local },
+                setLegacyLocal: { isLocal in
+                    translationProvider = isLocal ? .local : .cloud
+                    SettingsStorage.shared.translationProvider = translationProvider
                 }
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: translationProvider) { _, value in
-                SettingsStorage.shared.translationProvider = value
-            }
+            )
         }
     }
 

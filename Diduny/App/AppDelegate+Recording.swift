@@ -98,7 +98,10 @@ actor RealtimeVoiceAccumulator {
 extension AppDelegate {
     private var voiceTranscriptionProvider: TranscriptionProvider {
         OnboardingManager.shared.dictationProvider(
-            configuredProvider: SettingsStorage.shared.effectiveTranscriptionProvider,
+            configuredProvider: routedProvider(
+                for: .dictation,
+                legacy: SettingsStorage.shared.effectiveTranscriptionProvider
+            ),
             isAuthenticated: AuthService.shared.isLoggedIn
         )
     }
@@ -303,7 +306,7 @@ extension AppDelegate {
         case .cloud:
             Log.app.info("startRecording: Cloud provider selected")
         case .local:
-            guard WhisperModelManager.shared.selectedModel() != nil else {
+            guard elevenLabsDictationPlan != nil || WhisperModelManager.shared.selectedModel() != nil else {
                 Log.app.warning("startRecording: No Whisper model selected")
                 await MainActor.run {
                     appState
@@ -534,6 +537,9 @@ extension AppDelegate {
             } else if !realtimeResult.text.isEmpty {
                 rawText = realtimeResult.text
                 Log.app.info("stopRecording: Using realtime transcription (\(rawText.count) chars)")
+            } else if elevenLabsDictationPlan != nil {
+                rawText = try await transcribeWithElevenLabsBatch(audioData: audioData)
+                Log.app.info("stopRecording: ElevenLabs batch transcription (\(rawText.count) chars)")
             } else if voiceTranscriptionProvider == .local {
                 // Local Whisper — use original capture data, not the storage-compressed variant
                 let transcript = try await whisperTranscriptionService.transcribeDetailed(audioData: audioData)
@@ -548,12 +554,14 @@ extension AppDelegate {
                 await cleanRealtimeResultText(
                     rawText,
                     realtimeResult: realtimeResult,
-                    logPrefix: "Dictation"
+                    logPrefix: "Dictation",
+                    serverCleanup: elevenLabsDictationPlan == nil
                 )
             } else {
                 await TranscriptCleanupService.shared.clean(
                     rawText,
-                    fillerWords: SettingsStorage.shared.fillerWords
+                    fillerWords: SettingsStorage.shared.fillerWords,
+                    serverCleanup: elevenLabsDictationPlan == nil
                 )
             }
             let text = try requireNonemptyVoiceDictation(
@@ -815,7 +823,18 @@ extension AppDelegate {
             }
         }
 
-        if voiceTranscriptionProvider == .local {
+        dictationRealtimeService = nil
+        if let plan = elevenLabsDictationPlan {
+            guard plan.mode == .live, let key = ProviderKeyStore.shared.key(for: STTProviderID.elevenLabs) else {
+                // After-Stop model: no live stream; the batch request runs on Stop.
+                audioRecorder.onRealtimeAudioData = speechGatedAudioDelivery(deliver: { _ in }, onNoSpeech: onNoSpeech)
+                localVoiceStreamingService = nil
+                voiceRealtimeSessionEnabled = false
+                voiceRealtimeAccumulator = nil
+                return
+            }
+            dictationRealtimeService = ElevenLabsRealtimeService(apiKey: key)
+        } else if voiceTranscriptionProvider == .local {
             // The notch shows no live transcript — skip the local streaming
             // preview entirely so Whisper doesn't transcribe for a UI that
             // never renders it. Speech gating still runs for no-speech cancel.
@@ -866,7 +885,7 @@ extension AppDelegate {
         let accumulator = RealtimeVoiceAccumulator()
         voiceRealtimeAccumulator = accumulator
 
-        let rtService = realtimeTranscriptionService
+        let rtService = dictationRealtimeService ?? realtimeTranscriptionService
         audioRecorder.onRealtimeAudioData = speechGatedAudioDelivery(
             deliver: { [weak rtService] pcmData in
                 rtService?.sendAudioData(pcmData)
@@ -978,12 +997,13 @@ extension AppDelegate {
 
         let accumulator = voiceRealtimeAccumulator
         let wasEnabled = voiceRealtimeSessionEnabled
+        let rtService = dictationRealtimeService ?? realtimeTranscriptionService
 
         defer {
             audioRecorder.onRealtimeAudioData = nil
             voiceRealtimeSessionEnabled = false
             voiceRealtimeAccumulator = nil
-            realtimeTranscriptionService.clearCallbacks()
+            rtService.clearCallbacks()
         }
 
         guard wasEnabled else {
@@ -996,13 +1016,13 @@ extension AppDelegate {
             ""
         }
         let optimisticCleanupTask = finalize
-            ? startOptimisticRealtimeCleanup(for: preFinalizeText)
+            ? startOptimisticRealtimeCleanup(for: preFinalizeText, serverCleanup: elevenLabsDictationPlan == nil)
             : nil
         var finalizeResult: RealtimeFinalizeResult = .skipped
         if finalize {
-            finalizeResult = await realtimeTranscriptionService.finalize(profile: .dictationFast)
+            finalizeResult = await rtService.finalize(profile: .dictationFast)
         }
-        await realtimeTranscriptionService.disconnect()
+        await rtService.disconnect()
 
         let text = await (accumulator?.bestText(includeProvisional: true) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1031,7 +1051,8 @@ extension AppDelegate {
 
     func startOptimisticRealtimeCleanup(
         for rawText: String,
-        timeoutInterval: TimeInterval = 1.0
+        timeoutInterval: TimeInterval = 1.0,
+        serverCleanup: Bool = true
     ) -> Task<String, Never>? {
         guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
@@ -1041,7 +1062,8 @@ extension AppDelegate {
             await TranscriptCleanupService.shared.clean(
                 rawText,
                 fillerWords: SettingsStorage.shared.fillerWords,
-                timeoutInterval: timeoutInterval
+                timeoutInterval: timeoutInterval,
+                serverCleanup: serverCleanup
             )
         }
     }
@@ -1050,7 +1072,8 @@ extension AppDelegate {
         _ rawText: String,
         realtimeResult: RealtimeSessionStopResult,
         logPrefix: String,
-        timeoutInterval: TimeInterval = 1.0
+        timeoutInterval: TimeInterval = 1.0,
+        serverCleanup: Bool = true
     ) async -> String {
         if let optimisticCleanedText = realtimeResult.optimisticCleanedText,
            !realtimeResult.textChangedAfterFinalize
@@ -1068,7 +1091,8 @@ extension AppDelegate {
         return await TranscriptCleanupService.shared.clean(
             rawText,
             fillerWords: SettingsStorage.shared.fillerWords,
-            timeoutInterval: timeoutInterval
+            timeoutInterval: timeoutInterval,
+            serverCleanup: serverCleanup
         )
     }
 

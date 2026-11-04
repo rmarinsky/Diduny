@@ -5,9 +5,10 @@ import Foundation
 
 extension AppDelegate {
     @objc func toggleMeetingRecording() {
-        let provider: TranscriptionProvider = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
-            ? .cloud
-            : .local
+        let provider = routedProvider(
+            for: .meeting,
+            legacy: SettingsStorage.shared.meetingRealtimeTranscriptionEnabled ? .cloud : .local
+        )
         toggleMeetingRecording(provider: provider)
     }
 
@@ -267,17 +268,23 @@ extension AppDelegate {
 
         let sessionID = UUID()
         activeMeetingTranscriptionSessionID = sessionID
-        let provider = Self.resolveMeetingTranscriptionProvider(
-            requestedProvider: requestedProvider,
-            hasStoredSession: AuthService.hasStoredSession,
-            cachedUsage: UsageService.shared.cachedUsage
-        )
+        // Calendar recordings capture audio only, so they keep the existing Cloud/Local path.
+        meetingRealtimeService = calendarMeeting == nil ? makeElevenLabsMeetingService() : nil
+        meetingByokError = nil
+        // ElevenLabs streams live like Cloud (no Diduny sign-in needed); it never falls back to Cloud on its own.
+        let provider: TranscriptionProvider = meetingRealtimeService != nil ? .cloud
+            : Self.resolveMeetingTranscriptionProvider(
+                requestedProvider: requestedProvider,
+                hasStoredSession: AuthService.hasStoredSession,
+                cachedUsage: UsageService.shared.cachedUsage
+            )
         activeMeetingTranscriptionProvider = provider
         var didStart = false
         defer {
             if !didStart, activeMeetingTranscriptionSessionID == sessionID {
                 activeMeetingTranscriptionSessionID = nil
                 activeMeetingTranscriptionProvider = nil
+                meetingRealtimeService = nil
             }
         }
 
@@ -408,6 +415,10 @@ extension AppDelegate {
                 handleMeetingStateChange(.recording)
                 if !cloudModeEnabled {
                     updateRecordingFeedbackConnectionStatus(.connected, mode: .meeting)
+                }
+                if meetingRealtimeService != nil {
+                    DictationOverlayController.shared.showInfoDuringRecording(
+                        message: String(localized: "No speaker labels"), mode: .meeting, duration: 3)
                 }
                 if !cloudModeEnabled, !localPreview {
                     DictationOverlayController.shared.store.onTurnOnLiveTranscript = { [weak self] in
@@ -583,13 +594,15 @@ extension AppDelegate {
             return true
         }
 
+        let rtService: RealtimeTranscriptionProtocol = meetingRealtimeService ?? realtimeTranscriptionService
+        meetingRealtimeService = nil
         var didReceiveFinalization = true
         if finalizeCloud, appState.liveTranscriptStore != nil {
-            let result = await realtimeTranscriptionService.finalize(profile: .safe)
+            let result = await rtService.finalize(profile: .safe)
             didReceiveFinalization = result.didReceiveFinishedSignal
         }
-        await realtimeTranscriptionService.disconnect()
-        realtimeTranscriptionService.clearCallbacks()
+        await rtService.disconnect()
+        rtService.clearCallbacks()
         meetingRecorderService.onRealtimeAudioData = nil
         await meetingTokenCoalescer?.flushNow()
         meetingTokenCoalescer = nil
@@ -599,7 +612,9 @@ extension AppDelegate {
     private func setupRealtimeTranscription(sessionID: UUID?) async -> LiveTranscriptStore {
         let store = await MainActor.run { LiveTranscriptStore() }
 
-        let rtService = realtimeTranscriptionService
+        let rtService: RealtimeTranscriptionProtocol = meetingRealtimeService ?? realtimeTranscriptionService
+        let isByok = meetingRealtimeService != nil
+        await MainActor.run { store.speakerLabels = !isByok }
 
         // Stream the exact same mixed mono audio that is written to fallback WAV.
         meetingRecorderService.onRealtimeAudioData = { [weak rtService] pcmData in
@@ -645,6 +660,7 @@ extension AppDelegate {
         let errorHandler: (Error) -> Void = { [weak self] error in
             Log.transcription.error("Realtime transcription error: \(error.localizedDescription)")
             Task { @MainActor in
+                self?.recordMeetingByokError(error, sessionID: sessionID)
                 self?.fallBackMeetingToLocalIfUsageUnavailable(error, sessionID: sessionID)
             }
             // Don't stop recording — file recording continues independently
@@ -663,7 +679,7 @@ extension AppDelegate {
             guard let self else { return }
             do {
                 let languageHints = SettingsStorage.shared.speechLanguageHints
-                try await realtimeTranscriptionService.connect(
+                try await rtService.connect(
                     languageHints: languageHints,
                     strictLanguageHints: !languageHints.isEmpty
                 )
@@ -682,6 +698,7 @@ extension AppDelegate {
                     store?.isActive = true
                     store?.connectionStatus = .failed(error.localizedDescription)
                 }
+                recordMeetingByokError(error, sessionID: sessionID)
                 fallBackMeetingToLocalIfUsageUnavailable(error, sessionID: sessionID)
             }
         }
@@ -712,6 +729,13 @@ extension AppDelegate {
             RecordingsLibraryStorage.shared.updateStatusDetail(id: id, detail: detail)
         }
         return true
+    }
+
+    /// Remembers an ElevenLabs failure for the current meeting; the recording itself continues.
+    func recordMeetingByokError(_ error: Error, sessionID: UUID?) {
+        guard let sessionID, activeMeetingTranscriptionSessionID == sessionID,
+              let byokError = error as? ElevenLabsError else { return }
+        meetingByokError = byokError
     }
 
     @discardableResult
@@ -780,6 +804,9 @@ extension AppDelegate {
 
         appState.meetingRecordingState = .processing
         handleMeetingStateChange(.processing)
+
+        // ElevenLabs meetings: the committed live text is the final transcript (no re-processing after Stop).
+        let byokMeeting = meetingRealtimeService != nil
 
         // Finalize and disconnect real-time transcription (if active)
         let didReceiveRealtimeFinalization = await stopMeetingLiveTranscription(finalizeCloud: true)
@@ -891,17 +918,19 @@ extension AppDelegate {
             let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
             var cloudModeEnabled = activeMeetingTranscriptionProvider == .cloud
             let shouldUseRealtimeText = cloudModeEnabled
-                && shouldAcceptRealtimeTranscript(
-                    realtimeText,
-                    duration: duration,
-                    didReceiveFinalization: didReceiveRealtimeFinalization
-                )
+                && (byokMeeting
+                    ? !realtimeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    : shouldAcceptRealtimeTranscript(
+                        realtimeText,
+                        duration: duration,
+                        didReceiveFinalization: didReceiveRealtimeFinalization
+                    ))
 
             let rawTranscript: GeneratedTranscript?
             if shouldUseRealtimeText {
                 rawTranscript = GeneratedTranscript(text: realtimeText)
                 Log.app.info("Using real-time transcript (\(realtimeText.count) chars)")
-            } else if cloudModeEnabled {
+            } else if cloudModeEnabled, !byokMeeting {
                 if !realtimeText.isEmpty {
                     Log.app
                         .warning(
@@ -969,7 +998,8 @@ extension AppDelegate {
                 } else {
                     await TranscriptCleanupService.shared.clean(
                         rawTranscript.text,
-                        fillerWords: SettingsStorage.shared.fillerWords
+                        fillerWords: SettingsStorage.shared.fillerWords,
+                        serverCleanup: !byokMeeting
                     )
                 }
             } else {
@@ -1078,6 +1108,12 @@ extension AppDelegate {
 
             if SettingsStorage.shared.playSoundOnCompletion {
                 NSSound(named: .init("Funk"))?.play()
+            }
+
+            if byokMeeting, let byokError = meetingByokError {
+                meetingByokError = nil
+                let savedID = librarySavedId
+                Task { @MainActor in self.presentMeetingByokError(byokError, recordingID: savedID) }
             }
 
         } catch is CancellationError {

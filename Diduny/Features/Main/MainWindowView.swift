@@ -87,6 +87,8 @@ struct MainWindowView: View {
                 .environment(audioDeviceManager)
         case .models:
             OfflineModelsSettingsView()
+        case .providers:
+            ProvidersSettingsView()
         case .shortcuts:
             ShortcutsSettingsView()
         case .account:

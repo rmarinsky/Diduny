@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-final class CloudRealtimeService: NSObject, @unchecked Sendable {
+final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unchecked Sendable {
     private let loadProxyBaseURL: () -> String
     private let loadAccessToken: () async -> String?
     private let loadUsage: () async -> UsageResponse?

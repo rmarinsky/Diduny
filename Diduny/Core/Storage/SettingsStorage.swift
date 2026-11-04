@@ -783,6 +783,11 @@ final class SettingsStorage {
 
     // MARK: - Transcription Provider
 
+    /// Per-job default provider + model (multi-provider STT). Defaults to Diduny Cloud.
+    var providerDefaults: ProviderDefaultsStore {
+        ProviderDefaultsStore(defaults: defaults)
+    }
+
     var transcriptionProvider: TranscriptionProvider {
         get {
             guard let rawValue = defaults.string(forKey: Key.transcriptionProvider.rawValue),

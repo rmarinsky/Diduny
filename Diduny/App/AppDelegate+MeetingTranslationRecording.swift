@@ -157,6 +157,16 @@ extension AppDelegate {
             return
         }
 
+        // ElevenLabs can't translate live; two-way meeting translation stays on Diduny Cloud.
+        guard elevenLabsMeetingPlan == nil else {
+            Log.app.info("startMeetingTranslationRecording: unavailable with the ElevenLabs meeting engine")
+            DictationOverlayController.shared.showInfo(
+                message: String(localized: "Live meeting translation isn't available with ElevenLabs. Choose Diduny Cloud for meetings to translate live."),
+                duration: 4
+            )
+            return
+        }
+
         // Request screen capture permission on-demand
         let hasPermission = await PermissionManager.shared.ensureScreenRecordingPermission(context: .meetingTranslation)
         appState.screenCapturePermissionGranted = hasPermission

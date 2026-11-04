@@ -92,6 +92,15 @@ struct TranscriptCleanupServiceTests {
         #expect(result == input)
     }
 
+    @Test("BYOK text skips server cleanup even with a stored session")
+    func serverCleanupDisabledStaysLocal() async {
+        let input = "Hello world this is a test."
+        let result = await TranscriptCleanupService.shared.clean(
+            input, fillerWords: ["um"], timeoutInterval: 0.01, serverCleanup: false
+        )
+        #expect(result == input)
+    }
+
     // MARK: - ClipboardService.preparedText interaction
 
     @Test(".cleaned behavior trims surrounding whitespace from the already-cleaned text")

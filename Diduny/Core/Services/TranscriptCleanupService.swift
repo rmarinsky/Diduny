@@ -35,10 +35,15 @@ final class TranscriptCleanupService {
     func clean(
         _ rawText: String,
         fillerWords: [String],
-        timeoutInterval: TimeInterval = 3
+        timeoutInterval: TimeInterval = 3,
+        serverCleanup: Bool = true
     ) async -> String {
         guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return rawText
+        }
+        // Text from a bring-your-own-key provider never goes to the Diduny server.
+        guard serverCleanup else {
+            return localLexiconPostprocess(rawText)
         }
         guard AuthService.hasStoredSession else {
             Log.app.info("[Cleanup] No auth session — skipping server cleanup")
@@ -105,14 +110,14 @@ final class TranscriptCleanupService {
         }
     }
 
-    private func localLexiconPostprocess(_ text: String) -> String {
-        ProtectedLexiconService.shared.postprocessTranscript(text)
-    }
-
     /// Translation models join clauses with "; " where a comma reads better.
     /// Mirrors stt-core's `replaceSemicolonsWithCommas` for realtime text,
     /// which never passes through the backend's translation mapper.
     static func replaceSemicolonsWithCommas(_ text: String) -> String {
         text.replacingOccurrences(of: #"[ \t]*;"#, with: ",", options: .regularExpression)
+    }
+
+    private func localLexiconPostprocess(_ text: String) -> String {
+        ProtectedLexiconService.shared.postprocessTranscript(text)
     }
 }

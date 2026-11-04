@@ -51,14 +51,16 @@ struct MeetingAudioSettingsView: View {
             }
 
             Section("Meeting Provider") {
-                Picker("Provider", selection: $meetingCloudModeEnabled) {
-                    Text("Cloud").tag(true)
-                    Text("Local").tag(false)
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: meetingCloudModeEnabled) { _, newValue in
-                    SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = newValue
-                }
+                EnginePickerRow(
+                    label: "Engine",
+                    request: JobRequest(job: .meeting, speakerLabels: true),
+                    legacyIsLocal: { !meetingCloudModeEnabled },
+                    setLegacyLocal: { isLocal in
+                        meetingCloudModeEnabled = !isLocal
+                        SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = !isLocal
+                    }
+                )
+                DidunyTranslationGateNotice()
 
                 if meetingCloudModeEnabled {
                     Text(
