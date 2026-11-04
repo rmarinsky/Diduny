@@ -216,12 +216,18 @@ final class ElevenLabsRealtimeService: RealtimeTranscriptionProtocol, @unchecked
             transport.close()
             throw Self.error(forMessageType: type ?? "") ?? ElevenLabsError.invalidResponse
         }
-        let buffered: [Data] = lock.withLock {
+        // disconnect() may have run during the handshake: don't install a transport nobody owns.
+        let buffered: [Data]? = lock.withLock {
+            guard sessionActive else { return nil }
             self.transport = transport
             connected = true
             var chunks: [Data] = []
             while let chunk = pendingAudio.removeFirst() { chunks.append(chunk) }
             return chunks
+        }
+        guard let buffered else {
+            transport.close()
+            throw CancellationError()
         }
         Log.transcription.info("ElevenLabs RT: session started, flushing \(buffered.count) buffered chunks")
         buffered.forEach(enqueueAudio)

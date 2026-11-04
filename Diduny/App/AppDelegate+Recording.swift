@@ -1077,6 +1077,8 @@ extension AppDelegate {
         }
 
         guard wasEnabled else {
+            // Stop beat the handshake: make sure a late session_started doesn't leave a live session behind.
+            await dictationRealtimeService?.disconnect()
             return .empty
         }
 

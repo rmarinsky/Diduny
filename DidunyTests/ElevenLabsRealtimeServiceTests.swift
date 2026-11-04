@@ -344,6 +344,26 @@ final class ElevenLabsRealtimeServiceTests: XCTestCase {
         }
     }
 
+    func testSessionStartedAfterDisconnectIsClosedNotKept() async throws {
+        let transport = FakeElevenLabsTransport()
+        let service = ElevenLabsRealtimeService(apiKey: sentinel) { _ in transport }
+        let connecting = Task { try await service.connect() }
+        // Stop beats the handshake: disconnect while session_started is still pending.
+        try await Task.sleep(nanoseconds: 100_000_000)
+        await service.disconnect()
+        transport.push(started)
+        do {
+            try await connecting.value
+            XCTFail("a late session must not open")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertGreaterThanOrEqual(transport.closeCount, 1)
+        service.sendAudioData(Data([1, 2]))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(transport.sent.isEmpty)
+    }
+
     func testRealtimeModelIsDeclared() throws {
         let model = try XCTUnwrap(ElevenLabsProvider().models.first { $0.id == "scribe_v2_realtime" })
         XCTAssertNil(model.capabilities.batch)
