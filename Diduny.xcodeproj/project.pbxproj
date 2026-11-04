@@ -26,6 +26,7 @@
 		154F9E85CEDA37FE7E88EE36 /* CloudTranscriptionServiceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2D4C4C36B3BB89D1A2E8BD /* CloudTranscriptionServiceE2ETests.swift */; };
 		168E409F3F1A8B6489AD03AC /* TranslationPairPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19CACF6F1317164FD269AF83 /* TranslationPairPickerView.swift */; };
 		1781B9D8B99C71B7C5260D8A /* TranslationPairPickerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26E5561A2486B59713A6C3BF /* TranslationPairPickerController.swift */; };
+		19B81159DB04138CF1B83773 /* AppleLiveTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDF40894A493C54FD30164D7 /* AppleLiveTranscriptionService.swift */; };
 		1CC15B4101578289FDDA2003 /* DidunyUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = E142ECDFB6C88CE1F7757B95 /* DidunyUITestCase.swift */; };
 		1D8F54C7E34D0BF458CDE89A /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D10CEDBC544B56C03986007 /* OverviewView.swift */; };
 		1FC13B68C69A30C9FD13E2F0 /* ShortcutsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B0622318D71BD3A1EEA701 /* ShortcutsSettingsView.swift */; };
@@ -242,6 +243,7 @@
 		E7F1B035104E1A79711068B2 /* MeetingChunkStitcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E5E0CC22FD7FC0DA86702AF /* MeetingChunkStitcherTests.swift */; };
 		E8170AF2C7B49EF2AABD76BA /* BrowserCalendarSavedConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA15A75B29315FCF2D293CA3 /* BrowserCalendarSavedConnectionTests.swift */; };
 		E8268E59FC06679FC0BABA3D /* RecordingsLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2217BBA473011B6506284B3 /* RecordingsLibraryView.swift */; };
+		E86F28882412E32397271545 /* AppleLiveTranscriptionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25EF28BD2C826F6353D77ACC /* AppleLiveTranscriptionServiceTests.swift */; };
 		E87816C0CD59FF9C74962953 /* BrowserCalendarSyncSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D972D1D9233FF5156D440B7B /* BrowserCalendarSyncSessionTests.swift */; };
 		E90C0EBCE28E780D183A2C0E /* WhisperModelUnloadPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14415E4A90B0A80E5B44F3B /* WhisperModelUnloadPolicy.swift */; };
 		E936FF3D499BC2EFB6DC0A14 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65DFFB871345DD916879CEBD /* SidebarView.swift */; };
@@ -329,6 +331,7 @@
 		2557CB1E6202CAC116B9137B /* RecordingMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingMode.swift; sourceTree = "<group>"; };
 		258680FE2F7ED1EB6DB95757 /* ProtectedLexiconService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtectedLexiconService.swift; sourceTree = "<group>"; };
 		25CA3466DC76D4C3741A1663 /* ReleaseHighlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseHighlights.swift; sourceTree = "<group>"; };
+		25EF28BD2C826F6353D77ACC /* AppleLiveTranscriptionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleLiveTranscriptionServiceTests.swift; sourceTree = "<group>"; };
 		264384B85BF3DDB51B80093F /* RecordingTrimNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingTrimNavigation.swift; sourceTree = "<group>"; };
 		26809CA162E096F4EA668768 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
 		268D49F3DE850563CE2C0032 /* CalendarConnectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarConnectionTests.swift; sourceTree = "<group>"; };
@@ -526,6 +529,7 @@
 		EA15A75B29315FCF2D293CA3 /* BrowserCalendarSavedConnectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserCalendarSavedConnectionTests.swift; sourceTree = "<group>"; };
 		EA793C0790C4F9F4B19764D7 /* MainWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowController.swift; sourceTree = "<group>"; };
 		EB4776457AA6B4EFE7553DED /* SilenceAutoStop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SilenceAutoStop.swift; sourceTree = "<group>"; };
+		EDF40894A493C54FD30164D7 /* AppleLiveTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleLiveTranscriptionService.swift; sourceTree = "<group>"; };
 		EED41A85ABE10582EF485F5D /* HistoryPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPaletteView.swift; sourceTree = "<group>"; };
 		F06909181E0B9AD3B70E57E3 /* WhisperError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperError.swift; sourceTree = "<group>"; };
 		F0D8B455676B571AEC778E72 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -739,6 +743,7 @@
 		4E9257208A1E961F03A1A487 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				EDF40894A493C54FD30164D7 /* AppleLiveTranscriptionService.swift */,
 				6B9D1F82FF8D90EF894B48C1 /* AsyncTranscriptionJobService.swift */,
 				741C4E6B6495E48C5D14392E /* AudioCompressionService.swift */,
 				8D1A1D461E4C3229A9A8A486 /* AudioDeviceManager.swift */,
@@ -1035,6 +1040,7 @@
 		D2B2605F1A03065F4BA5333C /* DidunyTests */ = {
 			isa = PBXGroup;
 			children = (
+				25EF28BD2C826F6353D77ACC /* AppleLiveTranscriptionServiceTests.swift */,
 				CB03AFCF7D534F613B88F580 /* AsyncTranscriptionJobFileUploadTests.swift */,
 				39B7F24BF3AC148D37B0D173 /* AudioPlaybackTrimTests.swift */,
 				0CA68D80B03C5B98EDEAE055 /* AudioTrimEditorTests.swift */,
@@ -1350,6 +1356,7 @@
 				5007F0585DD384082AB30B8F /* AppDelegate+TranslationRecording.swift in Sources */,
 				A09E73F9CCF5D1023A1E3D2F /* AppDelegate.swift in Sources */,
 				9FD5B6627D4A5BE503A607FF /* AppState.swift in Sources */,
+				19B81159DB04138CF1B83773 /* AppleLiveTranscriptionService.swift in Sources */,
 				4B43C41C32D07C52621117A2 /* AsyncTranscriptionJobService.swift in Sources */,
 				A546AE88A1817EF822FFEAE1 /* AudioCompressionService.swift in Sources */,
 				C8F29AF8B551E388C4C6F2A0 /* AudioConverter.swift in Sources */,
@@ -1529,6 +1536,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E86F28882412E32397271545 /* AppleLiveTranscriptionServiceTests.swift in Sources */,
 				40F99144735911B3C0DF19AC /* AsyncTranscriptionJobFileUploadTests.swift in Sources */,
 				C9FB98A590D2BD7576272110 /* AudioPlaybackTrimTests.swift in Sources */,
 				735B901BB42D0AA967110D94 /* AudioTrimEditorTests.swift in Sources */,

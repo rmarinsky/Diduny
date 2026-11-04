@@ -101,6 +101,12 @@ extension AppDelegate {
         )
     }
 
+    /// Live Apple session for a meeting when Apple is the meeting engine and ready; nil otherwise.
+    func makeAppleMeetingService() -> AppleLiveTranscriptionService? {
+        guard onDeviceSelection(for: .meeting) == STTProviderID.appleSpeech, onDeviceEngine(for: .meeting) != nil else { return nil }
+        return AppleLiveTranscriptionService(farField: true)
+    }
+
     /// After Stop: names the ElevenLabs failure and offers a one-off Diduny Cloud transcription of the saved audio.
     func presentMeetingByokError(_ error: ElevenLabsError, recordingID: UUID?) {
         let availability = EngineOptions.translationAvailability()

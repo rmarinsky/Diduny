@@ -35,12 +35,14 @@ enum EngineOptions {
         ]
         return engines.compactMap { id, engine in
             guard engine.availability() == .ready else { return nil }
-            let plan = ExecutionPlan(mode: .afterStop, translation: job == .dictationTranslation ? .didunyStep : .none)
+            // Apple streams live text for dictation and meetings; Parakeet transcribes after Stop (like Handy).
+            let live = id == STTProviderID.appleSpeech && job != .file
+            let plan = ExecutionPlan(mode: live ? .live : .afterStop, translation: job == .dictationTranslation ? .didunyStep : .none)
             if job == .dictationTranslation, !context.didunyTranslationAvailable {
                 return EngineOption(id: id, title: engine.name, disabledReason: reasonText(.translationNeedsDiduny, signedIn: signedIn), hint: nil)
             }
             return EngineOption(id: id, title: "\(engine.name) · \(planLabel(plan, job: job))", disabledReason: nil,
-                                hint: String(localized: "Runs on this Mac after you press Stop.") + (job == .dictationTranslation ? " " + String(localized: "Diduny translates the text and uses your Diduny quota.") : ""))
+                                hint: (live ? String(localized: "Runs on this Mac. Text appears while you speak.") : String(localized: "Runs on this Mac after you press Stop.")) + (job == .dictationTranslation ? " " + String(localized: "Diduny translates the text and uses your Diduny quota.") : ""))
         }
     }
 

@@ -194,7 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var translationByokPlan: ExecutionPlan?
     var translationRealtimeService: RealtimeTranscriptionProtocol?
     /// BYOK realtime engine for the current meeting; nil = `realtimeTranscriptionService`.
-    var meetingRealtimeService: ElevenLabsRealtimeService?
+    var meetingRealtimeService: (any RealtimeTranscriptionProtocol)?
     /// Last ElevenLabs failure in the current meeting, offered with a Diduny Cloud re-run after Stop.
     var meetingByokError: ElevenLabsError?
     var remoteDeletionTimer: Timer?

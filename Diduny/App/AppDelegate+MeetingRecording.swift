@@ -273,9 +273,16 @@ extension AppDelegate {
         let sessionID = UUID()
         activeMeetingTranscriptionSessionID = sessionID
         // Calendar recordings capture audio only, so they keep the existing Cloud/Local path.
-        meetingRealtimeService = calendarMeeting == nil ? makeElevenLabsMeetingService() : nil
+        // The user's own live engine: ElevenLabs (their key) or Apple on this Mac.
+        if calendarMeeting == nil, let elevenLabs = makeElevenLabsMeetingService() {
+            meetingRealtimeService = elevenLabs
+        } else if calendarMeeting == nil, let apple = makeAppleMeetingService() {
+            meetingRealtimeService = apple
+        } else {
+            meetingRealtimeService = nil
+        }
         meetingByokError = nil
-        // ElevenLabs streams live like Cloud (no Diduny sign-in needed); it never falls back to Cloud on its own.
+        // Own engines stream live like Cloud (no Diduny sign-in needed) and never fall back to Cloud on their own.
         let provider: TranscriptionProvider = meetingRealtimeService != nil ? .cloud
             : Self.resolveMeetingTranscriptionProvider(
                 requestedProvider: requestedProvider,
@@ -422,6 +429,7 @@ extension AppDelegate {
                     updateRecordingFeedbackConnectionStatus(.connected, mode: .meeting)
                 }
                 if meetingRealtimeService != nil {
+                    // Own live engines (ElevenLabs, Apple) give no speaker labels.
                     DictationOverlayController.shared.showInfoDuringRecording(
                         message: String(localized: "No speaker labels"), mode: .meeting, duration: 3)
                 }
@@ -835,8 +843,10 @@ extension AppDelegate {
         appState.meetingRecordingState = .processing
         handleMeetingStateChange(.processing)
 
-        // ElevenLabs meetings: the committed live text is the final transcript (no re-processing after Stop).
+        // Own-engine meetings (ElevenLabs key or Apple on this Mac): the committed live text is the final
+        // transcript, with no Diduny server cleanup and no Diduny Cloud fallback.
         let byokMeeting = meetingRealtimeService != nil
+        let appleLiveMeeting = meetingRealtimeService is AppleLiveTranscriptionService
 
         // Finalize and disconnect real-time transcription (if active)
         let didReceiveRealtimeFinalization = await stopMeetingLiveTranscription(finalizeCloud: true)
@@ -970,6 +980,10 @@ extension AppDelegate {
             // The queue needs the saved library row; without it the audio waits for recovery.
             // A BYOK meeting never falls back to the Diduny Cloud queue.
             let handsOffToQueue: Bool = if case .queueCloud = route { librarySavedId != nil && !byokMeeting } else { false }
+            // Apple live text came out empty: transcribe the saved recording with Apple on this Mac instead.
+            if appleLiveMeeting, !acceptsRealtimeTranscript, let librarySavedId {
+                RecordingQueueService.shared.enqueue([librarySavedId], action: .transcribe, providerOverride: .local)
+            }
 
             let rawTranscript: GeneratedTranscript?
             if route == .realtimeTranscript {

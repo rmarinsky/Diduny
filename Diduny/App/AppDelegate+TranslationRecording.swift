@@ -733,7 +733,16 @@ extension AppDelegate {
 
         translationRealtimeService = nil
         if translationByokPlan != nil {
-            if translationByokPlan?.mode == .live, let key = ProviderKeyStore.shared.key(for: STTProviderID.elevenLabs) {
+            if onDeviceSelection(for: .dictationTranslation) == STTProviderID.appleSpeech {
+                // Apple: live text while speaking; the final text is translated on Stop.
+                translationRealtimeService = AppleLiveTranscriptionService()
+            } else if onDeviceSelection(for: .dictationTranslation) != nil {
+                // Parakeet: the capture is transcribed on Stop, then translated.
+                audioRecorder.onRealtimeAudioData = speechGatedAudioDelivery(deliver: { _ in }, onNoSpeech: onNoSpeech)
+                translationRealtimeSessionEnabled = false
+                translationRealtimeAccumulator = nil
+                return
+            } else if translationByokPlan?.mode == .live, let key = ProviderKeyStore.shared.key(for: STTProviderID.elevenLabs) {
                 translationRealtimeService = ElevenLabsRealtimeService(apiKey: key)
             } else {
                 // After-Stop model: no live stream; the batch request runs on Stop.

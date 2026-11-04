@@ -1648,3 +1648,4 @@
 "Apple speech recognition doesn't support this language." = "Розпізнавання мовлення Apple не підтримує цю мову.";
 "Allow Speech Recognition for Diduny in System Settings › Privacy & Security." = "Дозволь Diduny розпізнавання мовлення в Системних параметрах › Приватність і безпека.";
 "The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Providers." = "Вибраний локальний рушій не готовий на цьому Mac. Завантаж його в «Локальних моделях» або обери інший рушій у Налаштуваннях › Способи обробки.";
+"Runs on this Mac. Text appears while you speak." = "Працює на цьому Mac. Текст з'являється, поки ти говориш.";

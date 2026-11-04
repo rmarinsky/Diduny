@@ -844,15 +844,20 @@ extension AppDelegate {
         }
 
         dictationRealtimeService = nil
-        if onDeviceSelection(for: .dictation) != nil {
-            // On-device engine: no live stream; the capture is transcribed on Stop.
+        if onDeviceSelection(for: .dictation) == STTProviderID.appleSpeech {
+            // Apple: live text while speaking; its final text is pasted on Stop.
+            dictationRealtimeService = AppleLiveTranscriptionService()
+        } else if onDeviceSelection(for: .dictation) != nil {
+            // Parakeet: no live stream (like Handy); the whole capture is transcribed on Stop in ~0.1 s per 10 s.
             audioRecorder.onRealtimeAudioData = speechGatedAudioDelivery(deliver: { _ in }, onNoSpeech: onNoSpeech)
             localVoiceStreamingService = nil
             voiceRealtimeSessionEnabled = false
             voiceRealtimeAccumulator = nil
             return
         }
-        if let plan = elevenLabsDictationPlan {
+        if dictationRealtimeService != nil {
+            // On-device live engine set above.
+        } else if let plan = elevenLabsDictationPlan {
             guard plan.mode == .live, let key = ProviderKeyStore.shared.key(for: STTProviderID.elevenLabs) else {
                 // After-Stop model: no live stream; the batch request runs on Stop.
                 audioRecorder.onRealtimeAudioData = speechGatedAudioDelivery(deliver: { _ in }, onNoSpeech: onNoSpeech)
