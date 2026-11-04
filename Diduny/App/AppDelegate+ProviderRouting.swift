@@ -33,6 +33,35 @@ extension AppDelegate {
         )
     }
 
+    /// Parakeet V3 or Apple selected for the job and ready on this Mac; they transcribe the capture after Stop.
+    func onDeviceEngine(for job: STTJob) -> (any BenchmarkEngine)? {
+        let engine: (any BenchmarkEngine)? = switch SettingsStorage.shared.providerDefaults.selection(for: job).providerID {
+        case STTProviderID.parakeet: ParakeetBenchmarkEngine()
+        case STTProviderID.appleSpeech: AppleBenchmarkEngine()
+        default: nil
+        }
+        return engine?.availability() == .ready ? engine : nil
+    }
+
+    /// Dictation runs on the user's own engine (ElevenLabs key or an on-device engine): no Diduny server cleanup.
+    var dictationUsesOwnEngine: Bool {
+        elevenLabsDictationPlan != nil || onDeviceEngine(for: .dictation) != nil
+    }
+
+    /// Transcribes a capture with the job's on-device engine when one is selected, else with ElevenLabs batch.
+    func transcribeWithOwnEngine(job: STTJob, audioData: Data) async throws -> String {
+        guard let engine = onDeviceEngine(for: job) else {
+            return try await transcribeWithElevenLabsBatch(audioData: audioData)
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("diduny-local-\(UUID().uuidString).wav")
+        try audioData.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let language = SettingsStorage.shared.speechLanguageHints.first ?? BenchmarkRunner.defaultLanguage
+        let text = try await engine.transcribe(url, language: language).text
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TranscriptionError.emptyTranscription }
+        return text
+    }
+
     /// The ElevenLabs plan for meetings when the user picked an ElevenLabs model and it is routable, else nil.
     var elevenLabsMeetingPlan: ExecutionPlan? {
         ProviderEngineRouting.byokPlan(
@@ -74,8 +103,14 @@ extension AppDelegate {
         RecordingQueueService.shared.enqueue([recordingID], action: .transcribeDiarize, providerOverride: .cloud)
     }
 
-    /// Whether dictation translation runs on ElevenLabs (then the Diduny text translation step).
+    /// Whether dictation translation runs on the user's own engine (then the Diduny text translation step).
     var elevenLabsTranslationDecision: ByokTranslationStep.StartDecision {
+        if onDeviceEngine(for: .dictationTranslation) != nil {
+            let availability = EngineOptions.translationAvailability()
+            return availability.available
+                ? .run(ExecutionPlan(mode: .afterStop, translation: .didunyStep))
+                : .translationUnavailable(signedIn: availability.signedIn)
+        }
         let selection = SettingsStorage.shared.providerDefaults.selection(for: .dictationTranslation)
         let availability = EngineOptions.translationAvailability()
         var context = providerRoutingContext

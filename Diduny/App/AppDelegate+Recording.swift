@@ -306,7 +306,7 @@ extension AppDelegate {
         case .cloud:
             Log.app.info("startRecording: Cloud provider selected")
         case .local:
-            guard elevenLabsDictationPlan != nil || WhisperModelManager.shared.selectedModel() != nil else {
+            guard dictationUsesOwnEngine || WhisperModelManager.shared.selectedModel() != nil else {
                 Log.app.warning("startRecording: No Whisper model selected")
                 await MainActor.run {
                     appState
@@ -548,9 +548,9 @@ extension AppDelegate {
             } else if !realtimeResult.text.isEmpty {
                 rawText = realtimeResult.text
                 Log.app.info("stopRecording: Using realtime transcription (\(rawText.count) chars)")
-            } else if elevenLabsDictationPlan != nil {
-                rawText = try await transcribeWithElevenLabsBatch(audioData: audioData)
-                Log.app.info("stopRecording: ElevenLabs batch transcription (\(rawText.count) chars)")
+            } else if dictationUsesOwnEngine {
+                rawText = try await transcribeWithOwnEngine(job: .dictation, audioData: audioData)
+                Log.app.info("stopRecording: own-engine batch transcription (\(rawText.count) chars)")
             } else if voiceTranscriptionProvider == .local {
                 // Local Whisper — use original capture data, not the storage-compressed variant
                 let transcript = try await whisperTranscriptionService.transcribeDetailed(audioData: audioData)
@@ -566,13 +566,13 @@ extension AppDelegate {
                     rawText,
                     realtimeResult: realtimeResult,
                     logPrefix: "Dictation",
-                    serverCleanup: elevenLabsDictationPlan == nil
+                    serverCleanup: !dictationUsesOwnEngine
                 )
             } else {
                 await TranscriptCleanupService.shared.clean(
                     rawText,
                     fillerWords: SettingsStorage.shared.fillerWords,
-                    serverCleanup: elevenLabsDictationPlan == nil
+                    serverCleanup: !dictationUsesOwnEngine
                 )
             }
             let text = try requireNonemptyVoiceDictation(
@@ -835,6 +835,14 @@ extension AppDelegate {
         }
 
         dictationRealtimeService = nil
+        if onDeviceEngine(for: .dictation) != nil {
+            // On-device engine: no live stream; the capture is transcribed on Stop.
+            audioRecorder.onRealtimeAudioData = speechGatedAudioDelivery(deliver: { _ in }, onNoSpeech: onNoSpeech)
+            localVoiceStreamingService = nil
+            voiceRealtimeSessionEnabled = false
+            voiceRealtimeAccumulator = nil
+            return
+        }
         if let plan = elevenLabsDictationPlan {
             guard plan.mode == .live, let key = ProviderKeyStore.shared.key(for: STTProviderID.elevenLabs) else {
                 // After-Stop model: no live stream; the batch request runs on Stop.
@@ -1027,7 +1035,7 @@ extension AppDelegate {
             ""
         }
         let optimisticCleanupTask = finalize
-            ? startOptimisticRealtimeCleanup(for: preFinalizeText, serverCleanup: elevenLabsDictationPlan == nil)
+            ? startOptimisticRealtimeCleanup(for: preFinalizeText, serverCleanup: !dictationUsesOwnEngine)
             : nil
         var finalizeResult: RealtimeFinalizeResult = .skipped
         if finalize {

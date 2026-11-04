@@ -24,6 +24,25 @@ enum EngineOptions {
     }
 
     static let byokJobs: Set<STTJob> = [.dictation, .dictationTranslation, .meeting]
+    /// Parakeet and Apple run after Stop, so they are offered where the flow transcribes the saved capture.
+    static let onDeviceJobs: Set<STTJob> = [.dictation, .dictationTranslation]
+
+    /// Parakeet V3 / Apple entries: listed when ready on this Mac; translation adds the Diduny text step.
+    static func onDeviceOptions(for job: STTJob, context: RoutingContext, signedIn: Bool) -> [EngineOption] {
+        let engines: [(String, any BenchmarkEngine)] = [
+            (STTProviderID.parakeet, ParakeetBenchmarkEngine()),
+            (STTProviderID.appleSpeech, AppleBenchmarkEngine())
+        ]
+        return engines.compactMap { id, engine in
+            guard engine.availability() == .ready else { return nil }
+            let plan = ExecutionPlan(mode: .afterStop, translation: job == .dictationTranslation ? .didunyStep : .none)
+            if job == .dictationTranslation, !context.didunyTranslationAvailable {
+                return EngineOption(id: id, title: engine.name, disabledReason: reasonText(.translationNeedsDiduny, signedIn: signedIn), hint: nil)
+            }
+            return EngineOption(id: id, title: "\(engine.name) · \(planLabel(plan, job: job))", disabledReason: nil,
+                                hint: String(localized: "Runs on this Mac after you press Stop.") + (job == .dictationTranslation ? " " + String(localized: "Diduny translates the text and uses your Diduny quota.") : ""))
+        }
+    }
 
     static func context(keyStore: ProviderKeyStore = .shared, registry: ProviderRegistry = .shared) -> RoutingContext {
         RoutingContext(
@@ -38,10 +57,20 @@ enum EngineOptions {
         context: RoutingContext,
         signedIn: Bool
     ) -> [EngineOption] {
+        let diduny = EngineOption(id: STTProviderID.didunyCloud, title: builtInTitle("Diduny Cloud", job: request.job, local: false), disabledReason: nil, hint: nil)
+        // Live two-way meeting translation runs only on Diduny Cloud.
+        guard request.job != .meetingTranslation else {
+            return [diduny] + registry.modules.filter { $0.requiresKey && context.providersWithKey.contains($0.id) }.map {
+                EngineOption(id: "\($0.id)/\($0.models.first?.id ?? "")", title: $0.displayName, disabledReason: String(localized: "can't translate live"), hint: nil)
+            }
+        }
         var result = [
-            EngineOption(id: STTProviderID.didunyCloud, title: builtInTitle("Diduny Cloud", job: request.job, local: false), disabledReason: nil, hint: nil),
+            diduny,
             EngineOption(id: STTProviderID.localWhisper, title: builtInTitle("Local Whisper", job: request.job, local: true), disabledReason: nil, hint: nil)
         ]
+        if onDeviceJobs.contains(request.job) {
+            result += onDeviceOptions(for: request.job, context: context, signedIn: signedIn)
+        }
         // BYOK engines run only where the recording flow is wired to them (dictation, dictation translation, live meetings).
         guard byokJobs.contains(request.job) else { return result }
         for module in registry.modules where module.requiresKey && context.providersWithKey.contains(module.id) {
@@ -125,6 +154,7 @@ struct EnginePickerRow: View {
     let request: JobRequest
     let legacyIsLocal: () -> Bool
     let setLegacyLocal: (Bool) -> Void
+    var showsManageLink = true
 
     @State private var selection = ""
     @State private var options: [EngineOption] = []
@@ -149,11 +179,13 @@ struct EnginePickerRow: View {
             if let hint = options.first(where: { $0.id == selection })?.hint {
                 Text(hint).font(.caption).foregroundStyle(.secondary)
             }
-            Button("Manage providers") {
-                MainWindowController.shared.showWindow(section: .providers)
+            if showsManageLink {
+                Button("Manage providers") {
+                    MainWindowController.shared.showWindow(section: .providers)
+                }
+                .buttonStyle(.link)
+                .font(.caption)
             }
-            .buttonStyle(.link)
-            .font(.caption)
         }
         .onAppear(perform: reload)
     }
@@ -166,7 +198,8 @@ struct EnginePickerRow: View {
             signedIn: EngineOptions.translationAvailability().signedIn
         )
         let stored = defaults.selection(for: request.job)
-        let byokID = stored.modelID.map { "\(stored.providerID)/\($0)" }
+        let byokID = STTProviderID.onDeviceEngines.contains(stored.providerID)
+            ? stored.providerID : stored.modelID.map { "\(stored.providerID)/\($0)" }
         if let byokID, options.contains(where: { $0.id == byokID && $0.disabledReason == nil }) {
             selection = byokID
         } else {
@@ -175,10 +208,22 @@ struct EnginePickerRow: View {
     }
 
     private func apply(_ id: String) {
+        EngineOptions.apply(id, job: request.job, setLegacyLocal: setLegacyLocal)
+    }
+}
+
+extension EngineOptions {
+    /// Stores a picker choice for a job. Diduny Cloud / Local Whisper also write the legacy Cloud/Local setting.
+    static func apply(_ id: String, job: STTJob, setLegacyLocal: (Bool) -> Void) {
+        let defaults = SettingsStorage.shared.providerDefaults
+        let request = JobRequest(job: job)
         switch id {
         case STTProviderID.didunyCloud, STTProviderID.localWhisper:
             defaults.setSelection(.didunyCloud, for: request.job)
             setLegacyLocal(id == STTProviderID.localWhisper)
+        case let onDevice where STTProviderID.onDeviceEngines.contains(onDevice):
+            defaults.setSelection(JobProviderSelection(providerID: onDevice, modelID: nil), for: request.job)
+            setLegacyLocal(false)
         default:
             let parts = id.split(separator: "/", maxSplits: 1).map(String.init)
             guard parts.count == 2 else { return }
@@ -295,5 +340,94 @@ struct RecordingErrorBanner: View {
         case .termsNotAccepted, .quotaExceeded, .planOrModelNotAvailable: "Open ElevenLabs dashboard"
         default: "Retry"
         }
+    }
+}
+
+/// One place to pick the engine for every mode, with a shortcut that sets the same engine for all of them.
+struct EnginesByModeSection: View {
+    private struct Mode {
+        let job: STTJob
+        let label: LocalizedStringKey
+        let request: JobRequest
+        let legacyIsLocal: () -> Bool
+        let setLegacyLocal: (Bool) -> Void
+    }
+
+    @State private var refresh = UUID()
+    @State private var allChoice = ""
+    @State private var note: String?
+
+    private let modes: [Mode] = {
+        let s = SettingsStorage.shared
+        return [
+            Mode(job: .dictation, label: "Dictation", request: JobRequest(job: .dictation),
+                 legacyIsLocal: { s.transcriptionProvider == .local },
+                 setLegacyLocal: { s.transcriptionProvider = $0 ? .local : .cloud }),
+            Mode(job: .dictationTranslation, label: "Dictation translation", request: JobRequest(job: .dictationTranslation),
+                 legacyIsLocal: { s.translationProvider == .local },
+                 setLegacyLocal: { s.translationProvider = $0 ? .local : .cloud }),
+            Mode(job: .meeting, label: "Meetings", request: JobRequest(job: .meeting, speakerLabels: true),
+                 legacyIsLocal: { !s.meetingRealtimeTranscriptionEnabled },
+                 setLegacyLocal: { s.meetingRealtimeTranscriptionEnabled = !$0 }),
+            Mode(job: .meetingTranslation, label: "Meeting translation", request: JobRequest(job: .meetingTranslation),
+                 legacyIsLocal: { false }, setLegacyLocal: { _ in }),
+            Mode(job: .file, label: "Files", request: JobRequest(job: .file),
+                 legacyIsLocal: { s.providerDefaults.selection(for: .file).providerID == STTProviderID.localWhisper },
+                 setLegacyLocal: { isLocal in
+                     s.providerDefaults.setSelection(
+                         JobProviderSelection(providerID: isLocal ? STTProviderID.localWhisper : STTProviderID.didunyCloud, modelID: nil),
+                         for: .file
+                     )
+                 }),
+        ]
+    }()
+
+    private var allOptions: [EngineOption] {
+        let context = EngineOptions.context()
+        let signedIn = EngineOptions.translationAvailability().signedIn
+        var seen = Set<String>()
+        return modes.flatMap { EngineOptions.options(for: $0.request, context: context, signedIn: signedIn) }
+            .filter { $0.disabledReason == nil && seen.insert($0.id).inserted }
+            .map { EngineOption(id: $0.id, title: String($0.title.split(separator: "·").first ?? "").trimmingCharacters(in: .whitespaces), disabledReason: nil, hint: nil) }
+    }
+
+    var body: some View {
+        Section {
+            Picker("Use for all modes", selection: $allChoice) {
+                Text("Choose an engine").tag("")
+                ForEach(allOptions) { Text($0.title).tag($0.id) }
+            }
+            .onChange(of: allChoice) { _, id in applyAll(id) }
+            if let note {
+                Text(note).font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(Array(modes.enumerated()), id: \.offset) { _, mode in
+                EnginePickerRow(label: mode.label, request: mode.request, legacyIsLocal: mode.legacyIsLocal,
+                                setLegacyLocal: mode.setLegacyLocal, showsManageLink: false)
+            }
+            .id(refresh)
+        } header: {
+            Text("Engine for each mode")
+        } footer: {
+            Text("Pick one engine for everything, then change any single mode.")
+        }
+    }
+
+    private func applyAll(_ id: String) {
+        guard !id.isEmpty else { return }
+        let context = EngineOptions.context()
+        let signedIn = EngineOptions.translationAvailability().signedIn
+        var skipped = false
+        for mode in modes {
+            let options = EngineOptions.options(for: mode.request, context: context, signedIn: signedIn)
+            if options.contains(where: { $0.id == id && $0.disabledReason == nil }) {
+                EngineOptions.apply(id, job: mode.job, setLegacyLocal: mode.setLegacyLocal)
+            } else {
+                skipped = true
+            }
+        }
+        note = !skipped ? nil : String(localized: "Not available for some modes; they keep their engine.")
+        allChoice = ""
+        refresh = UUID()
     }
 }

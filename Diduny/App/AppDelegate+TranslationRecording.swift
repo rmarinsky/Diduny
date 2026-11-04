@@ -515,7 +515,7 @@ extension AppDelegate {
                 rawText = switchedText
             } else if translationByokPlan != nil {
                 let transcript = realtimeResult.originalText.isEmpty
-                    ? try await transcribeWithElevenLabsBatch(audioData: audioData)
+                    ? try await transcribeWithOwnEngine(job: .dictationTranslation, audioData: audioData)
                     : realtimeResult.originalText
                 let step = await ByokTranslationStep.translate(
                     transcript,

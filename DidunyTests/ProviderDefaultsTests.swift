@@ -55,13 +55,28 @@ final class ProviderDefaultsTests: XCTestCase {
     }
 
     func testPickerOffersBYOKOnlyForWiredJobs() {
-        for job in STTJob.allCases {
+        for job in STTJob.allCases where job != .meetingTranslation {
             let ids = EngineOptions.options(for: JobRequest(job: job), context: withKey, signedIn: true).map(\.id)
             XCTAssertTrue(ids.starts(with: [STTProviderID.didunyCloud, STTProviderID.localWhisper]))
             let hasBYOK = ids.contains { $0.hasPrefix(STTProviderID.elevenLabs + "/") }
             XCTAssertEqual(hasBYOK, EngineOptions.byokJobs.contains(job), "\(job)")
         }
+        // On-device engines (Parakeet, Apple) appear only when ready on this Mac, so ignore them here.
         let noKeyIDs = EngineOptions.options(for: JobRequest(job: .dictation), context: noKey, signedIn: true).map(\.id)
+            .filter { !STTProviderID.onDeviceEngines.contains($0) }
         XCTAssertEqual(noKeyIDs, [STTProviderID.didunyCloud, STTProviderID.localWhisper])
+    }
+
+    func testMeetingTranslationOffersOnlyDidunyCloud() {
+        let options = EngineOptions.options(for: JobRequest(job: .meetingTranslation), context: withKey, signedIn: true)
+        XCTAssertEqual(options.filter { $0.disabledReason == nil }.map(\.id), [STTProviderID.didunyCloud])
+        XCTAssertTrue(options.contains { $0.id.hasPrefix(STTProviderID.elevenLabs + "/") && $0.disabledReason != nil })
+    }
+
+    func testOnDeviceEnginesNotOfferedForMeetingsOrFiles() {
+        for job in [STTJob.meeting, .file] {
+            let ids = EngineOptions.options(for: JobRequest(job: job), context: withKey, signedIn: true).map(\.id)
+            XCTAssertTrue(Set(ids).isDisjoint(with: STTProviderID.onDeviceEngines), "\(job)")
+        }
     }
 }

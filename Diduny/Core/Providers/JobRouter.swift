@@ -94,6 +94,10 @@ enum JobRouter {
             return dictationPlan(caps, translate: true, context: context)
         case .meeting:
             return meetingPlan(request, caps, context: context)
+        case .meetingTranslation:
+            var translated = request
+            translated.meetingTranslation = true
+            return meetingPlan(translated, caps, context: context)
         case .file:
             return filePlan(request, caps)
         }

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Settings > Providers: built-in engines, bring-your-own-key provider cards, file-transcription default.
+/// Settings > Providers: built-in engines, bring-your-own-key provider cards, engine for each mode.
 struct ProvidersSettingsView: View {
     @State private var resetJobs: [STTJob] = []
     private let registry = ProviderRegistry.shared
@@ -28,29 +28,14 @@ struct ProvidersSettingsView: View {
                 }
             }
 
+            EnginesByModeSection()
+
             ForEach(registry.modules, id: \.id) { module in
                 if module.requiresKey {
                     ByokProviderSection(module: module, onRemoved: { resetJobs = $0 })
                 } else {
                     builtInSection(module)
                 }
-            }
-
-            Section("File transcription") {
-                EnginePickerRow(
-                    label: "Default engine",
-                    request: JobRequest(job: .file),
-                    legacyIsLocal: {
-                        SettingsStorage.shared.providerDefaults.selection(for: .file).providerID == STTProviderID.localWhisper
-                    },
-                    setLegacyLocal: { isLocal in
-                        // Files have no legacy toggle: store Cloud/Local directly in the per-job default.
-                        SettingsStorage.shared.providerDefaults.setSelection(
-                            JobProviderSelection(providerID: isLocal ? STTProviderID.localWhisper : STTProviderID.didunyCloud, modelID: nil),
-                            for: .file
-                        )
-                    }
-                )
             }
         }
         .formStyle(.grouped)
@@ -88,6 +73,7 @@ struct ProvidersSettingsView: View {
         case .dictation: String(localized: "Dictation")
         case .dictationTranslation: String(localized: "Dictation translation")
         case .meeting: String(localized: "Meetings")
+        case .meetingTranslation: String(localized: "Meeting translation")
         case .file: String(localized: "File transcription")
         }
     }

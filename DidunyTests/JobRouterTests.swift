@@ -48,6 +48,24 @@ final class JobRouterTests: XCTestCase {
         JobRouter.plan(request, providerID: byok, requiresKey: true, model: model, context: context ?? withKey)
     }
 
+    // MARK: Meeting translation
+
+    func test_meetingTranslation_nativeTwoWayModelTranslatesLive() {
+        XCTAssertEqual(
+            route(JobRequest(job: .meetingTranslation), nativeTranslating),
+            .plan(ExecutionPlan(mode: .live, translation: .native))
+        )
+    }
+
+    func test_meetingTranslation_withoutDidunyTranslationIsUnsupported() {
+        let context = RoutingContext(providersWithKey: [byok], didunyTranslationAvailable: false)
+        XCTAssertEqual(route(JobRequest(job: .meetingTranslation), realtimeOnly, context: context), .unsupported(.translationNeedsDiduny))
+    }
+
+    func test_onDeviceEnginesAreKnownProviderIDs() {
+        XCTAssertTrue(ProviderRegistry.shared.providerIDs.isSuperset(of: STTProviderID.onDeviceEngines))
+    }
+
     // MARK: Dictation
 
     func test_dictation_realtimeModelIsLive() {

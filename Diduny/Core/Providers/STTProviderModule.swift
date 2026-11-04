@@ -4,13 +4,18 @@ import Foundation
 enum STTProviderID {
     static let didunyCloud = "diduny-cloud"
     static let localWhisper = "local-whisper"
+    /// On-device engines without a provider module: Parakeet V3 (FluidAudio) and Apple speech recognition.
+    static let parakeet = "parakeet-v3"
+    static let appleSpeech = "apple-speech"
+    static let onDeviceEngines: Set<String> = [parakeet, appleSpeech]
 }
 
-/// The four user-facing jobs that each have their own default provider + model.
+/// The user-facing jobs that each have their own default provider + model.
 enum STTJob: String, CaseIterable, Codable, Sendable {
     case dictation
     case dictationTranslation
     case meeting
+    case meetingTranslation
     case file
 }
 
@@ -96,6 +101,6 @@ struct ProviderRegistry: Sendable {
     }
 
     var providerIDs: Set<String> {
-        Set(modules.map(\.id)).union([STTProviderID.didunyCloud, STTProviderID.localWhisper])
+        Set(modules.map(\.id)).union([STTProviderID.didunyCloud, STTProviderID.localWhisper]).union(STTProviderID.onDeviceEngines)
     }
 }
