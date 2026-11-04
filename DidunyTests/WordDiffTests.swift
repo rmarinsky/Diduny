@@ -50,4 +50,17 @@ final class WordDiffTests: XCTestCase {
         run.referenceEngineID = "parakeet-v3"
         XCTAssertEqual(run.summary(for: "diduny").rate ?? -1, 0.25, accuracy: 0.0001)
     }
+
+    func testRelaxedModeIgnoresCaseAndPunctuationButKeepsOriginalWords() {
+        let result = WordDiff.compare("Ну, Блять — офігеть.", reference: "Ну блять офігеть", strict: false)
+        XCTAssertEqual(result.ops, [.equal("Ну,"), .equal("Блять"), .equal("офігеть.")])
+        XCTAssertEqual(result.rate, 0)
+        XCTAssertEqual(result.referenceWords, 3)
+    }
+
+    func testRelaxedModeStillCountsRealWordChanges() {
+        let result = WordDiff.compare("всі пл-реквести", reference: "Всі пул-реквести,", strict: false)
+        XCTAssertEqual(result.ops, [.equal("всі"), .substituted(word: "пл-реквести", reference: "пул-реквести,")])
+        XCTAssertEqual(result.errors, 1)
+    }
 }
