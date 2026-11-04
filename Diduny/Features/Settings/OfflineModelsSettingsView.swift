@@ -22,6 +22,7 @@ struct OfflineModelsSettingsView: View {
 
     var body: some View {
         Form {
+            if ParakeetModelStore.isSupportedHardware { ParakeetModelSection() }
             whisperModelsSection
             whisperLanguageSection
             memoryManagementSection
@@ -300,4 +301,58 @@ private struct ModelBadge: View {
 #Preview {
     OfflineModelsSettingsView()
         .frame(width: 500, height: 650)
+}
+
+/// Parakeet V3 (FluidAudio, Neural Engine). Apple Silicon only; used by the Benchmark tab.
+private struct ParakeetModelSection: View {
+    @State private var downloaded = ParakeetModelStore.isDownloaded
+    @State private var progress: Double?
+    @State private var error: String?
+    @State private var confirmDelete = false
+
+    var body: some View {
+        Section("Parakeet") {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Parakeet V3").fontWeight(.medium)
+                    Text("25 European languages incl. Ukrainian. Runs on the Neural Engine. About 480 MB.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if let progress { ProgressView(value: progress).frame(maxWidth: 240) }
+                    if let error { Text(error).font(.caption).foregroundStyle(.red) }
+                }
+                Spacer()
+                if downloaded {
+                    Label("Ready", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
+                        .help("Delete Parakeet V3")
+                } else if progress == nil {
+                    Button("Download") { download() }
+                }
+            }
+            .confirmationDialog("Delete Parakeet V3? You can download it again.", isPresented: $confirmDelete) {
+                Button("Delete", role: .destructive) {
+                    Task {
+                        try? await ParakeetModelStore.shared.delete()
+                        downloaded = ParakeetModelStore.isDownloaded
+                    }
+                }
+            }
+        }
+    }
+
+    private func download() {
+        error = nil
+        progress = 0
+        Task {
+            do {
+                _ = try await ParakeetModelStore.shared.loaded { value in
+                    Task { @MainActor in progress = value }
+                }
+            } catch {
+                self.error = error.localizedDescription
+            }
+            progress = nil
+            downloaded = ParakeetModelStore.isDownloaded
+        }
+    }
 }
