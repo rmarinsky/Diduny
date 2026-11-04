@@ -176,7 +176,21 @@ final class ClipboardService: ClipboardServiceProtocol {
         pasteboard.string(forType: .string)
     }
 
-    private func postCommandShortcut(keyCode: CGKeyCode, error: ClipboardError) async throws {
+    /// Sends the given shortcut to the frontmost app (used by Force submit after a successful paste).
+    func sendShortcut(keyCode: CGKeyCode, flags: CGEventFlags) async throws {
+        guard ClipboardService.isAccessibilityGranted() else {
+            throw ClipboardError.accessibilityNotGranted
+        }
+        // Let the target app finish handling the paste before submitting.
+        try await Task.sleep(for: .milliseconds(80))
+        try await postCommandShortcut(keyCode: keyCode, flags: flags, error: .pasteEventFailed)
+    }
+
+    private func postCommandShortcut(
+        keyCode: CGKeyCode,
+        flags: CGEventFlags = .maskCommand,
+        error: ClipboardError
+    ) async throws {
         guard let source = CGEventSource(stateID: .hidSystemState) else {
             Log.app.error("Failed to create event source")
             throw error
@@ -186,7 +200,7 @@ final class ClipboardService: ClipboardServiceProtocol {
             Log.app.error("Failed to create keyDown event")
             throw error
         }
-        keyDown.flags = .maskCommand
+        keyDown.flags = flags
 
         // Build the key-up up front and post it via defer so it always fires —
         // even if the hold-interval sleep below is cancelled (e.g. the user
@@ -196,7 +210,7 @@ final class ClipboardService: ClipboardServiceProtocol {
             Log.app.error("Failed to create keyUp event")
             throw error
         }
-        keyUp.flags = .maskCommand
+        keyUp.flags = flags
 
         keyDown.post(tap: .cgAnnotatedSessionEventTap)
         defer { keyUp.post(tap: .cgAnnotatedSessionEventTap) }

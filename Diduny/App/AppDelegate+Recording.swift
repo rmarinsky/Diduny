@@ -157,6 +157,8 @@ extension AppDelegate {
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
+        ForceSubmitService.shared.deactivate()
+        ForceSubmitService.shared.disarm()
 
         if !forceDiscardAudio, SettingsStorage.shared.escapeCancelSaveAudio, audioRecorder.isRecording {
             do {
@@ -254,17 +256,44 @@ extension AppDelegate {
         copy(text)
         Log.app.info("stopRecording: Text copied to clipboard")
 
-        guard autoPaste else { return true }
+        guard autoPaste else {
+            ForceSubmitService.shared.disarm()
+            return true
+        }
         Log.app.info("stopRecording: Auto-pasting")
         do {
             try await paste()
+            await submitAfterPasteIfRequested(hasText: !text.isEmpty)
         } catch ClipboardError.accessibilityNotGranted {
+            ForceSubmitService.shared.disarm()
             Log.app.warning("stopRecording: Accessibility permission needed")
             PermissionManager.shared.showPermissionAlert(for: .accessibility)
         } catch {
+            ForceSubmitService.shared.disarm()
             Log.app.error("stopRecording: Paste failed - \(error.localizedDescription)")
         }
         return true
+    }
+
+    /// Force submit: after a successful paste, sends Command-Return to the frontmost app.
+    /// Call only after the paste succeeded; consumes the armed flag either way.
+    func submitAfterPasteIfRequested(hasText: Bool) async {
+        let armed = ForceSubmitService.shared.consumeArmed()
+        guard ForceSubmitPolicy.shouldSubmit(
+            armed: armed,
+            autoPaste: SettingsStorage.shared.autoPaste,
+            hasText: hasText,
+            pasteSucceeded: true
+        ) else { return }
+        do {
+            try await clipboardService.sendShortcut(
+                keyCode: ForceSubmitPolicy.submitKeyCode,
+                flags: ForceSubmitPolicy.submitFlags
+            )
+            Log.app.info("Force submit: key combination sent")
+        } catch {
+            Log.app.warning("Force submit failed - \(error.localizedDescription)")
+        }
     }
 
     func startRecording() async {
@@ -421,6 +450,7 @@ extension AppDelegate {
             // Activate escape cancel handler
             await MainActor.run {
                 setupEscapeCancelHandler()
+                setupForceSubmitHandler()
             }
         } catch is CancellationError {
             // Canceled while the engine was initializing; the canceller owns the state.
@@ -493,6 +523,7 @@ extension AppDelegate {
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
+        ForceSubmitService.shared.deactivate()
 
         // Capture recording start time for duration calculation
         let recordingStartTime = appState.recordingStartTime
@@ -706,6 +737,7 @@ extension AppDelegate {
                     if SettingsStorage.shared.autoPaste {
                         do {
                             try await clipboardService.paste()
+                            await submitAfterPasteIfRequested(hasText: !text.isEmpty)
                         } catch ClipboardError.accessibilityNotGranted {
                             Log.app.warning("stopRecording: Accessibility permission needed during Whisper fallback")
                             PermissionManager.shared.showPermissionAlert(for: .accessibility)
@@ -1288,5 +1320,11 @@ extension AppDelegate {
         }
 
         escapeService.activate()
+    }
+
+    private func setupForceSubmitHandler() {
+        ForceSubmitService.shared.activate { [weak self] in
+            Task { @MainActor in await self?.stopRecordingIfRecording() }
+        }
     }
 }

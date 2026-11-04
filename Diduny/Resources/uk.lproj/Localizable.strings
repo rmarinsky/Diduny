@@ -1688,3 +1688,6 @@
 "Type" = "Тип";
 "%lld calendars" = "Календарів: %lld";
 "No calendars" = "Немає календарів";
+"Force submit" = "Примусове надсилання";
+"Press %@ while recording to paste and press ⌘↩" = "Натисніть %@ під час запису, щоб вставити й натиснути ⌘↩";
+"Does not press ⌘↩ after pasting" = "Не натискає ⌘↩ після вставлення";

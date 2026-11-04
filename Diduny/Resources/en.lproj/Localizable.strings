@@ -1688,3 +1688,6 @@
 "Type" = "Type";
 "%lld calendars" = "%lld calendars";
 "No calendars" = "No calendars";
+"Force submit" = "Force submit";
+"Press %@ while recording to paste and press ⌘↩" = "Press %@ while recording to paste and press ⌘↩";
+"Does not press ⌘↩ after pasting" = "Does not press ⌘↩ after pasting";

@@ -23,6 +23,7 @@ struct ShortcutsSettingsView: View {
     @State private var escapeCancelEnabled = SettingsStorage.shared.escapeCancelEnabled
     @State private var escapeCancelPressCount = SettingsStorage.shared.escapeCancelPressCount
     @State private var escapeCancelSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
+    @State private var forceSubmitEnabled = SettingsStorage.shared.forceSubmitEnabled
     @State private var inplaceTranslationEnabled = SettingsStorage.shared.inplaceTranslationEnabled
     @State private var shortcutDisplayRefresh = 0
 
@@ -131,7 +132,10 @@ struct ShortcutsSettingsView: View {
         }
     }
 
-    private func shortcutRecorderField(for shortcut: KeyboardShortcuts.Name) -> some View {
+    private func shortcutRecorderField(
+        for shortcut: KeyboardShortcuts.Name,
+        onChange: @escaping () -> Void = {}
+    ) -> some View {
         let tokens = shortcutTokens(for: shortcut, refresh: shortcutDisplayRefresh)
 
         return ZStack(alignment: .leading) {
@@ -158,6 +162,7 @@ struct ShortcutsSettingsView: View {
 
             ShortcutRecorderOverlay(name: shortcut) { _ in
                 shortcutDisplayRefresh += 1
+                onChange()
             }
             .frame(width: ShortcutLayout.shortcutInputWidth, height: 32)
         }
@@ -304,6 +309,9 @@ struct ShortcutsSettingsView: View {
             divider
 
             cancelRecordingRow
+            divider
+
+            forceSubmitRow
         }
     }
 
@@ -553,6 +561,50 @@ struct ShortcutsSettingsView: View {
         }
         .onChange(of: escapeCancelSaveAudio) { _, newValue in
             SettingsStorage.shared.escapeCancelSaveAudio = newValue
+        }
+    }
+
+    // MARK: - Force Submit
+
+    private var forceSubmitRow: some View {
+        let shortcutLabel = KeyboardShortcuts.getShortcut(for: .forceSubmit).map { String(describing: $0) }
+        return HStack(spacing: DS.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                rowTitle("Force submit")
+                Text(forceSubmitEnabled && shortcutLabel != nil
+                    ? String(localized: "Press \(shortcutLabel ?? "") while recording to paste and press ⌘↩")
+                    : String(localized: "Does not press ⌘↩ after pasting"))
+                    .font(DS.Font.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .id(shortcutDisplayRefresh)
+            }
+
+            Spacer(minLength: DS.Space.md)
+
+            shortcutRecorderField(for: .forceSubmit) {
+                // Recording a shortcut registers it system-wide; keep it off while idle.
+                if !ForceSubmitService.shared.isActive {
+                    KeyboardShortcuts.disable(.forceSubmit)
+                }
+            }
+            .disabled(!forceSubmitEnabled)
+            .opacity(forceSubmitEnabled ? 1.0 : 0.45)
+
+            Toggle("", isOn: $forceSubmitEnabled)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .accessibilityLabel("Force submit")
+        }
+        .padding(.horizontal, DS.Space.lg)
+        .padding(.vertical, DS.Space.md)
+        .frame(minHeight: DS.Layout.settingRowMinHeight)
+        .onChange(of: forceSubmitEnabled) { _, newValue in
+            SettingsStorage.shared.forceSubmitEnabled = newValue
+            if !newValue {
+                ForceSubmitService.shared.deactivate()
+            }
         }
     }
 

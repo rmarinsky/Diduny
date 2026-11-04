@@ -185,6 +185,7 @@ final class SettingsStorage {
         case escapeCancelShortcut
         case escapeCancelPressCount
         case escapeCancelSaveAudio
+        case forceSubmitEnabled
         case textCleanupEnabled
         case fillerWords
         case dictationTranslationHistoryRetentionPolicy
@@ -984,6 +985,19 @@ final class SettingsStorage {
                 forKey: Key.meetingSilenceAutoStopSeconds.rawValue
             )
         }
+    }
+
+    // MARK: - Force Submit
+
+    /// Enables the Force submit shortcut (stop, paste, then send the same keys) during dictation/translation.
+    var forceSubmitEnabled: Bool {
+        get {
+            if defaults.object(forKey: Key.forceSubmitEnabled.rawValue) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Key.forceSubmitEnabled.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.forceSubmitEnabled.rawValue) }
     }
 
     // MARK: - Escape Cancel
