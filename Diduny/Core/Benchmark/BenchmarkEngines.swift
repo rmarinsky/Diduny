@@ -139,6 +139,13 @@ struct ElevenLabsBenchmarkEngine: BenchmarkEngine {
 
     func transcribe(_ url: URL, language: String) async throws -> BenchmarkOutput {
         let (result, seconds) = try await timed { try await ElevenLabsBatchService().transcribe(audioURL: url, languageCode: language) }
+        // Same promise as dictation: ask ElevenLabs to delete the file transcript.
+        if let id = result.transcriptionID {
+            Task {
+                await RemoteDeletionQueue.shared.enqueue(providerID: STTProviderID.elevenLabs, remoteID: id)
+                await RemoteDeletionQueue.shared.process()
+            }
+        }
         return BenchmarkOutput(text: result.transcript.text, seconds: seconds, loadSeconds: 0)
     }
 }
