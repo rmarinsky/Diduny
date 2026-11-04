@@ -171,10 +171,11 @@ To ship a release:
    `release:patch` (bug fix / internal), `release:minor` (new user-facing capability),
    or `release:major` (breaking change), and update release highlights
    (`Diduny/Resources/ReleaseHighlights.json`, EN + UA) **and the "What's new" GIF**:
-   record short clips of the real app (demo recordings only, never real notes) into
-   `release-demo/clips/` (`screencapture -v -V <sec> -R x,y,w,h -x clip.mov`), list them with
-   UA + EN subtitles in `release-demo/scenario.json`, run `python3 scripts/render_release_gif.py`
-   → `Diduny/Resources/ReleaseDemo.gif`, and embed the GIF at
+   record the real app (demo recordings only; `screencapture -v -V <sec> -R x,y,w,h -x clip.mov`
+   into the gitignored `release-demo/clips/`), cut stills into `release-demo/frames/`, script the
+   montage in `release-demo/scenario.js` (camera moves, transitions, highlights, animated shortcut
+   keys, masks over anything private, UA + EN subtitles; preview `open release-demo/player.html`),
+   run `python3 scripts/render_release_gif.py` → `Diduny/Resources/ReleaseDemo.gif`, and embed the GIF at
    the top of the PR description. CI requires both files to change; the GIF ships in the
    app's What's New card and is attached to the GitHub Release as `whats-new.gif`.
    Use `release:skip` only if Roman explicitly requests skipping that PR's release.
