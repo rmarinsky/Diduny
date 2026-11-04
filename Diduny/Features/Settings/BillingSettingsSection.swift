@@ -57,7 +57,7 @@ struct BillingSettingsSection: View {
                         subscription(state)
                     }
                     if state.pendingOrderReference != nil {
-                        Button("Change plan") { confirmsPlanChange = true }.disabled(billing.isLoading)
+                        Button("Change plan") { confirmsPlanChange = true }.buttonStyle(.bordered).disabled(billing.isLoading)
                     }
                     BillingOfferView(state: state, interval: Binding(get: { navigation.interval }, set: { navigation.interval = $0 }),
                                          checkoutAvailable: billing.checkoutAvailable,
@@ -91,11 +91,12 @@ struct BillingSettingsSection: View {
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Button("Terms, refunds & privacy") { showsPolicies = true }
-                        .buttonStyle(.link)
+                        .buttonStyle(.bordered)
                     Spacer()
                     if isLoggedIn {
                         if billing.isLoading { ProgressView().controlSize(.small) }
                         Button("Check payment status") { Task { await refresh(sync: billing.checkoutAvailable) } }
+                            .buttonStyle(.bordered)
                             .disabled(billing.isLoading)
                     }
                 }.font(.callout)
@@ -154,6 +155,8 @@ struct BillingSettingsSection: View {
             Text("A higher plan is a separate purchase. Starting checkout stops the current renewal. Your new plan begins after payment confirmation; the previous payment is not credited.")
                 .font(.callout).foregroundStyle(.secondary)
             Button("Explore Pro plans") { showsUpgrade = true }
+                .buttonStyle(.borderedProminent)
+                .tint(DS.Palette.accent)
         }
         if state.community?.eligible == true {
             if let url = state.community?.inviteURL {
@@ -187,10 +190,13 @@ struct BillingSettingsSection: View {
                         await billing.refresh()
                     }
                 }
-            }.disabled(billing.isLoading)
+            }
+            .buttonStyle(.bordered)
+            .disabled(billing.isLoading)
         } else {
             if let date = displayDate(state.renewsAt) { LabeledContent("Next payment", value: date) }
             Button("Cancel automatic renewal", role: .destructive) { confirmsCancellation = true }
+                .buttonStyle(.bordered)
                 .disabled(billing.isLoading)
         }
     }
