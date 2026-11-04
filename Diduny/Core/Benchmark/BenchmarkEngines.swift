@@ -21,6 +21,8 @@ struct BenchmarkOutput: Sendable {
     let seconds: TimeInterval
     /// Model load time, reported apart from transcription time (0 when warm or remote).
     let loadSeconds: TimeInterval
+    /// Language the engine heard, when it reports one (Diduny does, per token).
+    var detectedLanguage: String? = nil
 }
 
 /// One engine the Benchmark tab can run on a recording's audio file.
@@ -60,7 +62,7 @@ struct DidunyBenchmarkEngine: BenchmarkEngine {
         let service = CloudRealtimeService()
         let collector = TokenCollector()
         service.onTokensReceived = { collector.add($0) }
-        try await service.connect(languageHints: [language], enableSpeakerDiarization: false)
+        try await service.connect(languageHints: language == BenchmarkRun.autoLanguage ? [] : [language], enableSpeakerDiarization: false)
         let chunk = 1600 // 100ms at 16kHz
         var index = 0
         while index < samples.count {
@@ -74,24 +76,33 @@ struct DidunyBenchmarkEngine: BenchmarkEngine {
         let text = collector.text
         await service.disconnect()
         guard !text.isEmpty else { throw TranscriptionError.emptyTranscription }
-        return BenchmarkOutput(text: text, seconds: seconds, loadSeconds: 0)
+        return BenchmarkOutput(text: text, seconds: seconds, loadSeconds: 0, detectedLanguage: collector.language)
     }
 
     /// Tokens arrive on the socket's queue; keep them in order without hopping tasks.
     private final class TokenCollector: @unchecked Sendable {
         private let lock = NSLock()
         private var final = "", provisional = ""
+        private var languageCounts: [String: Int] = [:]
         func add(_ tokens: [RealtimeToken]) {
             lock.lock(); defer { lock.unlock() }
             var latest = ""
             for token in tokens where !token.text.isEmpty {
-                if token.isFinal { final += token.text } else { latest += token.text }
+                if token.isFinal {
+                    final += token.text
+                    if let language = token.language { languageCounts[language, default: 0] += token.text.count }
+                } else { latest += token.text }
             }
             provisional = latest
         }
         var text: String {
             lock.lock(); defer { lock.unlock() }
             return (final + provisional).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        /// The language most of the final text was in.
+        var language: String? {
+            lock.lock(); defer { lock.unlock() }
+            return languageCounts.max { $0.value < $1.value }?.key
         }
     }
 
@@ -229,7 +240,8 @@ struct AppleBenchmarkEngine: BenchmarkEngine {
     /// macOS 26+: SpeechAnalyzer's DictationTranscriber (its newer SpeechTranscriber has no Ukrainian).
     /// Older macOS: on-device SFSpeechRecognizer.
     func transcribe(_ url: URL, language: String) async throws -> BenchmarkOutput {
-        let locale = Locale(identifier: language)
+        // Apple can't detect the language; in Auto it gets what Diduny heard (see the runner).
+        let locale = Locale(identifier: language == BenchmarkRun.autoLanguage ? BenchmarkRunner.defaultLanguage : language)
         if #available(macOS 26, *) {
             let (text, seconds) = try await timed { try await Self.transcribeWithAnalyzer(url, locale: locale) }
             return BenchmarkOutput(text: text, seconds: seconds, loadSeconds: 0)

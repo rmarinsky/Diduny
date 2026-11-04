@@ -22,7 +22,7 @@ private struct BenchmarkSetupView: View {
     @State private var storage = RecordingsLibraryStorage.shared
     @State private var selectedRecordings: Set<UUID> = []
     @State private var selectedEngines: Set<String> = []
-    @State private var language = BenchmarkRunner.defaultLanguage
+    @State private var language = BenchmarkRun.autoLanguage
     @State private var engines: [any BenchmarkEngine] = BenchmarkEngineCatalog.all()
 
     private var playable: [Recording] {
@@ -92,6 +92,7 @@ private struct BenchmarkSetupView: View {
 
                 HStack {
                     Picker("Language", selection: $language) {
+                        Text("Auto (per recording)").tag(BenchmarkRun.autoLanguage)
                         ForEach(SettingsStorage.shared.favoriteLanguages, id: \.self) { code in
                             Text(Locale.current.localizedString(forLanguageCode: code) ?? code).tag(code)
                         }
@@ -209,15 +210,18 @@ private struct BenchmarkResultsView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 12) {
-                    Picker("", selection: $filter) {
-                        Text("All clips \(run.clips.count)").tag("all")
-                        ForEach(run.engines.filter { $0.id != run.referenceEngineID }) { engine in
-                            Text("\(engine.name) differs \(differingCount(engine.id))").tag(engine.id)
+                    // Chips scroll sideways instead of a segmented control, which can't
+                    // shrink and pushed the window past the screen with 5+ engines.
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            filterChip("all", "All clips", run.clips.count)
+                            ForEach(run.engines.filter { $0.id != run.referenceEngineID }) { engine in
+                                filterChip(engine.id, "\(engine.name) differs", differingCount(engine.id))
+                            }
+                            filterChip("unvoted", "Not voted", run.clips.filter { run.votes[$0.id] == nil }.count)
                         }
-                        Text("Not voted \(run.clips.filter { run.votes[$0.id] == nil }.count)").tag("unvoted")
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
                     Toggle("Count punctuation and case", isOn: $strict)
                         .toggleStyle(.checkbox)
                         .font(.system(size: 11.5))
@@ -255,6 +259,28 @@ private struct BenchmarkResultsView: View {
         }
     }
 
+    private func filterChip(_ id: String, _ title: String, _ count: Int) -> some View {
+        let on = filter == id
+        return Button { filter = id } label: {
+            HStack(spacing: 4) {
+                Text(title)
+                Text("\(count)").monospacedDigit().opacity(0.7)
+            }
+            .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .foregroundStyle(on ? .white : .primary)
+            .background(on ? Color.accentColor : Color(.separatorColor).opacity(0.5), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    /// How the engine runs, so "Diduny" isn't read as just another model.
+    private func modeLabel(_ engine: BenchmarkRun.Engine) -> String {
+        if engine.id == "diduny" { return String(localized: "Realtime · cloud") }
+        return engine.kind == .cloud ? String(localized: "Cloud") : String(localized: "On-device")
+    }
+
     private func diff(_ clip: BenchmarkRun.Clip, _ engineID: String) -> WordDiff.Result? {
         guard let text = run.cell(clip.id, engineID)?.text,
               let ref = run.cell(clip.id, run.referenceEngineID)?.text else { return nil }
@@ -290,12 +316,18 @@ private struct BenchmarkResultsView: View {
                 Text(engine.name).font(.system(size: 13, weight: .semibold))
                 if isDefault { badge("Default") }
             }
+            HStack(spacing: 4) {
+                Text(modeLabel(engine))
+                    .font(.system(size: 10.5, weight: .medium)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Color(.separatorColor).opacity(0.5), in: Capsule())
+            }
             Text(s.rate.map { String(format: "%.1f%%", $0 * 100) } ?? String(localized: "Reference"))
                 .font(.system(size: 22, weight: .bold))
-            Text(s.rate == nil ? "Other engines are compared with it" : "of words differ from Reference · lower is closer")
+            Text(s.rate == nil ? "Others are compared with it" : "words differ · lower is closer")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(String(format: String(localized: "%.2f s avg from Stop to text"), s.seconds / Double(max(finished, 1))))
+            Text(String(format: String(localized: "%.2f s Stop → text"), s.seconds / Double(max(finished, 1))))
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
             Text(String(format: "model load %.1f s · votes %d of %d", s.loadSeconds, s.votes, run.clips.count))
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
@@ -329,6 +361,12 @@ private struct BenchmarkResultsView: View {
             HStack(spacing: 12) {
                 Text(clip.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                 Spacer()
+                if let code = run.clipLanguages?[clip.id] {
+                    Text(code.uppercased()).font(.system(size: 10.5, weight: .semibold))
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Color(.separatorColor), in: RoundedRectangle(cornerRadius: 4))
+                        .help("Language Diduny detected for this recording")
+                }
                 Text(duration(clip.durationSeconds)).font(.system(size: 12, weight: .medium, design: .monospaced))
                 Text(clip.createdAt, style: .date).font(.system(size: 11)).foregroundStyle(.secondary)
             }
@@ -374,7 +412,13 @@ private struct BenchmarkResultsView: View {
                 if let error = cell?.error {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 } else if let text = cell?.text {
-                    if !isRef, let diff { Text(highlighted(diff)) } else { Text(text) }
+                    if !isRef, let diff, diff.rate > 0.6 {
+                        // Word marks are noise when almost nothing matches: show the text as is.
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Mostly different from Reference").font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
+                            Text(text)
+                        }
+                    } else if !isRef, let diff { Text(highlighted(diff)) } else { Text(text) }
                 } else {
                     Text(runner.isRunning ? "Waiting…" : "Not run").foregroundStyle(.secondary)
                 }
