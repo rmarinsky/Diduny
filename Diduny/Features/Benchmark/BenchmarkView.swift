@@ -2,17 +2,25 @@ import SwiftUI
 
 struct BenchmarkView: View {
     @State private var runner = BenchmarkRunner.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
             if let run = runner.current {
                 BenchmarkResultsView(run: run, runner: runner)
+                    .transition(.opacity.combined(with: .scale(scale: reduceMotion ? 1 : 0.985)))
             } else {
                 BenchmarkSetupView(runner: runner)
+                    .transition(.opacity.combined(with: .scale(scale: reduceMotion ? 1 : 0.985)))
             }
         }
+        .animation(reduceMotion ? DS.Motion.reduced : DS.Motion.easeOut(0.2), value: runner.current == nil)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+}
+
+private enum BenchmarkLayout {
+    static let recordingRowHeight: CGFloat = 32
 }
 
 // MARK: - Setup
@@ -33,31 +41,30 @@ private struct BenchmarkSetupView: View {
     private var unavailable: [any BenchmarkEngine] { engines.filter { $0.availability() != .ready } }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Benchmark").font(.title2.bold())
-                    Text("Compare transcription engines on your own recordings.").foregroundStyle(.secondary)
-                }
-
+        PageScaffold(title: "Benchmark", subtitle: "Compare transcription engines on your own recordings.") {
+            Button(runTitle) {
+                let recs = playable.filter { selectedRecordings.contains($0.id) }
+                runner.start(recordings: recs, engines: ready.filter { selectedEngines.contains($0.id) }, language: language)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(DS.Palette.accent)
+            .disabled(selectedRecordings.isEmpty || selectedEngines.count < 2)
+            .keyboardShortcut("r", modifiers: .command)
+        } content: {
+            VStack(alignment: .leading, spacing: DS.Space.lg) {
                 card(title: "Recordings", detail: recordingsDetail) {
                     if playable.isEmpty {
-                        Text("No recordings yet. Record something first.").foregroundStyle(.secondary).padding(16)
-                    }
-                    ForEach(playable) { recording in
-                        checkRow(isOn: selectedRecordings.contains(recording.id)) {
-                            toggle(&selectedRecordings, recording.id)
-                        } content: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(recording.displayTitle).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                                Text(recording.transcriptionText ?? "").font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
-                            }
-                            Spacer(minLength: 8)
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(duration(recording.effectiveDurationSeconds)).font(.system(size: 12, weight: .medium, design: .monospaced))
-                                Text(recording.createdAt, style: .date).font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text("No recordings yet. Record something first.").foregroundStyle(.secondary).padding(DS.Space.lg)
+                    } else {
+                        // About 10 rows of 32 pt; longer libraries scroll inside the card.
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(playable) { recording in
+                                    recordingRow(recording)
+                                }
                             }
                         }
+                        .frame(height: min(CGFloat(playable.count), 10) * BenchmarkLayout.recordingRowHeight)
                     }
                 }
 
@@ -69,22 +76,22 @@ private struct BenchmarkSetupView: View {
                             engineLabel(engine)
                             Spacer()
                             Label("Ready", systemImage: "circle.fill").labelStyle(.titleAndIcon)
-                                .font(.system(size: 12)).foregroundStyle(.green)
+                                .font(DS.Font.callout).foregroundStyle(.green)
                         }
                     }
                     if !unavailable.isEmpty {
-                        Text("Not available").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-                            .padding(.horizontal, 16).padding(.vertical, 8)
+                        Text("Not available").font(DS.Font.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            .padding(.horizontal, DS.Space.lg).padding(.vertical, DS.Space.sm)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color(.quaternaryLabelColor).opacity(0.12))
                         ForEach(unavailable, id: \.id) { engine in
-                            HStack(spacing: 12) {
+                            HStack(spacing: DS.Space.md) {
                                 Image(systemName: "square").foregroundStyle(.tertiary)
                                 engineLabel(engine)
                                 Spacer()
-                                Text(reason(engine.availability())).font(.system(size: 12)).foregroundStyle(.secondary)
+                                Text(reason(engine.availability())).font(DS.Font.callout).foregroundStyle(.secondary)
                             }
-                            .padding(.horizontal, 16).padding(.vertical, 11)
+                            .padding(.horizontal, DS.Space.lg).padding(.vertical, DS.Space.md)
                             .opacity(0.6)
                         }
                     }
@@ -100,13 +107,7 @@ private struct BenchmarkSetupView: View {
                     .frame(width: 220)
                     Spacer()
                     Button("Clear") { selectedRecordings = []; selectedEngines = [] }
-                    Button(runTitle) {
-                        let recs = playable.filter { selectedRecordings.contains($0.id) }
-                        runner.start(recordings: recs, engines: ready.filter { selectedEngines.contains($0.id) }, language: language)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(selectedRecordings.isEmpty || selectedEngines.count < 2)
-                    .keyboardShortcut("r", modifiers: .command)
+                        .buttonStyle(.bordered)
                 }
 
                 if !runner.runs.isEmpty {
@@ -118,9 +119,9 @@ private struct BenchmarkSetupView: View {
                                 } label: {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(run.createdAt, format: .dateTime.day().month().hour().minute())
-                                            .font(.system(size: 13, weight: .semibold))
+                                            .font(DS.Font.headline)
                                         Text("\(run.clips.count) recordings · \(run.engines.map(\.name).joined(separator: ", "))")
-                                            .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                                            .font(DS.Font.callout).foregroundStyle(.secondary).lineLimit(1)
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .contentShape(Rectangle())
@@ -129,14 +130,47 @@ private struct BenchmarkSetupView: View {
                                 Button(role: .destructive) { runner.delete(run) } label: { Image(systemName: "trash") }
                                     .buttonStyle(.plain).foregroundStyle(.red).help("Delete benchmark")
                             }
-                            .padding(.horizontal, 16).padding(.vertical, 11)
+                            .padding(.horizontal, DS.Space.lg).padding(.vertical, DS.Space.md)
                         }
                     }
                 }
             }
-            .padding(24)
         }
         .onAppear { engines = BenchmarkEngineCatalog.all() }
+    }
+
+    /// Single-line 32 pt row: checkbox, "Title · date, time", truncated preview, monospaced duration.
+    private func recordingRow(_ recording: Recording) -> some View {
+        let isOn = selectedRecordings.contains(recording.id)
+        return Button {
+            toggle(&selectedRecordings, recording.id)
+        } label: {
+            HStack(spacing: DS.Space.sm) {
+                Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                    .font(DS.Font.body)
+                    .foregroundStyle(isOn ? DS.Palette.accent : .secondary)
+                HStack(spacing: DS.Space.xs) {
+                    Text(recording.displayTitle).font(DS.Font.body.weight(.medium))
+                    Text("· \(recording.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(DS.Font.caption).foregroundStyle(.secondary)
+                }
+                .lineLimit(1)
+                .fixedSize()
+                .layoutPriority(1)
+                Text(recording.transcriptionText ?? "")
+                    .font(DS.Font.callout).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(duration(recording.effectiveDurationSeconds))
+                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, DS.Space.lg)
+            .frame(height: BenchmarkLayout.recordingRowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     private var recordingsDetail: String {
@@ -179,28 +213,26 @@ private struct BenchmarkResultsView: View {
     @AppStorage("benchmarkStrictDiff") private var strict = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(runner.isRunning ? "Running benchmark" : "Benchmark results").font(.title2.bold())
-                        Text("\(run.clips.count) recordings · \(run.engines.count) engines · \(duration(run.audioSeconds)) audio\(run.cancelled ? " · cancelled, partial" : "")")
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if runner.isRunning {
-                        ProgressView(value: Double(runner.progress.done), total: Double(max(runner.progress.total, 1)))
-                            .frame(width: 160)
-                        Button("Cancel") { runner.cancel() }
-                    } else {
-                        Picker("Reference", selection: Binding(get: { run.referenceEngineID }, set: { runner.setReference($0) })) {
-                            ForEach(run.engines) { Text($0.name).tag($0.id) }
-                        }
-                        .frame(width: 220)
-                        Button("New benchmark") { runner.close() }
-                    }
+        PageScaffold(
+            title: runner.isRunning ? "Running benchmark" : "Benchmark results",
+            subtitle: "\(run.clips.count) recordings · \(run.engines.count) engines · \(duration(run.audioSeconds)) audio\(run.cancelled ? " · cancelled, partial" : "")"
+        ) {
+            if runner.isRunning {
+                ProgressView(value: Double(runner.progress.done), total: Double(max(runner.progress.total, 1)))
+                    .tint(DS.Palette.accent)
+                    .frame(width: 160)
+                Button("Cancel") { runner.cancel() }
+                    .buttonStyle(.bordered)
+            } else {
+                Picker("Reference", selection: Binding(get: { run.referenceEngineID }, set: { runner.setReference($0) })) {
+                    ForEach(run.engines) { Text($0.name).tag($0.id) }
                 }
-
+                .frame(width: 220)
+                Button("New benchmark") { runner.close() }
+                    .buttonStyle(.bordered)
+            }
+        } content: {
+            VStack(alignment: .leading, spacing: DS.Space.md) {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 12) {
                     ForEach(run.engines) { engine in summaryCard(engine) }
                 }
@@ -240,11 +272,10 @@ private struct BenchmarkResultsView: View {
                         Divider()
                     }
                 }
-                .background(Color(.windowBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color(.separatorColor), lineWidth: 0.5))
+                .background(DS.Palette.cardFill)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous).stroke(DS.Palette.cardBorder, lineWidth: 1))
             }
-            .padding(24)
         }
     }
 
@@ -488,17 +519,17 @@ private func duration(_ seconds: TimeInterval) -> String {
 private func card(title: LocalizedStringKey, detail: String, @ViewBuilder content: () -> some View) -> some View {
     VStack(spacing: 0) {
         HStack {
-            Text(title).font(.system(size: 13, weight: .semibold))
+            Text(title).font(DS.Font.headline)
             Spacer()
-            Text(detail).font(.system(size: 12)).foregroundStyle(.secondary)
+            Text(detail).font(DS.Font.callout).foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        Divider()
+        .padding(.horizontal, DS.Space.lg).padding(.vertical, DS.Space.md)
+        RowSeparator()
         content()
     }
-    .background(Color(.windowBackgroundColor))
-    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color(.separatorColor), lineWidth: 0.5))
+    .background(DS.Palette.cardFill)
+    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous).stroke(DS.Palette.cardBorder, lineWidth: 1))
 }
 
 private func checkRow(isOn: Bool, action: @escaping () -> Void, @ViewBuilder content: () -> some View) -> some View {
@@ -506,10 +537,10 @@ private func checkRow(isOn: Bool, action: @escaping () -> Void, @ViewBuilder con
         HStack(spacing: 12) {
             Image(systemName: isOn ? "checkmark.square.fill" : "square")
                 .font(.system(size: 15))
-                .foregroundStyle(isOn ? Color.accentColor : .secondary)
+                .foregroundStyle(isOn ? DS.Palette.accent : .secondary)
             content()
         }
-        .padding(.horizontal, 16).padding(.vertical, 11)
+        .padding(.horizontal, DS.Space.lg).padding(.vertical, DS.Space.md)
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
