@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Bring your own ElevenLabs key",
+    "headline": "Your own ElevenLabs key, local Parakeet and a Benchmark tab",
     "highlights": [
       "Settings → Providers: add your ElevenLabs API key and use it for dictation, dictation translation and live meetings. The key stays in your Mac's Keychain, and Diduny asks ElevenLabs to delete each transcript after saving it.",
-      "Pick the engine per job in Audio & Dictation and Calendar & Meetings. Diduny Cloud stays the default, and \"Models\" is now called \"Local Models\".",
-      "Recordings search and the Overview stats are much faster. Overview opens on the current calendar month."
+      "Settings → Providers → \"Engine for each mode\": pick the engine for dictation, dictation translation, meetings, meeting translation and files, or one for all. New on-device options for dictation: Parakeet V3 on the Neural Engine (download it in Local Models, Apple Silicon only) and Apple's recognition. \"Models\" is now \"Local Models\".",
+      "New Benchmark tab: run your recordings through several engines and compare text, speed and differences side by side, then make the winner your default. Recordings search and Overview stats are also much faster."
     ]
   },
   "uk": {
-    "headline": "Свій ключ ElevenLabs",
+    "headline": "Свій ключ ElevenLabs, локальний Parakeet і вкладка «Бенчмарк»",
     "highlights": [
       "Налаштування → Провайдери: додай свій API-ключ ElevenLabs і використовуй його для диктування, перекладу диктування та живих зустрічей. Ключ лишається в Keychain твого Mac, а Diduny просить ElevenLabs видалити кожен транскрипт після збереження.",
-      "Обирай рушій для кожного завдання в «Аудіо й диктування» та «Календар і зустрічі». Diduny Cloud лишається за замовчуванням, а «Моделі» тепер називаються «Локальні моделі».",
-      "Пошук у записах і статистика в Огляді працюють значно швидше. Огляд відкривається на поточному календарному місяці."
+      "Налаштування → Способи обробки → «Рушій для кожного режиму»: обирай рушій для диктування, перекладу диктування, зустрічей, перекладу зустрічей і файлів або один для всього. Нові локальні варіанти для диктування: Parakeet V3 на Neural Engine (завантаж у «Локальних моделях», лише Apple Silicon) і розпізнавання Apple. «Моделі» тепер «Локальні моделі».",
+      "Нова вкладка «Бенчмарк»: проганяй свої записи через кілька рушіїв і порівнюй текст, швидкість і відмінності поруч, а переможця роби основним. Пошук у записах і статистика в Огляді теж працюють значно швидше."
     ]
   }
 }
