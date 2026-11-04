@@ -97,6 +97,13 @@ struct OverviewLaunchCard: View {
                     }
                     .font(.subheadline)
                 }
+                if let demo = NSImage(named: "ReleaseDemo") ?? Bundle.main.image(forResource: "ReleaseDemo") {
+                    AnimatedImage(image: demo)
+                        .aspectRatio(800.0 / 500.0, contentMode: .fit)
+                        .frame(maxWidth: 480)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .accessibilityLabel("What’s new in this release, animated")
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -126,4 +133,21 @@ struct OverviewLaunchCard: View {
         accessibilityGranted = PermissionManager.shared.status.accessibility
         screenRecordingGranted = PermissionManager.shared.status.screenRecording
     }
+}
+
+/// Plays a bundled animated GIF (NSImageView animates GIFs natively; SwiftUI's Image does not).
+private struct AnimatedImage: NSViewRepresentable {
+    let image: NSImage
+
+    func makeNSView(context: Context) -> NSImageView {
+        let view = NSImageView()
+        view.image = image
+        view.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        view.imageScaling = .scaleProportionallyUpOrDown
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        return view
+    }
+
+    func updateNSView(_ view: NSImageView, context: Context) {}
 }

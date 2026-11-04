@@ -106,6 +106,7 @@
 		5A7DA4DDED7F5A4D1947DCD0 /* ShortcutsSettingsHitTestingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB4F81CA3EBCB66A1B0C08A6 /* ShortcutsSettingsHitTestingTests.swift */; };
 		5B89431A91667B55380925FB /* MainSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B15385C5553FC7E235C629D0 /* MainSection.swift */; };
 		5BAC7C23DB894E302D797814 /* Mono16kConverterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68414914E06C26A51256B3F /* Mono16kConverterTests.swift */; };
+		5BF3B02701FAD881D99E1DE2 /* ReleaseDemo.gif in Resources */ = {isa = PBXBuildFile; fileRef = 0BC53822E243EB2275568A78 /* ReleaseDemo.gif */; };
 		5C38E65B15A426A3B51A9EEB /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FF35CE111AABBE5F2797242F /* whisper.xcframework */; };
 		5CC5754191FB75CCCB6336B0 /* MeetingLiveLibraryRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 182AC9A53900248957496A43 /* MeetingLiveLibraryRowTests.swift */; };
 		5E19BD971514D120D45C56FE /* Banner.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB79067AA8AF06A01E737F48 /* Banner.swift */; };
@@ -312,6 +313,7 @@
 		09A53A5FD4196FA12DF76141 /* MeetingChapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingChapter.swift; sourceTree = "<group>"; };
 		0B1B86B6C7ECD0E87920F9AA /* ElevenLabsBatchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsBatchService.swift; sourceTree = "<group>"; };
 		0B43D2844894F848F20BFDEB /* MenuBarIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconView.swift; sourceTree = "<group>"; };
+		0BC53822E243EB2275568A78 /* ReleaseDemo.gif */ = {isa = PBXFileReference; lastKnownFileType = image.gif; path = ReleaseDemo.gif; sourceTree = "<group>"; };
 		0C49EEDF9A5AEED5B941A6AF /* Test.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Test.xcconfig; sourceTree = "<group>"; };
 		0C6F0ACF93EFE09C0E36A170 /* LocalSpeakerDiarizerIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSpeakerDiarizerIntegrationTests.swift; sourceTree = "<group>"; };
 		0CA68D80B03C5B98EDEAE055 /* AudioTrimEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTrimEditorTests.swift; sourceTree = "<group>"; };
@@ -743,6 +745,7 @@
 				6DEE8864EAB344C14A78A884 /* ggml-silero-v6.2.0.bin */,
 				F54AB0D8602B537FB2845507 /* Info.plist */,
 				95C548901A7E8B827205B588 /* InfoPlist.strings */,
+				0BC53822E243EB2275568A78 /* ReleaseDemo.gif */,
 				9F81DB03BFE440BD64876657 /* ReleaseHighlights.json */,
 				42E534876DC6CD7F829ED08D /* Localizable.strings */,
 			);
@@ -1338,6 +1341,7 @@
 				107FDBF081DEEF30BD2A922D /* Assets.xcassets in Resources */,
 				3ACD0775BB825096D5C8EFED /* InfoPlist.strings in Resources */,
 				E15A31EBDA816B7582FF7897 /* Localizable.strings in Resources */,
+				5BF3B02701FAD881D99E1DE2 /* ReleaseDemo.gif in Resources */,
 				DA068435E21EDFDDAA91B8C8 /* ReleaseHighlights.json in Resources */,
 				DAA6C27D18AD6B9D807FAFDC /* ggml-silero-v6.2.0.bin in Resources */,
 			);

@@ -169,7 +169,12 @@ To ship a release:
 1. Open a PR into `main`.
 2. Every PR must be prepared for a release. Add exactly one label:
    `release:patch` (bug fix / internal), `release:minor` (new user-facing capability),
-   or `release:major` (breaking change), and update release highlights.
+   or `release:major` (breaking change), and update release highlights
+   (`Diduny/Resources/ReleaseHighlights.json`, EN + UA) **and the "What's new" GIF**:
+   edit `release-demo/scenario.js` (preview: `open release-demo/player.html`), run
+   `scripts/render_release_gif.sh` → `Diduny/Resources/ReleaseDemo.gif`, and embed the GIF at
+   the top of the PR description. CI requires both files to change; the GIF ships in the
+   app's What's New card and is attached to the GitHub Release as `whats-new.gif`.
    Use `release:skip` only if Roman explicitly requests skipping that PR's release.
    Draft status and lack of merge authorization do not justify `release:skip`.
 3. Merge the PR.

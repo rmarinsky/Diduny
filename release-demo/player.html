@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Diduny release demo</title>
+<!--
+  Plays window.SCENARIO from scenario.js. Open directly to preview (loops).
+  ?t=<ms> freezes every animation at that moment; scripts/render_release_gif.sh uses it
+  to capture frames deterministically.
+-->
+<style>
+:root{
+  --bg:#1e1e1e; --card:#262626; --border:rgba(255,255,255,.08); --sep:rgba(255,255,255,.07);
+  --text:#ececec; --text2:rgba(235,235,245,.6); --text3:rgba(235,235,245,.35);
+  --accent:#d6506c; --accent-soft:rgba(214,80,108,.16); --green:#3fb950;
+}
+*{box-sizing:border-box;margin:0}
+html,body{width:800px;height:500px;overflow:hidden;background:var(--bg);color:var(--text);
+  font:15px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;-webkit-font-smoothing:antialiased}
+.scene{position:absolute;inset:0;display:flex;flex-direction:column;opacity:0}
+.stage{flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 56px}
+.caption{height:64px;flex:none;display:flex;align-items:center;gap:12px;padding:0 32px;border-top:1px solid var(--sep);font-size:17px;font-weight:500}
+.caption::before{content:"";width:4px;height:24px;border-radius:2px;background:var(--accent)}
+.brand{position:absolute;top:22px;left:32px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--text2)}
+.brand i{width:20px;height:20px;border-radius:6px;background:var(--accent);display:grid;place-items:center;font-style:normal;font-size:11px}
+/* title */
+.t-title{font-size:56px;font-weight:700;letter-spacing:-.02em;text-align:center}
+.t-sub{font-size:22px;color:var(--text2);text-align:center;margin-top:10px}
+/* race */
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.stop{align-self:flex-start;margin-bottom:18px;display:flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:17px;background:var(--accent);font-weight:600;font-size:14px}
+.stop b{width:10px;height:10px;border-radius:2px;background:#fff}
+.lane{display:grid;grid-template-columns:230px 1fr 72px;align-items:center;gap:16px;height:62px;padding:0 20px}
+.lane+.lane{border-top:1px solid var(--sep)}
+.lane .nm{font-weight:600;font-size:15px}
+.lane .tg{font-size:11px;color:var(--text2)}
+.track{height:10px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden}
+.bar{height:100%;border-radius:5px;background:rgba(255,255,255,.45);transform-origin:left center}
+.lane.hl .bar{background:var(--accent)}
+.lane .val{font:600 15px ui-monospace,SFMono-Regular,monospace;text-align:right;opacity:0}
+.lane.hl .val{color:var(--accent)}
+/* keys */
+.chat{width:100%;display:flex;flex-direction:column;gap:14px}
+.msgs{height:120px;display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-end;gap:8px}
+.bubble{max-width:70%;padding:10px 14px;border-radius:16px 16px 4px 16px;background:var(--accent);font-size:15px;opacity:0}
+.bubble.old{background:#3a3a3a;opacity:1;align-self:flex-start;border-radius:16px 16px 16px 4px;color:var(--text2)}
+.input{height:52px;border-radius:12px;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 16px;position:relative}
+.rec{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)}
+.rec b{width:9px;height:9px;border-radius:50%;background:var(--accent)}
+.typed{position:absolute;left:16px;right:16px;opacity:0}
+.keys{display:flex;gap:10px;justify-content:center;margin-top:26px}
+.key{width:64px;height:64px;border-radius:14px;background:#2e2e2e;border:1px solid rgba(255,255,255,.14);border-bottom-width:4px;display:grid;place-items:center;font-size:28px;opacity:0}
+/* apps */
+.apps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.app{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:12px;opacity:0;min-height:170px}
+.app .ic{width:52px;height:52px;border-radius:13px;background:#333;display:grid;place-items:center;font-size:28px}
+.app .an{font-weight:600;font-size:17px}
+.app .at{font-size:13px;color:var(--text2)}
+.app .here{align-self:flex-start;margin-top:auto;font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent)}
+</style>
+</head>
+<body>
+<script src="scenario.js"></script>
+<script>
+const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
+const EASE_IN_OUT = 'cubic-bezier(0.77, 0, 0.175, 1)';
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+// Every animation is scheduled on one timeline (delay = absolute start) so ?t= can seek all of them.
+function at(node, keyframes, start, duration, easing = EASE_OUT, fill = 'both') {
+  if (REDUCE) keyframes = keyframes.map(k => { const { transform, ...rest } = k; return rest; });
+  return node.animate(keyframes, { delay: start, duration, easing, fill });
+}
+const enter = (node, start, dy = 10, duration = 360) =>
+  at(node, [{ opacity: 0, transform: `translateY(${dy}px) scale(0.98)` }, { opacity: 1, transform: 'none' }], start, duration);
+
+const builders = {
+  title(s, t0) {
+    const st = el('div', 'stage');
+    const a = st.appendChild(el('div', 't-title', s.title));
+    const b = st.appendChild(el('div', 't-sub', s.subtitle || ''));
+    enter(a, t0 + 120, 14, 480); enter(b, t0 + 200, 14, 480);
+    return { stage: st };
+  },
+  race(s, t0) {
+    const st = el('div', 'stage');
+    const stop = st.appendChild(el('div', 'stop', '<b></b>Stop'));
+    const card = st.appendChild(el('div', 'card'));
+    enter(stop, t0 + 150); enter(card, t0 + 210);
+    const pressAt = t0 + 900;
+    at(stop, [{ transform: 'scale(1)' }, { transform: 'scale(0.94)' }], pressAt, 120);
+    at(stop, [{ transform: 'scale(0.94)' }, { transform: 'scale(1)' }], pressAt + 120, 160, EASE_OUT, 'forwards');
+    const max = Math.max(...s.lanes.map(l => l.seconds));
+    s.lanes.forEach(l => {
+      const row = card.appendChild(el('div', 'lane' + (l.highlight ? ' hl' : ''),
+        `<div><div class="nm">${l.name}</div><div class="tg">${l.tag || ''}</div></div><div class="track"><div class="bar"></div></div><div class="val">${l.seconds.toFixed(2)} s</div>`));
+      const bar = row.querySelector('.bar'); const val = row.querySelector('.val');
+      const start = pressAt + 280; const ms = l.seconds * 1000; // real time from Stop to text
+      bar.style.width = (l.seconds / max * 100) + '%';
+      at(bar, [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], start, ms, 'linear');
+      at(val, [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], start + ms, 220);
+    });
+    return { stage: st };
+  },
+  keys(s, t0) {
+    const st = el('div', 'stage');
+    const chat = st.appendChild(el('div', 'chat'));
+    const msgs = chat.appendChild(el('div', 'msgs'));
+    msgs.appendChild(el('div', 'bubble old', 'Can we ship today?'));
+    const bubble = msgs.appendChild(el('div', 'bubble', s.text));
+    const input = chat.appendChild(el('div', 'input'));
+    const rec = input.appendChild(el('div', 'rec', '<b></b>Recording…'));
+    const typed = input.appendChild(el('div', 'typed', s.text));
+    const keys = st.appendChild(el('div', 'keys'));
+    const caps = s.keys.map(k => keys.appendChild(el('div', 'key', k)));
+    enter(chat, t0 + 150);
+    at(rec.querySelector('b'), [{ opacity: 1 }, { opacity: 0.25 }, { opacity: 1 }], t0, 900, 'linear');
+    caps.forEach((c, i) => enter(c, t0 + 700 + i * 60, 8, 300));
+    const press = t0 + 1500;
+    caps.forEach(c => {
+      at(c, [{ transform: 'translateY(0)' }, { transform: 'translateY(3px) scale(0.96)' }], press, 120, EASE_OUT, 'forwards');
+      at(c, [{ transform: 'translateY(3px) scale(0.96)' }, { transform: 'none' }], press + 260, 160, EASE_OUT, 'forwards');
+    });
+    at(rec, [{ opacity: 1 }, { opacity: 0 }], press + 80, 160, EASE_OUT, 'forwards');
+    at(typed, [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], press + 280, 220);
+    const send = press + 1300;
+    at(typed, [{ opacity: 1 }, { opacity: 0 }], send, 160, EASE_OUT, 'forwards');
+    at(bubble, [{ opacity: 0, transform: 'translateY(48px) scale(0.97)' }, { opacity: 1, transform: 'none' }], send, 420, EASE_IN_OUT);
+    return { stage: st };
+  },
+  apps(s, t0) {
+    const st = el('div', 'stage');
+    const grid = st.appendChild(el('div', 'apps'));
+    s.apps.forEach((a, i) => {
+      const card = grid.appendChild(el('div', 'app',
+        `<div class="ic">${a.glyph}</div><div class="an">${a.name}</div><div class="at">${a.tagline}</div>${a.here ? '<div class="here">You are here</div>' : ''}`));
+      enter(card, t0 + 200 + i * 70, 12, 420);
+    });
+    return { stage: st };
+  },
+};
+
+let t = 0;
+window.SCENARIO.scenes.forEach(s => {
+  const scene = document.body.appendChild(el('div', 'scene'));
+  scene.appendChild(el('div', 'brand', '<i>🎙</i>Diduny ' + window.SCENARIO.version));
+  const { stage } = builders[s.type](s, t);
+  scene.appendChild(stage);
+  if (s.caption) scene.appendChild(el('div', 'caption', s.caption));
+  at(scene, [{ opacity: 0 }, { opacity: 1 }], t, 260, EASE_OUT, 'both');
+  at(scene, [{ opacity: 1 }, { opacity: 0 }], t + s.duration - 240, 220, EASE_OUT, 'forwards');
+  t += s.duration;
+});
+window.TOTAL_MS = t;
+
+const seek = new URLSearchParams(location.search).get('t');
+if (seek !== null) {
+  document.getAnimations().forEach(a => { a.pause(); a.currentTime = Number(seek); });
+} else {
+  setTimeout(() => location.reload(), t + 400); // preview loops
+}
+</script>
+</body>
+</html>
