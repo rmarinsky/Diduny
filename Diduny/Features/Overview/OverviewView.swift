@@ -252,35 +252,21 @@ struct OverviewView: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Text("Overview")
-                    .font(.title2.bold())
-                Spacer()
-                Picker("", selection: $timePeriod) {
-                    ForEach(TimePeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 220)
+        PageScaffold(title: "Overview") {
+            Picker("", selection: $timePeriod) {
+                ForEach(TimePeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 16)
-
-            ScrollView {
-                VStack(spacing: 12) {
-                    OverviewLaunchCard()
-                    heroCard
-                    metricGrid
-                    chartCard
-                    recentCard
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
+            .pickerStyle(.segmented)
+            .frame(width: 220)
+        } content: {
+            VStack(spacing: DS.Space.md) {
+                OverviewLaunchCard()
+                heroCard
+                metricGrid
+                chartCard
+                recentCard
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .sheet(item: Binding(
             get: { selectedRecording },
             set: { next in
@@ -310,21 +296,21 @@ struct OverviewView: View {
                 Text(
                     "TIME SAVED · THIS \(NSLocalizedString(timePeriod.rawValue, comment: "Overview period").uppercased())"
                 )
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(Color("BrandAccentDeep"))
+                .font(DS.Font.caption.weight(.semibold))
+                .foregroundColor(DS.Palette.accent)
                 .kerning(0.5)
 
                 HStack(alignment: .lastTextBaseline, spacing: 4) {
                     Text(String(format: "%.1f", totalHours))
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundColor(.primary)
                     Text("hrs")
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .font(DS.Font.headline)
                         .foregroundColor(.primary)
                 }
 
                 Text(heroDescription)
-                    .font(.system(size: 12))
+                    .font(DS.Font.callout)
                     .foregroundColor(.secondary)
             }
 
@@ -335,7 +321,7 @@ struct OverviewView: View {
                 waveformRibbon
             }
         }
-        .padding(20)
+        .padding(DS.Space.lg)
         .background(Color("BrandTintSoft"), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -408,9 +394,9 @@ struct OverviewView: View {
     private var chartCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(timePeriod.chartTitle)
-                .font(.system(size: 14, weight: .semibold))
+                .font(DS.Font.headline)
             Text(timePeriod.chartSubtitle)
-                .font(.system(size: 12))
+                .font(DS.Font.callout)
                 .foregroundColor(.secondary)
 
             Chart {
@@ -467,12 +453,12 @@ struct OverviewView: View {
             .frame(height: 120)
             .padding(.top, 8)
         }
-        .padding(20)
-        .background(Color(.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(DS.Space.lg)
+        .background(DS.Palette.cardFill)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         )
     }
 
@@ -483,13 +469,13 @@ struct OverviewView: View {
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Recent recordings")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(DS.Font.headline)
                 Spacer()
                 Button("See all ›") {
                     MainWindowController.shared.showWindow(section: .recordings)
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 12))
+                .font(DS.Font.callout)
                 .foregroundColor(Color("BrandAccentDeep"))
             }
             .padding(.horizontal, 16)
@@ -514,11 +500,11 @@ struct OverviewView: View {
                 .padding(.bottom, 8)
             }
         }
-        .background(Color(.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(DS.Palette.cardFill)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         )
     }
 
@@ -567,19 +553,19 @@ private struct MetricCard: View {
                 .minimumScaleFactor(0.82)
 
             Text(LocalizedStringKey(label))
-                .font(.system(size: 11))
+                .font(DS.Font.caption)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(
-            isStreak ? Color("BrandTintSoft") : Color(.windowBackgroundColor)
+            isStreak ? Color("BrandTintSoft") : DS.Palette.cardFill
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         )
     }
 

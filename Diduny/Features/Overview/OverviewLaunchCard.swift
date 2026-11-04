@@ -36,7 +36,7 @@ struct OverviewLaunchCard: View {
                 Button("Open Setup Guide") {
                     OnboardingWindowController.shared.showOnboarding()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .accessibilityHint("Opens the setup guide in a separate window")
             }
 
@@ -46,12 +46,12 @@ struct OverviewLaunchCard: View {
                 status("Screen Recording", icon: "rectangle.on.rectangle", granted: screenRecordingGranted)
             }
         }
-        .padding(16)
-        .background(Color(.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(DS.Space.lg)
+        .background(DS.Palette.cardFill)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
         .task { await refreshPermissions() }
@@ -110,7 +110,7 @@ struct OverviewLaunchCard: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss What’s New for Diduny \(releaseLine)")
         }
-        .padding(20)
+        .padding(DS.Space.lg)
         .background(Color("BrandTintSoft"))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
