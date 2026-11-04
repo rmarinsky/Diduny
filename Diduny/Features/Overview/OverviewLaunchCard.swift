@@ -7,18 +7,30 @@ struct OverviewLaunchCard: View {
     @State private var microphoneGranted = false
     @State private var accessibilityGranted = false
     @State private var screenRecordingGranted = false
+    @State private var permissionsLoaded = false
+
+    private var allPermissionsGranted: Bool {
+        microphoneGranted && accessibilityGranted && screenRecordingGranted
+    }
 
     private let releaseHighlights = ReleaseHighlights.bundled()
 
     var body: some View {
         VStack(spacing: 12) {
-            permissionStatusCard
+            // Nothing to act on once everything is allowed, so the card steps aside.
+            if permissionsLoaded, !(allPermissionsGranted && onboarding.hasCompletedOnboarding) {
+                permissionStatusCard
+            }
             if onboarding.canShowUpdateHighlights,
                let releaseLine = updateArrival.pendingReleaseLine,
                let releaseHighlights
             {
                 whatsNewCard(releaseLine: releaseLine, highlights: releaseHighlights)
             }
+        }
+        .task { await refreshPermissions() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await refreshPermissions() }
         }
     }
 
@@ -54,10 +66,6 @@ struct OverviewLaunchCard: View {
                 .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
-        .task { await refreshPermissions() }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            Task { await refreshPermissions() }
-        }
     }
 
     private func status(_ title: LocalizedStringKey, icon: String, granted: Bool) -> some View {
@@ -76,46 +84,55 @@ struct OverviewLaunchCard: View {
     }
 
     private func whatsNewCard(releaseLine: String, highlights: ReleaseHighlights) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            Image(systemName: "sparkles")
-                .font(.title2)
-                .foregroundStyle(Color("BrandAccentDeep"))
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("What’s New in Diduny \(releaseLine)")
-                    .font(.title3.bold())
+        HStack(alignment: .top, spacing: DS.Space.lg) {
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
+                HStack(spacing: DS.Space.sm) {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(Color("BrandAccentDeep"))
+                        .accessibilityHidden(true)
+                    Text("What’s New in Diduny \(releaseLine)")
+                        .font(DS.Font.headline)
+                    Spacer(minLength: 0)
+                    Button {
+                        updateArrival.dismissPendingRelease()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Dismiss What’s New for Diduny \(releaseLine)")
+                }
                 Text(LocalizedStringKey(highlights.headline))
-                    .font(.headline)
+                    .font(.title3.bold())
+                    .fixedSize(horizontal: false, vertical: true)
                 ForEach(Array(highlights.highlights.enumerated()), id: \.offset) { _, highlight in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: DS.Space.sm) {
                         Image(systemName: "circle.fill")
                             .font(.system(size: 5))
+                            .foregroundStyle(Color("BrandAccentDeep"))
                             .accessibilityHidden(true)
                         Text(LocalizedStringKey(highlight))
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .font(.subheadline)
-                }
-                if let demo = NSImage(named: "ReleaseDemo") ?? Bundle.main.image(forResource: "ReleaseDemo") {
-                    AnimatedImage(image: demo)
-                        .aspectRatio(800.0 / 500.0, contentMode: .fit)
-                        .frame(maxWidth: 480)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .accessibilityLabel("What’s new in this release, animated")
+                    .font(DS.Font.callout)
+                    .foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button {
-                updateArrival.dismissPendingRelease()
-            } label: {
-                Image(systemName: "xmark")
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+            if let demo = Bundle.main.image(forResource: "ReleaseDemo") {
+                AnimatedImage(image: demo)
+                    .aspectRatio(demo.size.width / max(demo.size.height, 1), contentMode: .fit)
+                    .frame(width: 300)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color("BrandTintBorder"), lineWidth: 1)
+                    }
+                    .accessibilityLabel("What’s new in this release, animated")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss What’s New for Diduny \(releaseLine)")
         }
         .padding(DS.Space.lg)
         .background(Color("BrandTintSoft"))
@@ -132,6 +149,7 @@ struct OverviewLaunchCard: View {
         microphoneGranted = PermissionManager.shared.status.microphone
         accessibilityGranted = PermissionManager.shared.status.accessibility
         screenRecordingGranted = PermissionManager.shared.status.screenRecording
+        permissionsLoaded = true
     }
 }
 
