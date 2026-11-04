@@ -614,7 +614,16 @@ final class RecordingQueueService {
     }
 
     private func preflightError(for item: QueueItem) -> String? {
-        preflightError(for: item, provider: configuredProvider(for: item))
+        // Same rule as processRecording: an on-device engine skips the Whisper/cloud checks.
+        if let recording = storage.recordings.first(where: { $0.id == item.id }) {
+            let onDeviceID = item.action == .translate
+                ? onDeviceTranslationEngineID(for: item, recording: recording)
+                : onDeviceEngineID(for: item, recording: recording)
+            if onDeviceID != nil {
+                return OnDeviceEngines.engine(id: onDeviceID) == nil ? OnDeviceEngines.notReadyMessage : nil
+            }
+        }
+        return preflightError(for: item, provider: configuredProvider(for: item))
     }
 
     private func preflightError(for item: QueueItem, provider: TranscriptionProvider) -> String? {
