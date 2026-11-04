@@ -570,10 +570,12 @@ final class EdgeCommandPanelController: NSObject {
         let panel = panel ?? makePanel()
         self.panel = panel
         model?.meetingSuggestion = nil
+        // A fresh appearance pops from the edge; growing out of a visible tab morphs instead.
+        let shouldPop = !panel.isVisible || panel.alphaValue < 1
         model?.isLiveFeedbackMinimized = false
         model?.isShowingLiveFeedback = true
-        position(panel, presentation: .live(mode))
-        revealPanelIfConcealed()
+        position(panel, presentation: .live(mode), popIn: shouldPop)
+        if !shouldPop { revealPanelIfConcealed() }
         panel.orderFrontRegardless()
     }
 
@@ -975,7 +977,8 @@ final class EdgeCommandPanelController: NSObject {
     private func position(
         _ panel: NSPanel,
         presentation: EdgeCommandPanelPresentation,
-        on explicitVisibleFrame: NSRect? = nil
+        on explicitVisibleFrame: NSRect? = nil,
+        popIn: Bool = false
     ) {
         // A live drag owns the frame; phase changes and toasts must not snap
         // the panel back to its dock mid-drag. onDragEnd re-docks and calls
@@ -995,7 +998,7 @@ final class EdgeCommandPanelController: NSObject {
         model?.dockEdge = resolvedDock.edge
         let isExpanded = presentation != .collapsed
         model?.isExpanded = isExpanded
-        panelContentView?.setExpanded(isExpanded)
+        panelContentView?.setExpanded(isExpanded, animated: panel.isVisible && panel.alphaValue > 0)
         // Backstop clip: the SwiftUI material's shape mask can be lost by the
         // window server; the layer clip keeps expanded corners rounded no
         // matter what. The collapsed tab keeps its own edge-flush shape.
@@ -1008,7 +1011,9 @@ final class EdgeCommandPanelController: NSObject {
             dock: resolvedDock,
             presentation: presentation
         )
-        if panel.isVisible {
+        if popIn {
+            popInPanel(panel, to: frame, from: resolvedDock.edge)
+        } else if panel.isVisible {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.24
                 context.timingFunction = CAMediaTimingFunction(controlPoints: 0.25, 0.46, 0.45, 0.94)
@@ -1016,6 +1021,32 @@ final class EdgeCommandPanelController: NSObject {
             }
         } else {
             panel.setFrame(frame, display: true)
+        }
+    }
+
+    /// Fresh appearance: the panel slides 8pt out of its docked edge while growing
+    /// from 96% and fading in, on the drawer curve (~0.26s).
+    private func popInPanel(_ panel: NSPanel, to frame: NSRect, from edge: EdgeCommandPanelDockEdge) {
+        panel.ignoresMouseEvents = false
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            panel.setFrame(frame, display: true)
+            NSAnimationContext.runAnimationGroup { $0.duration = 0.15; panel.animator().alphaValue = 1 }
+            return
+        }
+        var start = frame.insetBy(dx: frame.width * 0.02, dy: frame.height * 0.02)
+        switch edge {
+        case .left: start.origin.x -= 8
+        case .right: start.origin.x += 8
+        case .top: start.origin.y += 8
+        case .bottom: start.origin.y -= 8
+        }
+        panel.alphaValue = 0
+        panel.setFrame(start, display: true)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.26
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
+            panel.animator().setFrame(frame, display: true)
+            panel.animator().alphaValue = 1
         }
     }
 
@@ -1120,9 +1151,32 @@ private final class EdgeCommandPanelContentView: NSView {
         layer?.masksToBounds = radius > 0
     }
 
-    func setExpanded(_ expanded: Bool) {
-        tabHostingView.isHidden = expanded
-        expandedHostingView.isHidden = !expanded
+    func setExpanded(_ expanded: Bool, animated: Bool = false) {
+        let incoming: NSView = expanded ? expandedHostingView : tabHostingView
+        let outgoing: NSView = expanded ? tabHostingView : expandedHostingView
+        guard animated, incoming.isHidden,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        else {
+            incoming.alphaValue = 1
+            outgoing.alphaValue = 1
+            incoming.isHidden = false
+            outgoing.isHidden = true
+            return
+        }
+        // Tab ↔ panel morph: the window frame grows from the tab (see position()),
+        // while the two surfaces cross-fade so the tab appears to become the panel.
+        incoming.alphaValue = 0
+        incoming.isHidden = false
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+            incoming.animator().alphaValue = 1
+            outgoing.animator().alphaValue = 0
+        }, completionHandler: {
+            guard incoming.alphaValue == 1 else { return }
+            outgoing.isHidden = true
+            outgoing.alphaValue = 1
+        })
     }
 
     func updateTabView(_ tabView: EdgeCommandTabView) {

@@ -13,15 +13,22 @@ struct LiveDictationOverlayView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private static let transcriptBottomID = "transcript-bottom"
 
+    @State private var appeared = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+                .blurIn(appeared, step: 0, reduceMotion: reduceMotion)
             statusRow
-            if let turnOn = store.onTurnOnLiveTranscript, !store.hasText, store.canStop {
-                recordingOnlyView(turnOn)
-            } else {
-                transcriptView
+                .blurIn(appeared, step: 1, reduceMotion: reduceMotion)
+            Group {
+                if let turnOn = store.onTurnOnLiveTranscript, !store.hasText, store.canStop {
+                    recordingOnlyView(turnOn)
+                } else {
+                    transcriptView
+                }
             }
+            .blurIn(appeared, step: 2, reduceMotion: reduceMotion)
 
             if store.phase == .pasted {
                 Toggle("Paste and close automatically", isOn: $autoPaste)
@@ -35,7 +42,10 @@ struct LiveDictationOverlayView: View {
             }
 
             controls
+                .blurIn(appeared, step: 3, reduceMotion: reduceMotion)
         }
+        .onAppear { appeared = true }
+        .onDisappear { appeared = false }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(.regularMaterial, in: panelShape)
@@ -594,5 +604,19 @@ private struct LiveAudioMeter: View {
     private func opacity(for index: Int) -> Double {
         let threshold = Float(index + 1) / 6
         return level >= threshold ? 1 : 0.35
+    }
+}
+
+private extension View {
+    /// Entrance cascade: each block sharpens from a light blur, 25ms after the previous one.
+    func blurIn(_ visible: Bool, step: Int, reduceMotion: Bool) -> some View {
+        opacity(visible ? 1 : 0)
+            .blur(radius: visible || reduceMotion ? 0 : 6)
+            .animation(
+                reduceMotion
+                    ? .easeOut(duration: 0.15)
+                    : .easeOut(duration: 0.2).delay(Double(step) * 0.025),
+                value: visible
+            )
     }
 }
