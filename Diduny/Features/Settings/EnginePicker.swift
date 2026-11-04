@@ -159,6 +159,9 @@ struct EnginePickerRow: View {
     let legacyIsLocal: () -> Bool
     let setLegacyLocal: (Bool) -> Void
     var showsManageLink = true
+    /// When set, the label sits on the left and the menu is right-aligned at this fixed width,
+    /// so a column of rows lines up.
+    var menuWidth: CGFloat?
 
     @State private var selection = ""
     @State private var options: [EngineOption] = []
@@ -167,18 +170,15 @@ struct EnginePickerRow: View {
 
     var body: some View {
         Group {
-            Picker(label, selection: $selection) {
-                ForEach(options) { option in
-                    if let reason = option.disabledReason {
-                        Text("\(option.title) — \(reason)").tag(option.id).selectionDisabled()
-                    } else {
-                        Text(option.title).tag(option.id)
-                    }
+            if let menuWidth {
+                HStack {
+                    Text(label)
+                    Spacer(minLength: DS.Space.md)
+                    picker.labelsHidden().fixedSize().frame(width: menuWidth, alignment: .leading)
                 }
+            } else {
+                picker
             }
-            .pickerStyle(.menu)
-            .accessibilityValue(options.first { $0.id == selection }?.title ?? "")
-            .onChange(of: selection) { _, value in apply(value) }
 
             if let hint = options.first(where: { $0.id == selection })?.hint {
                 Text(hint).font(.caption).foregroundStyle(.secondary)
@@ -192,6 +192,21 @@ struct EnginePickerRow: View {
             }
         }
         .onAppear(perform: reload)
+    }
+
+    private var picker: some View {
+        Picker(label, selection: $selection) {
+            ForEach(options) { option in
+                if let reason = option.disabledReason {
+                    Text("\(option.title) — \(reason)").tag(option.id).selectionDisabled()
+                } else {
+                    Text(option.title).tag(option.id)
+                }
+            }
+        }
+        .pickerStyle(.menu)
+        .accessibilityValue(options.first { $0.id == selection }?.title ?? "")
+        .onChange(of: selection) { _, value in apply(value) }
     }
 
     private func reload() {
@@ -350,6 +365,7 @@ struct RecordingErrorBanner: View {
 
 /// One place to pick the engine for every mode, with a shortcut that sets the same engine for all of them.
 struct EnginesByModeSection: View {
+    private static let menuWidth: CGFloat = 300
     private struct Mode {
         let job: STTJob
         let label: LocalizedStringKey
@@ -406,6 +422,7 @@ struct EnginesByModeSection: View {
                     }
                     .labelsHidden()
                     .fixedSize()
+                    .frame(width: Self.menuWidth, alignment: .leading)
                 }
                 .onChange(of: allChoice) { _, id in applyAll(id) }
                 if let note {
@@ -417,7 +434,8 @@ struct EnginesByModeSection: View {
                     RowSeparator()
                     VStack(alignment: .leading, spacing: DS.Space.xs) {
                         EnginePickerRow(label: mode.label, request: mode.request, legacyIsLocal: mode.legacyIsLocal,
-                                        setLegacyLocal: mode.setLegacyLocal, showsManageLink: false)
+                                        setLegacyLocal: mode.setLegacyLocal, showsManageLink: false,
+                                        menuWidth: Self.menuWidth)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, DS.Space.lg)

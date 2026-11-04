@@ -30,6 +30,13 @@ window.SCENARIO = {
       uk2: "текст вставиться і відправиться", en2: "the text is pasted and sent",
     },
     {
+      frame: "elevenlabs", duration: 3600, enter: "slide",
+      camera: [[0, "full"], [400, [262, 230, 714, 210]]],
+      highlight: { rect: [278, 272, 684, 26], at: 900 },
+      uk: "Свій ключ ElevenLabs: диктування, переклад, зустрічі", en: "Your own ElevenLabs key: dictation, translation, meetings",
+      uk2: "ключ лишається в Keychain твого Mac", en2: "the key stays in your Mac's Keychain",
+    },
+    {
       frame: "about", duration: 3400, enter: "slide",
       masks: [[850, 140, 112, 46]], // update-check values
       camera: [[0, "full"], [400, [255, 70, 730, 340]]],
