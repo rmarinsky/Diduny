@@ -214,6 +214,15 @@ extension AppDelegate {
             return
         }
 
+        if let message = onDeviceEngineStartError(for: .dictationTranslation) {
+            await MainActor.run {
+                appState.errorMessage = message
+                appState.translationRecordingState = .error
+                handleTranslationStateChange(.error)
+            }
+            return
+        }
+
         let pair = requestedPair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
         switch elevenLabsTranslationDecision {
         case .notSelected:

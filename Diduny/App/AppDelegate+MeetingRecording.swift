@@ -5,6 +5,10 @@ import Foundation
 
 extension AppDelegate {
     @objc func toggleMeetingRecording() {
+        if appState.meetingRecordingState == .idle, let message = onDeviceEngineStartError(for: .meeting) {
+            DictationOverlayController.shared.showInfo(message: message, duration: 4)
+            return
+        }
         let provider = routedProvider(
             for: .meeting,
             legacy: SettingsStorage.shared.meetingRealtimeTranscriptionEnabled ? .cloud : .local
@@ -362,6 +366,7 @@ extension AppDelegate {
             guard !Task.isCancelled, activeMeetingTranscriptionSessionID == sessionID else { return }
             // Calendar recordings capture audio only; the transcript is made after the meeting.
             let localPreview = calendarMeeting == nil && SettingsStorage.shared.meetingLocalLivePreviewEnabled
+                && onDeviceSelection(for: .meeting) == nil
             let store = await setupMeetingLiveTranscription(cloudModeEnabled: cloudModeEnabled, localPreview: localPreview)
             let stillOwnsSession = activeMeetingTranscriptionSessionID == sessionID
             guard !Task.isCancelled,
@@ -960,7 +965,7 @@ extension AppDelegate {
             let route = Self.meetingStopRoute(
                 provider: cloudModeEnabled ? .cloud : .local,
                 acceptsRealtimeTranscript: acceptsRealtimeTranscript,
-                hasLocalModel: WhisperModelManager.shared.selectedModel() != nil
+                hasLocalModel: WhisperModelManager.shared.selectedModel() != nil || onDeviceEngine(for: .meeting) != nil
             )
             // The queue needs the saved library row; without it the audio waits for recovery.
             // A BYOK meeting never falls back to the Diduny Cloud queue.
@@ -1093,7 +1098,7 @@ extension AppDelegate {
                     let didEnqueue = Self.enqueueLocalMeetingTranscriptionIfReady(
                         savedRecordingID: savedRecordingID,
                         cloudModeEnabled: cloudModeEnabled,
-                        hasLocalModel: WhisperModelManager.shared.selectedModel() != nil
+                        hasLocalModel: WhisperModelManager.shared.selectedModel() != nil || onDeviceEngine(for: .meeting) != nil
                     ) { recordingIDs, action, provider in
                         RecordingQueueService.shared.enqueue(
                             recordingIDs,

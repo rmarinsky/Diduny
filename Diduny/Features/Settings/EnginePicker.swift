@@ -25,7 +25,7 @@ enum EngineOptions {
 
     static let byokJobs: Set<STTJob> = [.dictation, .dictationTranslation, .meeting]
     /// Parakeet and Apple run after Stop, so they are offered where the flow transcribes the saved capture.
-    static let onDeviceJobs: Set<STTJob> = [.dictation, .dictationTranslation]
+    static let onDeviceJobs: Set<STTJob> = [.dictation, .dictationTranslation, .meeting, .file]
 
     /// Parakeet V3 / Apple entries: listed when ready on this Mac; translation adds the Diduny text step.
     static func onDeviceOptions(for job: STTJob, context: RoutingContext, signedIn: Bool) -> [EngineOption] {
@@ -222,8 +222,10 @@ extension EngineOptions {
             defaults.setSelection(.didunyCloud, for: request.job)
             setLegacyLocal(id == STTProviderID.localWhisper)
         case let onDevice where STTProviderID.onDeviceEngines.contains(onDevice):
+            // Legacy "local" first: no live cloud stream, the capture is transcribed on this Mac after Stop.
+            // (For files the legacy setter writes the selection, so it must run before ours.)
+            setLegacyLocal(true)
             defaults.setSelection(JobProviderSelection(providerID: onDevice, modelID: nil), for: request.job)
-            setLegacyLocal(false)
         default:
             let parts = id.split(separator: "/", maxSplits: 1).map(String.init)
             guard parts.count == 2 else { return }
@@ -262,10 +264,9 @@ struct CapabilityChip: View {
     let available: Bool
 
     var body: some View {
-        Label {
-            Text(text)
-        } icon: {
+        HStack(spacing: 3) {
             Image(systemName: available ? "checkmark" : "minus").font(.system(size: 8, weight: .bold))
+            Text(text)
         }
         .font(.caption2.weight(.medium))
         .padding(.horizontal, 6)

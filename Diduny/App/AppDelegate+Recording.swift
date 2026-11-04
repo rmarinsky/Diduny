@@ -301,6 +301,15 @@ extension AppDelegate {
             return
         }
 
+        if let message = onDeviceEngineStartError(for: .dictation) {
+            await MainActor.run {
+                appState.errorMessage = message
+                appState.recordingState = .error
+                handleRecordingStateChange(.error)
+            }
+            return
+        }
+
         // Provider-specific validation
         switch voiceTranscriptionProvider {
         case .cloud:

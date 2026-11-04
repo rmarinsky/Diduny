@@ -174,7 +174,13 @@ final class RecordingQueueService {
             }
             try Task.checkCancellation()
 
-            if let error = preflightError(for: item, provider: provider) {
+            let onDeviceID = onDeviceEngineID(for: item, recording: recording)
+            let onDevice = OnDeviceEngines.engine(id: onDeviceID)
+            if onDeviceID != nil, onDevice == nil {
+                storage.updateRecording(id: item.id, status: .failed, error: OnDeviceEngines.notReadyMessage)
+                return
+            }
+            if onDevice == nil, let error = preflightError(for: item, provider: provider) {
                 storage.updateRecording(id: item.id, status: .failed, error: error)
                 return
             }
@@ -198,7 +204,10 @@ final class RecordingQueueService {
             let sourceLanguageCode: String?
             switch item.action {
             case .transcribe:
-                if provider == .cloud {
+                if let onDevice {
+                    let language = SettingsStorage.shared.speechLanguageHints.first ?? BenchmarkRunner.defaultLanguage
+                    transcript = try await GeneratedTranscript(text: onDevice.transcribe(audioURL, language: language).text)
+                } else if provider == .cloud {
                     transcript = try await transcribeViaJobs(
                         audioFileURL: audioURL,
                         config: buildCloudTranscriptionConfig(enableSpeakerDiarization: false),
@@ -212,10 +221,13 @@ final class RecordingQueueService {
                 }
                 status = .transcribed
                 translationTargetLanguageCode = nil
-                historyKind = provider == .local ? .local : .cloud
+                historyKind = provider == .local || onDevice != nil ? .local : .cloud
                 sourceLanguageCode = nil
             case .transcribeDiarize:
-                if provider == .cloud {
+                if let onDevice {
+                    let language = SettingsStorage.shared.speechLanguageHints.first ?? BenchmarkRunner.defaultLanguage
+                    transcript = try await GeneratedTranscript(text: onDevice.transcribe(audioURL, language: language).text)
+                } else if provider == .cloud {
                     transcript = try await transcribeViaJobs(
                         audioFileURL: audioURL,
                         config: buildCloudTranscriptionConfig(enableSpeakerDiarization: true),
@@ -229,7 +241,7 @@ final class RecordingQueueService {
                 }
                 status = .transcribed
                 translationTargetLanguageCode = nil
-                historyKind = provider == .local ? .local : .cloud
+                historyKind = provider == .local || onDevice != nil ? .local : .cloud
                 sourceLanguageCode = nil
             case .translate:
                 let pair = SettingsStorage.shared.resolveTranslationLanguagePair()
@@ -545,6 +557,21 @@ final class RecordingQueueService {
             targetLanguage: targetLanguage,
             localFallbackOnUsageLimit: localFallbackOnUsageLimit
         )
+    }
+
+    /// Parakeet / Apple chosen for this recording's mode. An explicit Diduny Cloud override and
+    /// translations keep their own path.
+    private func onDeviceEngineID(for item: QueueItem, recording: Recording) -> String? {
+        guard item.providerOverride != .cloud, item.action != .translate else { return nil }
+        let job: STTJob = switch recording.type {
+        case .meeting: .meeting
+        case .meetingTranslation: .meetingTranslation
+        case .fileTranscription: .file
+        case .translation: .dictationTranslation
+        case .voice: .dictation
+        }
+        let id = SettingsStorage.shared.providerDefaults.selection(for: job).providerID
+        return STTProviderID.onDeviceEngines.contains(id) ? id : nil
     }
 
     private func configuredProvider(for item: QueueItem) -> TranscriptionProvider {

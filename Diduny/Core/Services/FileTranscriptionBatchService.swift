@@ -61,14 +61,18 @@ struct FileTranscriptionSettingsSnapshot {
     let provider: TranscriptionProvider
     let languageHints: [String]
     let localModelName: String
+    /// Parakeet / Apple picked for files; transcribes on this Mac instead of Whisper.
+    var onDeviceEngineID: String? = nil
 
     @MainActor
     static func current() -> Self {
         let settings = SettingsStorage.shared
+        let fileEngine = settings.providerDefaults.selection(for: .file).providerID
         return Self(
             provider: .local,
             languageHints: settings.speechLanguageHints,
-            localModelName: settings.selectedWhisperModel
+            localModelName: settings.selectedWhisperModel,
+            onDeviceEngineID: STTProviderID.onDeviceEngines.contains(fileEngine) ? fileEngine : nil
         )
     }
 }
@@ -1535,6 +1539,9 @@ final class FileTranscriptionBatchService {
 
 private final class LiveFileTranscriptionBatchTranscriber: FileTranscriptionBatchTranscribing {
     func preflightError(for settings: FileTranscriptionSettingsSnapshot) -> String? {
+        if settings.onDeviceEngineID != nil {
+            return OnDeviceEngines.engine(id: settings.onDeviceEngineID) == nil ? OnDeviceEngines.notReadyMessage : nil
+        }
         guard AuthService.hasStoredSession else { return String(localized: "Sign in to use Diduny transcription.") }
         switch settings.provider {
         case .cloud:
@@ -1559,6 +1566,11 @@ private final class LiveFileTranscriptionBatchTranscriber: FileTranscriptionBatc
         onJobSubmitted: @escaping (String) -> Void,
         onUpdate: @escaping (JobProgressUpdate) -> Void
     ) async throws -> GeneratedTranscript {
+        if let engine = OnDeviceEngines.engine(id: settings.onDeviceEngineID) {
+            onUpdate(JobProgressUpdate(status: .processing))
+            let language = settings.languageHints.first ?? BenchmarkRunner.defaultLanguage
+            return GeneratedTranscript(text: try await engine.transcribe(audioFileURL, language: language).text)
+        }
         switch settings.provider {
         case .cloud:
             var config: [String: Any] = ["mode": "transcribe"]

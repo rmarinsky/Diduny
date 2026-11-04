@@ -73,10 +73,19 @@ final class ProviderDefaultsTests: XCTestCase {
         XCTAssertTrue(options.contains { $0.id.hasPrefix(STTProviderID.elevenLabs + "/") && $0.disabledReason != nil })
     }
 
-    func testOnDeviceEnginesNotOfferedForMeetingsOrFiles() {
-        for job in [STTJob.meeting, .file] {
-            let ids = EngineOptions.options(for: JobRequest(job: job), context: withKey, signedIn: true).map(\.id)
-            XCTAssertTrue(Set(ids).isDisjoint(with: STTProviderID.onDeviceEngines), "\(job)")
-        }
+    func testOnDeviceEnginesAreOfferedForEveryModeButMeetingTranslation() {
+        XCTAssertEqual(EngineOptions.onDeviceJobs, [.dictation, .dictationTranslation, .meeting, .file])
+        let ids = EngineOptions.options(for: JobRequest(job: .meetingTranslation), context: withKey, signedIn: true).map(\.id)
+        XCTAssertTrue(Set(ids).isDisjoint(with: STTProviderID.onDeviceEngines))
+    }
+
+    func testFileSnapshotPicksUpOnDeviceSelection() {
+        let defaults = SettingsStorage.shared.providerDefaults
+        let previous = defaults.selection(for: .file)
+        defer { defaults.setSelection(previous, for: .file) }
+        defaults.setSelection(JobProviderSelection(providerID: STTProviderID.parakeet, modelID: nil), for: .file)
+        XCTAssertEqual(FileTranscriptionSettingsSnapshot.current().onDeviceEngineID, STTProviderID.parakeet)
+        defaults.setSelection(.didunyCloud, for: .file)
+        XCTAssertNil(FileTranscriptionSettingsSnapshot.current().onDeviceEngineID)
     }
 }

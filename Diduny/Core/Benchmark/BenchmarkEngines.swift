@@ -174,32 +174,64 @@ struct AppleBenchmarkEngine: BenchmarkEngine {
         return .ready
     }
 
+    /// macOS 26+: SpeechAnalyzer's DictationTranscriber (its newer SpeechTranscriber has no Ukrainian).
+    /// Older macOS: on-device SFSpeechRecognizer.
     func transcribe(_ url: URL, language: String) async throws -> BenchmarkOutput {
+        let locale = Locale(identifier: language)
+        if #available(macOS 26, *) {
+            let (text, seconds) = try await timed { try await Self.transcribeWithAnalyzer(url, locale: locale) }
+            return BenchmarkOutput(text: text, seconds: seconds, loadSeconds: 0)
+        }
+        let (text, seconds) = try await timed { try await Self.transcribeWithRecognizer(url, locale: locale) }
+        return BenchmarkOutput(text: text, seconds: seconds, loadSeconds: 0)
+    }
+
+    @available(macOS 26, *)
+    private static func transcribeWithAnalyzer(_ url: URL, locale: Locale) async throws -> String {
+        guard let supported = await DictationTranscriber.supportedLocale(equivalentTo: locale) else {
+            throw TranscriptionError.apiError(String(localized: "Apple speech recognition doesn't support this language."))
+        }
+        let transcriber = DictationTranscriber(locale: supported, preset: .longDictation)
+        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+            try await request.downloadAndInstall()
+        }
+        let analyzer = SpeechAnalyzer(modules: [transcriber])
+        let collector = Task {
+            var parts: [String] = []
+            for try await result in transcriber.results {
+                parts.append(String(result.text.characters).trimmingCharacters(in: .whitespaces))
+            }
+            return parts.filter { !$0.isEmpty }.joined(separator: " ")
+        }
+        try await analyzer.start(inputAudioFile: AVAudioFile(forReading: url), finishAfterFile: true)
+        let text = try await collector.value
+        guard !text.isEmpty else { throw TranscriptionError.emptyTranscription }
+        return text
+    }
+
+    private static func transcribeWithRecognizer(_ url: URL, locale: Locale) async throws -> String {
         if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
             _ = await withCheckedContinuation { cont in SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0) } }
         }
         guard SFSpeechRecognizer.authorizationStatus() == .authorized,
-              let recognizer = SFSpeechRecognizer(locale: Locale(identifier: language))
-        else { throw TranscriptionError.emptyTranscription }
+              let recognizer = SFSpeechRecognizer(locale: locale)
+        else { throw TranscriptionError.apiError(String(localized: "Allow Speech Recognition for Diduny in System Settings › Privacy & Security.")) }
         let request = SFSpeechURLRecognitionRequest(url: url)
         request.requiresOnDeviceRecognition = true
         request.addsPunctuation = true
-        let (text, seconds) = try await timed {
-            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
-                var done = false
-                recognizer.recognitionTask(with: request) { result, error in
-                    guard !done else { return }
-                    if let result, result.isFinal {
-                        done = true
-                        cont.resume(returning: result.bestTranscription.formattedString)
-                    } else if let error {
-                        done = true
-                        cont.resume(throwing: error)
-                    }
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
+            var done = false
+            recognizer.recognitionTask(with: request) { result, error in
+                guard !done else { return }
+                if let result, result.isFinal {
+                    done = true
+                    cont.resume(returning: result.bestTranscription.formattedString)
+                } else if let error {
+                    done = true
+                    cont.resume(throwing: error)
                 }
             }
         }
-        return BenchmarkOutput(text: text, seconds: seconds, loadSeconds: 0)
     }
 }
 
@@ -212,4 +244,23 @@ enum BenchmarkEngineCatalog {
         engines.append(AppleBenchmarkEngine())
         return engines
     }
+}
+
+/// On-device engines usable as a mode's engine (Parakeet V3, Apple).
+enum OnDeviceEngines {
+    static func make(id: String?) -> (any BenchmarkEngine)? {
+        switch id {
+        case STTProviderID.parakeet: ParakeetBenchmarkEngine()
+        case STTProviderID.appleSpeech: AppleBenchmarkEngine()
+        default: nil
+        }
+    }
+
+    /// The engine when it is ready on this Mac, else nil.
+    @MainActor static func engine(id: String?) -> (any BenchmarkEngine)? {
+        guard let engine = make(id: id), engine.availability() == .ready else { return nil }
+        return engine
+    }
+
+    static let notReadyMessage = String(localized: "The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Providers.")
 }

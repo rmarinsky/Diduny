@@ -35,18 +35,19 @@ extension AppDelegate {
 
     /// Parakeet V3 or Apple selected for the job and ready on this Mac; they transcribe the capture after Stop.
     func onDeviceEngine(for job: STTJob) -> (any BenchmarkEngine)? {
-        let engine: (any BenchmarkEngine)? = switch SettingsStorage.shared.providerDefaults.selection(for: job).providerID {
-        case STTProviderID.parakeet: ParakeetBenchmarkEngine()
-        case STTProviderID.appleSpeech: AppleBenchmarkEngine()
-        default: nil
-        }
-        return engine?.availability() == .ready ? engine : nil
+        OnDeviceEngines.engine(id: SettingsStorage.shared.providerDefaults.selection(for: job).providerID)
     }
 
     /// Parakeet / Apple id when the user picked one for the job, ready or not.
     func onDeviceSelection(for job: STTJob) -> String? {
         let id = SettingsStorage.shared.providerDefaults.selection(for: job).providerID
         return STTProviderID.onDeviceEngines.contains(id) ? id : nil
+    }
+
+    /// Error to show at Start when the job's on-device engine is selected but not ready; nil when fine.
+    func onDeviceEngineStartError(for job: STTJob) -> String? {
+        guard onDeviceSelection(for: job) != nil, onDeviceEngine(for: job) == nil else { return nil }
+        return OnDeviceEngines.notReadyMessage
     }
 
     /// Dictation runs on the user's own engine (ElevenLabs key or an on-device engine): no Diduny server cleanup.

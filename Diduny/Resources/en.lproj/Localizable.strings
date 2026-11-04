@@ -1645,3 +1645,6 @@
 "Past benchmarks" = "Past benchmarks";
 "%@ differs" = "%@ differs";
 "%lld clips excluded" = "%lld clips excluded";
+"Apple speech recognition doesn't support this language." = "Apple speech recognition doesn't support this language.";
+"Allow Speech Recognition for Diduny in System Settings › Privacy & Security." = "Allow Speech Recognition for Diduny in System Settings › Privacy & Security.";
+"The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Providers." = "The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Providers.";
