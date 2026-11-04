@@ -76,10 +76,12 @@ final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unch
     private var sessionCleanupFillerWords: [String]?
     private let cleanedTextLock = NSLock()
     private var _serverCleanedText: String?
+    /// False once the session reconnected: a "cleaned" frame then covers only the new socket's audio.
+    private var cleanedTextCoversSession = true
     /// Cleaned text the proxy sent right before `finished` (nil if not requested or not received).
     var serverCleanedText: String? {
         cleanedTextLock.lock(); defer { cleanedTextLock.unlock() }
-        return _serverCleanedText
+        return cleanedTextCoversSession ? _serverCleanedText : nil
     }
     private let finalizeStateLock = NSLock()
     private let lifecycleLock = NSLock()
@@ -149,7 +151,7 @@ final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unch
         self.enableSpeakerDiarization = enableSpeakerDiarization
         sessionCleanupFillerWords = nextSessionCleanupFillerWords
         nextSessionCleanupFillerWords = nil
-        cleanedTextLock.lock(); _serverCleanedText = nil; cleanedTextLock.unlock()
+        cleanedTextLock.lock(); _serverCleanedText = nil; cleanedTextCoversSession = true; cleanedTextLock.unlock()
         // Fresh session: start buffering incoming audio right away, so speech
         // during the connect handshake is delivered once the socket is up.
         lifecycleLock.lock()
@@ -856,6 +858,8 @@ final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unch
         }
 
         let delay = pow(2.0, Double(attempt)) // 2s, 4s, 8s
+        // Caller falls back to its local cleanup of the full accumulated transcript.
+        cleanedTextLock.lock(); cleanedTextCoversSession = false; cleanedTextLock.unlock()
 
         Log.transcription.info("Cloud RT: Reconnecting (attempt \(attempt))...")
         onConnectionStatusChanged?(.reconnecting(attempt: attempt))
