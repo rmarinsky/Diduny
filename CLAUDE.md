@@ -162,6 +162,7 @@ open Diduny.xcodeproj
 **NEVER push directly to `main`** — not commits, not tags. Everything goes through a PR.
 **NEVER create or push `v*` tags by hand** — CI does that.
 **NEVER hand-edit** `MARKETING_VERSION` in `project.yml` or the Sparkle `appcast.xml`.
+**Sparkle is the only distribution channel.** Never use, update or recommend Homebrew (no cask, no `rmarinsky/tap`).
 
 To ship a release:
 
