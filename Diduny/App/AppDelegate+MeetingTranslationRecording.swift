@@ -177,8 +177,7 @@ extension AppDelegate {
             }
             let pair = requestedPair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
             SettingsStorage.shared.markTranslationLanguagePairUsed(pair)
-            pendingMeetingTranslationTarget = pair.languageB
-            toggleMeetingRecording(provider: .local)
+            toggleMeetingRecording(provider: .local, translateTarget: pair.languageB)
             return
         }
 

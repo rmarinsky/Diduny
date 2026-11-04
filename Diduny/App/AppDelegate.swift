@@ -198,7 +198,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Last ElevenLabs failure in the current meeting, offered with a Diduny Cloud re-run after Stop.
     var meetingByokError: ElevenLabsError?
     /// Meeting translation on an on-device engine: target language for the one translation after Stop.
-    var pendingMeetingTranslationTarget: String?
+    /// Set per meeting session at start, cleared with the session; never carried into another meeting.
+    var activeMeetingTranslateTarget: String?
     var remoteDeletionTimer: Timer?
     var localVoiceStreamingService: LocalWhisperStreamingService?
     var localMeetingStreamingService: LocalWhisperStreamingService?

@@ -19,6 +19,7 @@ extension AppDelegate {
     func toggleMeetingRecording(
         provider: TranscriptionProvider,
         calendarMeeting: CalendarMeeting? = nil,
+        translateTarget: String? = nil,
         cancelPipeline: (() async -> Void)? = nil
     ) {
         let meetingRecordingState = appState.meetingRecordingState
@@ -43,6 +44,7 @@ extension AppDelegate {
             let generation = meetingPipelineGeneration
             meetingPipelineTask = Task {
                 await self.startMeetingRecording(provider: provider, calendarMeeting: calendarMeeting,
+                                                 translateTarget: translateTarget,
                                                  pipelineGeneration: generation)
             }
         case .recording:
@@ -95,6 +97,7 @@ extension AppDelegate {
         defer {
             activeMeetingTranscriptionSessionID = nil
             activeMeetingTranscriptionProvider = nil
+            activeMeetingTranslateTarget = nil
         }
 
         let recordingStartTime = appState.meetingRecordingStartTime
@@ -231,6 +234,7 @@ extension AppDelegate {
         releaseMeetingSleepActivityTokens()
         activeMeetingTranscriptionSessionID = nil
         activeMeetingTranscriptionProvider = nil
+        activeMeetingTranslateTarget = nil
     }
 
     nonisolated static func resolveMeetingTranscriptionProvider(
@@ -248,6 +252,7 @@ extension AppDelegate {
     func startMeetingRecording(
         provider requestedProvider: TranscriptionProvider,
         calendarMeeting: CalendarMeeting? = nil,
+        translateTarget: String? = nil,
         pipelineGeneration: UInt64? = nil,
         canStart: (() -> Bool)? = nil,
         ensureScreenRecordingPermission: @escaping () async -> Bool = {
@@ -274,7 +279,8 @@ extension AppDelegate {
         activeMeetingTranscriptionSessionID = sessionID
         // Calendar recordings capture audio only, so they keep the existing Cloud/Local path.
         // The user's own live engine: ElevenLabs (their key) or Apple on this Mac.
-        if pendingMeetingTranslationTarget != nil {
+        activeMeetingTranslateTarget = translateTarget
+        if translateTarget != nil {
             // Meeting translation on an on-device engine: no live stream; transcribed and translated after Stop.
             meetingRealtimeService = nil
         } else if calendarMeeting == nil, let elevenLabs = makeElevenLabsMeetingService() {
@@ -298,6 +304,7 @@ extension AppDelegate {
             if !didStart, activeMeetingTranscriptionSessionID == sessionID {
                 activeMeetingTranscriptionSessionID = nil
                 activeMeetingTranscriptionProvider = nil
+            activeMeetingTranslateTarget = nil
                 meetingRealtimeService = nil
             }
         }
@@ -832,6 +839,7 @@ extension AppDelegate {
         defer {
             activeMeetingTranscriptionSessionID = nil
             activeMeetingTranscriptionProvider = nil
+            activeMeetingTranslateTarget = nil
         }
 
         // Deactivate chapter bookmark hotkey
@@ -850,6 +858,8 @@ extension AppDelegate {
         // transcript, with no Diduny server cleanup and no Diduny Cloud fallback.
         let byokMeeting = meetingRealtimeService != nil
         let appleLiveMeeting = meetingRealtimeService is AppleLiveTranscriptionService
+        // Captured now: the session state is cleared when this stop finishes.
+        let translateTarget = activeMeetingTranslateTarget
 
         // Finalize and disconnect real-time transcription (if active)
         let didReceiveRealtimeFinalization = await stopMeetingLiveTranscription(finalizeCloud: true)
@@ -1116,9 +1126,9 @@ extension AppDelegate {
                         savedRecordingID: savedRecordingID,
                         cloudModeEnabled: cloudModeEnabled,
                         hasLocalModel: WhisperModelManager.shared.selectedModel() != nil || onDeviceEngine(for: .meeting) != nil
-                            || pendingMeetingTranslationTarget != nil
+                            || translateTarget != nil
                     ) { recordingIDs, action, provider in
-                        if let target = pendingMeetingTranslationTarget {
+                        if let target = translateTarget {
                             RecordingQueueService.shared.enqueue(recordingIDs, action: .translate, targetLanguage: target)
                         } else {
                             RecordingQueueService.shared.enqueue(
@@ -1128,7 +1138,6 @@ extension AppDelegate {
                             )
                         }
                     }
-                    pendingMeetingTranslationTarget = nil
                     if !cloudModeEnabled, !didEnqueue {
                         DictationOverlayController.shared.showInfo(
                             message: String(
