@@ -33,8 +33,14 @@ struct BenchmarkRun: Codable, Identifiable, Equatable {
     var votes: [UUID: String] = [:]
     var referenceEngineID: String
     var cancelled = false
+    /// Auto runs: the language Diduny detected per clip.
+    /// Optional so runs saved before this field still decode.
+    var clipLanguages: [UUID: String]?
 
     static func key(_ clip: UUID, _ engine: String) -> String { "\(clip.uuidString)|\(engine)" }
+    /// Each clip is transcribed in the language its speaker used; engines detect it themselves.
+    static let autoLanguage = "auto"
+
     func cell(_ clip: UUID, _ engine: String) -> Cell? { cells[Self.key(clip, engine)] }
     var audioSeconds: TimeInterval { clips.map(\.durationSeconds).reduce(0, +) }
 
@@ -97,13 +103,20 @@ final class BenchmarkRunner {
         isRunning = true
         progress = (0, recordings.count * engines.count)
         let urls = recordings.map { RecordingsLibraryStorage.shared.audioFileURL(for: $0) }
+        // Diduny first: in Auto its detected language is handed to engines that can't detect one.
+        let ordered = engines.filter { $0.id == "diduny" } + engines.filter { $0.id != "diduny" }
         task = Task { [weak self] in
             for (clip, url) in zip(run.clips, urls) {
-                for engine in engines {
+                var clipLanguage = language
+                for engine in ordered {
                     if Task.isCancelled { break }
                     var cell = BenchmarkRun.Cell()
                     do {
-                        let out = try await engine.transcribe(url, language: language)
+                        let out = try await engine.transcribe(url, language: clipLanguage)
+                        if language == BenchmarkRun.autoLanguage, let detected = out.detectedLanguage {
+                            clipLanguage = detected
+                            run.clipLanguages = (run.clipLanguages ?? [:]).merging([clip.id: detected]) { $1 }
+                        }
                         cell.text = out.text
                         cell.seconds = out.seconds
                         cell.loadSeconds = out.loadSeconds
