@@ -69,14 +69,16 @@ final class ProviderDefaultsTests: XCTestCase {
 
     func testMeetingTranslationOffersOnlyDidunyCloud() {
         let options = EngineOptions.options(for: JobRequest(job: .meetingTranslation), context: withKey, signedIn: true)
-        XCTAssertEqual(options.filter { $0.disabledReason == nil }.map(\.id), [STTProviderID.didunyCloud])
+        // Parakeet / Apple may also be listed when ready on this Mac (transcribe after Stop, then translate once).
+        XCTAssertEqual(
+            options.filter { $0.disabledReason == nil && !STTProviderID.onDeviceEngines.contains($0.id) }.map(\.id),
+            [STTProviderID.didunyCloud]
+        )
         XCTAssertTrue(options.contains { $0.id.hasPrefix(STTProviderID.elevenLabs + "/") && $0.disabledReason != nil })
     }
 
-    func testOnDeviceEnginesAreOfferedForEveryModeButMeetingTranslation() {
-        XCTAssertEqual(EngineOptions.onDeviceJobs, [.dictation, .dictationTranslation, .meeting, .file])
-        let ids = EngineOptions.options(for: JobRequest(job: .meetingTranslation), context: withKey, signedIn: true).map(\.id)
-        XCTAssertTrue(Set(ids).isDisjoint(with: STTProviderID.onDeviceEngines))
+    func testOnDeviceEnginesAreOfferedForEveryMode() {
+        XCTAssertEqual(EngineOptions.onDeviceJobs, Set(STTJob.allCases))
     }
 
     func testFileSnapshotPicksUpOnDeviceSelection() {

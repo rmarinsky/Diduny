@@ -25,7 +25,7 @@ enum EngineOptions {
 
     static let byokJobs: Set<STTJob> = [.dictation, .dictationTranslation, .meeting]
     /// Parakeet and Apple run after Stop, so they are offered where the flow transcribes the saved capture.
-    static let onDeviceJobs: Set<STTJob> = [.dictation, .dictationTranslation, .meeting, .file]
+    static let onDeviceJobs: Set<STTJob> = [.dictation, .dictationTranslation, .meeting, .meetingTranslation, .file]
 
     /// Parakeet V3 / Apple entries: listed when ready on this Mac; translation adds the Diduny text step.
     static func onDeviceOptions(for job: STTJob, context: RoutingContext, signedIn: Bool) -> [EngineOption] {
@@ -36,13 +36,14 @@ enum EngineOptions {
         return engines.compactMap { id, engine in
             guard engine.availability() == .ready else { return nil }
             // Apple streams live text for dictation and meetings; Parakeet transcribes after Stop (like Handy).
-            let live = id == STTProviderID.appleSpeech && job != .file
-            let plan = ExecutionPlan(mode: live ? .live : .afterStop, translation: job == .dictationTranslation ? .didunyStep : .none)
-            if job == .dictationTranslation, !context.didunyTranslationAvailable {
+            let translates = job == .dictationTranslation || job == .meetingTranslation
+            let live = id == STTProviderID.appleSpeech && job != .file && job != .meetingTranslation
+            let plan = ExecutionPlan(mode: live ? .live : .afterStop, translation: translates ? .didunyStep : .none)
+            if translates, !context.didunyTranslationAvailable {
                 return EngineOption(id: id, title: engine.name, disabledReason: reasonText(.translationNeedsDiduny, signedIn: signedIn), hint: nil)
             }
             return EngineOption(id: id, title: "\(engine.name) · \(planLabel(plan, job: job))", disabledReason: nil,
-                                hint: (live ? String(localized: "Runs on this Mac. Text appears while you speak.") : String(localized: "Runs on this Mac after you press Stop.")) + (job == .dictationTranslation ? " " + String(localized: "Diduny translates the text and uses your Diduny quota.") : ""))
+                                hint: (live ? String(localized: "Runs on this Mac. Text appears while you speak.") : String(localized: "Runs on this Mac after you press Stop.")) + (translates ? " " + String(localized: "Diduny translates the text and uses your Diduny quota.") : ""))
         }
     }
 
@@ -62,7 +63,8 @@ enum EngineOptions {
         let diduny = EngineOption(id: STTProviderID.didunyCloud, title: builtInTitle("Diduny Cloud", job: request.job, local: false), disabledReason: nil, hint: nil)
         // Live two-way meeting translation runs only on Diduny Cloud.
         guard request.job != .meetingTranslation else {
-            return [diduny] + registry.modules.filter { $0.requiresKey && context.providersWithKey.contains($0.id) }.map {
+            // Own engines: Parakeet / Apple transcribe after Stop, then the final text is translated once.
+            return [diduny] + onDeviceOptions(for: .meetingTranslation, context: context, signedIn: signedIn) + registry.modules.filter { $0.requiresKey && context.providersWithKey.contains($0.id) }.map {
                 EngineOption(id: "\($0.id)/\($0.models.first?.id ?? "")", title: $0.displayName, disabledReason: String(localized: "can't translate live"), hint: nil)
             }
         }

@@ -1649,3 +1649,4 @@
 "Allow Speech Recognition for Diduny in System Settings › Privacy & Security." = "Allow Speech Recognition for Diduny in System Settings › Privacy & Security.";
 "The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Providers." = "The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Providers.";
 "Runs on this Mac. Text appears while you speak." = "Runs on this Mac. Text appears while you speak.";
+"Translation failed. Try again from the recording." = "Translation failed. Try again from the recording.";

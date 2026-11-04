@@ -174,7 +174,9 @@ final class RecordingQueueService {
             }
             try Task.checkCancellation()
 
-            let onDeviceID = onDeviceEngineID(for: item, recording: recording)
+            let onDeviceID = item.action == .translate
+                ? onDeviceTranslationEngineID(for: item, recording: recording)
+                : onDeviceEngineID(for: item, recording: recording)
             let onDevice = OnDeviceEngines.engine(id: onDeviceID)
             if onDeviceID != nil, onDevice == nil {
                 storage.updateRecording(id: item.id, status: .failed, error: OnDeviceEngines.notReadyMessage)
@@ -246,7 +248,16 @@ final class RecordingQueueService {
             case .translate:
                 let pair = SettingsStorage.shared.resolveTranslationLanguagePair()
                 let targetLanguage: String
-                if provider == .cloud {
+                if let onDevice {
+                    // Transcribe on this Mac, then translate the final text once with Diduny (text only).
+                    targetLanguage = item.targetLanguage ?? pair.languageB
+                    let original = try await onDevice.transcribe(audioURL, language: pair.languageA).text
+                    let step = await ByokTranslationStep.translate(original, targetLanguage: targetLanguage, translator: DidunyTextTranslationService())
+                    guard step.translated else {
+                        throw TranscriptionError.apiError(String(localized: "Translation failed. Try again from the recording."))
+                    }
+                    transcript = GeneratedTranscript(text: step.text)
+                } else if provider == .cloud {
                     // The synchronous POST path rejects large uploads (413) and
                     // times out on long meetings — cloud translation must go
                     // through the async jobs API, same as cloud transcription.
@@ -570,6 +581,14 @@ final class RecordingQueueService {
         case .translation: .dictationTranslation
         case .voice: .dictation
         }
+        let id = SettingsStorage.shared.providerDefaults.selection(for: job).providerID
+        return STTProviderID.onDeviceEngines.contains(id) ? id : nil
+    }
+
+    /// Parakeet / Apple chosen for this recording's translation mode (meetings → meeting translation).
+    private func onDeviceTranslationEngineID(for item: QueueItem, recording: Recording) -> String? {
+        guard item.providerOverride != .cloud else { return nil }
+        let job: STTJob = recording.type == .meeting || recording.type == .meetingTranslation ? .meetingTranslation : .dictationTranslation
         let id = SettingsStorage.shared.providerDefaults.selection(for: job).providerID
         return STTProviderID.onDeviceEngines.contains(id) ? id : nil
     }

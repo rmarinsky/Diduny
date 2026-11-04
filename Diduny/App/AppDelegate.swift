@@ -197,6 +197,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var meetingRealtimeService: (any RealtimeTranscriptionProtocol)?
     /// Last ElevenLabs failure in the current meeting, offered with a Diduny Cloud re-run after Stop.
     var meetingByokError: ElevenLabsError?
+    /// Meeting translation on an on-device engine: target language for the one translation after Stop.
+    var pendingMeetingTranslationTarget: String?
     var remoteDeletionTimer: Timer?
     var localVoiceStreamingService: LocalWhisperStreamingService?
     var localMeetingStreamingService: LocalWhisperStreamingService?

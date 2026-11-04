@@ -274,7 +274,10 @@ extension AppDelegate {
         activeMeetingTranscriptionSessionID = sessionID
         // Calendar recordings capture audio only, so they keep the existing Cloud/Local path.
         // The user's own live engine: ElevenLabs (their key) or Apple on this Mac.
-        if calendarMeeting == nil, let elevenLabs = makeElevenLabsMeetingService() {
+        if pendingMeetingTranslationTarget != nil {
+            // Meeting translation on an on-device engine: no live stream; transcribed and translated after Stop.
+            meetingRealtimeService = nil
+        } else if calendarMeeting == nil, let elevenLabs = makeElevenLabsMeetingService() {
             meetingRealtimeService = elevenLabs
         } else if calendarMeeting == nil, let apple = makeAppleMeetingService() {
             meetingRealtimeService = apple
@@ -1113,13 +1116,19 @@ extension AppDelegate {
                         savedRecordingID: savedRecordingID,
                         cloudModeEnabled: cloudModeEnabled,
                         hasLocalModel: WhisperModelManager.shared.selectedModel() != nil || onDeviceEngine(for: .meeting) != nil
+                            || pendingMeetingTranslationTarget != nil
                     ) { recordingIDs, action, provider in
-                        RecordingQueueService.shared.enqueue(
-                            recordingIDs,
-                            action: action,
-                            providerOverride: provider
-                        )
+                        if let target = pendingMeetingTranslationTarget {
+                            RecordingQueueService.shared.enqueue(recordingIDs, action: .translate, targetLanguage: target)
+                        } else {
+                            RecordingQueueService.shared.enqueue(
+                                recordingIDs,
+                                action: action,
+                                providerOverride: provider
+                            )
+                        }
                     }
+                    pendingMeetingTranslationTarget = nil
                     if !cloudModeEnabled, !didEnqueue {
                         DictationOverlayController.shared.showInfo(
                             message: String(
