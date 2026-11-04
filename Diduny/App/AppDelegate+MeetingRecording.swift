@@ -529,6 +529,7 @@ extension AppDelegate {
         store.connectionStatus = .connected
 
         let whisper = whisperTranscriptionService
+        whisper.beginRecordingHold()
         let stream = LocalWhisperStreamingService(
             transcribe: { samples in
                 try await whisper.transcribeRawSamples(samples)
@@ -753,6 +754,30 @@ extension AppDelegate {
 
     // MARK: - Stop Meeting Recording
 
+    enum MeetingStopRoute: Equatable {
+        /// The live transcript is complete enough to use as the result.
+        case realtimeTranscript
+        /// Cloud transcription runs in the queue; `localFallback` retries on this Mac if Cloud runs out.
+        case queueCloud(localFallback: Bool)
+        /// Local transcription runs in the queue.
+        case queueLocal
+        /// No way to transcribe now; the audio stays in Recordings.
+        case saveOnly
+    }
+
+    nonisolated static func meetingStopRoute(
+        provider: TranscriptionProvider,
+        acceptsRealtimeTranscript: Bool,
+        hasLocalModel: Bool
+    ) -> MeetingStopRoute {
+        switch provider {
+        case .cloud:
+            acceptsRealtimeTranscript ? .realtimeTranscript : .queueCloud(localFallback: hasLocalModel)
+        case .local:
+            hasLocalModel ? .queueLocal : .saveOnly
+        }
+    }
+
     @discardableResult
     static func enqueueLocalMeetingTranscriptionIfReady(
         savedRecordingID: UUID?,
@@ -869,6 +894,12 @@ extension AppDelegate {
 
             Log.app.info("Meeting recording stopped")
 
+            // The 2-channel file for speaker labels compresses alongside the mixed file.
+            async let tracksAttached: Void = RecordingsLibraryStorage.shared.attachInProgressTracks(
+                from: inProgressRecordingId,
+                to: recordingId
+            )
+
             // Compress WAV → FLAC before loading into memory (saves RAM and upload time)
             let compressedURL = await AudioCompressionService.compressToFLAC(wavURL: audioURL)
             let didCompress = compressedURL != audioURL
@@ -914,73 +945,40 @@ extension AppDelegate {
                     durationSeconds: duration
                 )
             }
+            await tracksAttached
 
             let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
-            var cloudModeEnabled = activeMeetingTranscriptionProvider == .cloud
-            let shouldUseRealtimeText = cloudModeEnabled
-                && (byokMeeting
-                    ? !realtimeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    : shouldAcceptRealtimeTranscript(
-                        realtimeText,
-                        duration: duration,
-                        didReceiveFinalization: didReceiveRealtimeFinalization
-                    ))
+            let cloudModeEnabled = activeMeetingTranscriptionProvider == .cloud
+            // ElevenLabs meetings: the committed live text is the final transcript.
+            let acceptsRealtimeTranscript = cloudModeEnabled && (byokMeeting
+                ? !realtimeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                : shouldAcceptRealtimeTranscript(
+                    realtimeText,
+                    duration: duration,
+                    didReceiveFinalization: didReceiveRealtimeFinalization
+                ))
+            let route = Self.meetingStopRoute(
+                provider: cloudModeEnabled ? .cloud : .local,
+                acceptsRealtimeTranscript: acceptsRealtimeTranscript,
+                hasLocalModel: WhisperModelManager.shared.selectedModel() != nil
+            )
+            // The queue needs the saved library row; without it the audio waits for recovery.
+            // A BYOK meeting never falls back to the Diduny Cloud queue.
+            let handsOffToQueue: Bool = if case .queueCloud = route { librarySavedId != nil && !byokMeeting } else { false }
 
             let rawTranscript: GeneratedTranscript?
-            if shouldUseRealtimeText {
+            if route == .realtimeTranscript {
                 rawTranscript = GeneratedTranscript(text: realtimeText)
                 Log.app.info("Using real-time transcript (\(realtimeText.count) chars)")
             } else if cloudModeEnabled, !byokMeeting {
                 if !realtimeText.isEmpty {
                     Log.app
                         .warning(
-                            "Ignoring partial real-time transcript (\(realtimeText.count) chars, finalized=\(didReceiveRealtimeFinalization)); falling back to async jobs API"
+                            "Ignoring partial real-time transcript (\(realtimeText.count) chars, finalized=\(didReceiveRealtimeFinalization)); handing the meeting to the transcription queue"
                         )
                 }
-                Log.app.info("No real-time transcript, falling back to async jobs API...")
-
-                let asyncJobService = AsyncTranscriptionJobService()
-                let hints = SettingsStorage.shared.speechLanguageHints
-                var config: [String: Any] = [
-                    "mode": "transcribe",
-                    "enable_speaker_diarization": true
-                ]
-                if !hints.isEmpty {
-                    config["language_hints"] = hints
-                    config["language_hints_strict"] = true
-                }
-
-                do {
-                    rawTranscript = try await asyncJobService.transcribeFileDetailedWithRetry(
-                        audioFileURL: compressedURL,
-                        config: config,
-                        source: compressedURL.lastPathComponent,
-                        sourceDurationSeconds: duration
-                    ) { status in
-                        Task { @MainActor in
-                            switch status.status {
-                            case .queued:
-                                DictationOverlayController.shared.showInfo(message: "Queued...", duration: 30)
-                            case .uploading:
-                                DictationOverlayController.shared.showInfo(message: "Uploading...", duration: 30)
-                            case .processing:
-                                // Processing can take tens of minutes for large files —
-                                // use persistent processing state instead of auto-dismissing info
-                                DictationOverlayController.shared.startProcessing(mode: .meeting)
-                            case .finalizing:
-                                DictationOverlayController.shared.showInfo(message: "Finishing up...", duration: 30)
-                            default:
-                                break
-                            }
-                        }
-                    }
-                    Log.app.info("Async jobs transcription received (\(rawTranscript?.text.count ?? 0) chars)")
-                } catch let error as TranscriptionError where error.isUsageLimitExceeded {
-                    cloudModeEnabled = false
-                    activeMeetingTranscriptionProvider = .local
-                    rawTranscript = nil
-                    Log.app.info("Cloud usage unavailable at stop; queued Local transcription instead")
-                }
+                Log.app.notice("No usable real-time transcript; meeting goes to the transcription queue")
+                rawTranscript = nil
             } else {
                 rawTranscript = nil
                 Log.app.info("Saving meeting recording without automatic transcription")
@@ -1047,7 +1045,23 @@ extension AppDelegate {
                     handleMeetingStateChange(.success)
                 }
             } else {
+                // Say "in background" only when the queue actually took the recording.
+                var queued = false
+                if handsOffToQueue, let savedRecordingID = librarySavedId,
+                   case let .queueCloud(localFallback) = route
+                {
+                    queued = RecordingQueueService.shared.enqueue(
+                        [savedRecordingID],
+                        action: .transcribeDiarize,
+                        providerOverride: .cloud,
+                        localFallbackOnUsageLimit: localFallback
+                    )
+                }
                 await MainActor.run {
+                    // Shown before .success so the panel switches in place instead of hiding.
+                    if queued {
+                        DictationOverlayController.shared.showBackgroundHandoff()
+                    }
                     appState.lastTranscription = nil
                     appState.meetingRecordingState = .success
                     appState.meetingRecordingStartTime = nil
@@ -1067,6 +1081,8 @@ extension AppDelegate {
                         kind: .cloud,
                         provider: TranscriptionProvider.cloud.rawValue
                     )
+                } else if case .queueCloud = route {
+                    // Already handed to the queue before the panel update.
                 } else {
                     RecordingsLibraryStorage.shared.updateRecording(
                         id: recordingId,

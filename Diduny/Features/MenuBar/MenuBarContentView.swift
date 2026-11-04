@@ -107,6 +107,7 @@ private struct StatusItemLabel: View {
         var toggleMeetingTranslation: () -> Void
         var batchFilesAndURLs: () -> Void
         var openMainWindow: (MainSection) -> Void
+        var checkForUpdates: () -> Void
     }
 
     let appState: AppState
@@ -128,6 +129,7 @@ private struct StatusItemLabel: View {
             ActionMenuItem(String(localized: "Recordings")) { actions.openMainWindow(.recordings) },
             batchItem(),
             .separator(),
+            ActionMenuItem(String(localized: "Check for Updates…")) { actions.checkForUpdates() },
             settingsItem(),
             ActionMenuItem(String(localized: "Quit"), key: "q") { NSApplication.shared.terminate(nil) },
         ]

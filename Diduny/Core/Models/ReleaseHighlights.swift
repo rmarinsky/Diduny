@@ -1,42 +1,64 @@
 import Foundation
 
 struct ReleaseHighlights: Decodable, Equatable {
+    struct Entry: Decodable, Equatable {
+        let headline: String
+        let highlights: [String]
+    }
+
     let schemaVersion: Int
-    let headline: String
-    let highlights: [String]
+    let english: Entry
+    let ukrainian: Entry
+    /// Language the app UI runs in; picks which entry `headline`/`highlights` return.
+    var languageCode = Bundle.main.preferredLocalizations.first ?? "en"
+
+    var headline: String { entry.headline }
+    var highlights: [String] { entry.highlights }
+
+    private var entry: Entry { languageCode.hasPrefix("uk") ? ukrainian : english }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, headline, highlights
+        case schemaVersion
+        case english = "en"
+        case ukrainian = "uk"
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
-        headline = try container.decode(String.self, forKey: .headline)
-        highlights = try container.decode([String].self, forKey: .highlights)
 
-        guard schemaVersion == 1 else {
+        guard schemaVersion == 2 else {
             throw DecodingError.dataCorruptedError(
                 forKey: .schemaVersion,
                 in: container,
                 debugDescription: "Unsupported release highlights schema"
             )
         }
-        guard !headline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        english = try Self.decodeEntry(from: container, forKey: .english)
+        ukrainian = try Self.decodeEntry(from: container, forKey: .ukrainian)
+    }
+
+    private static func decodeEntry(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) throws -> Entry {
+        let entry = try container.decode(Entry.self, forKey: key)
+        guard !entry.headline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw DecodingError.dataCorruptedError(
-                forKey: .headline,
+                forKey: key,
                 in: container,
                 debugDescription: "Release headline must not be empty"
             )
         }
-        guard (1...3).contains(highlights.count),
-              highlights.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+        guard (1...3).contains(entry.highlights.count),
+              entry.highlights.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
             throw DecodingError.dataCorruptedError(
-                forKey: .highlights,
+                forKey: key,
                 in: container,
                 debugDescription: "Release highlights must contain one to three non-empty items"
             )
         }
+        return entry
     }
 
     static func bundled(in bundle: Bundle = .main) -> ReleaseHighlights? {

@@ -280,6 +280,7 @@ extension AppDelegate {
                 }
                 return
             }
+            whisperTranscriptionService.beginRecordingHold()
         }
         Log.app.info("startTranslationRecording: Provider ready, pair=\(pair.displayLabel)")
         translationRealtimeSessionEnabled = false
@@ -321,6 +322,9 @@ extension AppDelegate {
             // Set up realtime callback BEFORE starting recorder (AudioRecorderService
             // snapshots onRealtimeAudioData at start time). WebSocket connects in background.
             setupRealtimeTranslationIfNeeded()
+            startDictationSilenceMonitor(pushToTalk: translationPushToTalkService) { [weak self] in
+                await self?.stopTranslationRecordingIfRecording()
+            }
 
             Log.app.info("startTranslationRecording: Starting audio recording")
             _ = try await startAudioRecorderWithFallback(
@@ -460,7 +464,6 @@ extension AppDelegate {
         let recordingStartTime = appState.translationRecordingStartTime
         let pair = activeTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
         let targetLanguage = activeTranslationTargetLanguage ?? pair.languageB
-        let output = await selectedRecordingFeedbackOutput()
 
         // Capture stop time immediately for accurate duration
         let stopTime = Date()
@@ -486,18 +489,26 @@ extension AppDelegate {
             capturedAudioData = audioData
 
             let realtimeResult = await realtimeStopTask.value
-            let switchedText = try await switchedOutputText(
-                output,
-                native: .translation(targetLanguage: targetLanguage),
-                nativeText: realtimeResult.text,
-                originalText: realtimeResult.originalText,
-                audioData: audioData,
-                languageHints: SettingsStorage.shared.translationLanguageHints(for: pair)
-            )
-
-            var producedOutput: DictationOutput = switchedText == nil
-                ? .translation(targetLanguage: targetLanguage)
-                : output
+            let switchedText: String?
+            var producedOutput: DictationOutput
+            if let voiceCommand = await voiceTranslationCommand(in: realtimeResult.originalText) {
+                let commandResult = await voiceCommandOutputText(voiceCommand)
+                switchedText = commandResult.text
+                producedOutput = commandResult.output
+            } else {
+                let output = await selectedRecordingFeedbackOutput()
+                switchedText = try await switchedOutputText(
+                    output,
+                    native: .translation(targetLanguage: targetLanguage),
+                    nativeText: realtimeResult.text,
+                    originalText: realtimeResult.originalText,
+                    audioData: audioData,
+                    languageHints: SettingsStorage.shared.translationLanguageHints(for: pair)
+                )
+                producedOutput = switchedText == nil
+                    ? .translation(targetLanguage: targetLanguage)
+                    : output
+            }
             let rawText: String
             var byokTranslationFailed = false
             if let switchedText {

@@ -219,10 +219,22 @@ import SwiftUI
         XCTAssertTrue(hidden.contains { $0.title.contains(String(localized: "Meeting")) })
     }
 
-    private static func builder(_ connection: CalendarConnection) -> StatusMenuBuilder {
+    private static func builder(_ connection: CalendarConnection, checkForUpdates: @escaping () -> Void = {}) -> StatusMenuBuilder {
         StatusMenuBuilder(appState: AppState(), audioDeviceManager: AudioDeviceManager(), connection: connection, actions: .init(
             toggleRecording: {}, toggleTranslation: {}, toggleMeeting: {}, toggleMeetingTranslation: {},
-            batchFilesAndURLs: {}, openMainWindow: { _ in }))
+            batchFilesAndURLs: {}, openMainWindow: { _ in }, checkForUpdates: checkForUpdates))
+    }
+
+    func testMenuOffersCheckForUpdates() throws {
+        var checked = false
+        let connection = CalendarConnection(defaults: UserDefaults(suiteName: "MenuUpdates-\(UUID())")!, authorize: { false },
+                                            read: { _ in ScheduledCalendarSnapshot(calendars: [], meetings: []) })
+        let items = Self.builder(connection, checkForUpdates: { checked = true }).items()
+        let item = try XCTUnwrap(items.first { $0.title == String(localized: "Check for Updates…") })
+        let menu = NSMenu()
+        items.forEach(menu.addItem)
+        menu.performActionForItem(at: try XCTUnwrap(menu.items.firstIndex(of: item)))
+        XCTAssertTrue(checked)
     }
 
     /// Writes the menu timeline in light and dark so reviewers can see it without a local build.

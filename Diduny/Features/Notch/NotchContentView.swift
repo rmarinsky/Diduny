@@ -38,8 +38,16 @@ struct NotchCompactTrailingView: View {
                 HStack(spacing: 6) {
                     PulsingDotView()
                         .allowsHitTesting(false)
-                    RecordingTimerView(startTime: manager.recordingStartTime)
-                        .allowsHitTesting(false)
+                    Group {
+                        if let secondsLeft = manager.silenceCountdown {
+                            Text("Stopping in \(secondsLeft)s")
+                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.orange)
+                        } else {
+                            RecordingTimerView(startTime: manager.recordingStartTime)
+                        }
+                    }
+                    .allowsHitTesting(false)
                     StopRecordingButton { manager.requestStopActiveRecording() }
                 }
 

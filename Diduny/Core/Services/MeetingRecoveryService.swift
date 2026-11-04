@@ -82,6 +82,7 @@ final class MeetingRecoveryService {
             )
             guard ok else { return false }
 
+            await storage.attachInProgressTracks(from: recordingID, to: recordingID)
             await cleanupInProgress(recordingID)
 
             if action == .processNow {

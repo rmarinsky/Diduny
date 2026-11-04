@@ -67,6 +67,23 @@ enum PushToTalkKey: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    var isOptionOrCommand: Bool {
+        switch self {
+        case .leftOption, .rightOption, .leftCommand, .rightCommand: true
+        default: false
+        }
+    }
+
+    /// ⌥ and ⌘ keys taken by an active modifier push-to-talk; the ⌥⌘ double-tap ignores them.
+    static func reservedForInplaceTranslation(_ shortcuts: [(key: PushToTalkKey, active: Bool)]) -> Set<PushToTalkKey> {
+        Set(shortcuts.filter { $0.active && $0.key.isOptionOrCommand }.map(\.key))
+    }
+
+    /// The double-tap needs one free Option key and one free Command key.
+    static func blocksInplaceTranslation(_ reserved: Set<PushToTalkKey>) -> Bool {
+        reserved.isSuperset(of: [.leftOption, .rightOption]) || reserved.isSuperset(of: [.leftCommand, .rightCommand])
+    }
+
     /// Label for picker display (symbol + name)
     var pickerLabel: String {
         switch self {

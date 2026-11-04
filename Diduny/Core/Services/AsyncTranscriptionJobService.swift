@@ -31,6 +31,26 @@ struct BatchUploadDiagnostics: Equatable {
     }
 }
 
+/// Reports the share of the request body sent, for upload progress.
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+    private let onProgress: (Double) -> Void
+
+    init(_ onProgress: @escaping (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(
+        _: URLSession,
+        task _: URLSessionTask,
+        didSendBodyData _: Int64,
+        totalBytesSent: Int64,
+        totalBytesExpectedToSend: Int64
+    ) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        onProgress(min(1, Double(totalBytesSent) / Double(totalBytesExpectedToSend)))
+    }
+}
+
 final class AsyncTranscriptionJobService {
     private var proxyBase: String {
         SettingsStorage.shared.proxyBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -109,7 +129,8 @@ final class AsyncTranscriptionJobService {
         audioFileURL: URL,
         config: [String: Any],
         source: String? = nil,
-        sourceDurationSeconds: TimeInterval? = nil
+        sourceDurationSeconds: TimeInterval? = nil,
+        onUploadProgress: ((Double) -> Void)? = nil
     ) async throws -> JobSubmission {
         guard let url = URL(string: "\(proxyBase)/api/v1/jobs") else {
             throw TranscriptionError.invalidURL
@@ -151,7 +172,8 @@ final class AsyncTranscriptionJobService {
         let (data, httpResponse) = try await AuthService.shared.performUploadWithAuth(
             request,
             bodyFileURL: multipart.fileURL,
-            session: longRunningSession
+            session: longRunningSession,
+            delegate: onUploadProgress.map(UploadProgressDelegate.init)
         )
         return try decodeSubmissionResponse(data: data, httpResponse: httpResponse, diagnostics: diagnostics)
     }
@@ -337,6 +359,7 @@ final class AsyncTranscriptionJobService {
         source: String? = nil,
         sourceDurationSeconds: TimeInterval? = nil,
         onSubmitted: ((String) -> Void)? = nil,
+        onUploadProgress: ((Double) -> Void)? = nil,
         onProgressUpdate: @escaping (JobProgressUpdate) -> Void
     ) async throws -> GeneratedTranscript {
         try Task.checkCancellation()
@@ -345,7 +368,8 @@ final class AsyncTranscriptionJobService {
             audioFileURL: audioFileURL,
             config: config,
             source: source,
-            sourceDurationSeconds: sourceDurationSeconds
+            sourceDurationSeconds: sourceDurationSeconds,
+            onUploadProgress: onUploadProgress
         )
         onSubmitted?(submission.jobId)
         return try await waitForResult(

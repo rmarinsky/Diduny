@@ -626,6 +626,7 @@ private struct RecentRow: View {
     }
 
     private var rowTitle: String {
+        if let specificTitle = recording.specificTitle { return specificTitle }
         if let text = recording.transcriptionText, !text.isEmpty {
             let words = text.split(separator: " ").prefix(6).joined(separator: " ")
             return words.count < text.count ? words + "…" : words

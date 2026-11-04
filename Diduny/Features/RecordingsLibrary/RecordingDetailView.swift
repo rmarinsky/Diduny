@@ -12,6 +12,7 @@ struct RecordingDetailView: View {
 
     @State private var playbackService = AudioPlaybackService.shared
     @State private var queueService = RecordingQueueService.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var modelManager = WhisperModelManager.shared
     @State private var selectedWhisperModel: String = SettingsStorage.shared.selectedWhisperModel
     @State private var storage = RecordingsLibraryStorage.shared
@@ -35,7 +36,7 @@ struct RecordingDetailView: View {
         self.onBack = onBack
         self.onClose = onClose
         self.onNavigationGuardChanged = onNavigationGuardChanged
-        _title = State(initialValue: recording.title ?? recording.displayTitle)
+        _title = State(initialValue: recording.customTitle ?? "")
         _description = State(initialValue: recording.description ?? recording.remoteSource?.description ?? "")
     }
 
@@ -59,6 +60,43 @@ struct RecordingDetailView: View {
 
     private var translationPair: TranslationLanguagePair {
         SettingsStorage.shared.resolveTranslationLanguagePair()
+    }
+
+    private var currentQueueProgress: QueueProgress? {
+        guard queueService.currentRecordingId == currentRecording.id else { return nil }
+        return queueService.currentProgress
+    }
+
+    private var queueProgressView: some View {
+        let progress = currentQueueProgress
+        let fraction = progress.flatMap(QueueProgressFormatter.barFraction)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                ProgressView().controlSize(.small)
+                Text(
+                    progress.map(QueueProgressFormatter.detailLine)
+                        ?? (queueService.isQueued(currentRecording.id) ? String(localized: "Queued") : nil)
+                        ?? queueStatusText
+                        ?? "Processing..."
+                )
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                Spacer()
+                if let timeLeft = progress.flatMap(QueueProgressFormatter.timeLeft) {
+                    Text(timeLeft)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            if let fraction {
+                ProgressView(value: fraction)
+                    .progressViewStyle(.linear)
+                    .controlSize(.small)
+                    .tint(Color("BrandAccentDeep"))
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: fraction)
+            }
+        }
     }
 
     private var queueStatusText: String? {
@@ -326,7 +364,9 @@ struct RecordingDetailView: View {
             Text("DETAILS")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            TextField("Recording title", text: $title)
+            // Only the person's own title is editable; the derived name (calendar event, imported
+            // file) stays a prompt so saving the description never freezes it into a custom title.
+            TextField("Recording title", text: $title, prompt: Text(currentRecording.displayTitle))
             TextField("Description", text: $description, axis: .vertical)
                 .lineLimit(2 ... 4)
             HStack {
@@ -472,10 +512,7 @@ struct RecordingDetailView: View {
             }
 
             if currentRecording.status == .processing {
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text(queueStatusText ?? "Processing...").foregroundStyle(.secondary)
-                }
+                queueProgressView
             } else if currentRecording.status == .failed {
                 Label(
                     currentRecording.errorMessage ?? String(localized: "Transcription failed"),

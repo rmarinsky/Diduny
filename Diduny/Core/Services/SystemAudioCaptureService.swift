@@ -46,6 +46,8 @@ final class SystemAudioCaptureService: NSObject {
     private var currentChunkStartedAt: Date = .init()
     /// Frames written into the current chunk; used to compute durationSeconds on rotation.
     private var currentChunkFrameCount: Int = 0
+    /// Writer for `tracksURL` (accessed only on fileWriteQueue).
+    private var tracksWriter: MeetingTracksWriter?
 
     // MARK: - Public Configuration
 
@@ -76,11 +78,18 @@ final class SystemAudioCaptureService: NSObject {
     /// the callback itself must not block.
     var onChunkRotated: ((Int, URL, Date, Int64, Double) -> Void)?
 
+    /// When set, also writes a 2-channel file (mic, system) frame-aligned with the mixed file,
+    /// for speaker labels. Not rotated: one file per capture.
+    var tracksURL: URL?
+
     var onError: ((Error) -> Void)?
     var onCaptureStarted: (() -> Void)?
 
     /// Raw mono s16le PCM data callback for cloud real-time transcription.
     var onRawAudioData: ((Data) -> Void)?
+
+    /// The same mixed mono 16 kHz audio as Float samples, for on-device analysis (silence auto-stop).
+    var onMixedSamples: (([Float]) -> Void)?
 
     /// Fired when microphone has been silent for > `silenceTimeout`.
     var onMicrophoneSilent: (() -> Void)?
@@ -152,6 +161,14 @@ final class SystemAudioCaptureService: NSObject {
         Log.audio.info("Starting system audio capture (captureMicrophone=\(captureMicrophoneAtStart))...")
 
         try setupAudioFile(at: outputURL)
+        if let tracksURL {
+            do {
+                tracksWriter = try MeetingTracksWriter(url: tracksURL)
+            } catch {
+                // Speaker labels fall back to voice only; the recording itself is unaffected.
+                Log.audio.error("Tracks file not created: \(error.localizedDescription)")
+            }
+        }
 
         // Reset chunk rotation state (RLR-M3b)
         currentChunkIndex = 1
@@ -545,6 +562,8 @@ final class SystemAudioCaptureService: NSObject {
                 }
                 audioFile = nil
                 outputFormat = nil
+                tracksWriter?.close()
+                tracksWriter = nil
                 systemBuffer.removeAll()
                 micBuffer.removeAll()
             }
@@ -745,20 +764,24 @@ final class SystemAudioCaptureService: NSObject {
                 for i in 0 ..< mixCount {
                     mixed[i] = max(-1.0, min(1.0, systemBuffer[i] + micBuffer[i]))
                 }
+                writeSamples(mixed, allowRotation: false)
+                appendTracks(mic: Array(micBuffer.prefix(mixCount)), system: Array(systemBuffer.prefix(mixCount)))
                 systemBuffer.removeFirst(mixCount)
                 micBuffer.removeFirst(mixCount)
-                writeSamples(mixed, allowRotation: false)
             }
             if !systemBuffer.isEmpty {
                 writeSamples(systemBuffer, allowRotation: false)
+                appendTracks(mic: [], system: systemBuffer)
                 systemBuffer.removeAll()
             }
             if !micBuffer.isEmpty {
                 writeSamples(micBuffer, allowRotation: false)
+                appendTracks(mic: micBuffer, system: [])
                 micBuffer.removeAll()
             }
         } else if !systemBuffer.isEmpty {
             writeSamples(systemBuffer, allowRotation: false)
+            appendTracks(mic: [], system: systemBuffer)
             systemBuffer.removeAll()
         }
     }
@@ -851,6 +874,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
             emitRealtimeData(samples)
             fileWriteQueue.async { [weak self] in
                 self?.writeSamples(samples)
+                self?.appendTracks(mic: [], system: samples)
             }
         }
     }
@@ -913,12 +937,15 @@ extension SystemAudioCaptureService: SCStreamOutput {
             }
         }
         let mixed = Array(mixScratchBuffer.prefix(mixCount))
+        let micPart = tracksURL == nil ? [] : Array(micBuffer.prefix(mixCount))
+        let systemPart = tracksURL == nil ? [] : Array(systemBuffer.prefix(mixCount))
         systemBuffer.removeFirst(mixCount)
         micBuffer.removeFirst(mixCount)
 
         emitRealtimeData(mixed)
         fileWriteQueue.async { [weak self] in
             self?.writeSamples(mixed)
+            self?.appendTracks(mic: micPart, system: systemPart)
         }
     }
 
@@ -926,11 +953,11 @@ extension SystemAudioCaptureService: SCStreamOutput {
     /// This prevents audio from being held indefinitely when one source delivers
     /// faster or the other is temporarily silent.
     private func flushStaleBuffer() {
-        flushIfStale(&systemBuffer, emitRealtime: captureMicrophone)
-        flushIfStale(&micBuffer, emitRealtime: captureMicrophone)
+        flushIfStale(&systemBuffer, emitRealtime: captureMicrophone, isMicrophone: false)
+        flushIfStale(&micBuffer, emitRealtime: captureMicrophone, isMicrophone: true)
     }
 
-    private func flushIfStale(_ buffer: inout [Float], emitRealtime: Bool) {
+    private func flushIfStale(_ buffer: inout [Float], emitRealtime: Bool, isMicrophone: Bool) {
         guard buffer.count > flushThresholdFrames else { return }
         let stale = Array(buffer)
         buffer.removeAll()
@@ -939,12 +966,14 @@ extension SystemAudioCaptureService: SCStreamOutput {
         }
         fileWriteQueue.async { [weak self] in
             self?.writeSamples(stale)
+            self?.appendTracks(mic: isMicrophone ? stale : [], system: isMicrophone ? [] : stale)
         }
     }
 
     // MARK: - Real-Time Streaming
 
     private func emitRealtimeData(_ samples: [Float]) {
+        onMixedSamples?(samples)
         guard let onRawAudioData else { return }
 
         var data = Data(count: samples.count * MemoryLayout<Int16>.size)
@@ -1007,6 +1036,18 @@ extension SystemAudioCaptureService: SCStreamOutput {
         if allowRotation {
             rotateChunkIfNeededOnFileWriteQueue()
         }
+    }
+
+    /// Writes to the tracks file with the mix gains undone, so channel loudness compares the real
+    /// signals (speaker labels) rather than the user's mix settings. Call on fileWriteQueue.
+    private func appendTracks(mic: [Float], system: [Float]) {
+        guard let tracksWriter else { return }
+        tracksWriter.append(mic: Self.ungained(mic, gain: micGain), system: Self.ungained(system, gain: systemGain))
+    }
+
+    static func ungained(_ samples: [Float], gain: Float) -> [Float] {
+        guard gain > 0.01, gain != 1 else { return samples }
+        return samples.map { max(-1, min(1, $0 / gain)) }
     }
 
     // MARK: - Chunk Rotation (RLR-M3b)

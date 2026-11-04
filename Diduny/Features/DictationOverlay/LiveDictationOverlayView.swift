@@ -70,7 +70,11 @@ struct LiveDictationOverlayView: View {
             Spacer(minLength: 4)
 
             if store.phase != .pasted {
-                ElapsedTimeLabel(startedAt: store.startedAt)
+                if let secondsLeft = store.silenceCountdown {
+                    SilenceCountdownLabel(secondsLeft: secondsLeft)
+                } else {
+                    ElapsedTimeLabel(startedAt: store.startedAt, endedAt: store.endedAt)
+                }
 
                 Button(action: onMinimize) {
                     Image(systemName: "minus")
@@ -106,9 +110,28 @@ struct LiveDictationOverlayView: View {
                             .font(.system(size: 9.5, weight: .medium))
                             .foregroundStyle(.secondary)
                         outputPicker
+                        if store.voiceCommand != nil {
+                            undoVoiceCommandButton
+                        }
                     }
                 } else if let target = store.targetLabel {
-                    statusBadge("→ \(target)")
+                    HStack(spacing: 5) {
+                        statusBadge("→ \(target)")
+                        if store.voiceCommand != nil {
+                            HStack(spacing: 3) {
+                                Image(systemName: "mic.fill")
+                                Text("by voice")
+                            }
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                            .frame(height: 20)
+                            .background(
+                                Color.primary.opacity(0.045),
+                                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -130,6 +153,10 @@ struct LiveDictationOverlayView: View {
             }
         } label: {
             HStack(spacing: 3) {
+                if store.voiceCommand != nil {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 8, weight: .semibold))
+                }
                 Text(store.selectedOutput.label)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 7, weight: .bold))
@@ -147,8 +174,68 @@ struct LiveDictationOverlayView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Output for this recording. Applies to everything said so far.")
-        .accessibilityLabel("Output language")
+        .accessibilityLabel(
+            store.voiceCommand == nil ? Text("Output language") : Text("Output language, set by voice command")
+        )
         .accessibilityValue(store.selectedOutput.label)
+    }
+
+    /// Back to the output from before the spoken command; the words stay as dictated text.
+    private var undoVoiceCommandButton: some View {
+        Button {
+            onSelectOutput(store.pickedOutput)
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "arrow.uturn.backward")
+                    .font(.system(size: 8, weight: .semibold))
+                Text("Undo")
+            }
+            .font(.system(size: 9.5, weight: .semibold))
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .frame(height: 20)
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .help("Keep the original output; the command words stay in the text.")
+    }
+
+    /// The recognised command, highlighted, beside the translated preview or the pasted result.
+    private func voiceCommandLine(_ prefix: LocalizedStringKey, _ command: VoiceTranslationCommand) -> some View {
+        HStack(spacing: 4) {
+            Text(prefix)
+                .foregroundStyle(.secondary)
+            Text(command.commandText)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color("BrandAccentDeep"))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(
+                    Color("BrandAccentDeep").opacity(0.18),
+                    in: RoundedRectangle(cornerRadius: 4, style: .continuous)
+                )
+        }
+        .font(.system(size: 10))
+        .lineLimit(1)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Spoken words with the command highlighted, until a translated preview replaces them.
+    private var transcriptText: Text {
+        let text = displayText
+        guard let command = store.voiceCommand, store.phase != .pasted, !store.isShowingConvertedPreview,
+              let range = command.position == .trailing
+              ? text.range(of: command.commandText, options: .backwards)
+              : text.range(of: command.commandText)
+        else { return Text(text) }
+        var attributed = AttributedString(text)
+        if let commandRange = Range(range, in: attributed) {
+            attributed[commandRange].foregroundColor = Color("BrandAccentDeep")
+            attributed[commandRange].backgroundColor = Color("BrandAccentDeep").opacity(0.18)
+            attributed[commandRange].inlinePresentationIntent = .stronglyEmphasized
+        }
+        return Text(attributed)
     }
 
     private func outputButton(_ output: DictationOutput) -> some View {
@@ -177,12 +264,27 @@ struct LiveDictationOverlayView: View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(displayText)
+                    if let command = store.voiceCommand, command.position == .leading,
+                       store.isShowingConvertedPreview
+                    {
+                        voiceCommandLine("Command:", command)
+                            .padding(.bottom, 6)
+                    }
+                    transcriptText
                         .font(.system(size: store.mode.isMeeting ? 12.5 : 12))
                         .foregroundStyle(store.hasText ? Color.primary.opacity(0.90) : Color.secondary)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentTransition(.opacity)
+                    if let command = store.voiceCommand {
+                        if store.phase == .pasted {
+                            voiceCommandLine("Removed command:", command)
+                                .padding(.top, 6)
+                        } else if command.position == .trailing, store.isShowingConvertedPreview {
+                            voiceCommandLine("Command:", command)
+                                .padding(.top, 6)
+                        }
+                    }
 
                     Color.clear
                         .frame(height: 1)
@@ -247,7 +349,7 @@ struct LiveDictationOverlayView: View {
             .disabled(!store.hasText)
             .help("Copy transcript")
 
-            Button(action: store.phase == .pasted ? onDismiss : onStop) {
+            Button(action: showsCloseButton ? onDismiss : onStop) {
                 HStack(spacing: 6) {
                     Image(systemName: stopButtonIcon)
                         .font(.system(size: 11, weight: .semibold))
@@ -276,9 +378,9 @@ struct LiveDictationOverlayView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(store.phase == .pasted || store.canStop ? Color.white : Color.secondary.opacity(0.55))
+            .foregroundStyle(showsCloseButton || store.canStop ? Color.white : Color.secondary.opacity(0.55))
             .background(stopButtonColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .disabled(!store.canStop && store.phase != .pasted)
+            .disabled(!store.canStop && !showsCloseButton)
             .help(stopButtonHelp)
             .accessibilityLabel(stopButtonTitle)
             .accessibilityHint(stopButtonHelp)
@@ -298,8 +400,16 @@ struct LiveDictationOverlayView: View {
             }
     }
 
+    /// The right button closes the panel after a paste and during the background hand-off.
+    private var showsCloseButton: Bool {
+        store.phase == .pasted || store.backgroundHandoffDetail != nil
+    }
+
     private var stopButtonTitle: String {
-        switch store.phase {
+        if showsCloseButton {
+            return String(localized: "Close")
+        }
+        return switch store.phase {
         case .finalizing:
             String(localized: "Finishing…")
         case .processing:
@@ -312,7 +422,10 @@ struct LiveDictationOverlayView: View {
     }
 
     private var stopButtonIcon: String {
-        switch store.phase {
+        if showsCloseButton {
+            return "xmark"
+        }
+        return switch store.phase {
         case .finalizing, .processing:
             "ellipsis"
         case .pasted:
@@ -323,7 +436,7 @@ struct LiveDictationOverlayView: View {
     }
 
     private var stopButtonHelp: String {
-        if store.phase == .pasted {
+        if showsCloseButton {
             return "Close"
         }
 
@@ -338,11 +451,12 @@ struct LiveDictationOverlayView: View {
     }
 
     private var displayText: String {
-        store.displayText.isEmpty ? "Listening…" : store.displayText
+        guard store.displayText.isEmpty else { return store.displayText }
+        return store.backgroundHandoffDetail ?? "Listening…"
     }
 
     private var stopButtonColor: Color {
-        if store.phase == .pasted {
+        if showsCloseButton {
             return Color.primary.opacity(0.14)
         }
         if store.canStop {
@@ -423,8 +537,20 @@ private struct OverlayStatusIcon: View {
     }
 }
 
+private struct SilenceCountdownLabel: View {
+    let secondsLeft: Int
+
+    var body: some View {
+        Text("Stopping in \(secondsLeft)s")
+            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+            .foregroundStyle(.orange)
+            .lineLimit(1)
+    }
+}
+
 private struct ElapsedTimeLabel: View {
     let startedAt: Date
+    var endedAt: Date?
 
     var body: some View {
         TimelineView(.periodic(from: startedAt, by: 1)) { timeline in
@@ -436,7 +562,7 @@ private struct ElapsedTimeLabel: View {
     }
 
     private func elapsedText(at date: Date) -> String {
-        let elapsed = max(0, Int(date.timeIntervalSince(startedAt)))
+        let elapsed = max(0, Int(min(date, endedAt ?? date).timeIntervalSince(startedAt)))
         return String(format: "%02d:%02d", elapsed / 60, elapsed % 60)
     }
 }

@@ -19,7 +19,13 @@ final class LiveDictationOverlayStore {
     var phase: LiveDictationOverlayPhase = .starting
     var connectionStatus: RealtimeConnectionStatus = .disconnected
     var audioLevel: Float = 0
+    /// Seconds left before "Stop after silence" ends the recording; nil when not counting down.
+    var silenceCountdown: Int?
     var startedAt = Date()
+    /// Set when a meeting is stopped; the timer shows the recorded length instead of counting.
+    var endedAt: Date?
+    /// Box text while the "Transcribing in background" hand-off is shown; nil otherwise.
+    var backgroundHandoffDetail: String?
     var finalText = ""
     var provisionalText = ""
     var copiedAt: Date?
@@ -27,8 +33,16 @@ final class LiveDictationOverlayStore {
     var onTurnOnLiveTranscript: (() -> Void)?
     /// What the live STT stream produces for this session.
     private(set) var nativeOutput: DictationOutput = .original
-    /// Output picked in the panel; applies to the whole recording at Stop.
-    var selectedOutput: DictationOutput = .original
+    /// Output of the session or picked in the panel, before any spoken command.
+    private(set) var pickedOutput: DictationOutput = .original
+    /// "Translate into X" said as the first or last final words.
+    private(set) var voiceCommand: VoiceTranslationCommand?
+    /// Off after Undo or a manual pick, and when voice commands are off or unavailable.
+    private(set) var listensForVoiceCommands = false
+    /// Output for the whole recording at Stop.
+    var selectedOutput: DictationOutput {
+        voiceCommand?.output ?? pickedOutput
+    }
     /// Empty hides the output picker.
     private(set) var outputOptions: [DictationOutput] = []
     /// Latest text-translated preview of the spoken words.
@@ -102,8 +116,18 @@ final class LiveDictationOverlayStore {
     /// the stream already produces the selected output.
     var outputSourceText: String? {
         guard selectedOutput != nativeOutput, selectedOutput != .original else { return nil }
-        let text = spokenText
+        let text = voiceCommand?.remainingText ?? spokenText
         return text.isEmpty ? nil : text
+    }
+
+    /// True while the panel shows the text-translated preview instead of the spoken words.
+    var isShowingConvertedPreview: Bool {
+        phase != .pasted && selectedOutput != nativeOutput && selectedOutput != .original
+            && convertedPreview?.output == selectedOutput
+    }
+
+    private var spokenFinalText: String {
+        (nativeOutput == .original ? finalText : fallbackFinalText).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var spokenText: String {
@@ -214,6 +238,8 @@ final class LiveDictationOverlayStore {
         connectionStatus = .disconnected
         audioLevel = 0
         startedAt = Date()
+        endedAt = nil
+        backgroundHandoffDetail = nil
         finalText = ""
         provisionalText = ""
         fallbackFinalText = ""
@@ -221,17 +247,43 @@ final class LiveDictationOverlayStore {
         meetingTranscript.reset()
         copiedAt = nil
         nativeOutput = .original
-        selectedOutput = .original
+        pickedOutput = .original
+        voiceCommand = nil
+        listensForVoiceCommands = false
         outputOptions = []
         convertedPreview = nil
         onTurnOnLiveTranscript = nil
     }
 
-    func configureOutput(native: DictationOutput, options: [DictationOutput]) {
+    func configureOutput(native: DictationOutput, options: [DictationOutput], listensForVoiceCommands: Bool) {
         nativeOutput = native
-        selectedOutput = native
+        pickedOutput = native
+        voiceCommand = nil
+        self.listensForVoiceCommands = listensForVoiceCommands
         outputOptions = options
         convertedPreview = nil
+    }
+
+    /// A manual pick, or Undo, wins over spoken commands for the rest of the recording.
+    func pickOutput(_ output: DictationOutput) {
+        pickedOutput = output
+        voiceCommand = nil
+        listensForVoiceCommands = false
+    }
+
+    /// Re-checks the start and end of the final words for a spoken command.
+    func updateVoiceCommand() {
+        guard listensForVoiceCommands else { return }
+        applyVoiceCommand(VoiceTranslationCommand.detect(
+            in: spokenFinalText,
+            position: SettingsStorage.shared.voiceTranslationCommandPosition,
+            languages: SettingsStorage.shared.voiceTranslationCommandLanguages
+        ))
+    }
+
+    func applyVoiceCommand(_ command: VoiceTranslationCommand?) {
+        guard listensForVoiceCommands, command != voiceCommand else { return }
+        voiceCommand = command
     }
 
     func processTokens(_ tokens: [RealtimeToken]) {

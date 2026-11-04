@@ -218,7 +218,8 @@ final class AuthService {
     nonisolated func performUploadWithAuth(
         _ request: URLRequest,
         bodyFileURL: URL,
-        session: URLSession
+        session: URLSession,
+        delegate: URLSessionTaskDelegate? = nil
     ) async throws -> (Data, HTTPURLResponse) {
         func upload(_ sourceRequest: URLRequest) async throws -> (Data, HTTPURLResponse) {
             var authedRequest = sourceRequest
@@ -226,7 +227,7 @@ final class AuthService {
             let requestId = HTTPLogger.attachRequestId(&authedRequest)
             HTTPLogger.logRequest(authedRequest, requestId: requestId)
             let startTime = ContinuousClock.now
-            let (data, response) = try await session.upload(for: authedRequest, fromFile: bodyFileURL)
+            let (data, response) = try await session.upload(for: authedRequest, fromFile: bodyFileURL, delegate: delegate)
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw AuthError.invalidResponse
             }

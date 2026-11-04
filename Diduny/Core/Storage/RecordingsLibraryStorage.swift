@@ -537,16 +537,24 @@ final class RecordingsLibraryStorage {
         guard allowInProgressCapture || !targets.contains(where: { $0.status == .recording }) else {
             return false
         }
-        let stagedAudioFiles = targets.compactMap { recording -> RecordingDeletionStagedFile? in
-            guard recording.hasAttachedAudio else { return nil }
-            let original = recordingsDir.appendingPathComponent(recording.audioFileName)
-            guard fileManager.fileExists(atPath: original.path) else { return nil }
-            return RecordingDeletionStagedFile(
-                originalPath: original.path,
-                stagedPath: recordingsDir.appendingPathComponent(
-                    ".\(recording.audioFileName).deleting-\(UUID().uuidString)"
-                ).path
-            )
+        let stagedAudioFiles = targets.flatMap { recording -> [RecordingDeletionStagedFile] in
+            var originals: [URL] = []
+            if recording.hasAttachedAudio {
+                originals.append(recordingsDir.appendingPathComponent(recording.audioFileName))
+            }
+            if let tracks = tracksFileURL(for: recording.id) {
+                originals.append(tracks)
+            }
+            return originals
+                .filter { fileManager.fileExists(atPath: $0.path) }
+                .map { original in
+                    RecordingDeletionStagedFile(
+                        originalPath: original.path,
+                        stagedPath: recordingsDir.appendingPathComponent(
+                            ".\(original.lastPathComponent).deleting-\(UUID().uuidString)"
+                        ).path
+                    )
+                }
         }
         let inProgressDirectory = appSupportDir.appendingPathComponent("InProgressRecordings")
         let stagedInProgressDirectories = targets.compactMap { recording -> RecordingDeletionStagedFile? in
@@ -919,6 +927,51 @@ final class RecordingsLibraryStorage {
 
     func audioFileURL(for recording: Recording) -> URL {
         recordingsDir.appendingPathComponent(recording.audioFileName)
+    }
+
+    // MARK: - Meeting Tracks (speaker labels)
+
+    /// The meeting's 2-channel file (channel 1 mic, channel 2 system), if one was kept.
+    func tracksFileURL(for id: UUID) -> URL? {
+        ["flac", "wav"]
+            .map { recordingsDir.appendingPathComponent("\(id.uuidString).tracks.\($0)") }
+            .first { fileManager.fileExists(atPath: $0.path) }
+    }
+
+    /// Attaches the 2-channel file left in a meeting's in-progress directory, if any.
+    func attachInProgressTracks(from inProgressRecordingId: UUID?, to id: UUID) async {
+        guard let inProgressRecordingId,
+              let store = try? InProgressRecordingStore.sharedStore(),
+              let directory = try? await store.directoryURL(for: inProgressRecordingId)
+        else { return }
+        await attachTracks(
+            from: directory.appendingPathComponent(MeetingRecorderService.tracksFilename),
+            to: id
+        )
+    }
+
+    /// Moves a finished 2-channel file from the in-progress directory into the library, compressed.
+    /// Best effort: without it the meeting gets voice-only speaker labels.
+    func attachTracks(from wavURL: URL, to id: UUID) async {
+        guard MeetingTracksWriter.repairHeader(at: wavURL),
+              let size = try? fileManager.attributesOfItem(atPath: wavURL.path)[.size] as? Int,
+              size > MeetingTracksWriter.headerSize
+        else { return }
+        let compressed = await audioCompressor(wavURL)
+        let destination = recordingsDir.appendingPathComponent(
+            "\(id.uuidString).tracks.\(compressed.pathExtension)"
+        )
+        do {
+            if let existing = tracksFileURL(for: id) {
+                try fileManager.removeItem(at: existing)
+            }
+            try fileManager.moveItem(at: compressed, to: destination)
+        } catch {
+            Log.app.error("Failed to keep meeting tracks: \(error.localizedDescription)")
+        }
+        if compressed != wavURL {
+            try? fileManager.removeItem(at: wavURL)
+        }
     }
 
     // MARK: - Stats

@@ -5,7 +5,7 @@ set -euo pipefail
 # Requires: cmake, Xcode command line tools
 # Output: Frameworks/whisper.xcframework
 
-WHISPER_TAG="v1.7.3"
+WHISPER_TAG="v1.9.5"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"

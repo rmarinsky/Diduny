@@ -164,10 +164,14 @@ final class VoiceTranslationTests: XCTestCase {
     func test_overlayShowsChosenOutputWithoutRestartingTheStream() {
         let store = LiveDictationOverlayStore()
         store.reset(mode: .voice)
-        store.configureOutput(native: .original, options: [.original, .translation(targetLanguage: "en")])
+        store.configureOutput(
+            native: .original,
+            options: [.original, .translation(targetLanguage: "en")],
+            listensForVoiceCommands: false
+        )
         store.processTokens([RealtimeToken(text: "Привіт", isFinal: true)])
 
-        store.selectedOutput = .translation(targetLanguage: "en")
+        store.pickOutput(.translation(targetLanguage: "en"))
         XCTAssertEqual(store.title, "Translating")
         XCTAssertEqual(store.displayText, "Привіт")
         XCTAssertEqual(store.outputSourceText, "Привіт")
@@ -175,10 +179,10 @@ final class VoiceTranslationTests: XCTestCase {
         store.convertedPreview = (output: .translation(targetLanguage: "en"), source: "Привіт", text: "Hello")
         XCTAssertEqual(store.displayText, "Hello")
 
-        store.selectedOutput = .translation(targetLanguage: "de")
+        store.pickOutput(.translation(targetLanguage: "de"))
         XCTAssertEqual(store.displayText, "Привіт")
 
-        store.selectedOutput = .original
+        store.pickOutput(.original)
         XCTAssertEqual(store.title, "Transcribing")
         XCTAssertEqual(store.displayText, "Привіт")
     }
@@ -189,7 +193,8 @@ final class VoiceTranslationTests: XCTestCase {
         store.reset(mode: .translation(targetLanguage: "→ EN"))
         store.configureOutput(
             native: .translation(targetLanguage: "en"),
-            options: [.original, .translation(targetLanguage: "en")]
+            options: [.original, .translation(targetLanguage: "en")],
+            listensForVoiceCommands: false
         )
         store.processTokens([
             RealtimeToken(text: "Привіт", isFinal: true, language: "uk", translationStatus: "original"),
@@ -197,12 +202,75 @@ final class VoiceTranslationTests: XCTestCase {
         ])
         XCTAssertEqual(store.displayText, "Hello")
 
-        store.selectedOutput = .original
+        store.pickOutput(.original)
         XCTAssertEqual(store.displayText, "Привіт")
         XCTAssertNil(store.outputSourceText)
         store.finalText = "Привіт!"
         store.phase = .pasted
         XCTAssertEqual(store.displayText, "Привіт!")
+    }
+
+    private static let spokenWithCommand = "Привіт, Марто. Зустріч у вівторок. Translate into Spanish."
+
+    @MainActor
+    private static func dictateVoiceCommand(_ store: LiveDictationOverlayStore) {
+        store.reset(mode: .voice)
+        store.configureOutput(
+            native: .original,
+            options: [.original, .translation(targetLanguage: "en")],
+            listensForVoiceCommands: true
+        )
+        store.phase = .recording
+        store.connectionStatus = .connected
+        store.processTokens([RealtimeToken(text: spokenWithCommand, isFinal: true)])
+        store.updateVoiceCommand()
+    }
+
+    @MainActor
+    func test_spokenCommandSwitchesOutputAndLeavesItsWordsOut() {
+        let store = LiveDictationOverlayStore()
+        Self.dictateVoiceCommand(store)
+
+        XCTAssertEqual(store.selectedOutput, .translation(targetLanguage: "es"))
+        XCTAssertEqual(store.title, "Translating")
+        XCTAssertEqual(store.outputSourceText, "Привіт, Марто. Зустріч у вівторок.")
+        XCTAssertEqual(store.voiceCommand?.commandText, "Translate into Spanish")
+    }
+
+    @MainActor
+    func test_spokenCommandStopsCountingOnceDictationContinues() {
+        let store = LiveDictationOverlayStore()
+        Self.dictateVoiceCommand(store)
+
+        store.processTokens([RealtimeToken(text: " Ні, лишаємо так.", isFinal: true)])
+        store.updateVoiceCommand()
+
+        XCTAssertNil(store.voiceCommand)
+        XCTAssertEqual(store.selectedOutput, .original)
+    }
+
+    @MainActor
+    func test_manualPickEndsSpokenCommandsForTheRecording() {
+        let store = LiveDictationOverlayStore()
+        Self.dictateVoiceCommand(store)
+
+        store.pickOutput(.original)
+        store.updateVoiceCommand()
+
+        XCTAssertNil(store.voiceCommand)
+        XCTAssertEqual(store.selectedOutput, .original)
+    }
+
+    @MainActor
+    func test_spokenCommandIgnoredWhenNotListening() {
+        let store = LiveDictationOverlayStore()
+        store.reset(mode: .voice)
+        store.configureOutput(native: .original, options: [], listensForVoiceCommands: false)
+        store.processTokens([RealtimeToken(text: Self.spokenWithCommand, isFinal: true)])
+        store.updateVoiceCommand()
+
+        XCTAssertNil(store.voiceCommand)
+        XCTAssertEqual(store.selectedOutput, .original)
     }
 
     /// Renders the live panel in each output-switching state, light and dark,
@@ -213,7 +281,7 @@ final class VoiceTranslationTests: XCTestCase {
         let english = DictationOutput.translation(targetLanguage: "en")
         let dictation: @MainActor (LiveDictationOverlayStore) -> Void = { store in
             store.reset(mode: .voice)
-            store.configureOutput(native: .original, options: [.original, english])
+            store.configureOutput(native: .original, options: [.original, english], listensForVoiceCommands: false)
             store.phase = .recording
             store.connectionStatus = .connected
             store.processTokens([RealtimeToken(text: "Привіт, це тест перемикання мови під час диктування", isFinal: true)])
@@ -222,7 +290,7 @@ final class VoiceTranslationTests: XCTestCase {
             ("1-dictation-original", "Привіт, це тест перемикання мови під час диктування", dictation),
             ("2-dictation-switched-to-english", "Hi, this is a test of switching language while dictating", { store in
                 dictation(store)
-                store.selectedOutput = english
+                store.pickOutput(english)
                 store.convertedPreview = (
                     output: english,
                     source: "Привіт, це тест перемикання мови під час диктування",
@@ -231,14 +299,30 @@ final class VoiceTranslationTests: XCTestCase {
             }),
             ("3-translation-switched-to-original", "Привіт", { store in
                 store.reset(mode: .translation(targetLanguage: "→ EN"))
-                store.configureOutput(native: english, options: [.original, english])
+                store.configureOutput(native: english, options: [.original, english], listensForVoiceCommands: false)
                 store.phase = .recording
                 store.connectionStatus = .connected
                 store.processTokens([
                     RealtimeToken(text: "Привіт", isFinal: true, language: "uk", translationStatus: "original"),
                     RealtimeToken(text: "Hello", isFinal: true, language: "en", translationStatus: "translation")
                 ])
-                store.selectedOutput = .original
+                store.pickOutput(.original)
+            }),
+            ("4-voice-command-before-preview", Self.spokenWithCommand, { store in
+                Self.dictateVoiceCommand(store)
+            }),
+            ("5-voice-command-with-preview", "Hola, Marta. Reunión el martes.", { store in
+                Self.dictateVoiceCommand(store)
+                store.convertedPreview = (
+                    output: .translation(targetLanguage: "es"),
+                    source: "Привіт, Марто. Зустріч у вівторок.",
+                    text: "Hola, Marta. Reunión el martes."
+                )
+            }),
+            ("6-voice-command-pasted", "Hola, Marta. Reunión el martes.", { store in
+                Self.dictateVoiceCommand(store)
+                store.finalText = "Hola, Marta. Reunión el martes."
+                store.phase = .pasted
             })
         ]
         let outputDirectory = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"].map { URL(fileURLWithPath: $0) }

@@ -138,6 +138,7 @@ final class SettingsStorage {
         case pushToTalkHoldStartDelaySeconds
         case meetingAudioSource
         case meetingSuggestionsEnabled
+        case speakerIdentificationEnabled
         case meetingMicGain
         case meetingSystemGain
         case translationPushToTalkKey
@@ -163,15 +164,23 @@ final class SettingsStorage {
         case translationLanguagePairs
         case defaultTranslationLanguagePairID
         case lastUsedTranslationLanguagePairID
+        case voiceTranslationCommandsEnabled
+        case voiceTranslationCommandPosition
+        case voiceTranslationCommandTargets
         case translationTargetLanguages
         case voiceTranslationTargetLanguage
         case textTranslationSourceLanguage
         case textTranslationTargetLanguage
+        case inplaceTranslationEnabled
         case translationProvider
         case translationRealtimeSocketEnabled
         case transcriptionRealtimeSocketEnabled
         case meetingRealtimeTranscriptionEnabled
         case meetingLocalLivePreviewEnabled
+        case dictationSilenceAutoStopEnabled
+        case dictationSilenceAutoStopSeconds
+        case meetingSilenceAutoStopEnabled
+        case meetingSilenceAutoStopSeconds
         case escapeCancelEnabled
         case escapeCancelShortcut
         case escapeCancelPressCount
@@ -592,6 +601,16 @@ final class SettingsStorage {
 
     // MARK: - Meeting Recording
 
+    /// Voice detection for local speaker labels (Apple silicon, macOS 15+). On by default.
+    /// "Me / Others" by channel doesn't depend on it.
+    var speakerIdentificationEnabled: Bool {
+        get {
+            defaults.object(forKey: Key.speakerIdentificationEnabled.rawValue) == nil
+                || defaults.bool(forKey: Key.speakerIdentificationEnabled.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.speakerIdentificationEnabled.rawValue) }
+    }
+
     var meetingSuggestionsEnabled: Bool {
         get {
             defaults.object(forKey: Key.meetingSuggestionsEnabled.rawValue) == nil
@@ -919,6 +938,54 @@ final class SettingsStorage {
         set { defaults.set(newValue, forKey: Key.meetingLocalLivePreviewEnabled.rawValue) }
     }
 
+    // MARK: - Stop After Silence
+
+    static let dictationSilenceAutoStopRange: ClosedRange<Double> = 1 ... 10
+    static let meetingSilenceAutoStopRange: ClosedRange<Double> = 10 ... 300
+
+    /// Voice dictation and voice translation (not while a hold-to-record key is held).
+    var dictationSilenceAutoStopEnabled: Bool {
+        get {
+            defaults.object(forKey: Key.dictationSilenceAutoStopEnabled.rawValue) == nil
+                || defaults.bool(forKey: Key.dictationSilenceAutoStopEnabled.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.dictationSilenceAutoStopEnabled.rawValue) }
+    }
+
+    var dictationSilenceAutoStopSeconds: Double {
+        get {
+            let stored = defaults.object(forKey: Key.dictationSilenceAutoStopSeconds.rawValue) as? Double ?? 5
+            return min(max(stored, Self.dictationSilenceAutoStopRange.lowerBound), Self.dictationSilenceAutoStopRange.upperBound)
+        }
+        set {
+            defaults.set(
+                min(max(newValue, Self.dictationSilenceAutoStopRange.lowerBound), Self.dictationSilenceAutoStopRange.upperBound),
+                forKey: Key.dictationSilenceAutoStopSeconds.rawValue
+            )
+        }
+    }
+
+    var meetingSilenceAutoStopEnabled: Bool {
+        get {
+            defaults.object(forKey: Key.meetingSilenceAutoStopEnabled.rawValue) == nil
+                || defaults.bool(forKey: Key.meetingSilenceAutoStopEnabled.rawValue)
+        }
+        set { defaults.set(newValue, forKey: Key.meetingSilenceAutoStopEnabled.rawValue) }
+    }
+
+    var meetingSilenceAutoStopSeconds: Double {
+        get {
+            let stored = defaults.object(forKey: Key.meetingSilenceAutoStopSeconds.rawValue) as? Double ?? 60
+            return min(max(stored, Self.meetingSilenceAutoStopRange.lowerBound), Self.meetingSilenceAutoStopRange.upperBound)
+        }
+        set {
+            defaults.set(
+                min(max(newValue, Self.meetingSilenceAutoStopRange.lowerBound), Self.meetingSilenceAutoStopRange.upperBound),
+                forKey: Key.meetingSilenceAutoStopSeconds.rawValue
+            )
+        }
+    }
+
     // MARK: - Escape Cancel
 
     /// Enables Escape-based cancellation during active recording.
@@ -1124,6 +1191,37 @@ final class SettingsStorage {
         }
     }
 
+    var voiceTranslationCommandsEnabled: Bool {
+        get { defaults.object(forKey: Key.voiceTranslationCommandsEnabled.rawValue) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.voiceTranslationCommandsEnabled.rawValue) }
+    }
+
+    var voiceTranslationCommandPosition: VoiceTranslationCommandPosition {
+        get {
+            defaults.string(forKey: Key.voiceTranslationCommandPosition.rawValue)
+                .flatMap(VoiceTranslationCommandPosition.init(rawValue:)) ?? .startAndEnd
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.voiceTranslationCommandPosition.rawValue) }
+    }
+
+    var voiceTranslationCommandTargets: VoiceTranslationCommandTargets {
+        get {
+            defaults.string(forKey: Key.voiceTranslationCommandTargets.rawValue)
+                .flatMap(VoiceTranslationCommandTargets.init(rawValue:)) ?? .anySupported
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.voiceTranslationCommandTargets.rawValue) }
+    }
+
+    /// Languages a spoken translation command may name.
+    var voiceTranslationCommandLanguages: Set<String> {
+        switch voiceTranslationCommandTargets {
+        case .anySupported:
+            Set(SupportedLanguage.cloudLanguages.map(\.code))
+        case .translationPairsOnly:
+            Set(translationLanguagePairs.flatMap(\.codes))
+        }
+    }
+
     var lastUsedTranslationLanguagePairID: String? {
         get {
             guard let stored = defaults.string(forKey: Key.lastUsedTranslationLanguagePairID.rawValue),
@@ -1243,6 +1341,38 @@ final class SettingsStorage {
             return voiceTranslationTargetLanguage
         }
         set { setTranslationTargetLanguage(newValue, key: .textTranslationTargetLanguage) }
+    }
+
+    // MARK: - In-place Selection Translation
+
+    var inplaceTranslationEnabled: Bool {
+        get {
+            defaults.object(forKey: Key.inplaceTranslationEnabled.rawValue) == nil
+                || defaults.bool(forKey: Key.inplaceTranslationEnabled.rawValue)
+        }
+        set {
+            defaults.set(newValue, forKey: Key.inplaceTranslationEnabled.rawValue)
+            NotificationCenter.default.post(name: .inplaceTranslationSettingsChanged, object: nil)
+        }
+    }
+
+
+    /// ⌥/⌘ keys that dictation or translation push-to-talk listens to; the double-tap avoids them.
+    var inplaceTranslationReservedKeys: Set<PushToTalkKey> {
+        PushToTalkKey.reservedForInplaceTranslation([
+            (pushToTalkKey, pushToTalkHoldEnabled || pushToTalkToggleEnabled),
+            (translationPushToTalkKey, translationPushToTalkHoldEnabled || translationPushToTalkToggleEnabled)
+        ])
+    }
+
+    /// True when push-to-talk takes both Option keys or both Command keys.
+    var inplaceTranslationBlockedByPushToTalk: Bool {
+        PushToTalkKey.blocksInplaceTranslation(inplaceTranslationReservedKeys)
+    }
+
+    /// The monitor runs only when the switch is on and no push-to-talk conflicts.
+    var inplaceTranslationActive: Bool {
+        inplaceTranslationEnabled && !inplaceTranslationBlockedByPushToTalk
     }
 
     private func setTranslationTargetLanguage(_ rawValue: String, key: Key) {
@@ -1388,6 +1518,7 @@ extension Notification.Name {
     static let meetingSuggestionsEnabledChanged = Notification.Name("meetingSuggestionsEnabledChanged")
     static let textCleanupSettingsChanged = Notification.Name("textCleanupSettingsChanged")
     static let historyRetentionSettingsChanged = Notification.Name("historyRetentionSettingsChanged")
+    static let inplaceTranslationSettingsChanged = Notification.Name("inplaceTranslationSettingsChanged")
     static let typingSpeedSettingsChanged = Notification.Name("typingSpeedSettingsChanged")
     static let whisperModelUnloadPolicyChanged = Notification.Name("whisperModelUnloadPolicyChanged")
 }

@@ -194,7 +194,7 @@ struct AnalyticsSettingsSection: View {
             }))
             .disabled(analytics.isLoading && !analytics.enabled)
             Text(
-                "Optional on Free and Pro. Shares duration, local/cloud mode and feature category linked to your account. No audio, text or file names. Cloud limits, payments and necessary security records are handled separately."
+                "Optional on Free and Pro. Shares duration, local/cloud mode and feature category, plus app launches and unexpected quits with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days. No audio, text or file names. Cloud limits, payments and necessary security records are handled separately."
             )
             .font(.caption).foregroundStyle(.secondary)
             if let error = analytics.errorMessage { Text(error).font(.caption).foregroundStyle(.red) }

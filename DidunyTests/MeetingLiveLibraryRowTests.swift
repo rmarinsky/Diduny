@@ -42,6 +42,108 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
                        "An unlinked recording is not linked again automatically")
     }
 
+    func testLinkedCalendarMeetingNamesTheRecording() throws {
+        let id = UUID()
+        let event = CalendarMeeting(id: "event/occurrence", calendarID: "work", title: "Design review",
+                                    start: Date(timeIntervalSince1970: 1_800_000_000),
+                                    end: Date(timeIntervalSince1970: 1_800_003_600))
+        XCTAssertNotNil(storage.beginMeetingRecording(id: id, type: .meeting))
+        func recording() throws -> Recording { try XCTUnwrap(storage.recordings.first { $0.id == id }) }
+        let typeName = Recording.RecordingType.meeting.displayName
+
+        XCTAssertNil(try recording().specificTitle)
+        XCTAssertEqual(try recording().displayTitle, typeName)
+        XCTAssertTrue(RecordingRowView.title(for: try recording()).hasPrefix("Meeting — "),
+                      "Without a name the library row falls back to the type and time")
+
+        XCTAssertTrue(storage.linkCalendarMeeting(id: id, meeting: event))
+        XCTAssertEqual(try recording().displayTitle, "Design review")
+        XCTAssertEqual(RecordingRowView.title(for: try recording()), "Design review",
+                       "The library row is named after the meeting, not the time it was recorded")
+
+        XCTAssertTrue(storage.updateDetails(id: id, title: "Pilot kickoff", description: ""))
+        XCTAssertEqual(try recording().displayTitle, "Pilot kickoff", "The person's own title wins over the calendar")
+        XCTAssertEqual(RecordingRowView.title(for: try recording()), "Pilot kickoff")
+
+        XCTAssertTrue(storage.updateDetails(id: id, title: "", description: ""))
+        XCTAssertTrue(storage.linkCalendarMeeting(id: id, meeting: nil))
+        XCTAssertEqual(try recording().displayTitle, typeName, "Unlinking takes the meeting's name with it")
+        XCTAssertTrue(RecordingRowView.title(for: try recording()).hasPrefix("Meeting — "))
+
+        var untitled = event
+        untitled.title = "  "
+        XCTAssertTrue(storage.linkCalendarMeeting(id: id, meeting: untitled))
+        XCTAssertNil(try recording().specificTitle, "A blank event title does not name the recording")
+        XCTAssertEqual(try recording().displayTitle, typeName)
+    }
+
+    func testRowButtonCopiesTheTranscriptAndTranscribesOnlyWithoutOne() {
+        func recording(_ status: Recording.ProcessingStatus, text: String? = nil,
+                       segments: [TimedTranscriptSegment]? = nil) -> Recording {
+            Recording(id: UUID(), createdAt: Date(timeIntervalSince1970: 1_800_000_000), type: .meeting,
+                      audioFileName: "a.wav", durationSeconds: 60, fileSizeBytes: 1, status: status,
+                      transcriptionText: text, sourceDevice: nil, transcriptSegments: segments)
+        }
+        let segment = TimedTranscriptSegment(startMilliseconds: 65_000, speaker: "1", text: "Ship it")
+
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.transcribed, text: "Ship it")), .copy("Ship it"))
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.transcribed, text: "Ship it", segments: [segment])),
+                       .copy("[01:05] Speaker 1: Ship it"), "Copies the transcript as shown, with time and speaker")
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.unprocessed)), .transcribe,
+                       "Without a transcript the button still transcribes")
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.failed, text: "")), .transcribe)
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.processing, text: "Ship it")), .hidden)
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.recording)), .hidden)
+        XCTAssertEqual(RecordingRowView.primaryAction(for: recording(.needsRecovery)), .hidden)
+    }
+
+    func testOlderTimeNamedMeetingRecordingsTakeTheNameOfTheMeetingRunningThen() async throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func record(_ id: UUID, at offset: TimeInterval, savedTitle: String? = nil) throws {
+            XCTAssertNotNil(storage.beginMeetingRecording(id: id, type: .meeting, createdAt: start.addingTimeInterval(offset)))
+            let wav = directory.appendingPathComponent("\(id).wav")
+            try Data("RIFF....WAVEfmt ".utf8).write(to: wav)
+            XCTAssertTrue(storage.finalizeInProgressRecording(id: id, audioURL: wav, duration: 1800,
+                          endedAt: start.addingTimeInterval(offset + 1800), status: .unprocessed, forceSave: true))
+            if let savedTitle { XCTAssertTrue(storage.updateDetails(id: id, title: savedTitle, description: "Notes")) }
+        }
+        func event(_ id: String, _ title: String, at offset: TimeInterval) -> CalendarMeeting {
+            CalendarMeeting(id: id, calendarID: "work", title: title,
+                            start: start.addingTimeInterval(offset), end: start.addingTimeInterval(offset + 1800))
+        }
+        // Older releases prefilled the title field with the type's name, so "Save Details" stored it,
+        // in whichever language the app ran in then.
+        let plain = UUID(), savedEnglish = UUID(), savedUkrainian = UUID(), named = UUID()
+        try record(plain, at: 0)
+        try record(savedEnglish, at: 7200, savedTitle: "Meeting")
+        try record(savedUkrainian, at: 14400, savedTitle: "Зустріч")
+        try record(named, at: 21600, savedTitle: "Board sync")
+        let events = [event("standup", "Daily standup", at: 0), event("review", "Design review", at: 7200),
+                      event("retro", "Sprint retro", at: 14400), event("planning", "Quarter planning", at: 21600)]
+        XCTAssertTrue(RecordingRowView.title(for: try XCTUnwrap(storage.recordings.first { $0.id == plain })).hasPrefix("Meeting — "))
+
+        let connection = CalendarConnection(defaults: UserDefaults(suiteName: "CalendarRename-\(UUID())")!, authorize: { true },
+                                            read: { _ in ScheduledCalendarSnapshot(calendars: [.init(id: "work", title: "Work", source: "Test")], meetings: []) },
+                                            readRange: { _, _, _ in events })
+        defer { connection.disconnect() }
+        await connection.connect()
+        await CalendarRecordingLinker().run(storage: storage, connection: connection)
+
+        let restored = RecordingsLibraryStorage(baseDirectory: directory, batchStorage: try TranscriptionBatchStorage(baseDirectory: directory))
+        func rowTitle(_ id: UUID) throws -> String { RecordingRowView.title(for: try XCTUnwrap(restored.recordings.first { $0.id == id })) }
+        XCTAssertEqual(try rowTitle(plain), "Daily standup", "An older recording is named after the meeting running then")
+        XCTAssertEqual(try rowTitle(savedEnglish), "Design review", "A saved type name is not the person's title")
+        XCTAssertEqual(try rowTitle(savedUkrainian), "Sprint retro", "Nor is the type name saved in another language")
+        XCTAssertEqual(try rowTitle(named), "Board sync", "A title the person typed is kept")
+        XCTAssertTrue(Recording.RecordingType.allCases.allSatisfy { $0.storedNamePlaceholders.contains($0.displayName) },
+                      "Every type's name is recognized when it was saved as a title")
+        var voiceNote = try XCTUnwrap(restored.recordings.first { $0.id == plain })
+        voiceNote = Recording(id: voiceNote.id, createdAt: voiceNote.createdAt, type: .voice, audioFileName: voiceNote.audioFileName,
+                              durationSeconds: voiceNote.durationSeconds, fileSizeBytes: voiceNote.fileSizeBytes,
+                              status: voiceNote.status, sourceDevice: nil, title: "Meeting")
+        XCTAssertEqual(voiceNote.displayTitle, "Meeting", "Another type's name is a real title")
+    }
+
     func testPastMeetingRecordingsLinkToCalendarEventsWithoutOverridingThePerson() async throws {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         func record(_ id: UUID, from: TimeInterval, to: TimeInterval) throws {

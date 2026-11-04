@@ -559,3 +559,31 @@ private extension KeyedDecodingContainer {
         return nil
     }
 }
+
+extension DiarizedTranscriptFormatter {
+    /// Local transcripts labelled by `SpeakerLabeling`: same line format and same-speaker grouping
+    /// as Cloud, with labels printed as they are ("Me", "Speaker 2 (remote)").
+    static func format(labelledSegments: [TimedTranscriptSegment]) -> String {
+        var lines: [Segment] = []
+        for segment in labelledSegments {
+            let text = cleanedSegmentText(segment.text)
+            guard !text.isEmpty else { continue }
+            if let last = lines.last, last.speaker == segment.speaker,
+               segment.startMilliseconds - (last.endMs ?? last.startMs) <= sameSpeakerGapThresholdMs
+            {
+                lines[lines.count - 1].text = appendedText(last.text, text)
+                lines[lines.count - 1].endMs = segment.endMilliseconds ?? last.endMs
+            } else {
+                lines.append(Segment(
+                    speaker: segment.speaker,
+                    startMs: segment.startMilliseconds,
+                    endMs: segment.endMilliseconds,
+                    text: text
+                ))
+            }
+        }
+        return lines
+            .map { "[\(timestamp(for: $0.startMs))] \($0.speaker ?? "Unknown"): \($0.text)" }
+            .joined(separator: "\n\n")
+    }
+}

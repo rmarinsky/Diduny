@@ -167,10 +167,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var audioRecorder = AudioRecorderService()
     lazy var transcriptionService = CloudTranscriptionService()
     lazy var whisperTranscriptionService = WhisperTranscriptionService()
+    /// "Stop after silence" for voice dictation / voice translation (they share `audioRecorder`).
+    var dictationSilenceMonitor: SilenceAutoStopMonitor?
+    var meetingSilenceMonitor: SilenceAutoStopMonitor?
     lazy var clipboardService = ClipboardService()
     lazy var hotkeyService = HotkeyService()
     lazy var pushToTalkService = PushToTalkService()
     lazy var translationPushToTalkService = PushToTalkService()
+    lazy var inplaceTranslationMonitor = InplaceTranslationHotkeyMonitor()
     lazy var meetingRecorderService = MeetingRecorderService()
     lazy var meetingJoinMonitor = MeetingJoinMonitor()
     let calendarReminderController = CalendarReminderController()
@@ -244,7 +248,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await AnalyticsService.shared.recordLaunch(
                 launch,
                 appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0",
-                osVersion: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
+                osVersion: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
+                arch: AppLaunchTracker.hardwareArchitecture()
             )
         }
         launchedAtLogin = LaunchAtLogin.wasLaunchedAtLogin
@@ -273,7 +278,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 toggleMeeting: { self.toggleMeetingRecording() },
                 toggleMeetingTranslation: { self.toggleMeetingTranslationRecording() },
                 batchFilesAndURLs: { self.batchFilesAndURLs() },
-                openMainWindow: { self.openMainWindow(section: $0) }
+                openMainWindow: { self.openMainWindow(section: $0) },
+                checkForUpdates: { self.updaterManager.checkForUpdates() }
             ))
         }
         EdgeCommandPanelController.shared.configure(appDelegate: self)
@@ -375,6 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupHotkeys()
         setupPushToTalk()
         setupTranslationPushToTalk()
+        setupInplaceTranslation()
 
         // Setup sleep handling for all recording modes (RLR-M2).
         // Must be registered before OrphanedRecordingDetector (M5a) to ensure the
@@ -762,6 +769,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyService.unregisterAll()
         pushToTalkService.stop()
         translationPushToTalkService.stop()
+        inplaceTranslationMonitor.stop()
         NotificationCenter.default.removeObserver(self)
         // Release all activity tokens on termination to avoid leaking wake locks.
         if let token = recordingActivityToken { ProcessInfo.processInfo.endActivity(token) }
@@ -1190,7 +1198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .success:
             if let text = appState.lastTranscription {
                 showFeedbackSuccess(text: text, mode: mode)
-            } else {
+            } else if !DictationOverlayController.shared.isShowingBackgroundHandoff {
                 hideFeedback(mode: mode)
             }
             let task = Task {
@@ -1217,6 +1225,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleRecordingStateChange(_ state: RecordingState) {
+        // `.processing` also precedes the start, so the hold ends only once the recording is over.
+        if state != .recording, state != .processing { whisperTranscriptionService.endRecordingHold() }
+        if state != .recording { stopDictationSilenceMonitor() }
         voiceAutoResetTask?.cancel()
         handleStateChange(
             state,
@@ -1237,6 +1248,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if state == .error {
             EscapeCancelService.shared.deactivate()
         }
+        if state != .recording, state != .processing { whisperTranscriptionService.endRecordingHold() }
+        if state == .recording {
+            startMeetingSilenceMonitor { [weak self] in
+                guard self?.appState.meetingRecordingState == .recording else { return }
+                await self?.stopMeetingRecording()
+            }
+        } else {
+            stopMeetingSilenceMonitor()
+        }
         meetingAutoResetTask?.cancel()
         handleStateChange(
             state,
@@ -1251,6 +1271,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleMeetingTranslationStateChange(_ state: RecordingState) {
+        if state == .recording {
+            startMeetingSilenceMonitor { [weak self] in
+                guard self?.appState.meetingTranslationRecordingState == .recording else { return }
+                await self?.stopMeetingTranslationRecording()
+            }
+        } else {
+            stopMeetingSilenceMonitor()
+        }
         meetingTranslationAutoResetTask?.cancel()
         handleStateChange(
             state,
@@ -1283,6 +1311,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleTranslationStateChange(_ state: RecordingState) {
+        // `.processing` also precedes the start, so the hold ends only once the recording is over.
+        if state != .recording, state != .processing { whisperTranscriptionService.endRecordingHold() }
+        if state != .recording { stopDictationSilenceMonitor() }
         translationAutoResetTask?.cancel()
         handleStateChange(
             state,

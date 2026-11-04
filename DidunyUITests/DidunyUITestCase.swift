@@ -10,6 +10,8 @@ class DidunyUITestCase: XCTestCase {
     private(set) var app: XCUIApplication!
 
     override func setUpWithError() throws {
+        // UI tests take over the screen, so they run only on CI (`DIDUNY_UI_TESTS=1`).
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["DIDUNY_UI_TESTS"] == "1", "UI tests run on CI only")
         continueAfterFailure = false
     }
 

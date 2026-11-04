@@ -12,6 +12,16 @@ struct RecordingRowView: View {
     var onToggleSelection: (() -> Void)?
 
     @State private var playbackService = AudioPlaybackService.shared
+    @State private var queueService = RecordingQueueService.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var didCopy = false
+    @State private var copyConfirmation: Task<Void, Never>?
+
+    /// Progress while this recording is the queue's current item.
+    private var queueProgress: QueueProgress? {
+        guard recording.status == .processing, queueService.currentRecordingId == recording.id else { return nil }
+        return queueService.currentProgress
+    }
 
     private var isPlaying: Bool {
         playbackService.playingRecordingId == recording.id && playbackService.isPlaying
@@ -73,13 +83,40 @@ struct RecordingRowView: View {
             if let meeting = recording.calendarMeeting {
                 calendarLine(meeting)
             }
-            Text(previewText)
-                .font(.system(size: 12))
-                .foregroundColor(previewColor)
-                .lineLimit(1)
+            if let queueProgress {
+                progressLine(queueProgress)
+            } else {
+                Text(previewText)
+                    .font(.system(size: 12))
+                    .foregroundColor(previewColor)
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    private func progressLine(_ progress: QueueProgress) -> some View {
+        let line = QueueProgressFormatter.rowLine(progress)
+        let fraction = QueueProgressFormatter.barFraction(progress)
+        return VStack(alignment: .leading, spacing: 3) {
+            Text(line)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+            if let fraction {
+                ProgressView(value: fraction)
+                    .progressViewStyle(.linear)
+                    .controlSize(.mini)
+                    .tint(Color("BrandAccentDeep"))
+                    .frame(maxWidth: 240)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: fraction)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(line))
     }
 
     private var selectionButton: some View {
@@ -201,12 +238,31 @@ struct RecordingRowView: View {
                         action: onSaveRecoveryAudio
                     )
                 }
-            } else if recording.status != .processing, recording.status != .recording {
-                RecordingActionButton(
-                    systemName: "text.bubble",
-                    label: String(localized: "Transcribe recording"),
-                    action: onTranscribe
-                )
+            } else {
+                switch Self.primaryAction(for: recording) {
+                case let .copy(text):
+                    RecordingActionButton(
+                        systemName: didCopy ? "checkmark" : "doc.on.doc",
+                        label: didCopy ? String(localized: "Copied") : String(localized: "Copy transcript")
+                    ) {
+                        ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
+                        copyConfirmation?.cancel()
+                        didCopy = true
+                        copyConfirmation = Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(1.2))
+                            guard !Task.isCancelled else { return }
+                            didCopy = false
+                        }
+                    }
+                case .transcribe:
+                    RecordingActionButton(
+                        systemName: "text.bubble",
+                        label: String(localized: "Transcribe recording"),
+                        action: onTranscribe
+                    )
+                case .hidden:
+                    EmptyView()
+                }
             }
 
             RecordingActionButton(
@@ -232,7 +288,26 @@ struct RecordingRowView: View {
 
     // MARK: - Computed
 
-    private var rowTitle: String {
+    enum PrimaryAction: Equatable {
+        case hidden
+        case transcribe
+        case copy(String)
+    }
+
+    /// The row's main action button, next to Delete.
+    static func primaryAction(for recording: Recording) -> PrimaryAction {
+        switch recording.status {
+        case .processing, .recording, .needsRecovery: .hidden
+        default: recording.displayTranscriptText.map(PrimaryAction.copy) ?? .transcribe
+        }
+    }
+
+    private var rowTitle: String { Self.title(for: recording) }
+
+    /// The recording's own name (the person's title, the linked meeting, the imported file);
+    /// otherwise its type and the time it was recorded.
+    static func title(for recording: Recording) -> String {
+        if let specificTitle = recording.specificTitle { return specificTitle }
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         let start = formatter.string(from: recording.createdAt)
@@ -248,7 +323,7 @@ struct RecordingRowView: View {
         case .translation: return "Translation — \(timeRange)"
         case .meeting: return "Meeting — \(timeRange)"
         case .meetingTranslation: return "Meeting translation — \(timeRange)"
-        case .fileTranscription: return recording.sourceFileName ?? "File — \(timeRange)"
+        case .fileTranscription: return "File — \(timeRange)"
         }
     }
 
@@ -260,7 +335,9 @@ struct RecordingRowView: View {
             return String(localized: "Needs processing — recover audio from this session")
         }
         if recording.status == .processing {
-            return String(localized: "Transcribing...")
+            return queueService.isQueued(recording.id)
+                ? String(localized: "Queued")
+                : String(localized: "Transcribing...")
         }
         if recording.status == .failed {
             return recording.errorMessage ?? String(localized: "Transcription failed")

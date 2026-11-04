@@ -34,8 +34,12 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
 
             self.run_script("render", str(PAYLOAD), str(markdown))
             payload = json.loads(PAYLOAD.read_text(encoding="utf-8"))
-            expected = f"# {payload['headline']}\n\n" + "".join(f"- {item}\n" for item in payload["highlights"])
-            self.assertEqual(markdown.read_text(encoding="utf-8"), expected)
+            rendered = markdown.read_text(encoding="utf-8")
+            self.assertLess(rendered.index("## English"), rendered.index("## Українською"))
+            for language in ("en", "uk"):
+                self.assertIn(f"### {payload[language]['headline']}\n", rendered)
+                for item in payload[language]["highlights"]:
+                    self.assertIn(f"- {item}\n", rendered)
 
             arguments = (
                 "upsert-appcast",
@@ -78,7 +82,7 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             payload = Path(directory) / "ReleaseHighlights.json"
             payload.write_text(
-                '{"schemaVersion":2,"headline":" ","highlights":[]}',
+                '{"schemaVersion":1,"headline":" ","highlights":[]}',
                 encoding="utf-8",
             )
 
@@ -90,7 +94,25 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
             )
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("schemaVersion must be 1", result.stderr)
+            self.assertIn("schemaVersion must be 2", result.stderr)
+
+    def test_validate_requires_both_languages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            payload = Path(directory) / "ReleaseHighlights.json"
+            payload.write_text(
+                '{"schemaVersion":2,"en":{"headline":"New","highlights":["One"]}}',
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "validate", str(payload)],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("uk must be an object", result.stderr)
 
     def test_release_workflow_serializes_gh_pages_writers(self):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(

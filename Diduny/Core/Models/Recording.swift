@@ -211,11 +211,23 @@ struct Recording: Identifiable, Codable, Equatable {
         isYouTubeVideo ? .red : type.brandColor
     }
 
+    /// What names this particular recording: the person's own title, else the linked calendar
+    /// meeting's title, else the remote media title or imported file name. `nil` when nothing
+    /// but the recording type is known.
+    var specificTitle: String? {
+        customTitle ?? calendarMeeting?.title.nilIfBlank ?? remoteSource?.title ?? sourceFileName
+    }
+
+    /// The title the person typed. Older releases prefilled the title field with the type's name, so
+    /// "Save Details" stored "Meeting" or "Зустріч" as a title; that stored name is not one.
+    /// Ceiling: a person who now types exactly their recording's type name sees the derived name instead.
+    var customTitle: String? {
+        guard let title = title?.nilIfBlank, !type.storedNamePlaceholders.contains(title) else { return nil }
+        return title
+    }
+
     var displayTitle: String {
-        if let title = title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
-            return title
-        }
-        return remoteSource?.title ?? sourceFileName ?? libraryDisplayName
+        specificTitle ?? libraryDisplayName
     }
 
     /// True when a durable audio file name has been attached (playable once on disk).
@@ -276,6 +288,18 @@ struct Recording: Identifiable, Codable, Equatable {
         case meeting
         case meetingTranslation
         case fileTranscription
+
+        /// This type's name as releases up to v2.17.0 saved it into titles, in English or Ukrainian.
+        /// A fixed record of what shipped, so later translations never hide a title the person typed.
+        var storedNamePlaceholders: Set<String> {
+            switch self {
+            case .voice: ["Voice", "Голос"]
+            case .translation: ["Translation", "Переклад"]
+            case .meeting: ["Meeting", "Зустріч"]
+            case .meetingTranslation: ["Meeting Translation", "Переклад зустрічі"]
+            case .fileTranscription: ["File Transcription", "Транскрипція файлу"]
+            }
+        }
 
         var displayName: String {
             switch self {

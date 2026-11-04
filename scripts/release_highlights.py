@@ -11,29 +11,47 @@ SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 ET.register_namespace("sparkle", SPARKLE)
 
 
+LANGUAGES = (("en", "English"), ("uk", "Українською"))
+
+
+def validate_entry(entry, language):
+    if not isinstance(entry, dict):
+        raise ValueError(f"{language} must be an object with headline and highlights")
+    headline = entry.get("headline")
+    highlights = entry.get("highlights")
+    if not isinstance(headline, str) or not headline.strip():
+        raise ValueError(f"{language}.headline must be a non-empty string")
+    if not isinstance(highlights, list) or not 1 <= len(highlights) <= 3:
+        raise ValueError(f"{language}.highlights must contain one to three items")
+    if any(not isinstance(item, str) or not item.strip() for item in highlights):
+        raise ValueError(f"every {language} highlight must be a non-empty string")
+
+
 def load_payload(path):
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    if type(payload.get("schemaVersion")) is not int or payload["schemaVersion"] != 1:
-        raise ValueError("schemaVersion must be 1")
-    headline = payload.get("headline")
-    highlights = payload.get("highlights")
-    if not isinstance(headline, str) or not headline.strip():
-        raise ValueError("headline must be a non-empty string")
-    if not isinstance(highlights, list) or not 1 <= len(highlights) <= 3:
-        raise ValueError("highlights must contain one to three items")
-    if any(not isinstance(item, str) or not item.strip() for item in highlights):
-        raise ValueError("every highlight must be a non-empty string")
+    if type(payload.get("schemaVersion")) is not int or payload["schemaVersion"] != 2:
+        raise ValueError("schemaVersion must be 2")
+    for language, _ in LANGUAGES:
+        validate_entry(payload.get(language), language)
     return payload
+
+
+def render_markdown(payload):
+    sections = []
+    for language, title in LANGUAGES:
+        entry = payload[language]
+        sections.append(
+            f"## {title}\n\n### {entry['headline']}\n\n"
+            + "".join(f"- {item}\n" for item in entry["highlights"])
+        )
+    return "\n".join(sections)
 
 
 def render(arguments):
     payload = load_payload(arguments.input)
-    markdown = f"# {payload['headline']}\n\n" + "".join(
-        f"- {item}\n" for item in payload["highlights"]
-    )
     output = Path(arguments.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(markdown, encoding="utf-8")
+    output.write_text(render_markdown(payload), encoding="utf-8")
 
 
 def set_text(parent, tag, value):
