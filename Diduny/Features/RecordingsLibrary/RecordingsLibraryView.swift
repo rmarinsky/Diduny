@@ -670,43 +670,22 @@ struct RecordingsLibraryView: View {
     // MARK: - Empty States
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            Image(systemName: "waveform.circle")
-                .font(.system(size: 48))
-                .foregroundColor(Color("BrandTintSoft"))
-            Text("No Recordings Yet")
-                .font(.title2)
-                .foregroundColor(.secondary)
-            Text("Your voice, translation, and meeting recordings will appear here.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyState(
+            icon: "waveform.circle",
+            title: "No Recordings Yet",
+            message: "Your voice, translation, and meeting recordings will appear here."
+        )
     }
 
     private var noResultsState: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 36))
-                .foregroundColor(Color("BrandTintSoft"))
-            Text("No Results")
-                .font(.title3)
-                .foregroundColor(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyState(icon: "magnifyingglass", title: "No Results")
     }
 
     private var batchesEmptyState: some View {
-        ContentUnavailableView(
-            "No Batches Yet",
-            systemImage: "square.stack.3d.up",
-            description: Text("Create a batch to group related recordings and transcripts.")
+        EmptyState(
+            icon: "square.stack.3d.up",
+            title: "No Batches Yet",
+            message: "Create a batch to group related recordings and transcripts."
         )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
-

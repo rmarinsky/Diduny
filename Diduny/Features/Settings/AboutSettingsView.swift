@@ -134,19 +134,10 @@ struct AboutSettingsView: View {
     }
 
     private var errorBanner: some View {
-        HStack(spacing: DS.Space.md) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
-            Text("Couldn’t check for updates. Try again.").font(DS.Font.body)
-            Spacer()
+        Banner(message: Text("Couldn’t check for updates. Try again.")) {
             Button("Try again") { Task { await loadLatestVersion() } }
+                .buttonStyle(.bordered)
         }
-        .padding(DS.Space.md)
-        .background(Color.red.opacity(0.07), in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
-                .strokeBorder(Color.red.opacity(0.22), lineWidth: 1)
-        )
-        .transition(.opacity.combined(with: .offset(y: -4)))
     }
 
     // MARK: - Grid
