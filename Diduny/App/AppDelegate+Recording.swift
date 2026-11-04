@@ -577,7 +577,8 @@ extension AppDelegate {
                     nativeText: realtimeResult.text,
                     originalText: realtimeResult.text,
                     audioData: audioData,
-                    languageHints: SettingsStorage.shared.speechLanguageHints
+                    languageHints: SettingsStorage.shared.speechLanguageHints,
+                    allowAudioUpload: !dictationUsesOwnEngine
                 )
                 producedOutput = switchedText == nil ? .original : output
             }
@@ -1248,7 +1249,8 @@ extension AppDelegate {
         nativeText: String,
         originalText: String,
         audioData: Data,
-        languageHints: [String]
+        languageHints: [String],
+        allowAudioUpload: Bool = true
     ) async throws -> String? {
         guard output != native else { return nil }
         Log.app.info("Output switched mid-recording to \(output.targetLanguage ?? "original")")
@@ -1271,6 +1273,8 @@ extension AppDelegate {
         }
 
         try Task.checkCancellation()
+        // Own engines (ElevenLabs key, on-device): audio never goes to Diduny Cloud.
+        guard allowAudioUpload else { return nil }
         do {
             return switch output {
             case .original:
