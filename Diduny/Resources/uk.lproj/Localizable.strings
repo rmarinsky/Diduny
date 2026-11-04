@@ -1698,3 +1698,8 @@
 "About Difference and Speed" = "Про відмінність і швидкість";
 "Difference" = "Відмінність";
 "Filter" = "Фільтр";
+"Auto (per recording)" = "Авто (для кожного запису)";
+"Count punctuation and case" = "Враховувати пунктуацію і регістр";
+"No clips differ for this filter." = "За цим фільтром відмінностей немає.";
+"Language Diduny detected for this recording" = "Мова, яку Diduny розпізнав для цього запису";
+"Mostly different from Reference" = "Здебільшого відрізняється від еталона";
