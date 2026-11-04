@@ -391,15 +391,25 @@ extension Recording {
     /// Library search: names, descriptions and source details, the linked meeting's title, agenda,
     /// place, calendar and people (names and emails), and every transcript version.
     func matchesSearch(_ query: String) -> Bool {
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return true }
+        Self.searchableText(searchableText, matches: query)
+    }
+
+    /// Every searchable field, lowercased and joined once so the library can cache it
+    /// instead of rebuilding transcripts on each keystroke.
+    var searchableText: String {
         let meeting = calendarMeeting
         let fields: [String?] = [displayTitle, libraryDisplayName, description, sourceFileName,
                                  remoteSource?.channelName, remoteSource?.description,
                                  meeting?.title, meeting?.notes, meeting?.location, meeting?.calendarTitle]
             + (meeting?.attendees ?? []).flatMap { [$0.name, $0.email] }
-        return fields.contains { $0?.lowercased().contains(query) == true }
-            || resolvedTranscriptHistory.contains { $0.text.lowercased().contains(query) }
+            + resolvedTranscriptHistory.map(\.text)
+        // NUL separator keeps a query from matching across two fields.
+        return fields.compactMap { $0?.lowercased() }.joined(separator: "\u{0}")
+    }
+
+    static func searchableText(_ text: String, matches query: String) -> Bool {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return query.isEmpty || text.contains(query)
     }
 
     /// No calendar chosen shows every recording; otherwise only recordings linked to a chosen calendar.

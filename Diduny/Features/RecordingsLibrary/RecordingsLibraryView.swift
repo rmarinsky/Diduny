@@ -21,6 +21,7 @@ struct RecordingsLibraryView: View {
     @State private var queueService = RecordingQueueService.shared
     @State private var playbackService = AudioPlaybackService.shared
     @State private var searchText = ""
+    @State private var searchIndex: [UUID: String] = [:]
     @State private var filter: RecordingTypeFilter = .all
     @State private var selectedCalendarIDs: Set<String> = []
     @State private var inspectorSelection: RecordingsInspectorSelection?
@@ -71,8 +72,14 @@ struct RecordingsLibraryView: View {
 
     private var filteredRecordings: [Recording] {
         storage.recordings.filter { recording in
-            filter.matches(recording) && recording.matchesCalendars(selectedCalendarIDs) && recording.matchesSearch(searchText)
+            filter.matches(recording) && recording.matchesCalendars(selectedCalendarIDs)
+                && Recording.searchableText(searchIndex[recording.id] ?? recording.searchableText, matches: searchText)
         }
+    }
+
+    private func rebuildSearchIndex() {
+        searchIndex = Dictionary(storage.recordings.map { ($0.id, $0.searchableText) },
+                                 uniquingKeysWith: { first, _ in first })
     }
 
     private var calendarOptions: [CalendarFilterOption] {
@@ -138,6 +145,7 @@ struct RecordingsLibraryView: View {
         }
         .onAppear {
             batchLoadErrorMessage = batchStorage.loadErrorMessage
+            rebuildSearchIndex()
             openRequestedRecordingIfAvailable()
             openRequestedBatchComposerIfAvailable()
         }
@@ -146,6 +154,7 @@ struct RecordingsLibraryView: View {
         }
         .onChange(of: storage.recordings) {
             openRequestedRecordingIfAvailable()
+            rebuildSearchIndex()
         }
         .onChange(of: MainWindowController.shared.requestedBatchComposer) {
             openRequestedBatchComposerIfAvailable()
@@ -373,7 +382,8 @@ struct RecordingsLibraryView: View {
     private var recordingsCard: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(Array(filteredRecordings.enumerated()), id: \.element.id) { index, recording in
+                let recordings = filteredRecordings
+                ForEach(Array(recordings.enumerated()), id: \.element.id) { index, recording in
                     RecordingRowView(
                         recording: recording,
                         onOpen: {
@@ -396,7 +406,7 @@ struct RecordingsLibraryView: View {
                         onToggleSelection: { toggleSelection(for: recording) }
                     )
                     .contextMenu { recordingContextMenu(for: recording) }
-                    if index < filteredRecordings.count - 1 {
+                    if index < recordings.count - 1 {
                         Divider()
                             .padding(.horizontal, 16)
                     }

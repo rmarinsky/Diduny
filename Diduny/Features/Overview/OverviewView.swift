@@ -4,7 +4,8 @@ import SwiftUI
 struct OverviewView: View {
     @State private var storage = RecordingsLibraryStorage.shared
     @State private var playbackService = AudioPlaybackService.shared
-    @State private var timePeriod: TimePeriod = .week
+    @State private var timePeriod: TimePeriod = .month
+    @State private var snapshot = Snapshot()
     @State private var selectedRecording: Recording? = nil
     @State private var typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
 
@@ -40,7 +41,8 @@ struct OverviewView: View {
     // MARK: - Filtered recordings
 
     private var periodStart: Date {
-        Calendar.current.date(byAdding: .day, value: -timePeriod.daysBack, to: Date()) ?? Date()
+        if timePeriod == .month { return Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date() }
+        return Calendar.current.date(byAdding: .day, value: -timePeriod.daysBack, to: Date()) ?? Date()
     }
 
     private var periodRecordings: [Recording] {
@@ -49,9 +51,32 @@ struct OverviewView: View {
 
     // MARK: - Computed stats
 
-    private var periodStatistics: RecordingStatistics {
-        RecordingStatistics(recordings: periodRecordings)
+    /// Stats are computed once per data/period change, not on every redraw:
+    /// each pass word-splits every transcript, and the chart reads them per bar.
+    struct Snapshot {
+        var period = RecordingStatistics(recordings: [])
+        var previousTimeSavedSeconds: Double = 0
+        var series: [DayStat] = []
+        var avgMinutes: Double = 0
+        var maxMinutes: Double = 1
+        var streak = 0
     }
+
+    private func rebuildSnapshot() {
+        let series = computeChartSeries()
+        let nonEmpty = series.filter { !$0.isFuture && $0.minutes > 0 }
+        snapshot = Snapshot(
+            period: RecordingStatistics(recordings: periodRecordings),
+            previousTimeSavedSeconds: RecordingStatistics(recordings: previousPeriodRecordings)
+                .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute),
+            series: series,
+            avgMinutes: nonEmpty.isEmpty ? 0 : nonEmpty.reduce(0) { $0 + $1.minutes } / Double(nonEmpty.count),
+            maxMinutes: series.map(\.minutes).max() ?? 1,
+            streak: computeStreak()
+        )
+    }
+
+    private var periodStatistics: RecordingStatistics { snapshot.period }
 
     private var typingTimeSavedSeconds: Double {
         periodStatistics.typingTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute)
@@ -70,17 +95,15 @@ struct OverviewView: View {
     }
 
     private var previousPeriodStart: Date {
-        Calendar.current.date(byAdding: .day, value: -(timePeriod.daysBack * 2), to: Date()) ?? Date()
+        if timePeriod == .month { return Calendar.current.date(byAdding: .month, value: -1, to: periodStart) ?? Date() }
+        return Calendar.current.date(byAdding: .day, value: -(timePeriod.daysBack * 2), to: Date()) ?? Date()
     }
 
     private var previousPeriodRecordings: [Recording] {
         storage.recordings.filter { $0.createdAt >= previousPeriodStart && $0.createdAt < periodStart }
     }
 
-    private var previousTimeSavedSeconds: Double {
-        RecordingStatistics(recordings: previousPeriodRecordings)
-            .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute)
-    }
+    private var previousTimeSavedSeconds: Double { snapshot.previousTimeSavedSeconds }
 
     private var trendPercent: Int? {
         guard previousTimeSavedSeconds > 0 else { return nil }
@@ -110,7 +133,9 @@ struct OverviewView: View {
         periodStatistics.transcribedWordCount
     }
 
-    private var streak: Int {
+    private var streak: Int { snapshot.streak }
+
+    private func computeStreak() -> Int {
         let cal = Calendar.current
         var count = 0
         var day = cal.startOfDay(for: Date())
@@ -132,7 +157,9 @@ struct OverviewView: View {
         let label: String
     }
 
-    private var chartSeries: [DayStat] {
+    private var chartSeries: [DayStat] { snapshot.series }
+
+    private func computeChartSeries() -> [DayStat] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
         if timePeriod == .year {
@@ -157,12 +184,19 @@ struct OverviewView: View {
             }
         }
 
-        let days = (0 ..< timePeriod.daysBack).map {
-            cal.date(byAdding: .day, value: -(timePeriod.daysBack - 1 - $0), to: today)!
+        let days: [Date] = if timePeriod == .month {
+            // Whole calendar month; days after today render as future placeholders.
+            (cal.range(of: .day, in: .month, for: today) ?? 1 ..< 31).compactMap {
+                cal.date(byAdding: .day, value: $0 - 1, to: periodStart)
+            }
+        } else {
+            (0 ..< timePeriod.daysBack).map {
+                cal.date(byAdding: .day, value: -(timePeriod.daysBack - 1 - $0), to: today)!
+            }
         }
         let byDay = Dictionary(grouping: periodRecordings) { cal.startOfDay(for: $0.createdAt) }
         let formatter = DateFormatter()
-        formatter.dateFormat = "EEE"
+        formatter.dateFormat = timePeriod == .month ? "d" : "EEE"
         return days.map { day in
             let mins = RecordingStatistics(recordings: byDay[day] ?? [])
                 .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute) / 60
@@ -176,15 +210,9 @@ struct OverviewView: View {
         }
     }
 
-    private var avgMinutes: Double {
-        let nonEmpty = chartSeries.filter { !$0.isFuture && $0.minutes > 0 }
-        guard !nonEmpty.isEmpty else { return 0 }
-        return nonEmpty.reduce(0) { $0 + $1.minutes } / Double(nonEmpty.count)
-    }
+    private var avgMinutes: Double { snapshot.avgMinutes }
 
-    private var maxMinutes: Double {
-        chartSeries.map(\.minutes).max() ?? 1
-    }
+    private var maxMinutes: Double { snapshot.maxMinutes }
 
     // MARK: - Hero description
 
@@ -245,6 +273,10 @@ struct OverviewView: View {
         .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
             typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
         }
+        .onAppear { rebuildSnapshot() }
+        .onChange(of: timePeriod) { rebuildSnapshot() }
+        .onChange(of: storage.recordings) { rebuildSnapshot() }
+        .onChange(of: typingSpeedWordsPerMinute) { rebuildSnapshot() }
     }
 
     // MARK: - Hero Card
