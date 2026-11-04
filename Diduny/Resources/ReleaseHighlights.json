@@ -3,17 +3,17 @@
   "en": {
     "headline": "Parakeet: super-fast dictation right on your Mac",
     "highlights": [
-      "Parakeet V3 runs on your Mac's Neural Engine, no internet needed. In our Benchmark on Ukrainian voice notes it gave text 0.37 s after Stop, versus 0.80 s for Apple and 2.3 s for Whisper Large v3 Turbo, with 0.4 s to load. Download it in Local models (Apple Silicon only), then pick it for any mode in Providers → \"Engine for each mode\". You can also add your own ElevenLabs key there.",
-      "Benchmark tab: run your own recordings through several engines and compare text, speed and differences side by side, then make the winner your default. Recordings are now a compact scrollable list showing the date and time of each.",
-      "A cleaner app: every screen shares one layout, a new About screen shows Diduny, Papuga and AppCat, and the window keeps one size, widening only while a recording is open. New in Shortcuts: Force submit. Press ⌘↩ while recording and Diduny pastes the text and presses ⌘↩ to send it."
+      "Parakeet V3 runs on your Mac's Neural Engine, no internet needed. In our Benchmark on Ukrainian voice notes it gave text 0.37 s after Stop, versus 0.80 s for Apple and 2.3 s for Whisper Large v3 Turbo. Parakeet and Apple now also work for meetings, meeting translation and files. Pick an engine per mode in Providers → \"Engine for each mode\", or add your own ElevenLabs key there. Download Parakeet in Local models (Apple Silicon only).",
+      "Benchmark tab: run your own recordings through several engines, then compare speed and differences in one compact table and make the winner your default. Text appears sooner after Stop, and search in Recordings and the Overview stats are much faster.",
+      "A cleaner app: every screen shares one layout, a new About screen shows Diduny, Papuga and AppCat, the window keeps one size, and overlapping meetings get their own lanes in the calendar. New in Shortcuts: Force submit. Press ⌘↩ while recording and Diduny pastes the text and presses ⌘↩ to send it."
     ]
   },
   "uk": {
     "headline": "Parakeet: супершвидке диктування прямо на твоєму Mac",
     "highlights": [
-      "Parakeet V3 працює на Neural Engine твого Mac, без інтернету. У нашому Бенчмарку на українських голосових нотатках він видавав текст за 0,37 с після Stop, тоді як Apple за 0,80 с, а Whisper Large v3 Turbo за 2,3 с. Завантажується модель за 0,4 с. Завантаж її в «Локальних моделях» (лише Apple Silicon) і обери для будь-якого режиму в «Провайдери» → «Рушій для кожного режиму». Там же можна додати свій ключ ElevenLabs.",
-      "Вкладка «Бенчмарк»: проганяй свої записи через кілька рушіїв, порівнюй текст, швидкість і відмінності поруч, а переможця роби основним. Записи тепер компактним списком із прокруткою, біля кожного дата й час запису.",
-      "Акуратніша апка: усі екрани мають один макет, новий екран «Про апку» показує Diduny, Papuga та AppCat, а вікно має один розмір і розширюється лише тоді, коли відкрито запис. Нове в «Шорткатах»: Force submit. Натисни ⌘↩ під час запису, і Diduny вставить текст та натисне ⌘↩, щоб його надіслати."
+      "Parakeet V3 працює на Neural Engine твого Mac, без інтернету. У нашому Бенчмарку на українських голосових нотатках він видавав текст за 0,37 с після Stop, тоді як Apple за 0,80 с, а Whisper Large v3 Turbo за 2,3 с. Parakeet і Apple тепер працюють також для зустрічей, перекладу зустрічей і файлів. Обирай рушій для кожного режиму в «Провайдери» → «Рушій для кожного режиму» або додай там свій ключ ElevenLabs. Parakeet завантажується в «Локальних моделях» (лише Apple Silicon).",
+      "Вкладка «Бенчмарк»: проганяй свої записи через кілька рушіїв і порівнюй швидкість і відмінності в одній компактній таблиці, а переможця роби основним. Текст з'являється швидше після Stop, а пошук у записах і статистика в Огляді працюють значно швидше.",
+      "Акуратніша апка: усі екрани мають один макет, новий екран «Про апку» показує Diduny, Papuga та AppCat, вікно має один розмір, а зустрічі, що накладаються, отримали окремі доріжки в календарі. Нове в «Шорткатах»: Force submit. Натисни ⌘↩ під час запису, і Diduny вставить текст та натисне ⌘↩, щоб його надіслати."
     ]
   }
 }
