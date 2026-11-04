@@ -52,10 +52,62 @@ struct DidunyBenchmarkEngine: BenchmarkEngine {
         AuthService.shared.isLoggedIn ? .ready : .signedOut
     }
 
+    /// Replays the clip over the realtime socket exactly like live dictation:
+    /// 100ms PCM chunks at real-time pace, then Stop. `seconds` is Stop → final
+    /// text, the wait the user feels; the text is raw tokens before server cleanup.
     func transcribe(_ url: URL, language: String) async throws -> BenchmarkOutput {
-        let data = try Data(contentsOf: url, options: .mappedIfSafe)
-        let (result, seconds) = try await timed { try await CloudTranscriptionService().transcribeRawAndCleaned(audioData: data, language: language) }
-        return BenchmarkOutput(text: result.raw, seconds: seconds, loadSeconds: 0)
+        let samples = try AudioConverter.convertToWhisperFormat(audioData: Data(contentsOf: url, options: .mappedIfSafe))
+        let service = CloudRealtimeService()
+        let collector = TokenCollector()
+        service.onTokensReceived = { collector.add($0) }
+        try await service.connect(languageHints: [language], enableSpeakerDiarization: false)
+        let chunk = 1600 // 100ms at 16kHz
+        var index = 0
+        while index < samples.count {
+            try Task.checkCancellation()
+            let end = min(index + chunk, samples.count)
+            service.sendAudioData(Self.pcm16(samples[index ..< end]))
+            index = end
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let (_, seconds) = await timedAsync { await service.finalize(profile: .dictationFast) }
+        let text = collector.text
+        await service.disconnect()
+        guard !text.isEmpty else { throw TranscriptionError.emptyTranscription }
+        return BenchmarkOutput(text: text, seconds: seconds, loadSeconds: 0)
+    }
+
+    /// Tokens arrive on the socket's queue; keep them in order without hopping tasks.
+    private final class TokenCollector: @unchecked Sendable {
+        private let lock = NSLock()
+        private var final = "", provisional = ""
+        func add(_ tokens: [RealtimeToken]) {
+            lock.lock(); defer { lock.unlock() }
+            var latest = ""
+            for token in tokens where !token.text.isEmpty {
+                if token.isFinal { final += token.text } else { latest += token.text }
+            }
+            provisional = latest
+        }
+        var text: String {
+            lock.lock(); defer { lock.unlock() }
+            return (final + provisional).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private static func pcm16(_ samples: ArraySlice<Float>) -> Data {
+        var data = Data(capacity: samples.count * 2)
+        for sample in samples {
+            var value = Int16(max(-1, min(1, sample)) * Float(Int16.max)).littleEndian
+            withUnsafeBytes(of: &value) { data.append(contentsOf: $0) }
+        }
+        return data
+    }
+
+    private func timedAsync<T>(_ work: () async -> T) async -> (T, TimeInterval) {
+        let start = Date()
+        let value = await work()
+        return (value, Date().timeIntervalSince(start))
     }
 }
 

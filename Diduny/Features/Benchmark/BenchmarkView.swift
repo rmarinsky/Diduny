@@ -175,6 +175,7 @@ private struct BenchmarkResultsView: View {
     let run: BenchmarkRun
     let runner: BenchmarkRunner
     @State private var filter: String = "all"
+    @AppStorage("benchmarkStrictDiff") private var strict = false
 
     var body: some View {
         ScrollView {
@@ -203,16 +204,31 @@ private struct BenchmarkResultsView: View {
                     ForEach(run.engines) { engine in summaryCard(engine) }
                 }
 
-                Text("Reference is the selected engine's text; for Diduny that is the text before server cleanup. Every difference counts, including punctuation and case.")
+                Text("Percent = share of Reference words this engine got different (lower is closer). Reference is the selected engine's text; for Diduny that is the text before server cleanup. Time = from Stop to final text; Diduny is replayed over the live socket like real dictation.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                Picker("", selection: $filter) {
-                    Text("All clips").tag("all")
-                    ForEach(run.engines.filter { $0.id != run.referenceEngineID }) { Text("\($0.name) differs").tag($0.id) }
-                    Text("Not voted").tag("unvoted")
+                HStack(spacing: 12) {
+                    Picker("", selection: $filter) {
+                        Text("All clips \(run.clips.count)").tag("all")
+                        ForEach(run.engines.filter { $0.id != run.referenceEngineID }) { engine in
+                            Text("\(engine.name) differs \(differingCount(engine.id))").tag(engine.id)
+                        }
+                        Text("Not voted \(run.clips.filter { run.votes[$0.id] == nil }.count)").tag("unvoted")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    Toggle("Count punctuation and case", isOn: $strict)
+                        .toggleStyle(.checkbox)
+                        .font(.system(size: 11.5))
+                        .fixedSize()
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+
+                if visibleClips.isEmpty {
+                    Text("No clips differ for this filter.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity).padding(.vertical, 24)
+                }
 
                 VStack(spacing: 0) {
                     ForEach(visibleClips) { clip in
@@ -234,18 +250,39 @@ private struct BenchmarkResultsView: View {
             case "all": return true
             case "unvoted": return run.votes[clip.id] == nil
             default:
-                guard let text = run.cell(clip.id, filter)?.text, let ref = run.cell(clip.id, run.referenceEngineID)?.text else { return false }
-                return text != ref
+                return differs(clip, filter)
             }
         }
     }
 
+    private func diff(_ clip: BenchmarkRun.Clip, _ engineID: String) -> WordDiff.Result? {
+        guard let text = run.cell(clip.id, engineID)?.text,
+              let ref = run.cell(clip.id, run.referenceEngineID)?.text else { return nil }
+        return WordDiff.compare(text, reference: ref, strict: strict)
+    }
+
+    private func differs(_ clip: BenchmarkRun.Clip, _ engineID: String) -> Bool {
+        (diff(clip, engineID)?.errors ?? 0) > 0
+    }
+
+    private func differingCount(_ engineID: String) -> Int {
+        run.clips.filter { differs($0, engineID) }.count
+    }
+
+    /// Engine filter selected → that clip shows only Reference and this engine.
+    private var focusedEngines: [BenchmarkRun.Engine] {
+        guard run.engines.contains(where: { $0.id == filter }) else { return run.engines }
+        return run.engines.filter { $0.id == run.referenceEngineID || $0.id == filter }
+    }
+
     private var bestEngine: String? {
-        run.engines.compactMap { e in run.summary(for: e.id).rate.map { (e.id, $0) } }.min { $0.1 < $1.1 }?.0
+        run.engines.compactMap { e in run.summary(for: e.id, strict: strict).rate.map { (e.id, $0) } }.min { $0.1 < $1.1 }?.0
     }
 
     private func summaryCard(_ engine: BenchmarkRun.Engine) -> some View {
-        let s = run.summary(for: engine.id)
+        let s = run.summary(for: engine.id, strict: strict)
+        let finished = run.clips.filter { run.cell($0.id, engine.id)?.text != nil }.count
+        let isFocused = filter == engine.id
         let isBest = engine.id == bestEngine
         let isDefault = defaultSelection(for: engine.id).map { isCurrentDefault($0) } ?? false
         return VStack(alignment: .leading, spacing: 3) {
@@ -255,7 +292,10 @@ private struct BenchmarkResultsView: View {
             }
             Text(s.rate.map { String(format: "%.1f%%", $0 * 100) } ?? String(localized: "Reference"))
                 .font(.system(size: 22, weight: .bold))
-            Text(String(format: "%.1f s total · %.0f× real time", s.seconds, run.audioSeconds / max(s.seconds, 0.01)))
+            Text(s.rate == nil ? "Other engines are compared with it" : "of words differ from Reference · lower is closer")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(String(format: String(localized: "%.2f s avg from Stop to text"), s.seconds / Double(max(finished, 1))))
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
             Text(String(format: "model load %.1f s · votes %d of %d", s.loadSeconds, s.votes, run.clips.count))
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
@@ -272,10 +312,16 @@ private struct BenchmarkResultsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(isBest ? Color("BrandTintSoft") : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(isBest || isFocused ? Color("BrandTintSoft") : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(isBest ? Color.accentColor : Color(.separatorColor), lineWidth: isBest ? 1.5 : 0.5))
+            .stroke(isBest || isFocused ? Color.accentColor : Color(.separatorColor), lineWidth: isBest || isFocused ? 1.5 : 0.5))
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .onTapGesture {
+            guard s.rate != nil else { return }
+            filter = isFocused ? "all" : engine.id
+        }
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(s.rate != nil ? .isButton : [])
     }
 
     private func clipBlock(_ clip: BenchmarkRun.Clip) -> some View {
@@ -286,8 +332,13 @@ private struct BenchmarkResultsView: View {
                 Text(duration(clip.durationSeconds)).font(.system(size: 12, weight: .medium, design: .monospaced))
                 Text(clip.createdAt, style: .date).font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            ForEach(run.engines) { engine in
+            ForEach(focusedEngines) { engine in
                 engineRow(clip, engine)
+            }
+            if focusedEngines.count == 2, let d = diff(clip, filter) {
+                Text("\(d.errors) of \(d.referenceWords) words differ")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .padding(.leading, 120)
             }
             HStack(spacing: 4) {
                 Text("Which is right?").font(.system(size: 11)).foregroundStyle(.secondary)
@@ -314,8 +365,7 @@ private struct BenchmarkResultsView: View {
     private func engineRow(_ clip: BenchmarkRun.Clip, _ engine: BenchmarkRun.Engine) -> some View {
         let cell = run.cell(clip.id, engine.id)
         let isRef = engine.id == run.referenceEngineID
-        let ref = run.cell(clip.id, run.referenceEngineID)?.text
-        let diff = cell?.text.flatMap { text in ref.map { WordDiff.compare(text, reference: $0) } }
+        let diff = isRef ? nil : diff(clip, engine.id)
         return HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(engine.name).font(.system(size: 11, weight: .medium))
                 .foregroundStyle(isRef ? Color("BrandAccentDeep") : .secondary)
@@ -339,26 +389,30 @@ private struct BenchmarkResultsView: View {
         }
     }
 
+    /// Reference words the engine dropped or misheard: red, struck through.
+    /// What the engine wrote instead (or added): green.
     private func highlighted(_ diff: WordDiff.Result) -> AttributedString {
+        func removed(_ w: String) -> AttributedString {
+            var part = AttributedString(w)
+            part.foregroundColor = .red
+            part.backgroundColor = .red.opacity(0.14)
+            part.strikethroughStyle = .single
+            return part
+        }
+        func added(_ w: String) -> AttributedString {
+            var part = AttributedString(w)
+            part.foregroundColor = .green
+            part.backgroundColor = .green.opacity(0.14)
+            return part
+        }
         var out = AttributedString()
         for (i, op) in diff.ops.enumerated() {
             if i > 0 { out += AttributedString(" ") }
             switch op {
-            case let .equal(w), let .inserted(w):
-                var part = AttributedString(w)
-                if case .inserted = op { part.backgroundColor = .yellow.opacity(0.35); part.underlineStyle = .single }
-                out += part
-            case let .substituted(w, _):
-                var part = AttributedString(w)
-                part.backgroundColor = .yellow.opacity(0.35)
-                part.underlineStyle = .single
-                out += part
-            case let .missing(w):
-                var part = AttributedString(w)
-                part.backgroundColor = .red.opacity(0.18)
-                part.foregroundColor = .red
-                part.strikethroughStyle = .single
-                out += part
+            case let .equal(w): out += AttributedString(w)
+            case let .substituted(w, ref): out += removed(ref) + AttributedString(" ") + added(w)
+            case let .missing(w): out += removed(w)
+            case let .inserted(w): out += added(w)
             }
         }
         return out

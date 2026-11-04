@@ -46,15 +46,16 @@ struct BenchmarkRun: Codable, Identifiable, Equatable {
         let excluded: Int
     }
 
-    func summary(for engine: String) -> Summary {
+    func summary(for engine: String, strict: Bool = true) -> Summary {
         var errors = 0, refWords = 0, seconds: TimeInterval = 0, load: TimeInterval = 0, excluded = 0
         for clip in clips {
             guard let mine = cell(clip.id, engine), let text = mine.text else { excluded += 1; continue }
             seconds += mine.seconds
             load += mine.loadSeconds
             guard engine != referenceEngineID, let ref = cell(clip.id, referenceEngineID)?.text else { continue }
-            let words = WordDiff.words(ref).count
-            errors += Int((WordDiff.compare(text, reference: ref).rate * Double(words)).rounded())
+            let diff = WordDiff.compare(text, reference: ref, strict: strict)
+            let words = diff.referenceWords
+            errors += Int((diff.rate * Double(words)).rounded())
             refWords += words
         }
         let rate: Double? = engine == referenceEngineID || refWords == 0 ? nil : Double(errors) / Double(refWords)
