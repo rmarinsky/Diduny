@@ -3,17 +3,17 @@
   "en": {
     "headline": "Parakeet: super-fast dictation right on your Mac",
     "highlights": [
-      "Parakeet V3 runs offline on the Neural Engine: text 0.2–0.4 s after Stop, also for meetings and files. Pick it per mode in Providers, or add your own ElevenLabs key.",
-      "Benchmark tab: run your recordings through several engines and compare speed and differences in one table.",
-      "Force submit: press ⌘↩ while recording to paste and send. Plus one layout for every screen and a new About screen."
+      "Parakeet V3 runs offline on the Neural Engine: text 0.2–0.4 s after Stop, also for meetings and files. Pick an engine for each mode in Providers.",
+      "Your own ElevenLabs key: use it for dictation, translation and live meetings. The key stays in your Keychain.",
+      "Benchmark tab to compare engines on your recordings, Force submit (⌘↩ while recording pastes and sends), and a cleaner layout with a new About screen."
     ]
   },
   "uk": {
     "headline": "Parakeet: супершвидке диктування прямо на твоєму Mac",
     "highlights": [
-      "Parakeet V3 працює офлайн на Neural Engine: текст за 0,2–0,4 с після Stop, також для зустрічей і файлів. Обирай його для кожного режиму в «Провайдерах» або додай свій ключ ElevenLabs.",
-      "Вкладка «Бенчмарк»: проганяй свої записи через кілька рушіїв і порівнюй швидкість і відмінності в одній таблиці.",
-      "Force submit: натисни ⌘↩ під час запису, щоб вставити й надіслати. А ще — єдиний вигляд усіх екранів і новий екран «Про апку»."
+      "Parakeet V3 працює офлайн на Neural Engine: текст за 0,2–0,4 с після Stop, також для зустрічей і файлів. Рушій для кожного режиму обирай у «Провайдерах».",
+      "Свій ключ ElevenLabs: для диктування, перекладу і живих зустрічей. Ключ лишається в Keychain твого Mac.",
+      "Вкладка «Бенчмарк» для порівняння рушіїв на твоїх записах, Force submit (⌘↩ під час запису вставляє й надсилає) і акуратніший вигляд із новим екраном «Про апку»."
     ]
   }
 }
