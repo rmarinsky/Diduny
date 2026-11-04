@@ -141,6 +141,12 @@ struct RecordingsLibraryView: View {
             inspectorContent
                 .frame(minHeight: 500)
         }
+        .onChange(of: inspectorSelection != nil, initial: true) { _, isOpen in
+            MainWindowController.shared.setRecordingInspectorExpanded(isOpen)
+        }
+        .onDisappear {
+            MainWindowController.shared.setRecordingInspectorExpanded(false)
+        }
         .onAppear {
             batchLoadErrorMessage = batchStorage.loadErrorMessage
             rebuildSearchIndex()
