@@ -6,6 +6,8 @@ struct OverviewView: View {
     @State private var playbackService = AudioPlaybackService.shared
     @State private var timePeriod: TimePeriod = .month
     @State private var snapshot = Snapshot()
+    @State private var barHeights: [Double] = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedRecording: Recording? = nil
     @State private var typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
 
@@ -159,6 +161,27 @@ struct OverviewView: View {
 
     private var chartSeries: [DayStat] { snapshot.series }
 
+    /// Grows bars from zero, left to right; the whole wave stays within ~0.3s of stagger.
+    private func revealBars() {
+        let series = chartSeries
+        barHeights = Array(repeating: 0, count: series.count)
+        guard !reduceMotion else { return syncBars() }
+        let step = min(0.03, 0.3 / Double(max(series.count, 1)))
+        for (index, day) in series.enumerated() {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.85).delay(Double(index) * step)) {
+                barHeights[index] = day.minutes
+            }
+        }
+    }
+
+    private func syncBars() {
+        barHeights = chartSeries.map(\.minutes)
+    }
+
+    private func barHeight(_ index: Int, _ day: DayStat) -> Double {
+        barHeights.indices.contains(index) ? barHeights[index] : day.minutes
+    }
+
     private func computeChartSeries() -> [DayStat] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
@@ -229,35 +252,21 @@ struct OverviewView: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Text("Overview")
-                    .font(.title2.bold())
-                Spacer()
-                Picker("", selection: $timePeriod) {
-                    ForEach(TimePeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 220)
+        PageScaffold(title: "Overview") {
+            Picker("", selection: $timePeriod) {
+                ForEach(TimePeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 16)
-
-            ScrollView {
-                VStack(spacing: 12) {
-                    OverviewLaunchCard()
-                    heroCard
-                    metricGrid
-                    chartCard
-                    recentCard
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
+            .pickerStyle(.segmented)
+            .frame(width: 220)
+        } content: {
+            VStack(spacing: DS.Space.md) {
+                OverviewLaunchCard()
+                heroCard
+                metricGrid
+                chartCard
+                recentCard
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .sheet(item: Binding(
             get: { selectedRecording },
             set: { next in
@@ -273,10 +282,10 @@ struct OverviewView: View {
         .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
             typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
         }
-        .onAppear { rebuildSnapshot() }
-        .onChange(of: timePeriod) { rebuildSnapshot() }
-        .onChange(of: storage.recordings) { rebuildSnapshot() }
-        .onChange(of: typingSpeedWordsPerMinute) { rebuildSnapshot() }
+        .onAppear { rebuildSnapshot(); revealBars() }
+        .onChange(of: timePeriod) { rebuildSnapshot(); revealBars() }
+        .onChange(of: storage.recordings) { rebuildSnapshot(); syncBars() }
+        .onChange(of: typingSpeedWordsPerMinute) { rebuildSnapshot(); syncBars() }
     }
 
     // MARK: - Hero Card
@@ -287,21 +296,21 @@ struct OverviewView: View {
                 Text(
                     "TIME SAVED · THIS \(NSLocalizedString(timePeriod.rawValue, comment: "Overview period").uppercased())"
                 )
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(Color("BrandAccentDeep"))
+                .font(DS.Font.caption.weight(.semibold))
+                .foregroundColor(DS.Palette.accent)
                 .kerning(0.5)
 
                 HStack(alignment: .lastTextBaseline, spacing: 4) {
                     Text(String(format: "%.1f", totalHours))
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundColor(.primary)
                     Text("hrs")
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .font(DS.Font.headline)
                         .foregroundColor(.primary)
                 }
 
                 Text(heroDescription)
-                    .font(.system(size: 12))
+                    .font(DS.Font.callout)
                     .foregroundColor(.secondary)
             }
 
@@ -312,7 +321,7 @@ struct OverviewView: View {
                 waveformRibbon
             }
         }
-        .padding(20)
+        .padding(DS.Space.lg)
         .background(Color("BrandTintSoft"), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -385,9 +394,9 @@ struct OverviewView: View {
     private var chartCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(timePeriod.chartTitle)
-                .font(.system(size: 14, weight: .semibold))
+                .font(DS.Font.headline)
             Text(timePeriod.chartSubtitle)
-                .font(.system(size: 12))
+                .font(DS.Font.callout)
                 .foregroundColor(.secondary)
 
             Chart {
@@ -402,7 +411,7 @@ struct OverviewView: View {
                         }
                 }
 
-                ForEach(chartSeries) { day in
+                ForEach(Array(chartSeries.enumerated()), id: \.element.id) { index, day in
                     if day.isFuture || day.minutes == 0 {
                         BarMark(
                             x: .value("Day", day.label),
@@ -415,7 +424,7 @@ struct OverviewView: View {
                         let opacity = 0.25 + 0.6 * (day.minutes / max(maxMinutes, 1))
                         BarMark(
                             x: .value("Day", day.label),
-                            y: .value("Min", day.minutes)
+                            y: .value("Min", barHeight(index, day))
                         )
                         .foregroundStyle(
                             day.isToday
@@ -424,7 +433,7 @@ struct OverviewView: View {
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                         .annotation(position: .top) {
-                            if day.isToday, day.minutes > 0 {
+                            if day.isToday, day.minutes > 0, barHeight(index, day) >= day.minutes {
                                 Text(String(format: "%dm", Int(day.minutes)))
                                     .font(.system(size: 10, weight: .semibold))
                                     .foregroundColor(Color("BrandAccentDeep"))
@@ -444,12 +453,12 @@ struct OverviewView: View {
             .frame(height: 120)
             .padding(.top, 8)
         }
-        .padding(20)
-        .background(Color(.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(DS.Space.lg)
+        .background(DS.Palette.cardFill)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         )
     }
 
@@ -460,13 +469,13 @@ struct OverviewView: View {
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Recent recordings")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(DS.Font.headline)
                 Spacer()
                 Button("See all ›") {
                     MainWindowController.shared.showWindow(section: .recordings)
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 12))
+                .font(DS.Font.callout)
                 .foregroundColor(Color("BrandAccentDeep"))
             }
             .padding(.horizontal, 16)
@@ -491,11 +500,11 @@ struct OverviewView: View {
                 .padding(.bottom, 8)
             }
         }
-        .background(Color(.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(DS.Palette.cardFill)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         )
     }
 
@@ -544,19 +553,19 @@ private struct MetricCard: View {
                 .minimumScaleFactor(0.82)
 
             Text(LocalizedStringKey(label))
-                .font(.system(size: 11))
+                .font(DS.Font.caption)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(
-            isStreak ? Color("BrandTintSoft") : Color(.windowBackgroundColor)
+            isStreak ? Color("BrandTintSoft") : DS.Palette.cardFill
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         )
     }
 

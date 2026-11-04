@@ -39,18 +39,31 @@ struct CalendarSettingsSection: View {
                     Button("Refresh") { Task { await connection.refresh() } }.disabled(connection.busy)
                 }
                 if connection.calendars.isEmpty && !connection.busy {
-                    Text("No calendars are available. Add an account in System Settings → Internet Accounts, then refresh.")
+                    EmptyState(
+                        icon: "calendar.badge.exclamationmark",
+                        title: "No calendars",
+                        message: "No calendars are available. Add an account in System Settings → Internet Accounts, then refresh.",
+                        compact: true
+                    )
                 }
             } else {
-                Label("Connect your calendars", systemImage: "calendar.badge.plus").font(.headline)
-                Text("Use calendars already connected to this Mac. Choose which ones appear in Diduny.")
-                    .foregroundStyle(.secondary)
-                Button("Connect macOS calendars…") { approved = false; showConsent = true }.buttonStyle(.borderedProminent)
+                EmptyState(
+                    icon: "calendar.badge.plus",
+                    title: "Connect your calendars",
+                    message: "Use calendars already connected to this Mac. Choose which ones appear in Diduny.",
+                    compact: true
+                ) {
+                    Button("Connect macOS calendars…") { approved = false; showConsent = true }
+                        .buttonStyle(.borderedProminent)
+                        .tint(DS.Palette.accent)
+                }
             }
             if let error = connection.error {
-                Text(error).foregroundStyle(.red).textSelection(.enabled)
-                Button("Open Calendar Permissions") {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
+                Banner(message: Text(verbatim: error)) {
+                    Button("Open Calendar Permissions") {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
             DisclosureGroup("Read a calendar from a browser", isExpanded: $showBrowser) {

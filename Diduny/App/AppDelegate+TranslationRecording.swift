@@ -140,6 +140,8 @@ extension AppDelegate {
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
+        ForceSubmitService.shared.deactivate()
+        ForceSubmitService.shared.disarm()
 
         if !forceDiscardAudio, SettingsStorage.shared.escapeCancelSaveAudio, audioRecorder.isRecording {
             do {
@@ -382,6 +384,7 @@ extension AppDelegate {
             // Activate escape cancel handler
             await MainActor.run {
                 setupTranslationEscapeCancelHandler()
+                setupTranslationForceSubmitHandler()
             }
         } catch is CancellationError {
             // Canceled while the engine was initializing; the canceller owns the state.
@@ -468,6 +471,7 @@ extension AppDelegate {
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
+        ForceSubmitService.shared.deactivate()
 
         // Capture recording start time for duration calculation
         let recordingStartTime = appState.translationRecordingStartTime
@@ -589,12 +593,17 @@ extension AppDelegate {
                 Log.app.info("stopTranslationRecording: Auto-pasting")
                 do {
                     try await clipboardService.paste()
+                    await submitAfterPasteIfRequested(hasText: !text.isEmpty)
                 } catch ClipboardError.accessibilityNotGranted {
+                    ForceSubmitService.shared.disarm()
                     Log.app.warning("stopTranslationRecording: Accessibility permission needed")
                     PermissionManager.shared.showPermissionAlert(for: .accessibility)
                 } catch {
+                    ForceSubmitService.shared.disarm()
                     Log.app.error("stopTranslationRecording: Paste failed - \(error.localizedDescription)")
                 }
+            } else {
+                ForceSubmitService.shared.disarm()
             }
 
             await MainActor.run {
@@ -943,5 +952,11 @@ extension AppDelegate {
         }
 
         escapeService.activate()
+    }
+
+    private func setupTranslationForceSubmitHandler() {
+        ForceSubmitService.shared.activate { [weak self] in
+            Task { @MainActor in await self?.stopTranslationRecordingIfRecording() }
+        }
     }
 }

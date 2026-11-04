@@ -10,17 +10,23 @@ struct LiveDictationOverlayView: View {
     let onDrag: () -> Void
     let onDragEnd: () -> Void
     @State private var autoPaste = SettingsStorage.shared.autoPaste
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private static let transcriptBottomID = "transcript-bottom"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+                .reveal(store.contentRevealed, step: 0, reduceMotion: reduceMotion)
             statusRow
-            if let turnOn = store.onTurnOnLiveTranscript, !store.hasText, store.canStop {
-                recordingOnlyView(turnOn)
-            } else {
-                transcriptView
+                .reveal(store.contentRevealed, step: 1, reduceMotion: reduceMotion)
+            Group {
+                if let turnOn = store.onTurnOnLiveTranscript, !store.hasText, store.canStop {
+                    recordingOnlyView(turnOn)
+                } else {
+                    transcriptView
+                }
             }
+            .reveal(store.contentRevealed, step: 2, reduceMotion: reduceMotion)
 
             if store.phase == .pasted {
                 Toggle("Paste and close automatically", isOn: $autoPaste)
@@ -34,12 +40,37 @@ struct LiveDictationOverlayView: View {
             }
 
             controls
+                .reveal(store.contentRevealed, step: 3, reduceMotion: reduceMotion)
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .overlay { skeleton.opacity(store.contentRevealed ? 0 : 1) }
+        .animation(.easeOut(duration: 0.2), value: store.contentRevealed)
         .background(.regularMaterial, in: panelShape)
         .overlay(panelShape.stroke(Color.primary.opacity(0.10), lineWidth: 0.5))
         .animation(.spring(response: 0.34, dampingFraction: 0.88), value: store.phase)
+    }
+
+    /// Static placeholder in the panel's layout, shown while the panel morphs in.
+    private var skeleton: some View {
+        let bar = Color.primary.opacity(0.08)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 9) {
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(bar).frame(width: 28, height: 28)
+                RoundedRectangle(cornerRadius: 4).fill(bar).frame(width: 90, height: 12)
+                Spacer()
+            }
+            RoundedRectangle(cornerRadius: 4).fill(bar).frame(width: 120, height: 10)
+            RoundedRectangle(cornerRadius: 10, style: .continuous).fill(bar).frame(maxHeight: .infinity)
+            HStack(spacing: 8) {
+                ForEach(0..<3, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(bar).frame(height: 28)
+                }
+            }
+        }
+        .padding(14)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     private var header: some View {
@@ -336,6 +367,8 @@ struct LiveDictationOverlayView: View {
                     store.copiedAt == nil ? "Copy" : "Copied",
                     systemImage: store.copiedAt == nil ? "doc.on.doc" : "checkmark"
                 )
+                .contentTransition(.symbolEffect(.replace))
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: store.copiedAt)
                 .font(.system(size: 12.5, weight: .semibold))
                 .frame(maxWidth: .infinity, minHeight: EdgeCommandPanelPlacement.liveControlHitTargetHeight)
                 .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -591,5 +624,20 @@ private struct LiveAudioMeter: View {
     private func opacity(for index: Int) -> Double {
         let threshold = Float(index + 1) / 6
         return level >= threshold ? 1 : 0.35
+    }
+}
+
+private extension View {
+    /// Entrance cascade after the tab→panel morph: blocks rise 4pt and fade in, 40ms apart.
+    /// Exit is a quick fade with no stagger.
+    func reveal(_ visible: Bool, step: Int, reduceMotion: Bool) -> some View {
+        opacity(visible ? 1 : 0)
+            .offset(y: visible || reduceMotion ? 0 : 4)
+            .animation(
+                !visible ? .easeIn(duration: 0.1)
+                    : reduceMotion ? .easeOut(duration: 0.15)
+                    : .easeOut(duration: 0.22).delay(Double(step) * 0.04),
+                value: visible
+            )
     }
 }

@@ -397,24 +397,37 @@ struct EnginesByModeSection: View {
     }
 
     var body: some View {
-        Section {
-            Picker("Use for all modes", selection: $allChoice) {
-                Text("Choose an engine").tag("")
-                ForEach(allOptions) { Text($0.title).tag($0.id) }
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
+            SettingsGroup(title: "Engine for each mode") {
+                SettingRow(title: "Use for all modes") {
+                    Picker("Use for all modes", selection: $allChoice) {
+                        Text("Choose an engine").tag("")
+                        ForEach(allOptions) { Text($0.title).tag($0.id) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                .onChange(of: allChoice) { _, id in applyAll(id) }
+                if let note {
+                    RowSeparator()
+                    Text(note).font(DS.Font.callout).foregroundStyle(.secondary)
+                        .padding(.horizontal, DS.Space.lg).padding(.vertical, DS.Space.md)
+                }
+                ForEach(Array(modes.enumerated()), id: \.offset) { _, mode in
+                    RowSeparator()
+                    VStack(alignment: .leading, spacing: DS.Space.xs) {
+                        EnginePickerRow(label: mode.label, request: mode.request, legacyIsLocal: mode.legacyIsLocal,
+                                        setLegacyLocal: mode.setLegacyLocal, showsManageLink: false)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, DS.Space.lg)
+                    .padding(.vertical, DS.Space.md)
+                }
+                .id(refresh)
             }
-            .onChange(of: allChoice) { _, id in applyAll(id) }
-            if let note {
-                Text(note).font(.caption).foregroundStyle(.secondary)
-            }
-            ForEach(Array(modes.enumerated()), id: \.offset) { _, mode in
-                EnginePickerRow(label: mode.label, request: mode.request, legacyIsLocal: mode.legacyIsLocal,
-                                setLegacyLocal: mode.setLegacyLocal, showsManageLink: false)
-            }
-            .id(refresh)
-        } header: {
-            Text("Engine for each mode")
-        } footer: {
             Text("Pick one engine for everything, then change any single mode.")
+                .font(DS.Font.callout).foregroundStyle(.secondary)
+                .padding(.horizontal, DS.Space.xs)
         }
     }
 

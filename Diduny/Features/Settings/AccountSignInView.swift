@@ -42,7 +42,8 @@ struct AccountSignInView: View {
                         .accessibilityIdentifier("account.email")
 
                     Button("Send Code", action: sendOtp)
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
+                        .tint(DS.Palette.accent)
                         .accessibilityIdentifier("account.sendCode")
                         .disabled(!AuthService.isValidEmail(email) || isLoading)
                 }
@@ -67,6 +68,7 @@ struct AccountSignInView: View {
                     Button("Verify", action: verifyOtp)
                         .accessibilityIdentifier("account.verify")
                         .buttonStyle(.borderedProminent)
+                        .tint(DS.Palette.accent)
                         .disabled(otpCode.count != 6 || isLoading)
 
                     Button("Resend Code", action: resendOtp)
@@ -85,7 +87,7 @@ struct AccountSignInView: View {
 
                     Spacer()
 
-                    Button("Sign Out") {
+                    Button("Sign Out", role: .destructive) {
                         Task { await authService.logout() }
                     }
                     .buttonStyle(.bordered)

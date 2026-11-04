@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct OfflineModelsSettingsView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedModel: String = SettingsStorage.shared.selectedWhisperModel
     @State private var modelSort: ModelSort = .speed
     @State private var whisperLanguage: String = SettingsStorage.shared.whisperLanguage
@@ -21,13 +22,14 @@ struct OfflineModelsSettingsView: View {
     private let modelManager = WhisperModelManager.shared
 
     var body: some View {
-        Form {
-            if ParakeetModelStore.isSupportedHardware { ParakeetModelSection() }
-            whisperModelsSection
-            whisperLanguageSection
-            memoryManagementSection
+        PageScaffold(title: "Local models") {
+            VStack(alignment: .leading, spacing: DS.Space.xl) {
+                if ParakeetModelStore.isSupportedHardware { ParakeetModelSection() }
+                whisperModelsSection
+                whisperLanguageSection
+                memoryManagementSection
+            }
         }
-        .formStyle(.grouped)
     }
 
     // MARK: - Whisper Models
@@ -41,37 +43,42 @@ struct OfflineModelsSettingsView: View {
         }
     }
 
-    @ViewBuilder
     private var whisperModelsSection: some View {
-        Section("Whisper Models") {
-            Picker("Sort by", selection: $modelSort) {
-                ForEach(ModelSort.allCases, id: \.self) { sort in
-                    Text(sort.label).tag(sort)
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
+            SettingsGroup(title: "Whisper Models") {
+                SettingRow(title: "Sort by") {
+                    Picker("Sort by", selection: $modelSort) {
+                        ForEach(ModelSort.allCases, id: \.self) { sort in
+                            Text(sort.label).tag(sort)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 200)
+                }
+
+                ForEach(sortedModels) { model in
+                    RowSeparator()
+                    whisperModelRow(model)
+                        .padding(.horizontal, DS.Space.lg)
+                        .padding(.vertical, DS.Space.md)
+                        .id(model.id)
                 }
             }
-            .pickerStyle(.segmented)
 
-            ForEach(sortedModels) { model in
-                whisperModelRow(model)
-                    .id(model.id)
-            }
-        }
-
-        Section {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Label(
                     "Models with the \"Translate\" badge can translate speech from any language to English.",
                     systemImage: "info.circle"
                 )
-                .font(.caption)
-                .foregroundColor(.secondary)
                 Label(
                     "On Intel Macs, Whisper runs on CPU only \u{2014} smaller models (Tiny, Base, Small) are recommended.",
                     systemImage: "desktopcomputer"
                 )
-                .font(.caption)
-                .foregroundColor(.secondary)
             }
+            .font(DS.Font.callout)
+            .foregroundColor(.secondary)
+            .padding(.horizontal, DS.Space.xs)
         }
     }
 
@@ -104,6 +111,7 @@ struct OfflineModelsSettingsView: View {
                 Spacer()
 
                 modelActions(model)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
 
             HStack(spacing: 16) {
@@ -140,9 +148,14 @@ struct OfflineModelsSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.mini)
                 }
+                .transition(.opacity)
             }
         }
         .padding(.vertical, 4)
+        .animation(
+            reduceMotion ? nil : .easeOut(duration: 0.25),
+            value: modelManager.isDownloading[model.name] == true
+        )
     }
 
     @ViewBuilder
@@ -156,7 +169,7 @@ struct OfflineModelsSettingsView: View {
                         selectedModel = model.name
                         SettingsStorage.shared.selectedWhisperModel = model.name
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
 
@@ -214,15 +227,21 @@ struct OfflineModelsSettingsView: View {
     // MARK: - Whisper Language & Prompt
 
     private var whisperLanguageSection: some View {
-        Section("Whisper Language & Prompt") {
-            Picker("Language", selection: $whisperLanguage) {
-                ForEach(SupportedLanguage.whisperLanguages) { lang in
-                    Text(lang.name).tag(lang.code)
+        SettingsGroup(title: "Whisper Language & Prompt") {
+            SettingRow(title: "Language") {
+                Picker("Language", selection: $whisperLanguage) {
+                    ForEach(SupportedLanguage.whisperLanguages) { lang in
+                        Text(lang.name).tag(lang.code)
+                    }
                 }
+                .labelsHidden()
+                .fixedSize()
             }
             .onChange(of: whisperLanguage) { _, newValue in
                 SettingsStorage.shared.whisperLanguage = newValue
             }
+
+            RowSeparator()
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Initial prompt:")
@@ -246,6 +265,8 @@ struct OfflineModelsSettingsView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
             }
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.vertical, DS.Space.md)
         }
         .onDisappear {
             SettingsStorage.shared.whisperPrompt = whisperPrompt
@@ -255,15 +276,21 @@ struct OfflineModelsSettingsView: View {
     // MARK: - Memory Management
 
     private var memoryManagementSection: some View {
-        Section("Memory Management") {
-            Picker("Unload model after inactivity", selection: $unloadPolicy) {
-                ForEach(WhisperModelUnloadPolicy.allCases) { policy in
-                    Text(policy.displayName).tag(policy)
+        SettingsGroup(title: "Memory Management") {
+            SettingRow(title: "Unload model after inactivity") {
+                Picker("Unload model after inactivity", selection: $unloadPolicy) {
+                    ForEach(WhisperModelUnloadPolicy.allCases) { policy in
+                        Text(policy.displayName).tag(policy)
+                    }
                 }
+                .labelsHidden()
+                .fixedSize()
             }
             .onChange(of: unloadPolicy) { _, newValue in
                 SettingsStorage.shared.whisperModelUnloadPolicy = newValue
             }
+
+            RowSeparator()
 
             Text(
                 "The Whisper model uses significant RAM while loaded. "
@@ -271,6 +298,8 @@ struct OfflineModelsSettingsView: View {
             )
             .font(.caption)
             .foregroundColor(.secondary)
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.vertical, DS.Space.md)
         }
     }
 }
@@ -311,7 +340,7 @@ private struct ParakeetModelSection: View {
     @State private var confirmDelete = false
 
     var body: some View {
-        Section("Parakeet") {
+        SettingsGroup(title: "Parakeet") {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Parakeet V3").fontWeight(.medium)
@@ -324,11 +353,15 @@ private struct ParakeetModelSection: View {
                 if downloaded {
                     Label("Ready", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                     Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
+                        .buttonStyle(.bordered)
                         .help("Delete Parakeet V3")
                 } else if progress == nil {
                     Button("Download") { download() }
+                        .buttonStyle(.bordered)
                 }
             }
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.vertical, DS.Space.md)
             .confirmationDialog("Delete Parakeet V3? You can download it again.", isPresented: $confirmDelete) {
                 Button("Delete", role: .destructive) {
                     Task {

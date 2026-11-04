@@ -23,6 +23,7 @@ struct ShortcutsSettingsView: View {
     @State private var escapeCancelEnabled = SettingsStorage.shared.escapeCancelEnabled
     @State private var escapeCancelPressCount = SettingsStorage.shared.escapeCancelPressCount
     @State private var escapeCancelSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
+    @State private var forceSubmitEnabled = SettingsStorage.shared.forceSubmitEnabled
     @State private var inplaceTranslationEnabled = SettingsStorage.shared.inplaceTranslationEnabled
     @State private var shortcutDisplayRefresh = 0
 
@@ -31,95 +32,38 @@ struct ShortcutsSettingsView: View {
     private let escapePressCountOptions = [2, 3]
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            ShortcutStyle.windowBackground
-                .ignoresSafeArea()
-
-            ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                header
-
-                Spacer()
-                    .frame(height: 10)
-
-                sectionTitle("ACTION HOTKEYS")
-
-                Spacer()
-                    .frame(height: 10)
-
-                actionHotkeysCard
-
-                Spacer()
-                    .frame(height: 10)
-
-                inplaceTranslationCard
-
-                Spacer()
-                    .frame(height: 10)
-
-                sectionTitle("MODIFIER KEY RECORDING")
-
-                Spacer()
-                    .frame(height: 10)
-
-                modifierKeyRecordingCard
-
-                Spacer()
-                    .frame(height: 10)
-
-                sectionTitle("CANCEL RECORDING")
-
-                Spacer()
-                    .frame(height: 10)
-
-                cancelRecordingCard
-            }
-            .frame(width: ShortcutLayout.contentWidth, alignment: .topLeading)
-            .padding(.leading, ShortcutLayout.contentLeading)
-            .padding(.top, ShortcutLayout.contentTop)
-            .padding(.bottom, ShortcutLayout.contentTop)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text("Shortcuts")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(ShortcutStyle.primaryText)
-
-            Spacer()
-
-            Text("Editable")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(ShortcutStyle.accent)
-                .padding(.horizontal, 10)
-                .frame(height: 24)
-                .background(ShortcutStyle.accentSoft, in: Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(ShortcutStyle.accentBorder, lineWidth: 1)
+        PageScaffold(title: "Shortcuts") {
+            VStack(alignment: .leading, spacing: DS.Space.xl) {
+                section("Action hotkeys", footer: "1x, 2x, 3x is how many times you press the shortcut before it triggers.") {
+                    actionHotkeysCard
                 }
+                section("Recording keys") { recordingKeysCard }
+                section("Translate in place") { inplaceTranslationCard }
+            }
         }
-        .frame(width: ShortcutLayout.contentWidth, height: 30)
     }
 
-    private func sectionTitle(_ title: String) -> some View {
-        Text(LocalizedStringKey(title))
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(ShortcutStyle.tertiaryText)
-            .frame(width: ShortcutLayout.contentWidth, height: 13, alignment: .leading)
+    private func section(
+        _ title: LocalizedStringKey,
+        footer: LocalizedStringKey? = nil,
+        @ViewBuilder content: () -> some View
+    ) -> some View {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
+            Text(title).font(DS.Font.headline)
+            content()
+            if let footer {
+                Text(footer)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 2)
+            }
+        }
     }
 
     // MARK: - Action Hotkeys
 
     private var actionHotkeysCard: some View {
         settingsCard {
-            actionHeader
-            divider
-
             actionHotkeyRow(
                 title: "Dictation",
                 shortcut: .toggleRecording,
@@ -137,7 +81,7 @@ struct ShortcutsSettingsView: View {
             divider
 
             actionHotkeyRow(
-                title: "Translate Selected Text",
+                title: "Translate selected text",
                 shortcut: .translateSelectedText,
                 pressCount: $translateSelectedTextHotkeyPressCount,
                 store: { SettingsStorage.shared.translateSelectedTextHotkeyPressCount = $0 }
@@ -153,22 +97,12 @@ struct ShortcutsSettingsView: View {
             divider
 
             actionHotkeyRow(
-                title: "Meeting Translation",
+                title: "Meeting translation",
                 shortcut: .toggleMeetingTranslation,
                 pressCount: $meetingTranslationHotkeyPressCount,
                 store: { SettingsStorage.shared.meetingTranslationHotkeyPressCount = $0 }
             )
         }
-    }
-
-    private var actionHeader: some View {
-        HStack(spacing: 0) {
-            headerCell("Action", width: ShortcutLayout.actionTitleColumn)
-            headerCell("Shortcut", width: ShortcutLayout.actionShortcutColumn)
-            headerCell("Trigger after", width: ShortcutLayout.actionTriggerColumn)
-            Spacer(minLength: 0)
-        }
-        .frame(height: 30)
     }
 
     private func actionHotkeyRow(
@@ -177,28 +111,31 @@ struct ShortcutsSettingsView: View {
         pressCount: Binding<Int>,
         store: @escaping (Int) -> Void
     ) -> some View {
-        HStack(spacing: 0) {
-            rowTitle(title, width: ShortcutLayout.actionTitleColumn)
+        HStack(spacing: DS.Space.md) {
+            rowTitle(title)
+
+            Spacer(minLength: DS.Space.md)
 
             shortcutRecorderField(for: shortcut)
-                .frame(width: ShortcutLayout.actionShortcutColumn, alignment: .leading)
 
             countSegmentedPicker(
                 selection: pressCount,
                 options: hotkeyPressCountOptions,
                 width: ShortcutLayout.actionTriggerWidth
             )
-            .frame(width: ShortcutLayout.actionTriggerColumn, alignment: .leading)
-
-            Spacer(minLength: 0)
         }
-        .frame(height: 48)
+        .padding(.horizontal, DS.Space.lg)
+        .padding(.vertical, DS.Space.md)
+        .frame(minHeight: DS.Layout.settingRowMinHeight)
         .onChange(of: pressCount.wrappedValue) { _, newValue in
             store(newValue)
         }
     }
 
-    private func shortcutRecorderField(for shortcut: KeyboardShortcuts.Name) -> some View {
+    private func shortcutRecorderField(
+        for shortcut: KeyboardShortcuts.Name,
+        onChange: @escaping () -> Void = {}
+    ) -> some View {
         let tokens = shortcutTokens(for: shortcut, refresh: shortcutDisplayRefresh)
 
         return ZStack(alignment: .leading) {
@@ -225,6 +162,7 @@ struct ShortcutsSettingsView: View {
 
             ShortcutRecorderOverlay(name: shortcut) { _ in
                 shortcutDisplayRefresh += 1
+                onChange()
             }
             .frame(width: ShortcutLayout.shortcutInputWidth, height: 32)
         }
@@ -262,61 +200,54 @@ struct ShortcutsSettingsView: View {
         PushToTalkKey.blocksInplaceTranslation(inplaceTranslationReservedKeys)
     }
 
-    private var inplaceTranslationCard: some View {
-        let blocked = inplaceTranslationBlocked
-        let active = inplaceTranslationEnabled && !blocked
-        return settingsCard {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Double-tap ⌥⌘ to translate selection in place")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(ShortcutStyle.primaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(blocked
-                        ? "Unavailable while modifier-key shortcuts use both Option keys or both Command keys."
-                        : inplaceTranslationReservedKeys.isEmpty
-                        ? "Select text, then tap Option and Command twice. The selection is replaced by its translation."
-                        : "Select text, then tap Option and Command twice, using the side your modifier-key shortcut doesn't use.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(ShortcutStyle.tertiaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 8)
-                Toggle("", isOn: $inplaceTranslationEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .disabled(blocked)
-                    .accessibilityLabel("Double-tap Option Command to translate selection in place")
-            }
-            .padding(.horizontal, 14)
-            .frame(minHeight: 48)
-            .onChange(of: inplaceTranslationEnabled) { _, newValue in
-                SettingsStorage.shared.inplaceTranslationEnabled = newValue
-            }
-            divider
-
-            HStack(spacing: 0) {
-                rowTitle("Language pair", width: 300)
-                Spacer(minLength: 0)
-                Text(SettingsStorage.shared.defaultTranslationLanguagePair.displayLabel)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(ShortcutStyle.secondaryText)
-                    .padding(.trailing, 14)
-                    .accessibilityLabel("Uses the default translation pair, \(SettingsStorage.shared.defaultTranslationLanguagePair.displayLabel)")
-            }
-            .frame(height: 48)
-            .opacity(active ? 1.0 : 0.5)
+    private var inplaceDescription: LocalizedStringKey {
+        if inplaceTranslationBlocked {
+            return "Unavailable while modifier-key shortcuts use both Option keys or both Command keys."
         }
+        if inplaceTranslationReservedKeys.isEmpty {
+            return "Select text, then tap Option and Command twice. The selection is replaced by its translation."
+        }
+        return "Select text, then tap Option and Command twice, using the side your modifier-key shortcut doesn't use."
+    }
+
+    private var inplaceTranslationCard: some View {
+        settingsCard {
+            inplaceToggleRow
+            divider
+            inplacePairRow
+        }
+    }
+
+    private var inplaceToggleRow: some View {
+        SettingRow(title: "Double-tap ⌥⌘ to translate selection in place", subtitle: inplaceDescription) {
+            Toggle("", isOn: $inplaceTranslationEnabled)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .disabled(inplaceTranslationBlocked)
+                .accessibilityLabel("Double-tap Option Command to translate selection in place")
+        }
+        .onChange(of: inplaceTranslationEnabled) { _, newValue in
+            SettingsStorage.shared.inplaceTranslationEnabled = newValue
+        }
+    }
+
+    private var inplacePairRow: some View {
+        let pairLabel = SettingsStorage.shared.defaultTranslationLanguagePair.displayLabel
+        let active = inplaceTranslationEnabled && !inplaceTranslationBlocked
+        return SettingRow(title: "Language pair") {
+            Text(pairLabel)
+                .font(DS.Font.callout.weight(.medium))
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Uses the default translation pair, \(pairLabel)")
+        }
+        .opacity(active ? 1.0 : 0.5)
     }
 
     // MARK: - Modifier Key Recording
 
-    private var modifierKeyRecordingCard: some View {
+    private var recordingKeysCard: some View {
         settingsCard {
-            modifierHeader
-            divider
-
             modifierKeyRow(
                 title: "Dictation",
                 key: $pushToTalkKey,
@@ -375,17 +306,13 @@ struct ShortcutsSettingsView: View {
                     NotificationCenter.default.post(name: .translationPushToTalkHoldStartDelayChanged, object: $0)
                 }
             )
-        }
-    }
+            divider
 
-    private var modifierHeader: some View {
-        HStack(spacing: 0) {
-            headerCell("Action", width: ShortcutLayout.modifierTitleColumn)
-            headerCell("Modifier key", width: ShortcutLayout.modifierKeyColumn)
-            headerCell("Tap trigger", width: ShortcutLayout.modifierTapColumn)
-            headerCell("Hold key + delay", width: ShortcutLayout.modifierHoldColumn)
+            cancelRecordingRow
+            divider
+
+            forceSubmitRow
         }
-        .frame(height: 30)
     }
 
     private func modifierKeyRow(
@@ -401,27 +328,58 @@ struct ShortcutsSettingsView: View {
         tapCountStore: @escaping (Int) -> Void,
         holdStartDelayStore: @escaping (TimeInterval) -> Void
     ) -> some View {
-        HStack(spacing: 0) {
-            rowTitle(title, width: ShortcutLayout.modifierTitleColumn)
+        let isAvailable = key.wrappedValue != .none
+        let isHoldActive = isAvailable && holdEnabled.wrappedValue
+
+        let keyName = key.wrappedValue.displayName
+        let subtitle: String
+        if !isAvailable {
+            subtitle = String(localized: "No modifier key")
+        } else if isHoldActive {
+            subtitle = String(localized: "Hold \(keyName) \(formattedHoldDelay(holdStartDelay.wrappedValue)) to record")
+        } else if toggleEnabled.wrappedValue {
+            subtitle = String(localized: "Tap \(keyName) \(tapCount.wrappedValue)x to start")
+        } else {
+            subtitle = String(localized: "Turn on tap or hold to use \(keyName)")
+        }
+
+        return HStack(spacing: DS.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                rowTitle(title)
+                Text(subtitle)
+                    .font(DS.Font.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: DS.Space.md)
 
             modifierKeyMenu(selection: key)
-                .frame(width: ShortcutLayout.modifierKeyColumn, alignment: .leading)
 
             tapTriggerPicker(
                 toggleEnabled: toggleEnabled,
                 tapCount: tapCount,
-                isDisabled: key.wrappedValue == .none
+                isDisabled: !isAvailable
             )
-            .frame(width: ShortcutLayout.modifierTapColumn, alignment: .leading)
 
-            holdTriggerCard(
-                key: key.wrappedValue,
-                isEnabled: holdEnabled,
-                holdStartDelay: holdStartDelay
-            )
-            .frame(width: ShortcutLayout.modifierHoldColumn, alignment: .leading)
+            HStack(spacing: DS.Space.sm) {
+                Toggle(isOn: holdEnabled) { EmptyView() }
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
+                    .accessibilityLabel(holdTriggerTitle(key: key.wrappedValue))
+                holdDelaySlider(selection: holdStartDelay, isEnabled: isHoldActive)
+                Text(isHoldActive ? formattedHoldDelay(holdStartDelay.wrappedValue) : "—")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(isHoldActive ? DS.Palette.accent : .secondary)
+                    .frame(width: 36, alignment: .trailing)
+            }
+            .frame(width: 150)
+            .disabled(!isAvailable)
+            .opacity(isAvailable ? 1 : 0.45)
         }
-        .frame(height: 77)
+        .frame(minHeight: DS.Layout.settingRowMinHeight)
+        .padding(.horizontal, DS.Space.lg)
+        .padding(.vertical, DS.Space.md)
         .onChange(of: key.wrappedValue) { _, newValue in
             keyStore(newValue)
         }
@@ -503,78 +461,6 @@ struct ShortcutsSettingsView: View {
         )
     }
 
-    private func holdTriggerCard(
-        key: PushToTalkKey,
-        isEnabled: Binding<Bool>,
-        holdStartDelay: Binding<TimeInterval>
-    ) -> some View {
-        let isAvailable = key != .none
-        let isActive = isAvailable && isEnabled.wrappedValue
-
-        return VStack(alignment: .leading, spacing: 7) {
-            Button {
-                guard isAvailable else { return }
-                isEnabled.wrappedValue.toggle()
-            } label: {
-                HStack(spacing: 8) {
-                    checkmarkBadge(isActive: isActive)
-
-                    Text(holdTriggerTitle(key: key))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(ShortcutStyle.primaryText)
-                        .lineLimit(1)
-
-                    Spacer(minLength: 6)
-
-                    Text(isActive ? formattedHoldDelay(holdStartDelay.wrappedValue) : "—")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(isActive ? ShortcutStyle.accentSoftText : ShortcutStyle.secondaryText)
-                }
-                .frame(width: 198, height: 20)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!isAvailable)
-            .accessibilityLabel(holdTriggerAccessibilityLabel(key: key, isActive: isActive))
-
-            holdDelaySlider(selection: holdStartDelay, isEnabled: isActive)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .frame(width: 218, height: 64, alignment: .topLeading)
-        .background(
-            holdTriggerBackground(isActive: isActive),
-            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(holdTriggerBorder(isActive: isActive), lineWidth: 1)
-        }
-        .opacity(isAvailable ? 1.0 : 0.45)
-    }
-
-    private func checkmarkBadge(isActive: Bool) -> some View {
-        ZStack {
-            Circle()
-                .fill(isActive ? ShortcutStyle.accent : .clear)
-                .overlay {
-                    Circle()
-                        .stroke(
-                            isActive ? ShortcutStyle.accent : ShortcutStyle.secondaryText.opacity(0.45),
-                            lineWidth: 1
-                        )
-                }
-
-            if isActive {
-                Text("✓")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .offset(y: -0.5)
-            }
-        }
-        .frame(width: 18, height: 18)
-    }
-
     private func holdDelaySlider(selection: Binding<TimeInterval>, isEnabled: Bool) -> some View {
         GeometryReader { proxy in
             let width = proxy.size.width
@@ -614,7 +500,7 @@ struct ShortcutsSettingsView: View {
                     }
             )
         }
-        .frame(width: 198, height: 18)
+        .frame(minWidth: 60, maxWidth: .infinity, minHeight: 18, maxHeight: 18)
     }
 
     private func holdDelayProgress(_ value: TimeInterval) -> CGFloat {
@@ -630,35 +516,40 @@ struct ShortcutsSettingsView: View {
 
     // MARK: - Cancel Recording
 
-    private var cancelRecordingCard: some View {
-        settingsCard {
-            HStack(spacing: 0) {
-                rowTitle("Cancel Recording", width: ShortcutLayout.cancelTitleColumn)
-
-                booleanSegmentedPicker(
-                    selection: $escapeCancelEnabled,
-                    falseLabel: "None",
-                    trueLabel: "Esc",
-                    width: 150
-                )
-                .frame(width: ShortcutLayout.cancelKeyColumn, alignment: .leading)
-
-                countSegmentedPicker(
-                    selection: $escapeCancelPressCount,
-                    options: escapePressCountOptions,
-                    width: 104
-                )
-                .disabled(!escapeCancelEnabled)
-                .opacity(escapeCancelEnabled ? 1.0 : 0.45)
-                .frame(width: ShortcutLayout.cancelTriggerColumn, alignment: .leading)
-
-                saveAudioControl
-                    .frame(width: ShortcutLayout.cancelSaveAudioColumn, alignment: .leading)
-
-                Spacer(minLength: 0)
+    private var cancelRecordingRow: some View {
+        HStack(spacing: DS.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                rowTitle("Cancel recording")
+                Text(escapeCancelEnabled
+                    ? String(localized: "Press Esc \(escapeCancelPressCount)x while recording")
+                    : String(localized: "Esc does not cancel recordings"))
+                    .font(DS.Font.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            .frame(height: 50)
+
+            Spacer(minLength: DS.Space.md)
+
+            booleanSegmentedPicker(
+                selection: $escapeCancelEnabled,
+                falseLabel: "None",
+                trueLabel: "Esc",
+                width: 104
+            )
+
+            countSegmentedPicker(
+                selection: $escapeCancelPressCount,
+                options: escapePressCountOptions,
+                width: 84
+            )
+            .disabled(!escapeCancelEnabled)
+            .opacity(escapeCancelEnabled ? 1.0 : 0.45)
+
+            saveAudioControl
         }
+        .padding(.horizontal, DS.Space.lg)
+        .padding(.vertical, DS.Space.md)
+        .frame(minHeight: DS.Layout.settingRowMinHeight)
         .onChange(of: escapeCancelEnabled) { _, newValue in
             SettingsStorage.shared.escapeCancelEnabled = newValue
             if !newValue {
@@ -670,6 +561,50 @@ struct ShortcutsSettingsView: View {
         }
         .onChange(of: escapeCancelSaveAudio) { _, newValue in
             SettingsStorage.shared.escapeCancelSaveAudio = newValue
+        }
+    }
+
+    // MARK: - Force Submit
+
+    private var forceSubmitRow: some View {
+        let shortcutLabel = KeyboardShortcuts.getShortcut(for: .forceSubmit).map { String(describing: $0) }
+        return HStack(spacing: DS.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                rowTitle("Force submit")
+                Text(forceSubmitEnabled && shortcutLabel != nil
+                    ? String(localized: "Press \(shortcutLabel ?? "") while recording to paste and press ⌘↩")
+                    : String(localized: "Does not press ⌘↩ after pasting"))
+                    .font(DS.Font.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .id(shortcutDisplayRefresh)
+            }
+
+            Spacer(minLength: DS.Space.md)
+
+            shortcutRecorderField(for: .forceSubmit) {
+                // Recording a shortcut registers it system-wide; keep it off while idle.
+                if !ForceSubmitService.shared.isActive {
+                    KeyboardShortcuts.disable(.forceSubmit)
+                }
+            }
+            .disabled(!forceSubmitEnabled)
+            .opacity(forceSubmitEnabled ? 1.0 : 0.45)
+
+            Toggle("", isOn: $forceSubmitEnabled)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .accessibilityLabel("Force submit")
+        }
+        .padding(.horizontal, DS.Space.lg)
+        .padding(.vertical, DS.Space.md)
+        .frame(minHeight: DS.Layout.settingRowMinHeight)
+        .onChange(of: forceSubmitEnabled) { _, newValue in
+            SettingsStorage.shared.forceSubmitEnabled = newValue
+            if !newValue {
+                ForceSubmitService.shared.deactivate()
+            }
         }
     }
 
@@ -706,39 +641,18 @@ struct ShortcutsSettingsView: View {
     // MARK: - Shared Controls
 
     private func settingsCard(@ViewBuilder content: () -> some View) -> some View {
-        VStack(spacing: 0) {
-            content()
+        let rows = content()
+        return Card(padding: 0) {
+            VStack(spacing: 0) { rows }
         }
-        .frame(width: ShortcutLayout.contentWidth)
-        .background(ShortcutStyle.cardBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(ShortcutStyle.separator, lineWidth: 1)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private var divider: some View {
-        Rectangle()
-            .fill(ShortcutStyle.separator)
-            .frame(width: ShortcutLayout.contentWidth, height: 1)
-    }
+    private var divider: some View { RowSeparator() }
 
-    private func headerCell(_ title: String, width: CGFloat) -> some View {
+    private func rowTitle(_ title: String) -> some View {
         Text(LocalizedStringKey(title))
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(ShortcutStyle.tertiaryText)
-            .frame(width: width, height: 30, alignment: .leading)
-            .padding(.leading, 14)
-    }
-
-    private func rowTitle(_ title: String, width: CGFloat) -> some View {
-        Text(LocalizedStringKey(title))
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(ShortcutStyle.primaryText)
+            .font(DS.Font.body)
             .lineLimit(1)
-            .frame(width: width, alignment: .leading)
-            .padding(.leading, 14)
     }
 
     private func countSegmentedPicker(
@@ -820,74 +734,26 @@ struct ShortcutsSettingsView: View {
         return String(localized: "Hold \(key.displayName)")
     }
 
-    private func holdTriggerAccessibilityLabel(key: PushToTalkKey, isActive: Bool) -> String {
-        guard key != .none else { return String(localized: "Choose a modifier key before enabling hold trigger") }
-        return isActive ? String(localized: "Disable hold trigger for \(key.displayName)") :
-            String(localized: "Enable hold trigger for \(key.displayName)")
-    }
-
-    private func holdTriggerBackground(isActive: Bool) -> Color {
-        isActive ? ShortcutStyle.holdActiveBackground : ShortcutStyle.inputBackground
-    }
-
-    private func holdTriggerBorder(isActive: Bool) -> Color {
-        isActive ? ShortcutStyle.accent.opacity(0.72) : ShortcutStyle.inputBorder
-    }
 }
 
 private enum ShortcutLayout {
-    static let contentWidth: CGFloat = 715
-    static let contentLeading: CGFloat = 22
-    static let contentTop: CGFloat = 6
-
-    static let actionTitleColumn: CGFloat = 216
-    static let actionShortcutColumn: CGFloat = 236
-    static let actionTriggerColumn: CGFloat = 150
-    static let actionTriggerWidth: CGFloat = 150
-    static let shortcutInputWidth: CGFloat = 224
-
-    static let modifierTitleColumn: CGFloat = 162
-    static let modifierKeyColumn: CGFloat = 146
-    static let modifierTapColumn: CGFloat = 164
-    static let modifierHoldColumn: CGFloat = 243
-
-    static let cancelTitleColumn: CGFloat = 216
-    static let cancelKeyColumn: CGFloat = 162
-    static let cancelTriggerColumn: CGFloat = 116
-    static let cancelSaveAudioColumn: CGFloat = 160
+    static let actionTriggerWidth: CGFloat = 114
+    static let shortcutInputWidth: CGFloat = 188
 }
 
+/// Adaptive (light + dark) colors; replaces the former dark-only hex palette.
 private enum ShortcutStyle {
-    static let windowBackground = Color(hex: 0x1C1C1E)
-    static let cardBackground = Color(hex: 0x2C2C2E)
-    static let inputBackground = Color(hex: 0x242428)
-    static let segmentBackground = Color(hex: 0x242428)
-    static let keycapBackground = Color(hex: 0x3A3A40).opacity(0.55)
-    static let holdActiveBackground = Color(hex: 0x2B2028)
-    static let sliderTrack = Color(hex: 0x4A3945)
+    static let inputBackground = Color.primary.opacity(0.05)
+    static let segmentBackground = Color.primary.opacity(0.06)
+    static let keycapBackground = Color.primary.opacity(0.08)
+    static let holdActiveBackground = DS.Palette.tintSoft
+    static let sliderTrack = Color.primary.opacity(0.15)
 
-    static let primaryText = Color(hex: 0xF5F5F7)
-    static let secondaryText = Color(hex: 0x98989D)
-    static let tertiaryText = Color(hex: 0x636366)
-    static let accent = Color(hex: 0xFF5C7E)
-    static let accentSoft = Color(hex: 0x3A2129)
-    static let accentSoftText = Color(hex: 0xFFD2DE)
-    static let accentBorder = Color(hex: 0xFF5C7E).opacity(0.25)
-    static let separator = Color.white.opacity(0.08)
-    static let inputBorder = Color(hex: 0x393940)
-    static let keycapBorder = Color.white.opacity(0.1)
-}
-
-private extension Color {
-    init(hex: UInt, opacity: Double = 1) {
-        self.init(
-            .sRGB,
-            red: Double((hex >> 16) & 0xFF) / 255,
-            green: Double((hex >> 8) & 0xFF) / 255,
-            blue: Double(hex & 0xFF) / 255,
-            opacity: opacity
-        )
-    }
+    static let primaryText = Color.primary
+    static let secondaryText = Color.secondary
+    static let accent = DS.Palette.accent
+    static let inputBorder = Color.primary.opacity(0.12)
+    static let keycapBorder = Color.primary.opacity(0.1)
 }
 
 extension Notification.Name {
@@ -1016,7 +882,7 @@ private struct ShortcutRecorderOverlay: NSViewRepresentable {
             } else {
                 statusLabel.stringValue = ""
                 actionLabel.stringValue = NSLocalizedString("edit", comment: "Starts editing a shortcut")
-                actionLabel.textColor = accent
+                actionLabel.textColor = .secondaryLabelColor
             }
 
             layer?.cornerRadius = 8

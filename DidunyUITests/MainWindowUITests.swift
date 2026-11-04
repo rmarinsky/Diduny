@@ -25,12 +25,13 @@ final class MainWindowUITests: DidunyUITestCase {
         // Sidebar label → section id and an element only that section shows.
         let sections: [(label: String, id: String, marker: (XCUIElement) -> XCUIElement)] = [
             ("Recordings", "recordings", { $0.staticTexts["No Recordings Yet"] }),
-            ("Typing Test", "typingTest", { $0.staticTexts["Typing Speed Test"] }),
+            ("Typing test", "typingTest", { $0.staticTexts["Typing Speed Test"] }),
             ("General", "general", { $0.staticTexts["Behavior"] }),
-            ("Audio & Dictation", "audioDictation", { $0.staticTexts["Test Recording"] }),
-            ("Calendar & Meetings", "meetings", { $0.staticTexts["Calendars"] }),
-            ("Local Models", "models", { $0.staticTexts["Whisper Models"] }),
-            ("Shortcuts", "shortcuts", { $0.staticTexts["Editable"] }),
+            ("Audio & dictation", "audioDictation", { $0.staticTexts["Test Recording"] }),
+            ("Calendar & meetings", "meetings", { $0.staticTexts["Calendars"] }),
+            ("Local models", "models", { $0.staticTexts["Whisper Models"] }),
+            ("Shortcuts", "shortcuts", { $0.staticTexts["Action hotkeys"] }),
+            ("About", "about", { $0.staticTexts["Author"] }),
             ("Account", "account", { $0.textFields["account.email"] }),
             ("Overview", "overview", { $0.staticTexts["Overview"] }),
         ]

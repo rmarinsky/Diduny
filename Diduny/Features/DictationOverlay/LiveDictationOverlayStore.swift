@@ -16,6 +16,9 @@ enum LiveDictationOverlayPhase: Equatable {
 @MainActor
 final class LiveDictationOverlayStore {
     var mode: RecordingMode = .voice
+    /// False while the edge panel morphs out of its tab: a static skeleton shows
+    /// instead of live content, so state updates never fight the entrance.
+    var contentRevealed = true
     var phase: LiveDictationOverlayPhase = .starting
     var connectionStatus: RealtimeConnectionStatus = .disconnected
     var audioLevel: Float = 0

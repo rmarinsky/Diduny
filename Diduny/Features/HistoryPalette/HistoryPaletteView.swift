@@ -3,6 +3,8 @@ import SwiftUI
 struct HistoryPaletteView: View {
     @State private var searchText = ""
     @State private var storage = RecordingsLibraryStorage.shared
+    @State private var listVisible = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var filteredRecordings: [Recording] {
         let withText = storage.recordings.filter { $0.transcriptionText?.isEmpty == false }
@@ -71,6 +73,10 @@ struct HistoryPaletteView: View {
                             }
                         }
                     }
+                }
+                .opacity(listVisible ? 1 : 0)
+                .onAppear {
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) { listVisible = true }
                 }
             }
 

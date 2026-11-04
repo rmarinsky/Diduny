@@ -10,6 +10,7 @@ struct AudioDictationSettingsView: View {
     @State private var testRecordingURL: URL?
     @State private var testAudioPlayer: AVAudioPlayer?
     @State private var testStatusMessage = String(localized: "")
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var transcriptionProvider: TranscriptionProvider = SettingsStorage.shared.transcriptionProvider
     @State private var translationProvider: TranscriptionProvider = SettingsStorage.shared.translationProvider
@@ -40,20 +41,24 @@ struct AudioDictationSettingsView: View {
 
     var body: some View {
         @Bindable var navigation = MainWindowController.shared
-        VStack(spacing: 0) {
+        PageScaffold(title: "Audio & dictation", scrolls: false) {
             Picker("Audio settings", selection: $navigation.showsMeetingAudioSettings) {
                 Text("Dictation").tag(false)
                 Text("Meetings").tag(true)
             }
             .pickerStyle(.segmented)
-            .frame(maxWidth: 340)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            if navigation.showsMeetingAudioSettings {
-                MeetingAudioSettingsView()
-            } else {
-                dictationForm
+            .labelsHidden()
+            .frame(width: 220)
+        } content: {
+            Group {
+                if navigation.showsMeetingAudioSettings {
+                    MeetingAudioSettingsView()
+                } else {
+                    dictationForm
+                }
             }
+            .transition(.opacity)
+            .animation(reduceMotion ? nil : DS.Motion.easeOut(0.14), value: navigation.showsMeetingAudioSettings)
         }
     }
 
@@ -184,8 +189,10 @@ struct AudioDictationSettingsView: View {
                     Text(testStatusMessage)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .transition(.opacity)
                 }
             }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: testStatusMessage.isEmpty)
         } header: {
             Text("Test Recording")
         }
