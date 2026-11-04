@@ -3,6 +3,7 @@ import KeyboardShortcuts
 import SwiftUI
 
 struct ShortcutsSettingsView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pushToTalkKey = SettingsStorage.shared.pushToTalkKey
     @State private var pushToTalkHoldEnabled = SettingsStorage.shared.pushToTalkHoldEnabled
     @State private var pushToTalkToggleEnabled = SettingsStorage.shared.pushToTalkToggleEnabled
@@ -310,36 +311,52 @@ struct ShortcutsSettingsView: View {
         tapCountStore: @escaping (Int) -> Void,
         holdStartDelayStore: @escaping (TimeInterval) -> Void
     ) -> some View {
-        HStack(alignment: .top, spacing: DS.Space.md) {
+        let isAvailable = key.wrappedValue != .none
+        let isHoldActive = isAvailable && holdEnabled.wrappedValue
+
+        return VStack(alignment: .leading, spacing: DS.Space.sm) {
             rowTitle(title)
-                .frame(minHeight: 30)
 
-            Spacer(minLength: DS.Space.md)
+            HStack(spacing: DS.Space.md) {
+                Text("Modifier key")
+                    .font(DS.Font.caption)
+                    .foregroundStyle(.secondary)
+                modifierKeyMenu(selection: key)
 
-            VStack(alignment: .trailing, spacing: DS.Space.sm) {
-                HStack(spacing: DS.Space.md) {
-                    Text("Modifier key")
-                        .font(DS.Font.caption)
-                        .foregroundStyle(.secondary)
-                    modifierKeyMenu(selection: key)
-
-                    Text("Tap trigger")
-                        .font(DS.Font.caption)
-                        .foregroundStyle(.secondary)
-                    tapTriggerPicker(
-                        toggleEnabled: toggleEnabled,
-                        tapCount: tapCount,
-                        isDisabled: key.wrappedValue == .none
-                    )
-                }
-
-                holdTriggerCard(
-                    key: key.wrappedValue,
-                    isEnabled: holdEnabled,
-                    holdStartDelay: holdStartDelay
+                Text("Tap trigger")
+                    .font(DS.Font.caption)
+                    .foregroundStyle(.secondary)
+                tapTriggerPicker(
+                    toggleEnabled: toggleEnabled,
+                    tapCount: tapCount,
+                    isDisabled: !isAvailable
                 )
+
+                Spacer(minLength: DS.Space.md)
+
+                Toggle(holdTriggerTitle(key: key.wrappedValue), isOn: holdEnabled)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .font(DS.Font.caption)
+                    .disabled(!isAvailable)
+            }
+
+            if isHoldActive {
+                HStack(spacing: DS.Space.md) {
+                    Text("Start after")
+                        .font(DS.Font.caption)
+                        .foregroundStyle(.secondary)
+                    holdDelaySlider(selection: holdStartDelay, isEnabled: true)
+                        .frame(maxWidth: 280)
+                    Text(formattedHoldDelay(holdStartDelay.wrappedValue))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .transition(.opacity)
             }
         }
+        .animation(reduceMotion ? DS.Motion.reduced : DS.Motion.easeOut(0.15), value: isHoldActive)
         .padding(.horizontal, DS.Space.lg)
         .padding(.vertical, DS.Space.md)
         .onChange(of: key.wrappedValue) { _, newValue in
@@ -421,78 +438,6 @@ struct ShortcutsSettingsView: View {
                 toggleEnabled.wrappedValue = true
             }
         )
-    }
-
-    private func holdTriggerCard(
-        key: PushToTalkKey,
-        isEnabled: Binding<Bool>,
-        holdStartDelay: Binding<TimeInterval>
-    ) -> some View {
-        let isAvailable = key != .none
-        let isActive = isAvailable && isEnabled.wrappedValue
-
-        return VStack(alignment: .leading, spacing: 7) {
-            Button {
-                guard isAvailable else { return }
-                isEnabled.wrappedValue.toggle()
-            } label: {
-                HStack(spacing: 8) {
-                    checkmarkBadge(isActive: isActive)
-
-                    Text(holdTriggerTitle(key: key))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(ShortcutStyle.primaryText)
-                        .lineLimit(1)
-
-                    Spacer(minLength: 6)
-
-                    Text(isActive ? formattedHoldDelay(holdStartDelay.wrappedValue) : "—")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(isActive ? ShortcutStyle.accentSoftText : ShortcutStyle.secondaryText)
-                }
-                .frame(width: 198, height: 20)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!isAvailable)
-            .accessibilityLabel(holdTriggerAccessibilityLabel(key: key, isActive: isActive))
-
-            holdDelaySlider(selection: holdStartDelay, isEnabled: isActive)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .frame(width: 218, height: 64, alignment: .topLeading)
-        .background(
-            holdTriggerBackground(isActive: isActive),
-            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(holdTriggerBorder(isActive: isActive), lineWidth: 1)
-        }
-        .opacity(isAvailable ? 1.0 : 0.45)
-    }
-
-    private func checkmarkBadge(isActive: Bool) -> some View {
-        ZStack {
-            Circle()
-                .fill(isActive ? ShortcutStyle.accent : .clear)
-                .overlay {
-                    Circle()
-                        .stroke(
-                            isActive ? ShortcutStyle.accent : ShortcutStyle.secondaryText.opacity(0.45),
-                            lineWidth: 1
-                        )
-                }
-
-            if isActive {
-                Text("✓")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .offset(y: -0.5)
-            }
-        }
-        .frame(width: 18, height: 18)
     }
 
     private func holdDelaySlider(selection: Binding<TimeInterval>, isEnabled: Bool) -> some View {
@@ -718,19 +663,6 @@ struct ShortcutsSettingsView: View {
         return String(localized: "Hold \(key.displayName)")
     }
 
-    private func holdTriggerAccessibilityLabel(key: PushToTalkKey, isActive: Bool) -> String {
-        guard key != .none else { return String(localized: "Choose a modifier key before enabling hold trigger") }
-        return isActive ? String(localized: "Disable hold trigger for \(key.displayName)") :
-            String(localized: "Enable hold trigger for \(key.displayName)")
-    }
-
-    private func holdTriggerBackground(isActive: Bool) -> Color {
-        isActive ? ShortcutStyle.holdActiveBackground : ShortcutStyle.inputBackground
-    }
-
-    private func holdTriggerBorder(isActive: Bool) -> Color {
-        isActive ? ShortcutStyle.accent.opacity(0.72) : ShortcutStyle.inputBorder
-    }
 }
 
 private enum ShortcutLayout {
