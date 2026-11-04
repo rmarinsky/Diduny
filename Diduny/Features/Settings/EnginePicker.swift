@@ -195,7 +195,8 @@ struct EnginePickerRow: View {
     }
 
     private var picker: some View {
-        Picker(label, selection: $selection) {
+        // apply() only on user picks: reload()'s fallback must not overwrite the saved choice.
+        Picker(label, selection: Binding(get: { selection }, set: { selection = $0; apply($0) })) {
             ForEach(options) { option in
                 if let reason = option.disabledReason {
                     Text("\(option.title) — \(reason)").tag(option.id).selectionDisabled()
@@ -206,7 +207,6 @@ struct EnginePickerRow: View {
         }
         .pickerStyle(.menu)
         .accessibilityValue(options.first { $0.id == selection }?.title ?? "")
-        .onChange(of: selection) { _, value in apply(value) }
     }
 
     private func reload() {
