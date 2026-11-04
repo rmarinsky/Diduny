@@ -494,7 +494,7 @@ struct RecordingsLibraryView: View {
                     onNavigationGuardChanged: { trimNavigationGuard = $0 }
                 )
                 .id(recording.id)
-                .inspectorColumnWidth(min: 380, ideal: 430, max: 500)
+                .inspectorColumnWidth(MainWindowController.recordingInspectorWidth)
             }
         case let .batch(id):
             if let batch = batchStorage.batches.first(where: { $0.id == id }) {
@@ -505,7 +505,7 @@ struct RecordingsLibraryView: View {
                     },
                     onClose: { requestInspectorSelection(nil) }
                 )
-                .inspectorColumnWidth(min: 380, ideal: 430, max: 500)
+                .inspectorColumnWidth(MainWindowController.recordingInspectorWidth)
             }
         case .batchComposer:
             NewTranscriptionBatchPanel(
@@ -515,7 +515,7 @@ struct RecordingsLibraryView: View {
                 },
                 onClose: { requestInspectorSelection(nil) }
             )
-            .inspectorColumnWidth(min: 430, ideal: 480, max: 560)
+            .inspectorColumnWidth(MainWindowController.recordingInspectorWidth)
         case nil:
             EmptyView()
         }

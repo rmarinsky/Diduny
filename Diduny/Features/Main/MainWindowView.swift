@@ -38,7 +38,7 @@ struct MainWindowView: View {
         }
         .background(Color(.windowBackgroundColor))
         .ignoresSafeArea(.container, edges: [.top, .bottom])
-        .frame(minWidth: 1000, idealWidth: 1000, minHeight: 680, idealHeight: 680)
+        .frame(minWidth: 1000, minHeight: 680)
         .onAppear {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)

@@ -72,6 +72,25 @@ final class MainWindowController {
         appDelegate?.toggleMeetingRecording()
     }
 
+    static let defaultContentSize = NSSize(width: 1000, height: 680)
+    static let recordingInspectorWidth: CGFloat = 480
+
+    /// The window has one fixed size; it widens only while a recording is open in the inspector.
+    func setRecordingInspectorExpanded(_ expanded: Bool) {
+        guard let window else { return }
+        var size = Self.defaultContentSize
+        if expanded { size.width += Self.recordingInspectorWidth }
+        let target = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        guard window.frame.size != target.size else { return }
+        var frame = window.frame
+        frame.origin.y += frame.height - target.height
+        frame.size = target.size
+        if let visible = window.screen?.visibleFrame, frame.maxX > visible.maxX {
+            frame.origin.x = max(visible.minX, visible.maxX - frame.width)
+        }
+        window.setFrame(frame, display: true, animate: true)
+    }
+
     func checkForUpdates() {
         appDelegate?.updaterManager.checkForUpdates()
     }
@@ -136,18 +155,16 @@ final class MainWindowController {
         let hostingView = NSHostingView(rootView: view)
 
         let w = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1000, height: 680),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            contentRect: NSRect(origin: .zero, size: Self.defaultContentSize),
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
         w.title = "Diduny"
         w.contentView = hostingView
         configureUnifiedChrome(for: w)
-        w.contentMinSize = NSSize(width: 900, height: 600)
         w.isReleasedWhenClosed = false
         w.collectionBehavior.insert(.moveToActiveSpace)
-        w.setFrameAutosaveName("diduny.main")
         w.center()
 
         windowDelegate = MainWindowDelegate { [weak self] in
