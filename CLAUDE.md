@@ -172,7 +172,8 @@ To ship a release:
    or `release:major` (breaking change), and update release highlights
    (`Diduny/Resources/ReleaseHighlights.json`, EN + UA) **and the "What's new" GIF**:
    record the real app (demo recordings only; `screencapture -v -V <sec> -R x,y,w,h -x clip.mov`
-   into the gitignored `release-demo/clips/`), cut stills into `release-demo/frames/`, script the
+   into the gitignored `release-demo/clips/`), cut stills into the gitignored `release-demo/frames/`
+   (raw footage may show private notes; only the masked GIF is committed), script the
    montage in `release-demo/scenario.js` (camera moves, transitions, highlights, animated shortcut
    keys, masks over anything private, UA + EN subtitles; preview `open release-demo/player.html`),
    run `python3 scripts/render_release_gif.py` → `Diduny/Resources/ReleaseDemo.gif`, and embed the GIF at
