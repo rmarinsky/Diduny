@@ -44,19 +44,32 @@ struct SettingRow<Control: View>: View {
 }
 
 /// Settings group: a padding-0 Card whose rows are separated by 1 pt hairlines at 8%.
-struct SettingsGroup<Content: View>: View {
+/// `trailing` sits next to the title (status pills).
+struct SettingsGroup<Trailing: View, Content: View>: View {
     var title: LocalizedStringKey?
+    @ViewBuilder var trailing: () -> Trailing
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.sm) {
-            if let title {
-                Text(title).font(DS.Font.headline)
+            if title != nil || Trailing.self != EmptyView.self {
+                HStack {
+                    if let title { Text(title).font(DS.Font.headline) }
+                    Spacer()
+                    trailing()
+                }
             }
+            let rows = content()
             Card(padding: 0) {
-                VStack(spacing: 0) { content() }
+                VStack(spacing: 0) { rows }
             }
         }
+    }
+}
+
+extension SettingsGroup where Trailing == EmptyView {
+    init(title: LocalizedStringKey? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.init(title: title, trailing: { EmptyView() }, content: content)
     }
 }
 

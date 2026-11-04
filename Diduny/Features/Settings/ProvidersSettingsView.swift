@@ -7,68 +7,74 @@ struct ProvidersSettingsView: View {
     private let registry = ProviderRegistry.shared
 
     var body: some View {
-        PageScaffold(title: "Providers", scrolls: false) { formContent }
-    }
-
-    private var formContent: some View {
-        Form {
-            if !resetJobs.isEmpty {
-                Section {
-                    HStack(alignment: .top) {
-                        Label(
-                            String(format: String(localized: "The key was removed. %@ now use Diduny Cloud."), Self.jobList(resetJobs)),
-                            systemImage: "info.circle"
-                        )
-                        .font(.callout)
-                        Spacer()
-                        Button {
-                            resetJobs = []
-                        } label: {
-                            Image(systemName: "xmark")
+        PageScaffold(title: "Providers") {
+            VStack(alignment: .leading, spacing: DS.Space.xl) {
+                if !resetJobs.isEmpty {
+                    Card {
+                        HStack(alignment: .top) {
+                            Label(
+                                String(format: String(localized: "The key was removed. %@ now use Diduny Cloud."), Self.jobList(resetJobs)),
+                                systemImage: "info.circle"
+                            )
+                            .font(DS.Font.body)
+                            Spacer()
+                            Button {
+                                resetJobs = []
+                            } label: {
+                                Image(systemName: "xmark")
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel(Text("Dismiss"))
                         }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel(Text("Dismiss"))
+                    }
+                }
+
+                EnginesByModeSection()
+
+                ForEach(registry.modules, id: \.id) { module in
+                    if module.requiresKey {
+                        ByokProviderSection(module: module, onRemoved: { resetJobs = $0 })
+                    } else {
+                        builtInSection(module)
                     }
                 }
             }
-
-            EnginesByModeSection()
-
-            ForEach(registry.modules, id: \.id) { module in
-                if module.requiresKey {
-                    ByokProviderSection(module: module, onRemoved: { resetJobs = $0 })
-                } else {
-                    builtInSection(module)
-                }
-            }
         }
-        .formStyle(.grouped)
+    }
+
+    private func providerRow(_ content: some View) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.vertical, DS.Space.md)
     }
 
     @ViewBuilder
     private func builtInSection(_ module: any STTProviderModule) -> some View {
         let isLocal = module.id == STTProviderID.localWhisper
-        Section {
-            Text(isLocal ? "Audio never leaves your Mac." : "Included with your account. No key needed.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+        SettingsGroup(title: LocalizedStringKey(module.displayName)) {
+            ProviderStatusPill(
+                text: isLocal ? String(localized: "On this Mac") : String(localized: "Built in"),
+                systemImage: isLocal ? "desktopcomputer" : "cloud",
+                color: .secondary
+            )
+        } content: {
+            providerRow(
+                Text(isLocal ? "Audio never leaves your Mac." : "Included with your account. No key needed.")
+                    .font(DS.Font.callout)
+                    .foregroundStyle(.secondary)
+            )
             ForEach(module.models, id: \.id) { model in
-                ChipRow(chips: CapabilityChip.chips(for: model, requiresKey: false))
+                RowSeparator()
+                providerRow(ChipRow(chips: CapabilityChip.chips(for: model, requiresKey: false)))
             }
-            Button(isLocal ? "Manage models" : "Account and quota") {
-                MainWindowController.shared.showWindow(section: isLocal ? .models : .account)
-            }
-            .buttonStyle(.link)
-        } header: {
-            HStack {
-                Text(module.displayName)
-                Spacer()
-                ProviderStatusPill(
-                    text: isLocal ? String(localized: "On this Mac") : String(localized: "Built in"),
-                    systemImage: isLocal ? "desktopcomputer" : "cloud",
-                    color: .secondary
-                )
-            }
+            RowSeparator()
+            providerRow(
+                Button(isLocal ? "Manage models" : "Account and quota") {
+                    MainWindowController.shared.showWindow(section: isLocal ? .models : .account)
+                }
+                .buttonStyle(.bordered)
+            )
         }
     }
 
@@ -102,8 +108,8 @@ struct ProviderStatusPill: View {
             }
             Text(text).fixedSize()
         }
-        .font(.caption2.weight(.medium))
-        .padding(.horizontal, 6)
+        .font(DS.Font.caption.weight(.medium))
+        .padding(.horizontal, 8)
         .padding(.vertical, 2)
         .background(color.opacity(0.15), in: Capsule())
         .foregroundStyle(color)
@@ -162,63 +168,98 @@ private struct ByokProviderSection: View {
         return ElevenLabsAccountService(session: URLSession(configuration: config))
     }
 
+    private func row(_ content: some View) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.vertical, DS.Space.md)
+    }
+
     var body: some View {
-        Section {
-            keyRow
+        SettingsGroup(title: LocalizedStringKey(module.displayName)) {
+            pill
+        } content: {
+            row(keyRow)
             if saveFailed {
-                Text("Couldn't save the key to Keychain.").font(.caption).foregroundStyle(.red)
+                RowSeparator()
+                row(Text("Couldn't save the key to Keychain.").font(DS.Font.callout).foregroundStyle(.red))
             }
             if maskedKey != nil, !isReplacing {
-                HStack {
-                    Button("Test connection") { Task { await test() } }
-                        .disabled(status == .testing)
-                    Spacer()
-                    Button("Remove", role: .destructive) { confirmRemove = true }
-                }
+                RowSeparator()
+                row(
+                    HStack {
+                        Button("Test connection") { Task { await test() } }
+                            .buttonStyle(.bordered)
+                            .disabled(status == .testing)
+                        Spacer()
+                        Button("Remove", role: .destructive) { confirmRemove = true }
+                            .buttonStyle(.bordered)
+                    }
+                )
                 if let detail = statusDetail {
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                    RowSeparator()
+                    if case .failed = status {
+                        row(Banner(message: Text(detail)))
+                    } else {
+                        row(Text(detail).font(DS.Font.callout).foregroundStyle(.secondary))
+                    }
                 }
                 if showsDashboardLink {
-                    Link("Open ElevenLabs dashboard", destination: Self.dashboardURL).font(.caption)
+                    RowSeparator()
+                    row(
+                        Link("Open ElevenLabs dashboard", destination: Self.dashboardURL)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    )
                 }
-                usageBlock
+                if usage != .hidden {
+                    RowSeparator()
+                    row(usageBlock)
+                }
             }
 
             ForEach(module.models, id: \.id) { model in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(model.displayName).font(.callout)
-                    ChipRow(chips: CapabilityChip.chips(for: model, requiresKey: true))
-                }
+                RowSeparator()
+                row(
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.displayName).font(DS.Font.body)
+                        ChipRow(chips: CapabilityChip.chips(for: model, requiresKey: true))
+                    }
+                )
             }
 
-            Label(
-                "Translation goes through Diduny. ElevenLabs transcribes in the original language; the transcript text is then sent to Diduny to be translated and uses your Diduny quota. Audio and your key are never sent to Diduny.",
-                systemImage: "arrow.triangle.branch"
-            )
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            Label(
-                "Diduny asks ElevenLabs to delete each file transcript after use. ElevenLabs may keep backups for up to 30 days and in its logs; zero retention is not supported. Live (realtime) transcripts are not claimed to be deleted. Audio is sent to ElevenLabs only for jobs set to ElevenLabs.",
-                systemImage: "hand.raised"
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            DisclosureGroup("Before you start", isExpanded: $guidanceExpanded) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("1. Create an API key in your ElevenLabs dashboard.")
-                    Text("2. If you restrict the key, enable Speech to Text, and Usage (read) to see credits.")
-                    Text("3. Accept the Scribe terms in your ElevenLabs dashboard before your first recording. Without this, ElevenLabs rejects live transcription.")
-                    Link("Open ElevenLabs dashboard", destination: Self.dashboardURL)
+            RowSeparator()
+            row(
+                VStack(alignment: .leading, spacing: DS.Space.sm) {
+                    Label(
+                        "Translation goes through Diduny. ElevenLabs transcribes in the original language; the transcript text is then sent to Diduny to be translated and uses your Diduny quota. Audio and your key are never sent to Diduny.",
+                        systemImage: "arrow.triangle.branch"
+                    )
+                    .font(DS.Font.callout)
+                    Label(
+                        "Diduny asks ElevenLabs to delete each file transcript after use. ElevenLabs may keep backups for up to 30 days and in its logs; zero retention is not supported. Live (realtime) transcripts are not claimed to be deleted. Audio is sent to ElevenLabs only for jobs set to ElevenLabs.",
+                        systemImage: "hand.raised"
+                    )
+                    .font(DS.Font.caption)
                 }
-                .font(.caption)
-            }
-        } header: {
-            HStack {
-                Text(module.displayName)
-                Spacer()
-                pill
-            }
+                .foregroundStyle(.secondary)
+            )
+
+            RowSeparator()
+            row(
+                DisclosureGroup("Before you start", isExpanded: $guidanceExpanded) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("1. Create an API key in your ElevenLabs dashboard.")
+                        Text("2. If you restrict the key, enable Speech to Text, and Usage (read) to see credits.")
+                        Text("3. Accept the Scribe terms in your ElevenLabs dashboard before your first recording. Without this, ElevenLabs rejects live transcription.")
+                        Link("Open ElevenLabs dashboard", destination: Self.dashboardURL)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                    .font(DS.Font.callout)
+                    .padding(.top, DS.Space.sm)
+                }
+            )
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text(module.displayName))
@@ -246,6 +287,7 @@ private struct ByokProviderSection: View {
                     keyInput = ""
                     isReplacing = true
                 }
+                .buttonStyle(.bordered)
             }
         } else {
             HStack {
@@ -256,6 +298,7 @@ private struct ByokProviderSection: View {
                         SecureField("API key", text: $keyInput, prompt: Text("Paste your ElevenLabs API key"))
                     }
                 }
+                .textFieldStyle(.roundedBorder)
                 .onSubmit(save)
                 Button {
                     if let text = NSPasteboard.general.string(forType: .string) {
@@ -274,9 +317,12 @@ private struct ByokProviderSection: View {
                     .accessibilityLabel(reveal ? Text("Hide key") : Text("Show key"))
                 }
                 Button("Save", action: save)
+                    .buttonStyle(.borderedProminent)
+                    .tint(DS.Palette.accent)
                     .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if isReplacing {
                     Button("Cancel") { isReplacing = false; keyInput = "" }
+                        .buttonStyle(.bordered)
                         .keyboardShortcut(.cancelAction)
                 }
             }
@@ -346,7 +392,7 @@ private struct ByokProviderSection: View {
         case .unavailable:
             HStack {
                 Text("Usage unavailable right now.").font(.caption).foregroundStyle(.secondary)
-                Button("Try again") { Task { await loadUsage() } }.buttonStyle(.link).font(.caption)
+                Button("Try again") { Task { await loadUsage() } }.buttonStyle(.bordered).controlSize(.small)
             }
         case let .loaded(value):
             VStack(alignment: .leading, spacing: 4) {
