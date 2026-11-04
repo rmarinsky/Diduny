@@ -3,6 +3,10 @@ import SwiftUI
 
 struct MeetingSettingsView: View {
     var body: some View {
+        PageScaffold(title: "Calendar & meetings", scrolls: false) { formContent }
+    }
+
+    private var formContent: some View {
         Form {
             CalendarSettingsSection()
             Section {

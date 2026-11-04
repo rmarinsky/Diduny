@@ -22,6 +22,10 @@ struct OfflineModelsSettingsView: View {
     private let modelManager = WhisperModelManager.shared
 
     var body: some View {
+        PageScaffold(title: "Local models", scrolls: false) { formContent }
+    }
+
+    private var formContent: some View {
         Form {
             if ParakeetModelStore.isSupportedHardware { ParakeetModelSection() }
             whisperModelsSection

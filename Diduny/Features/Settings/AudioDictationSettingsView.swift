@@ -41,20 +41,24 @@ struct AudioDictationSettingsView: View {
 
     var body: some View {
         @Bindable var navigation = MainWindowController.shared
-        VStack(spacing: 0) {
+        PageScaffold(title: "Audio & dictation", scrolls: false) {
             Picker("Audio settings", selection: $navigation.showsMeetingAudioSettings) {
                 Text("Dictation").tag(false)
                 Text("Meetings").tag(true)
             }
             .pickerStyle(.segmented)
-            .frame(maxWidth: 340)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            if navigation.showsMeetingAudioSettings {
-                MeetingAudioSettingsView()
-            } else {
-                dictationForm
+            .labelsHidden()
+            .frame(width: 220)
+        } content: {
+            Group {
+                if navigation.showsMeetingAudioSettings {
+                    MeetingAudioSettingsView()
+                } else {
+                    dictationForm
+                }
             }
+            .transition(.opacity)
+            .animation(reduceMotion ? nil : DS.Motion.easeOut(0.14), value: navigation.showsMeetingAudioSettings)
         }
     }
 

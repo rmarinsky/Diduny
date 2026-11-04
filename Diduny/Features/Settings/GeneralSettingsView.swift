@@ -12,16 +12,27 @@ struct GeneralSettingsView: View {
     @State private var screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
     @State private var dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
     @State private var meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
-
-    private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
-    }
-
-    private var buildNumber: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
-    }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        PageScaffold(title: "General", scrolls: false) {
+            form
+        }
+        .onAppear {
+            launchAtLogin = LaunchAtLogin.isEnabled
+            recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
+            showLiveTranscriptModal = SettingsStorage.shared.showLiveTranscriptModal
+            typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
+            screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
+            dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
+            meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
+            typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
+        }
+    }
+
+    private var form: some View {
         Form {
             AppLanguageSettingsSection()
 
@@ -57,6 +68,7 @@ struct GeneralSettingsView: View {
                         .onChange(of: showLiveTranscriptModal) { _, newValue in
                             SettingsStorage.shared.showLiveTranscriptModal = newValue
                         }
+                        .transition(.opacity)
                 }
 
             } header: {
@@ -99,7 +111,7 @@ struct GeneralSettingsView: View {
                 Button("Open Typing Speed Test…") {
                     MainWindowController.shared.showWindow(section: .typingTest)
                 }
-                .buttonStyle(.link)
+                .buttonStyle(.bordered)
             } header: {
                 Text("Statistics")
             } footer: {
@@ -130,7 +142,7 @@ struct GeneralSettingsView: View {
                 Button("Delete Expired History Now") {
                     RecordingsLibraryStorage.shared.pruneExpiredRecordings()
                 }
-                .buttonStyle(.link)
+                .buttonStyle(.bordered)
             } header: {
                 Text("History & Storage")
             } footer: {
@@ -158,57 +170,13 @@ struct GeneralSettingsView: View {
                 Button("Open Setup Guide") {
                     openSetupGuide()
                 }
-                .buttonStyle(.link)
+                .buttonStyle(.bordered)
             } header: {
                 Text("Help")
             }
-
-            Section {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Diduny")
-                            .font(.headline)
-                        Text("Version \(appVersion) (\(buildNumber))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    Spacer()
-                    Button("Check for Updates…") {
-                        MainWindowController.shared.checkForUpdates()
-                    }
-                    .buttonStyle(.link)
-                }
-
-                Link(destination: URL(string: "https://rmarinsky.com.ua")!) {
-                    HStack {
-                        Text("Website")
-                        Spacer()
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-
-                Text("Made in Ukraine · © 2024–2026 Roman Marinsky")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } header: {
-                Text("About")
-            }
         }
         .formStyle(.grouped)
-        .onAppear {
-            launchAtLogin = LaunchAtLogin.isEnabled
-            recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
-            showLiveTranscriptModal = SettingsStorage.shared.showLiveTranscriptModal
-            typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
-            screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
-            dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
-            meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
-            typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
-        }
+        .animation(reduceMotion ? nil : DS.Motion.easeInOut(0.18), value: recordingFeedbackSurface)
     }
 
     // MARK: - Helpers

@@ -7,6 +7,10 @@ struct ProvidersSettingsView: View {
     private let registry = ProviderRegistry.shared
 
     var body: some View {
+        PageScaffold(title: "Providers", scrolls: false) { formContent }
+    }
+
+    private var formContent: some View {
         Form {
             if !resetJobs.isEmpty {
                 Section {

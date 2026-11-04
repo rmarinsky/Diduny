@@ -17,6 +17,10 @@ struct AccountSettingsView: View {
     }
 
     var body: some View {
+        PageScaffold(title: "Account", scrolls: false) { formContent }
+    }
+
+    private var formContent: some View {
         Form {
             Section("Account") {
                 #if DEV_BUILD
