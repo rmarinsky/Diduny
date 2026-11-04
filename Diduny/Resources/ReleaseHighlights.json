@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Copy a transcript straight from the Recordings list",
+    "headline": "Bring your own ElevenLabs key",
     "highlights": [
-      "The button next to Delete now copies the recording's transcript, with times and speakers as shown. Recordings without a transcript still get the Transcribe button.",
-      "The in-place selection translation option in Settings → Shortcuts is now fully translated into Ukrainian.",
-      "Double-tap ⌥⌘ now works alongside a Right Option dictation key: tap the left Option with Command. It is turned off only when push-to-talk takes both Option keys or both Command keys."
+      "Settings → Providers: add your ElevenLabs API key and use it for dictation, dictation translation and live meetings. The key stays in your Mac's Keychain, and Diduny asks ElevenLabs to delete each transcript after saving it.",
+      "Pick the engine per job in Audio & Dictation and Calendar & Meetings. Diduny Cloud stays the default, and \"Models\" is now called \"Local Models\".",
+      "Recordings search and the Overview stats are much faster. Overview opens on the current calendar month."
     ]
   },
   "uk": {
-    "headline": "Копіюй транскрипт просто зі списку записів",
+    "headline": "Свій ключ ElevenLabs",
     "highlights": [
-      "Кнопка поруч із «Видалити» тепер копіює транскрипт запису з часом і мовцями, як на екрані. Для записів без транскрипту там і далі кнопка «Транскрибувати».",
-      "Опція перекладу виділеного тексту на місці в Налаштуваннях → Клавіатурні скорочення тепер повністю перекладена українською.",
-      "Подвійне натискання ⌥⌘ тепер працює і з диктуванням на правому Option: натискай лівий Option разом із Command. Вимикається воно лише тоді, коли push-to-talk займає обидва Option або обидва Command."
+      "Налаштування → Провайдери: додай свій API-ключ ElevenLabs і використовуй його для диктування, перекладу диктування та живих зустрічей. Ключ лишається в Keychain твого Mac, а Diduny просить ElevenLabs видалити кожен транскрипт після збереження.",
+      "Обирай рушій для кожного завдання в «Аудіо й диктування» та «Календар і зустрічі». Diduny Cloud лишається за замовчуванням, а «Моделі» тепер називаються «Локальні моделі».",
+      "Пошук у записах і статистика в Огляді працюють значно швидше. Огляд відкривається на поточному календарному місяці."
     ]
   }
 }
