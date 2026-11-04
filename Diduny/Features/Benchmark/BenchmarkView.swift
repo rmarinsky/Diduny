@@ -232,31 +232,36 @@ private struct BenchmarkResultsView: View {
                     .buttonStyle(.bordered)
             }
         } content: {
-            VStack(alignment: .leading, spacing: DS.Space.md) {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 12) {
-                    ForEach(run.engines) { engine in summaryCard(engine) }
+VStack(alignment: .leading, spacing: DS.Space.md) {
+                summaryTable
+
+                if excludedClips > 0 && !runner.isRunning {
+                    Text("\(excludedClips) clips excluded (empty or failed)")
+                        .font(DS.Font.caption).foregroundStyle(.secondary)
                 }
 
-                Text("Percent = share of Reference words this engine got different (lower is closer). Reference is the selected engine's text; for Diduny that is the text before server cleanup. Time = from Stop to final text; Diduny is replayed over the live socket like real dictation.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: DS.Space.xs) {
+                    Text("Difference = share of Reference words that changed. Speed = Stop to final text.")
+                        .font(DS.Font.caption).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.tail)
+                    Image(systemName: "info.circle")
+                        .font(DS.Font.caption).foregroundStyle(.secondary)
+                        .help("Difference is the share of Reference words this engine got different (lower is closer). Reference is the selected engine's text; for Diduny that is the text before server cleanup. Speed is the time from Stop to final text; Diduny is replayed over the live socket like real dictation.")
+                        .accessibilityLabel("About Difference and Speed")
+                }
 
-                HStack(spacing: 12) {
-                    // Chips scroll sideways instead of a segmented control, which can't
-                    // shrink and pushed the window past the screen with 5+ engines.
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            filterChip("all", "All clips", run.clips.count)
-                            ForEach(run.engines.filter { $0.id != run.referenceEngineID }) { engine in
-                                filterChip(engine.id, "\(engine.name) differs", differingCount(engine.id))
-                            }
-                            filterChip("unvoted", "Not voted", run.clips.filter { run.votes[$0.id] == nil }.count)
-                        }
+                HStack(spacing: DS.Space.md) {
+                    Picker("Filter", selection: $filter) {
+                        Text("\(String(localized: "All clips")) \(run.clips.count)").tag("all")
+                        Text("\(String(localized: "Differences")) \(differingClipCount)").tag("diff")
                     }
-                    .frame(maxWidth: .infinity)
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 280)
+                    Spacer(minLength: DS.Space.md)
                     Toggle("Count punctuation and case", isOn: $strict)
                         .toggleStyle(.checkbox)
-                        .font(.system(size: 11.5))
+                        .font(DS.Font.callout)
                         .fixedSize()
                 }
 
@@ -279,31 +284,12 @@ private struct BenchmarkResultsView: View {
         }
     }
 
-    private var visibleClips: [BenchmarkRun.Clip] {
-        run.clips.filter { clip in
-            switch filter {
-            case "all": return true
-            case "unvoted": return run.votes[clip.id] == nil
-            default:
-                return differs(clip, filter)
-            }
-        }
+private var visibleClips: [BenchmarkRun.Clip] {
+        filter == "diff" ? run.clips.filter { clip in run.engines.contains { $0.id != run.referenceEngineID && differs(clip, $0.id) } } : run.clips
     }
 
-    private func filterChip(_ id: String, _ title: String, _ count: Int) -> some View {
-        let on = filter == id
-        return Button { filter = id } label: {
-            HStack(spacing: 4) {
-                Text(title)
-                Text("\(count)").monospacedDigit().opacity(0.7)
-            }
-            .font(.system(size: 12, weight: .medium))
-            .padding(.horizontal, 10).padding(.vertical, 4)
-            .foregroundStyle(on ? .white : .primary)
-            .background(on ? Color.accentColor : Color(.separatorColor).opacity(0.5), in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
+    private var differingClipCount: Int {
+        run.clips.filter { clip in run.engines.contains { $0.id != run.referenceEngineID && differs(clip, $0.id) } }.count
     }
 
     /// How the engine runs, so "Diduny" isn't read as just another model.
@@ -322,71 +308,103 @@ private struct BenchmarkResultsView: View {
         (diff(clip, engineID)?.errors ?? 0) > 0
     }
 
-    private func differingCount(_ engineID: String) -> Int {
-        run.clips.filter { differs($0, engineID) }.count
+    private var excludedClips: Int {
+        run.engines.map { run.summary(for: $0.id, strict: strict).excluded }.max() ?? 0
     }
 
-    /// Engine filter selected → that clip shows only Reference and this engine.
-    private var focusedEngines: [BenchmarkRun.Engine] {
-        guard run.engines.contains(where: { $0.id == filter }) else { return run.engines }
-        return run.engines.filter { $0.id == run.referenceEngineID || $0.id == filter }
+    // MARK: Summary table
+
+    private enum Col {
+        static let speed: CGFloat = 90
+        static let difference: CGFloat = 100
+        static let action: CGFloat = 130
+        static let rowHeight: CGFloat = 40
     }
 
-    private var bestEngine: String? {
-        run.engines.compactMap { e in run.summary(for: e.id, strict: strict).rate.map { (e.id, $0) } }.min { $0.1 < $1.1 }?.0
+    private struct Row {
+        let engine: BenchmarkRun.Engine
+        let isReference: Bool
+        let rate: Double?
+        let averageSeconds: Double?
     }
 
-    private func summaryCard(_ engine: BenchmarkRun.Engine) -> some View {
-        let s = run.summary(for: engine.id, strict: strict)
-        let finished = run.clips.filter { run.cell($0.id, engine.id)?.text != nil }.count
-        let isFocused = filter == engine.id
-        let isBest = engine.id == bestEngine
-        let isDefault = defaultSelection(for: engine.id).map { isCurrentDefault($0) } ?? false
-        return VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Text(engine.name).font(.system(size: 13, weight: .semibold))
-                if isDefault { badge("Default") }
+    private var rows: [Row] {
+        run.engines.map { engine in
+            let s = run.summary(for: engine.id, strict: strict)
+            let finished = run.clips.filter { run.cell($0.id, engine.id)?.text != nil }.count
+            return Row(engine: engine, isReference: engine.id == run.referenceEngineID, rate: s.rate,
+                       averageSeconds: finished > 0 ? s.seconds / Double(finished) : nil)
+        }
+    }
+
+    private var summaryTable: some View {
+        let rows = rows
+        let timed = rows.compactMap(\.averageSeconds)
+        let fastest = !runner.isRunning && timed.count > 1 ? timed.min() : nil
+        return Card(padding: 0) {
+            VStack(spacing: 0) {
+                HStack(spacing: DS.Space.md) {
+                    Text("Engine").frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Speed").frame(width: Col.speed, alignment: .trailing)
+                    Text("Difference").frame(width: Col.difference, alignment: .trailing)
+                    Color.clear.frame(width: Col.action, height: 1)
+                }
+                .font(DS.Font.caption.weight(.medium)).foregroundStyle(.secondary)
+                .padding(.horizontal, DS.Space.lg).padding(.vertical, DS.Space.sm)
+                ForEach(rows, id: \.engine.id) { row in
+                    RowSeparator()
+                    tableRow(row, isFastest: fastest != nil && row.averageSeconds == fastest)
+                }
             }
-            HStack(spacing: 4) {
-                Text(modeLabel(engine))
-                    .font(.system(size: 10.5, weight: .medium)).foregroundStyle(.secondary)
+        }
+    }
+
+    private func tableRow(_ row: Row, isFastest: Bool) -> some View {
+        let pending = runner.isRunning
+        let speed = row.averageSeconds.map { String(format: "%.2f s", $0) } ?? (pending ? "…" : "—")
+        let difference: String = row.isReference ? String(localized: "Reference")
+            : row.rate.map { String(format: "%.1f%%", $0 * 100) } ?? (pending ? "…" : "—")
+        let selection = defaultSelection(for: row.engine.id)
+        let isDefault = selection.map { isCurrentDefault($0) } ?? false
+        return HStack(spacing: DS.Space.md) {
+            HStack(spacing: DS.Space.sm) {
+                Text(row.engine.name).font(DS.Font.headline).lineLimit(1)
+                Text(modeLabel(row.engine))
+                    .font(DS.Font.caption).foregroundStyle(.secondary)
                     .padding(.horizontal, 6).padding(.vertical, 1)
                     .background(Color(.separatorColor).opacity(0.5), in: Capsule())
+                    .lineLimit(1)
             }
-            Text(s.rate.map { String(format: "%.1f%%", $0 * 100) } ?? String(localized: "Reference"))
-                .font(.system(size: 22, weight: .bold))
-            Text(s.rate == nil ? "Others are compared with it" : "words differ · lower is closer")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(String(format: String(localized: "%.2f s Stop → text"), s.seconds / Double(max(finished, 1))))
-                .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-            Text(String(format: "model load %.1f s · votes %d of %d", s.loadSeconds, s.votes, run.clips.count))
-                .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-            if s.excluded > 0 {
-                Text("\(s.excluded) clips excluded").font(.system(size: 11)).foregroundStyle(.orange)
-            }
-            if let selection = defaultSelection(for: engine.id), !isDefault {
-                Button("Make default") {
-                    SettingsStorage.shared.providerDefaults.setSelection(selection, for: .dictation)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(speed)
+                .font(.system(size: 13, weight: isFastest ? .semibold : .regular, design: .monospaced))
+                .foregroundStyle(isFastest ? DS.Palette.accent : Color.primary)
+                .frame(width: Col.speed, alignment: .trailing)
+            Text(difference)
+                .font(.system(size: 13, design: .monospaced))
+                .foregroundStyle(row.isReference ? Color.secondary : Color.primary)
+                .frame(width: Col.difference, alignment: .trailing)
+            Group {
+                if isDefault {
+                    badge("Default")
+                } else if let selection, !pending {
+                    Button("Make default") {
+                        SettingsStorage.shared.providerDefaults.setSelection(selection, for: .dictation)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                } else {
+                    Color.clear
                 }
-                .controlSize(.small)
-                .padding(.top, 6)
             }
+            .frame(width: Col.action, alignment: .trailing)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(isBest || isFocused ? Color("BrandTintSoft") : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(isBest || isFocused ? Color.accentColor : Color(.separatorColor), lineWidth: isBest || isFocused ? 1.5 : 0.5))
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .onTapGesture {
-            guard s.rate != nil else { return }
-            filter = isFocused ? "all" : engine.id
-        }
+        .padding(.horizontal, DS.Space.lg)
+        .frame(height: Col.rowHeight)
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(s.rate != nil ? .isButton : [])
     }
 
+    
     private func clipBlock(_ clip: BenchmarkRun.Clip) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
@@ -401,13 +419,8 @@ private struct BenchmarkResultsView: View {
                 Text(duration(clip.durationSeconds)).font(.system(size: 12, weight: .medium, design: .monospaced))
                 Text(clip.createdAt, style: .date).font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            ForEach(focusedEngines) { engine in
+            ForEach(run.engines) { engine in
                 engineRow(clip, engine)
-            }
-            if focusedEngines.count == 2, let d = diff(clip, filter) {
-                Text("\(d.errors) of \(d.referenceWords) words differ")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .padding(.leading, 120)
             }
             HStack(spacing: 4) {
                 Text("Which is right?").font(.system(size: 11)).foregroundStyle(.secondary)

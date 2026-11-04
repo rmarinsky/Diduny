@@ -1691,3 +1691,10 @@
 "Force submit" = "Примусове надсилання";
 "Press %@ while recording to paste and press ⌘↩" = "Натисніть %@ під час запису, щоб вставити й натиснути ⌘↩";
 "Does not press ⌘↩ after pasting" = "Не натискає ⌘↩ після вставлення";
+"Differences" = "Відмінності";
+"%lld clips excluded (empty or failed)" = "Виключено записів: %lld (порожні або з помилкою)";
+"Difference = share of Reference words that changed. Speed = Stop to final text." = "Відмінність — частка слів Зразка, які змінилися. Швидкість — від Стоп до фінального тексту.";
+"Difference is the share of Reference words this engine got different (lower is closer). Reference is the selected engine's text; for Diduny that is the text before server cleanup. Speed is the time from Stop to final text; Diduny is replayed over the live socket like real dictation." = "Відмінність — частка слів Зразка, які цей рушій видав інакше (менше — ближче). Зразок — текст вибраного рушія; для Diduny це текст до серверного очищення. Швидкість — час від Стоп до фінального тексту; Diduny програється через живий сокет, як справжня диктовка.";
+"About Difference and Speed" = "Про відмінність і швидкість";
+"Difference" = "Відмінність";
+"Filter" = "Фільтр";

@@ -1691,3 +1691,10 @@
 "Force submit" = "Force submit";
 "Press %@ while recording to paste and press ⌘↩" = "Press %@ while recording to paste and press ⌘↩";
 "Does not press ⌘↩ after pasting" = "Does not press ⌘↩ after pasting";
+"Differences" = "Differences";
+"%lld clips excluded (empty or failed)" = "%lld clips excluded (empty or failed)";
+"Difference = share of Reference words that changed. Speed = Stop to final text." = "Difference = share of Reference words that changed. Speed = Stop to final text.";
+"Difference is the share of Reference words this engine got different (lower is closer). Reference is the selected engine's text; for Diduny that is the text before server cleanup. Speed is the time from Stop to final text; Diduny is replayed over the live socket like real dictation." = "Difference is the share of Reference words this engine got different (lower is closer). Reference is the selected engine's text; for Diduny that is the text before server cleanup. Speed is the time from Stop to final text; Diduny is replayed over the live socket like real dictation.";
+"About Difference and Speed" = "About Difference and Speed";
+"Difference" = "Difference";
+"Filter" = "Filter";
