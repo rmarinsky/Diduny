@@ -153,6 +153,9 @@ final class MainWindowController {
             .environment(appDelegate.audioDeviceManager)
 
         let hostingView = NSHostingView(rootView: view)
+        // Window size is owned by MainWindowController (fixed, widened for the recording inspector);
+        // without this the hosting view snaps the window back to its intrinsic width.
+        hostingView.sizingOptions = [.minSize]
 
         let w = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultContentSize),
