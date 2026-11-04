@@ -1175,7 +1175,12 @@ private final class EdgeCommandPanelContentView: NSView {
         layer?.masksToBounds = radius > 0
     }
 
+    /// Identity of the latest transition; a stale cross-fade completion must not hide the current view.
+    private var transitionID = 0
+
     func setExpanded(_ expanded: Bool, animated: Bool = false) {
+        transitionID += 1
+        let currentTransition = transitionID
         let incoming: NSView = expanded ? expandedHostingView : tabHostingView
         let outgoing: NSView = expanded ? tabHostingView : expandedHostingView
         guard animated, incoming.isHidden,
@@ -1196,8 +1201,8 @@ private final class EdgeCommandPanelContentView: NSView {
             context.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
             incoming.animator().alphaValue = 1
             outgoing.animator().alphaValue = 0
-        }, completionHandler: {
-            guard incoming.alphaValue == 1 else { return }
+        }, completionHandler: { [weak self] in
+            guard let self, transitionID == currentTransition else { return }
             outgoing.isHidden = true
             outgoing.alphaValue = 1
         })
