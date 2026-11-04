@@ -994,8 +994,11 @@ extension AppDelegate {
             // A BYOK meeting never falls back to the Diduny Cloud queue.
             let handsOffToQueue: Bool = if case .queueCloud = route { librarySavedId != nil && !byokMeeting } else { false }
             // Apple live text came out empty: transcribe the saved recording with Apple on this Mac instead.
+            var queuedOnThisMac = false
             if appleLiveMeeting, !acceptsRealtimeTranscript, let librarySavedId {
-                RecordingQueueService.shared.enqueue([librarySavedId], action: .transcribe, providerOverride: .local)
+                queuedOnThisMac = RecordingQueueService.shared.enqueue(
+                    [librarySavedId], action: .transcribe, providerOverride: .local
+                )
             }
 
             let rawTranscript: GeneratedTranscript?
@@ -1113,8 +1116,8 @@ extension AppDelegate {
                         kind: .cloud,
                         provider: TranscriptionProvider.cloud.rawValue
                     )
-                } else if case .queueCloud = route {
-                    // Already handed to the queue before the panel update.
+                } else if handsOffToQueue || queuedOnThisMac {
+                    // Already handed to a queue before the panel update.
                 } else {
                     RecordingsLibraryStorage.shared.updateRecording(
                         id: recordingId,
