@@ -452,6 +452,36 @@ extension Recording {
     }
 }
 
+/// The numbers Overview needs from one recording, without its text or audio. Rows of
+/// recordings that were deleted (by retention or by hand) or never saved because retention
+/// is "Never" are kept: deletion and retention govern content, the stats always count.
+struct UsageStatRow: Codable, Equatable {
+    let id: UUID
+    let createdAt: Date
+    let type: Recording.RecordingType
+    let durationSeconds: TimeInterval
+    let wordCount: Int
+    let isYouTube: Bool
+    let hasReadableTranscript: Bool
+
+    init(recording: Recording) {
+        self.init(id: recording.id, createdAt: recording.createdAt, type: recording.type,
+                  durationSeconds: recording.durationSeconds, transcriptionText: recording.transcriptionText,
+                  isYouTube: recording.isYouTubeVideo)
+    }
+
+    init(id: UUID, createdAt: Date, type: Recording.RecordingType, durationSeconds: TimeInterval,
+         transcriptionText: String?, isYouTube: Bool) {
+        self.id = id
+        self.createdAt = createdAt
+        self.type = type
+        self.durationSeconds = durationSeconds
+        wordCount = transcriptionText?.split(whereSeparator: \.isWhitespace).count ?? 0
+        self.isYouTube = isYouTube
+        hasReadableTranscript = !(transcriptionText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+}
+
 struct RecordingStatistics {
     let recordingCount: Int
     let totalDurationSeconds: TimeInterval
@@ -467,24 +497,28 @@ struct RecordingStatistics {
     private let typingDurationSeconds: TimeInterval
 
     init(recordings: [Recording]) {
-        recordingCount = recordings.count
-        totalDurationSeconds = recordings.reduce(0) { $0 + $1.durationSeconds }
-        voiceDurationSeconds = recordings.filter { $0.type == .voice }.reduce(0) { $0 + $1.durationSeconds }
-        translationDurationSeconds = recordings.filter { $0.type == .translation }.reduce(0) { $0 + $1.durationSeconds }
-        meetingDurationSeconds = recordings.filter(\.type.isMeetingLike).reduce(0) { $0 + $1.durationSeconds }
-        importedFileDurationSeconds = recordings
-            .filter { $0.type == .fileTranscription && !$0.isYouTubeVideo }
-            .reduce(0) { $0 + $1.durationSeconds }
-        youtubeDurationSeconds = recordings
-            .filter { $0.type == .fileTranscription && $0.isYouTubeVideo }
-            .reduce(0) { $0 + $1.durationSeconds }
-        transcribedWordCount = recordings.reduce(0) { $0 + Self.wordCount(in: $1.transcriptionText) }
+        self.init(rows: recordings.map(UsageStatRow.init(recording:)))
+    }
 
-        let typingRecordings = recordings.filter { $0.type != .fileTranscription }
-        typingWordCount = typingRecordings.reduce(0) { $0 + Self.wordCount(in: $1.transcriptionText) }
-        typingDurationSeconds = typingRecordings.reduce(0) { $0 + $1.durationSeconds }
-        mediaTimeSavedSeconds = recordings
-            .filter { $0.type == .fileTranscription && Self.hasReadableTranscript($0.transcriptionText) }
+    init(rows: [UsageStatRow]) {
+        recordingCount = rows.count
+        totalDurationSeconds = rows.reduce(0) { $0 + $1.durationSeconds }
+        voiceDurationSeconds = rows.filter { $0.type == .voice }.reduce(0) { $0 + $1.durationSeconds }
+        translationDurationSeconds = rows.filter { $0.type == .translation }.reduce(0) { $0 + $1.durationSeconds }
+        meetingDurationSeconds = rows.filter(\.type.isMeetingLike).reduce(0) { $0 + $1.durationSeconds }
+        importedFileDurationSeconds = rows
+            .filter { $0.type == .fileTranscription && !$0.isYouTube }
+            .reduce(0) { $0 + $1.durationSeconds }
+        youtubeDurationSeconds = rows
+            .filter { $0.type == .fileTranscription && $0.isYouTube }
+            .reduce(0) { $0 + $1.durationSeconds }
+        transcribedWordCount = rows.reduce(0) { $0 + $1.wordCount }
+
+        let typingRows = rows.filter { $0.type != .fileTranscription }
+        typingWordCount = typingRows.reduce(0) { $0 + $1.wordCount }
+        typingDurationSeconds = typingRows.reduce(0) { $0 + $1.durationSeconds }
+        mediaTimeSavedSeconds = rows
+            .filter { $0.type == .fileTranscription && $0.hasReadableTranscript }
             .reduce(0) { $0 + $1.durationSeconds }
     }
 
@@ -497,11 +531,4 @@ struct RecordingStatistics {
         typingTimeSavedSeconds(wordsPerMinute: wordsPerMinute) + mediaTimeSavedSeconds
     }
 
-    private static func wordCount(in text: String?) -> Int {
-        text?.split(whereSeparator: \.isWhitespace).count ?? 0
-    }
-
-    private static func hasReadableTranscript(_ text: String?) -> Bool {
-        !(text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-    }
 }

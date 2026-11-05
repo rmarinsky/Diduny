@@ -54,17 +54,30 @@ final class RecordingsLibraryStorage {
     }
 
     private(set) var recordings: [Recording] = []
+    /// Stats of recordings that were deleted (by retention or by hand) or never saved (see `UsageStatRow`).
+    private(set) var archivedUsageStats: [UsageStatRow] = []
+
+    /// Rows for Overview: saved recordings plus those retention already removed.
+    /// An archived row is written before its recording is deleted, so a saved recording wins.
+    var usageStatRows: [UsageStatRow] {
+        let savedIDs = Set(recordings.map(\.id))
+        return recordings.map(UsageStatRow.init(recording:)) + archivedUsageStats.filter { !savedIDs.contains($0.id) }
+    }
 
     private let fileManager = FileManager.default
     private let appSupportDir: URL
     private let recordingsDir: URL
     private let metadataURL: URL
+    private let usageStatsArchiveURL: URL
     private let deletionRecoveryURL: URL
     private let deletionCleanupURL: URL
     private let deletionCommitURL: URL
     private let deletionRecoveryRemover: (URL) throws -> Void
     private let deletionCommitWriter: (RecordingDeletionRecovery, URL) -> Bool
     private let synchronousMetadataWriter: ([Recording], URL) -> Bool
+    private let usageStatsArchiveWriter: ([UsageStatRow], URL) -> Bool
+    /// False when an existing archive could not be read nor moved aside: writing would destroy it.
+    private var usageStatsArchiveWritable = true
     private let audioCompressor: (URL) async -> URL
     private let batchStorage: TranscriptionBatchStorage
     private let metadataWriteQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.recordings-metadata")
@@ -77,6 +90,7 @@ final class RecordingsLibraryStorage {
         },
         deletionCommitWriter: ((RecordingDeletionRecovery, URL) -> Bool)? = nil,
         synchronousMetadataWriter: (([Recording], URL) -> Bool)? = nil,
+        usageStatsArchiveWriter: (([UsageStatRow], URL) -> Bool)? = nil,
         audioCompressor: ((URL) async -> URL)? = nil
     ) {
         let fm = FileManager.default
@@ -86,6 +100,7 @@ final class RecordingsLibraryStorage {
         self.deletionRecoveryRemover = deletionRecoveryRemover
         self.deletionCommitWriter = deletionCommitWriter ?? Self.writeDeletionRecovery
         self.synchronousMetadataWriter = synchronousMetadataWriter ?? Self.writeMetadataSnapshot
+        self.usageStatsArchiveWriter = usageStatsArchiveWriter ?? Self.writeUsageStatsArchive
         self.audioCompressor = audioCompressor ?? {
             await AudioCompressionService.compressToFLAC(wavURL: $0)
         }
@@ -96,10 +111,16 @@ final class RecordingsLibraryStorage {
 
         try? fm.createDirectory(at: appDir, withIntermediateDirectories: true)
         metadataURL = appDir.appendingPathComponent("recordings_metadata.json")
+        usageStatsArchiveURL = appDir.appendingPathComponent("usage_stats_archive.json")
         deletionRecoveryURL = appDir.appendingPathComponent("recordings_delete_recovery.json")
         deletionCleanupURL = appDir.appendingPathComponent("recordings_delete_cleanup.json")
         deletionCommitURL = appDir.appendingPathComponent("recordings_delete_commit.json")
 
+        if let archived = Self.loadUsageStatsArchive(from: usageStatsArchiveURL) {
+            archivedUsageStats = archived
+        } else {
+            usageStatsArchiveWritable = false
+        }
         loadAndPrune()
     }
 
@@ -125,7 +146,15 @@ final class RecordingsLibraryStorage {
         forceSave: Bool = false
     ) -> UUID? {
         guard allowsLibraryMutation() else { return nil }
-        guard forceSave || shouldSaveRecording(type: type) else { return nil }
+        guard forceSave || shouldSaveRecording(type: type) else {
+            // Retention "Never" skips the content, not the stats.
+            _ = archiveUsageStats([UsageStatRow(
+                id: id ?? UUID(), createdAt: createdAt, type: type, durationSeconds: duration,
+                transcriptionText: transcriptionText,
+                isYouTube: remoteSource?.provider == YouTubeRemoteMediaSource.provider
+            )])
+            return nil
+        }
 
         let recordingID = id ?? UUID()
         let fileExtension = detectedAudioFileExtension(for: audioData)
@@ -205,7 +234,15 @@ final class RecordingsLibraryStorage {
         forceSave: Bool = false
     ) -> UUID? {
         guard allowsLibraryMutation() else { return nil }
-        guard forceSave || shouldSaveRecording(type: type) else { return nil }
+        guard forceSave || shouldSaveRecording(type: type) else {
+            // Retention "Never" skips the content, not the stats.
+            _ = archiveUsageStats([UsageStatRow(
+                id: id ?? UUID(), createdAt: createdAt, type: type, durationSeconds: duration,
+                transcriptionText: transcriptionText,
+                isYouTube: remoteSource?.provider == YouTubeRemoteMediaSource.provider
+            )])
+            return nil
+        }
 
         let recordingID = id ?? UUID()
         let ext = audioURL.pathExtension.isEmpty ? "wav" : audioURL.pathExtension
@@ -478,13 +515,7 @@ final class RecordingsLibraryStorage {
 
     @discardableResult
     func deleteRecording(_ recording: Recording) -> Bool {
-        deleteStoredRecordings(Set([recording.id])) {
-            try batchStorage.removeRecordingReferences(
-                Set([recording.id]),
-                allowDuringRecordingRecovery: true,
-                deferDownloadedArtifactRemoval: true
-            )
-        }
+        deleteRecordings(Set([recording.id]))
     }
 
     @discardableResult
@@ -498,9 +529,14 @@ final class RecordingsLibraryStorage {
         }
     }
 
+    /// Deleting removes the content; the recording's numbers stay in Overview (`UsageStatRow`).
     @discardableResult
     func deleteRecordings(_ ids: Set<UUID>) -> Bool {
         guard !ids.isEmpty else { return true }
+        // Archived first: a crash after the delete commits must not lose the numbers.
+        guard archiveUsageStats(recordings.filter { ids.contains($0.id) }.map(UsageStatRow.init(recording:))) else {
+            return false
+        }
         return deleteStoredRecordings(ids) {
             try batchStorage.removeRecordingReferences(
                 ids,
@@ -512,7 +548,10 @@ final class RecordingsLibraryStorage {
 
     @discardableResult
     func deleteBatch(_ batch: TranscriptionBatch) -> Bool {
-        deleteStoredRecordings(Set(batch.recordingIDs)) {
+        guard archiveUsageStats(recordings.filter { batch.recordingIDs.contains($0.id) }.map(UsageStatRow.init(recording:))) else {
+            return false
+        }
+        return deleteStoredRecordings(Set(batch.recordingIDs)) {
             try batchStorage.delete(
                 batchID: batch.id,
                 allowDuringRecordingRecovery: true,
@@ -689,8 +728,57 @@ final class RecordingsLibraryStorage {
         })
 
         guard !expiredIds.isEmpty else { return }
-        deleteRecordings(expiredIds)
+        guard deleteRecordings(expiredIds) else { return }
         Log.app.info("Pruned \(expiredIds.count) expired recording entries")
+    }
+
+    /// Persists the rows; a delete goes ahead only when this returns true, so stats are never lost.
+    @discardableResult
+    private func archiveUsageStats(_ rows: [UsageStatRow]) -> Bool {
+        // Upsert: a row archived by an earlier, refused delete is replaced with current values.
+        var updated = archivedUsageStats
+        for row in rows {
+            if let index = updated.firstIndex(where: { $0.id == row.id }) { updated[index] = row } else { updated.append(row) }
+        }
+        guard updated != archivedUsageStats else { return true }
+        guard usageStatsArchiveWritable, usageStatsArchiveWriter(updated, usageStatsArchiveURL) else {
+            Log.app.error("Usage stats archive not saved; keeping the recordings")
+            return false
+        }
+        archivedUsageStats = updated
+        return true
+    }
+
+    private nonisolated static func writeUsageStatsArchive(_ rows: [UsageStatRow], to url: URL) -> Bool {
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            try encoder.encode(rows).write(to: url, options: .atomic)
+            return true
+        } catch {
+            Log.app.error("Failed to save usage stats archive: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// nil when an existing archive is unreadable and could not be moved aside.
+    private static func loadUsageStatsArchive(from url: URL) -> [UsageStatRow]? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        if let data = try? Data(contentsOf: url), let rows = try? decoder.decode([UsageStatRow].self, from: data) {
+            return rows
+        }
+        // Keep an unreadable archive instead of overwriting it with the next write.
+        let aside = url.deletingPathExtension().appendingPathExtension("unreadable-\(Int(Date().timeIntervalSince1970)).json")
+        do {
+            try FileManager.default.moveItem(at: url, to: aside)
+            Log.app.error("Usage stats archive was unreadable; moved it to \(aside.lastPathComponent)")
+            return []
+        } catch {
+            Log.app.error("Usage stats archive is unreadable and could not be moved aside; not writing it")
+            return nil
+        }
     }
 
     // MARK: - Update

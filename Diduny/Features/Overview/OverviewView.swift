@@ -47,8 +47,9 @@ struct OverviewView: View {
         return Calendar.current.date(byAdding: .day, value: -timePeriod.daysBack, to: Date()) ?? Date()
     }
 
-    private var periodRecordings: [Recording] {
-        storage.recordings.filter { $0.createdAt >= periodStart }
+    /// Stats rows, including recordings history retention already removed.
+    private var periodRecordings: [UsageStatRow] {
+        storage.usageStatRows.filter { $0.createdAt >= periodStart }
     }
 
     // MARK: - Computed stats
@@ -68,8 +69,8 @@ struct OverviewView: View {
         let series = computeChartSeries()
         let nonEmpty = series.filter { !$0.isFuture && $0.minutes > 0 }
         snapshot = Snapshot(
-            period: RecordingStatistics(recordings: periodRecordings),
-            previousTimeSavedSeconds: RecordingStatistics(recordings: previousPeriodRecordings)
+            period: RecordingStatistics(rows: periodRecordings),
+            previousTimeSavedSeconds: RecordingStatistics(rows: previousPeriodRecordings)
                 .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute),
             series: series,
             avgMinutes: nonEmpty.isEmpty ? 0 : nonEmpty.reduce(0) { $0 + $1.minutes } / Double(nonEmpty.count),
@@ -101,8 +102,8 @@ struct OverviewView: View {
         return Calendar.current.date(byAdding: .day, value: -(timePeriod.daysBack * 2), to: Date()) ?? Date()
     }
 
-    private var previousPeriodRecordings: [Recording] {
-        storage.recordings.filter { $0.createdAt >= previousPeriodStart && $0.createdAt < periodStart }
+    private var previousPeriodRecordings: [UsageStatRow] {
+        storage.usageStatRows.filter { $0.createdAt >= previousPeriodStart && $0.createdAt < periodStart }
     }
 
     private var previousTimeSavedSeconds: Double { snapshot.previousTimeSavedSeconds }
@@ -141,7 +142,7 @@ struct OverviewView: View {
         let cal = Calendar.current
         var count = 0
         var day = cal.startOfDay(for: Date())
-        let allDays = Set(storage.recordings.map { cal.startOfDay(for: $0.createdAt) })
+        let allDays = Set(storage.usageStatRows.map { cal.startOfDay(for: $0.createdAt) })
         while allDays.contains(day) {
             count += 1
             day = cal.date(byAdding: .day, value: -1, to: day) ?? day.addingTimeInterval(-86400)
@@ -198,7 +199,7 @@ struct OverviewView: View {
             return months.map { month in
                 DayStat(
                     id: month,
-                    minutes: RecordingStatistics(recordings: byMonth[month] ?? [])
+                    minutes: RecordingStatistics(rows: byMonth[month] ?? [])
                         .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute) / 60,
                     isToday: month == currentMonth,
                     isFuture: false,
@@ -221,7 +222,7 @@ struct OverviewView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = timePeriod == .month ? "d" : "EEE"
         return days.map { day in
-            let mins = RecordingStatistics(recordings: byDay[day] ?? [])
+            let mins = RecordingStatistics(rows: byDay[day] ?? [])
                 .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute) / 60
             return DayStat(
                 id: day,
