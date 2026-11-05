@@ -54,7 +54,7 @@ final class RecordingsLibraryStorage {
     }
 
     private(set) var recordings: [Recording] = []
-    /// Stats of recordings removed by history retention (see `UsageStatRow`).
+    /// Stats of recordings removed by history retention or never saved (see `UsageStatRow`).
     private(set) var archivedUsageStats: [UsageStatRow] = []
 
     /// Rows for Overview: saved recordings plus those retention already removed.
@@ -135,7 +135,15 @@ final class RecordingsLibraryStorage {
         forceSave: Bool = false
     ) -> UUID? {
         guard allowsLibraryMutation() else { return nil }
-        guard forceSave || shouldSaveRecording(type: type) else { return nil }
+        guard forceSave || shouldSaveRecording(type: type) else {
+            // Retention "Never" skips the content, not the stats.
+            archiveUsageStats([UsageStatRow(
+                id: id ?? UUID(), createdAt: createdAt, type: type, durationSeconds: duration,
+                transcriptionText: transcriptionText,
+                isYouTube: remoteSource?.provider == YouTubeRemoteMediaSource.provider
+            )])
+            return nil
+        }
 
         let recordingID = id ?? UUID()
         let fileExtension = detectedAudioFileExtension(for: audioData)
@@ -215,7 +223,15 @@ final class RecordingsLibraryStorage {
         forceSave: Bool = false
     ) -> UUID? {
         guard allowsLibraryMutation() else { return nil }
-        guard forceSave || shouldSaveRecording(type: type) else { return nil }
+        guard forceSave || shouldSaveRecording(type: type) else {
+            // Retention "Never" skips the content, not the stats.
+            archiveUsageStats([UsageStatRow(
+                id: id ?? UUID(), createdAt: createdAt, type: type, durationSeconds: duration,
+                transcriptionText: transcriptionText,
+                isYouTube: remoteSource?.provider == YouTubeRemoteMediaSource.provider
+            )])
+            return nil
+        }
 
         let recordingID = id ?? UUID()
         let ext = audioURL.pathExtension.isEmpty ? "wav" : audioURL.pathExtension

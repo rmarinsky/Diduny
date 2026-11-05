@@ -453,7 +453,8 @@ extension Recording {
 }
 
 /// The numbers Overview needs from one recording, without its text or audio. Rows of
-/// recordings pruned by history retention are kept, so retention never shrinks the stats.
+/// recordings pruned by history retention, or never saved because retention is "Never",
+/// are kept: retention governs content, the stats always count.
 struct UsageStatRow: Codable, Equatable {
     let id: UUID
     let createdAt: Date
@@ -464,14 +465,20 @@ struct UsageStatRow: Codable, Equatable {
     let hasReadableTranscript: Bool
 
     init(recording: Recording) {
-        id = recording.id
-        createdAt = recording.createdAt
-        type = recording.type
-        durationSeconds = recording.durationSeconds
-        wordCount = recording.transcriptionText?.split(whereSeparator: \.isWhitespace).count ?? 0
-        isYouTube = recording.isYouTubeVideo
-        hasReadableTranscript = !(recording.transcriptionText?
-            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        self.init(id: recording.id, createdAt: recording.createdAt, type: recording.type,
+                  durationSeconds: recording.durationSeconds, transcriptionText: recording.transcriptionText,
+                  isYouTube: recording.isYouTubeVideo)
+    }
+
+    init(id: UUID, createdAt: Date, type: Recording.RecordingType, durationSeconds: TimeInterval,
+         transcriptionText: String?, isYouTube: Bool) {
+        self.id = id
+        self.createdAt = createdAt
+        self.type = type
+        self.durationSeconds = durationSeconds
+        wordCount = transcriptionText?.split(whereSeparator: \.isWhitespace).count ?? 0
+        self.isYouTube = isYouTube
+        hasReadableTranscript = !(transcriptionText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
     }
 }
 

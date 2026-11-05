@@ -58,4 +58,14 @@ final class UsageStatsArchiveTests: XCTestCase {
         XCTAssertTrue(store.deleteRecordings([id]))
         XCTAssertTrue(store.usageStatRows.isEmpty)
     }
+
+    func test_neverRetentionSavesNoRecordingButCountsItsStats() throws {
+        SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy = .never
+        let store = try makeStore()
+        XCTAssertNil(store.saveRecording(audioData: Data([1]), type: .voice, duration: 3,
+                                         transcriptionText: "five words are said here"))
+        XCTAssertTrue(store.recordings.isEmpty)
+        XCTAssertEqual(RecordingStatistics(rows: store.usageStatRows).transcribedWordCount, 5)
+        XCTAssertEqual(RecordingStatistics(rows: try makeStore().usageStatRows).recordingCount, 1)
+    }
 }
