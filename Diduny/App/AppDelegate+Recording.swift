@@ -1004,8 +1004,12 @@ extension AppDelegate {
 
         voiceRealtimeConnectionError = nil
 
-        // Connect WebSocket in background — don't block recording start
-        Task {
+        // Connect WebSocket in background — don't block recording start.
+        // The token ties the result to this recording; Stop/next start invalidates it.
+        let connectToken = UUID()
+        voiceRealtimeConnectToken = connectToken
+        voiceRealtimeConnectTask?.cancel()
+        voiceRealtimeConnectTask = Task {
             do {
                 let languageHints = SettingsStorage.shared.speechLanguageHints
                 // Ask the proxy to push cleaned text with `finished`: saves the cleanup round trip.
@@ -1021,12 +1025,14 @@ extension AppDelegate {
                 )
 
                 await MainActor.run {
+                    guard self.voiceRealtimeConnectToken == connectToken else { return }
                     self.voiceRealtimeSessionEnabled = true
                     self.updateRecordingFeedbackConnectionStatus(.connected, mode: .voice)
                 }
                 Log.transcription.info("Dictation RT connected")
             } catch {
                 await MainActor.run {
+                    guard self.voiceRealtimeConnectToken == connectToken else { return }
                     self.audioRecorder.onRealtimeAudioData = nil
                     self.voiceRealtimeSessionEnabled = false
                     self.voiceRealtimeAccumulator = nil
@@ -1070,6 +1076,9 @@ extension AppDelegate {
         let rtService = dictationRealtimeService ?? realtimeTranscriptionService
 
         defer {
+            voiceRealtimeConnectToken = nil
+            voiceRealtimeConnectTask?.cancel()
+            voiceRealtimeConnectTask = nil
             audioRecorder.onRealtimeAudioData = nil
             voiceRealtimeSessionEnabled = false
             voiceRealtimeAccumulator = nil

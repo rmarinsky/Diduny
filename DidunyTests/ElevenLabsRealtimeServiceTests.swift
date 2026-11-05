@@ -12,6 +12,7 @@ final class FakeElevenLabsTransport: ElevenLabsRealtimeTransport, @unchecked Sen
 
     var sent: [String] { lock.withLock { sentFrames } }
     var closeCount: Int { lock.withLock { closes } }
+    var isReceiving: Bool { lock.withLock { !waiters.isEmpty } }
 
     func push(_ frame: String) {
         let waiter: CheckedContinuation<String, Error>? = lock.withLock {
@@ -349,7 +350,12 @@ final class ElevenLabsRealtimeServiceTests: XCTestCase {
         let service = ElevenLabsRealtimeService(apiKey: sentinel) { _ in transport }
         let connecting = Task { try await service.connect() }
         // Stop beats the handshake: disconnect while session_started is still pending.
-        try await Task.sleep(nanoseconds: 100_000_000)
+        var polls = 0
+        while !transport.isReceiving, polls < 2_000 {
+            polls += 1
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTAssertTrue(transport.isReceiving, "connect must reach the pending receive")
         await service.disconnect()
         transport.push(started)
         do {

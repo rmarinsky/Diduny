@@ -206,6 +206,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var voiceRealtimeAccumulator: RealtimeVoiceAccumulator?
     var voiceRealtimeSessionEnabled: Bool = false
     var voiceRealtimeConnectionError: String?
+    /// Identity of the in-flight dictation realtime connect; a stale result must not touch a newer recording.
+    var voiceRealtimeConnectToken: UUID?
+    var voiceRealtimeConnectTask: Task<Void, Never>?
     var translationRealtimeAccumulator: RealtimeTranslationAccumulator?
     var translationRealtimeSessionEnabled: Bool = false
     var translationRealtimeConnectionError: String?
