@@ -8,25 +8,26 @@ import Testing
 /// glyph and must pass, which proves the coordinates below hit the right
 /// control; the failing assertion is the click on the control's own padding.
 ///
-/// Coordinates are top-left based, derived from `ShortcutLayout` in
-/// ShortcutsSettingsView.swift (content x=22, y=6; action card rows are 48pt;
-/// modifier card rows are 77pt). Update them if that layout changes.
+/// Coordinates are top-left based, measured from a snapshot of ShortcutsSettingsView in a
+/// 760×1100 window (tall enough that nothing scrolls): PageScaffold, quiet rows of 57pt in
+/// "Action hotkeys", "Recording keys" rows of ~69pt. Update them if that layout changes.
 /// Drives a real key window, so it runs only on CI (`DIDUNY_UI_TESTS=1`), never on a dev Mac.
 @MainActor
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["DIDUNY_UI_TESTS"] == "1", "UI tests run on CI only"))
 struct ShortcutsSettingsHitTestingTests {
-    nonisolated private static let windowSize = NSSize(width: 759, height: 666)
+    nonisolated private static let windowSize = NSSize(width: 760, height: 1100)
 
     private enum Point {
-        // Dictation row of the "Action hotkeys" card (row centre y = 124).
-        static let dictation2xGlyph = NSPoint(x: 563, y: 124)
-        static let dictation2xPadding = NSPoint(x: 548, y: 124) // inside the 2x segment, left of its text
-        static let dictationEditLabel = NSPoint(x: 453, y: 124)
-        static let dictationFieldBody = NSPoint(x: 400, y: 124) // between keycaps and "edit"
+        // Dictation row of the "Action hotkeys" card (row centre y = 119).
+        static let dictation2xGlyph = NSPoint(x: 663, y: 119)
+        static let dictation2xPadding = NSPoint(x: 650, y: 119) // inside the 2x segment, left of its text
+        static let dictationEditLabel = NSPoint(x: 572, y: 119)
+        static let dictationFieldBody = NSPoint(x: 530, y: 119) // between keycaps and "edit"
+        static let dictationRecorderCenter = NSPoint(x: 500, y: 119)
 
-        // Dictation row of the "Modifier key recording" card (row centre y = 553).
-        static let dictationOffGlyph = NSPoint(x: 374, y: 553)
-        static let dictationOffPadding = NSPoint(x: 356, y: 553)
+        // Dictation row of the "Recording keys" card (row centre y = 479).
+        static let dictationOffGlyph = NSPoint(x: 433, y: 479)
+        static let dictationOffPadding = NSPoint(x: 415, y: 479)
     }
 
     private final class Harness {
@@ -162,7 +163,7 @@ struct ShortcutsSettingsHitTestingTests {
         let harness = Harness()
         try #require(harness.window.isKeyWindow, "test window must be key, or the first click only activates it")
 
-        harness.click(NSPoint(x: 364, y: 124))
+        harness.click(Point.dictationRecorderCenter)
 
         #expect(harness.isShortcutRecorderFocused, "first responder: \(String(describing: harness.window.firstResponder))")
     }

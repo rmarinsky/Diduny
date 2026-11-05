@@ -21,6 +21,7 @@ struct RecordingsLibraryView: View {
     @State private var queueService = RecordingQueueService.shared
     @State private var playbackService = AudioPlaybackService.shared
     @State private var searchText = ""
+    @State private var searchIndex: [UUID: String] = [:]
     @State private var filter: RecordingTypeFilter = .all
     @State private var selectedCalendarIDs: Set<String> = []
     @State private var inspectorSelection: RecordingsInspectorSelection?
@@ -71,8 +72,14 @@ struct RecordingsLibraryView: View {
 
     private var filteredRecordings: [Recording] {
         storage.recordings.filter { recording in
-            filter.matches(recording) && recording.matchesCalendars(selectedCalendarIDs) && recording.matchesSearch(searchText)
+            filter.matches(recording) && recording.matchesCalendars(selectedCalendarIDs)
+                && Recording.searchableText(searchIndex[recording.id] ?? recording.searchableText, matches: searchText)
         }
+    }
+
+    private func rebuildSearchIndex() {
+        searchIndex = Dictionary(storage.recordings.map { ($0.id, $0.searchableText) },
+                                 uniquingKeysWith: { first, _ in first })
     }
 
     private var calendarOptions: [CalendarFilterOption] {
@@ -98,37 +105,35 @@ struct RecordingsLibraryView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
-                .padding(.bottom, 16)
+        PageScaffold(title: "Recordings", scrolls: false) {
+            headerActions
+        } content: {
+            VStack(alignment: .leading, spacing: DS.Space.lg) {
+                filterToolbar
 
-            filterChips
-                .padding(.horizontal, 24)
-                .padding(.bottom, 16)
+                if isSelectionMode, !filter.showsBatches {
+                    bulkSelectionBar
+                }
 
-            if filter.showsBatches {
-                if batchStorage.batches.isEmpty {
-                    batchesEmptyState
-                } else if filteredBatches.isEmpty {
+                if filter.showsBatches {
+                    if batchStorage.batches.isEmpty {
+                        batchesEmptyState
+                    } else if filteredBatches.isEmpty {
+                        noResultsState
+                    } else {
+                        batchesCard
+                    }
+                } else if storage.recordings.isEmpty {
+                    emptyState
+                } else if filteredRecordings.isEmpty {
                     noResultsState
                 } else {
-                    batchesCard
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 24)
+                    recordingsCard
                 }
-            } else if storage.recordings.isEmpty {
-                emptyState
-            } else if filteredRecordings.isEmpty {
-                noResultsState
-            } else {
-                recordingsCard
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
             }
+            .padding(.horizontal, DS.Layout.pagePadding)
+            .padding(.bottom, DS.Layout.pagePadding)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .inspector(isPresented: Binding(
             get: { inspectorSelection != nil },
             set: { if !$0 { requestInspectorSelection(nil) } }
@@ -136,8 +141,15 @@ struct RecordingsLibraryView: View {
             inspectorContent
                 .frame(minHeight: 500)
         }
+        .onChange(of: inspectorSelection != nil, initial: true) { _, isOpen in
+            MainWindowController.shared.setRecordingInspectorExpanded(isOpen)
+        }
+        .onDisappear {
+            MainWindowController.shared.setRecordingInspectorExpanded(false)
+        }
         .onAppear {
             batchLoadErrorMessage = batchStorage.loadErrorMessage
+            rebuildSearchIndex()
             openRequestedRecordingIfAvailable()
             openRequestedBatchComposerIfAvailable()
         }
@@ -146,6 +158,7 @@ struct RecordingsLibraryView: View {
         }
         .onChange(of: storage.recordings) {
             openRequestedRecordingIfAvailable()
+            rebuildSearchIndex()
         }
         .onChange(of: MainWindowController.shared.requestedBatchComposer) {
             openRequestedBatchComposerIfAvailable()
@@ -225,22 +238,8 @@ struct RecordingsLibraryView: View {
 
     // MARK: - Header
 
-    private var header: some View {
-        HStack(alignment: .center) {
-            Text("Recordings")
-                .font(.title2.bold())
-            Spacer()
-            Button {
-                requestInspectorSelection(.batchComposer)
-            } label: {
-                Label(MainWindowController.batchComposerActionTitle, systemImage: "square.stack.3d.up")
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .keyboardShortcut("b", modifiers: [.command, .shift])
-            .help("Create a batch from files, URLs, or existing recordings (⇧⌘B)")
-            .accessibilityIdentifier("Batch files and URLs")
-
+    private var headerActions: some View {
+        HStack(spacing: DS.Space.sm) {
             if !filter.showsBatches {
                 Button {
                     toggleSelectionMode()
@@ -252,36 +251,20 @@ struct RecordingsLibraryView: View {
                 }
                 .labelStyle(.titleAndIcon)
                 .buttonStyle(.bordered)
-                .controlSize(.small)
                 .disabled(storage.recordings.isEmpty)
                 .accessibilityIdentifier("Toggle recording selection")
             }
 
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                    .font(.system(size: 13))
-                TextField(filter.showsBatches ? "Search batches" : "Search meetings, people and transcripts", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .frame(width: 220)
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                            .font(.system(size: 12))
-                    }
-                    .buttonStyle(.plain)
-                }
+            Button {
+                requestInspectorSelection(.batchComposer)
+            } label: {
+                Label(MainWindowController.batchComposerActionTitle, systemImage: "square.stack.3d.up")
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Color(.quaternaryLabelColor).opacity(0.1),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
+            .buttonStyle(.borderedProminent)
+            .tint(DS.Palette.accent)
+            .keyboardShortcut("b", modifiers: [.command, .shift])
+            .help("Create a batch from files, URLs, or existing recordings (⇧⌘B)")
+            .accessibilityIdentifier("Batch files and URLs")
         }
     }
 
@@ -292,49 +275,85 @@ struct RecordingsLibraryView: View {
         requestInspectorSelection(.batchComposer)
     }
 
-    // MARK: - Filter Chips
+    // MARK: - Filter Toolbar
 
-    private var filterChips: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                ForEach(RecordingTypeFilter.allCases, id: \.self) { type in
-                    FilterChip(label: type.rawValue, isSelected: filter == type) {
-                        filter = type
+    private var filterToolbar: some View {
+        HStack(spacing: DS.Space.md) {
+            HStack(spacing: DS.Space.sm) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                    .font(DS.Font.body)
+                TextField(filter.showsBatches ? "Search batches" : "Search meetings, people and transcripts", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(DS.Font.body)
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                            .font(DS.Font.callout)
                     }
+                    .buttonStyle(.plain)
                 }
-                Spacer()
             }
+            .padding(.horizontal, DS.Space.md)
+            .frame(height: 28)
+            .frame(maxWidth: .infinity)
+            .background(
+                Color.primary.opacity(0.05),
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+
+            Picker("Type", selection: $filter) {
+                ForEach(RecordingTypeFilter.allCases, id: \.self) { type in
+                    Text(type.rawValue).tag(type)
+                }
+            }
+            .pickerStyle(.menu)
+            .fixedSize()
 
             // Shown while a calendar is chosen even if its recordings are gone, so the filter can be cleared.
             if !filter.showsBatches, !calendarOptions.isEmpty || !selectedCalendarIDs.isEmpty {
-                calendarChips
-            }
-
-            if isSelectionMode, !filter.showsBatches {
-                bulkSelectionBar
+                calendarMenu
             }
         }
     }
 
     /// Calendars of linked meetings. Nothing chosen shows all; choosing narrows to those calendars.
-    private var calendarChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                FilterChip(label: String(localized: "All calendars"), isSelected: selectedCalendarIDs.isEmpty) {
-                    selectedCalendarIDs = []
-                }
-                ForEach(calendarOptions, id: \.id) { option in
-                    FilterChip(label: option.title, isSelected: selectedCalendarIDs.contains(option.id),
-                               dotRGB: option.colorRGB) {
-                        if selectedCalendarIDs.contains(option.id) {
-                            selectedCalendarIDs.remove(option.id)
-                        } else {
+    private var calendarMenu: some View {
+        Menu {
+            Button {
+                selectedCalendarIDs = []
+            } label: {
+                Label("All calendars", systemImage: selectedCalendarIDs.isEmpty ? "checkmark" : "")
+            }
+            Divider()
+            ForEach(calendarOptions, id: \.id) { option in
+                Toggle(option.title, isOn: Binding(
+                    get: { selectedCalendarIDs.contains(option.id) },
+                    set: { isOn in
+                        if isOn {
                             selectedCalendarIDs.insert(option.id)
+                        } else {
+                            selectedCalendarIDs.remove(option.id)
                         }
                     }
-                }
+                ))
+            }
+        } label: {
+            if selectedCalendarIDs.isEmpty {
+                Text("All calendars")
+            } else if selectedCalendarIDs.count == 1,
+                      let option = calendarOptions.first(where: { selectedCalendarIDs.contains($0.id) })
+            {
+                Text(option.title)
+            } else {
+                Text("\(selectedCalendarIDs.count) calendars")
             }
         }
+        .menuStyle(.button)
+        .fixedSize()
         .accessibilityLabel(Text("Calendars"))
     }
 
@@ -349,13 +368,14 @@ struct RecordingsLibraryView: View {
             Button("Select Visible") {
                 selectVisibleRecordings()
             }
-            .buttonStyle(.link)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .disabled(filteredRecordings.isEmpty || selectedVisibleCount == filteredRecordings.count)
 
-            Button("Delete") {
+            Button("Delete", role: .destructive) {
                 showBulkDeleteConfirmation = true
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(selectedRecordingIds.isEmpty)
             .accessibilityIdentifier("Delete selected recordings")
@@ -373,7 +393,8 @@ struct RecordingsLibraryView: View {
     private var recordingsCard: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(Array(filteredRecordings.enumerated()), id: \.element.id) { index, recording in
+                let recordings = filteredRecordings
+                ForEach(Array(recordings.enumerated()), id: \.element.id) { index, recording in
                     RecordingRowView(
                         recording: recording,
                         onOpen: {
@@ -396,18 +417,18 @@ struct RecordingsLibraryView: View {
                         onToggleSelection: { toggleSelection(for: recording) }
                     )
                     .contextMenu { recordingContextMenu(for: recording) }
-                    if index < filteredRecordings.count - 1 {
+                    if index < recordings.count - 1 {
                         Divider()
                             .padding(.horizontal, 16)
                     }
                 }
             }
         }
-        .background(Color(.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(DS.Palette.cardFill)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         )
     }
 
@@ -447,11 +468,11 @@ struct RecordingsLibraryView: View {
                 }
             }
         }
-        .background(Color(.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(DS.Palette.cardFill)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         }
     }
 
@@ -459,6 +480,15 @@ struct RecordingsLibraryView: View {
         guard next != inspectorSelection else { return }
         guard trimNavigationGuard?() ?? true else { return }
         trimNavigationGuard = nil
+        if inspectorSelection == nil, next != nil {
+            // Grow the window rightwards first (setFrame animates synchronously), then show the
+            // inspector in the new space without its own right-to-left slide.
+            MainWindowController.shared.setRecordingInspectorExpanded(true)
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { inspectorSelection = next }
+            return
+        }
         inspectorSelection = next
     }
 
@@ -479,7 +509,7 @@ struct RecordingsLibraryView: View {
                     onNavigationGuardChanged: { trimNavigationGuard = $0 }
                 )
                 .id(recording.id)
-                .inspectorColumnWidth(min: 380, ideal: 430, max: 500)
+                .inspectorColumnWidth(MainWindowController.recordingInspectorWidth)
             }
         case let .batch(id):
             if let batch = batchStorage.batches.first(where: { $0.id == id }) {
@@ -490,7 +520,7 @@ struct RecordingsLibraryView: View {
                     },
                     onClose: { requestInspectorSelection(nil) }
                 )
-                .inspectorColumnWidth(min: 380, ideal: 430, max: 500)
+                .inspectorColumnWidth(MainWindowController.recordingInspectorWidth)
             }
         case .batchComposer:
             NewTranscriptionBatchPanel(
@@ -500,7 +530,7 @@ struct RecordingsLibraryView: View {
                 },
                 onClose: { requestInspectorSelection(nil) }
             )
-            .inspectorColumnWidth(min: 430, ideal: 480, max: 560)
+            .inspectorColumnWidth(MainWindowController.recordingInspectorWidth)
         case nil:
             EmptyView()
         }
@@ -655,80 +685,22 @@ struct RecordingsLibraryView: View {
     // MARK: - Empty States
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            Image(systemName: "waveform.circle")
-                .font(.system(size: 48))
-                .foregroundColor(Color("BrandTintSoft"))
-            Text("No Recordings Yet")
-                .font(.title2)
-                .foregroundColor(.secondary)
-            Text("Your voice, translation, and meeting recordings will appear here.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyState(
+            icon: "waveform.circle",
+            title: "No Recordings Yet",
+            message: "Your voice, translation, and meeting recordings will appear here."
+        )
     }
 
     private var noResultsState: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 36))
-                .foregroundColor(Color("BrandTintSoft"))
-            Text("No Results")
-                .font(.title3)
-                .foregroundColor(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyState(icon: "magnifyingglass", title: "No Results")
     }
 
     private var batchesEmptyState: some View {
-        ContentUnavailableView(
-            "No Batches Yet",
-            systemImage: "square.stack.3d.up",
-            description: Text("Create a batch to group related recordings and transcripts.")
+        EmptyState(
+            icon: "square.stack.3d.up",
+            title: "No Batches Yet",
+            message: "Create a batch to group related recordings and transcripts."
         )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-// MARK: - Filter Chip
-
-private struct FilterChip: View {
-    let label: String
-    let isSelected: Bool
-    var dotRGB: UInt32? = nil
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if let dotRGB {
-                    Circle().fill(Color(rgb: dotRGB)).frame(width: 8, height: 8).accessibilityHidden(true)
-                }
-                Text(label)
-            }
-                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                .foregroundColor(isSelected ? .white : .primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(
-                    isSelected
-                        ? Color.accentColor
-                        : Color(.quaternaryLabelColor).opacity(0.08),
-                    in: Capsule()
-                )
-                .overlay(
-                    Capsule()
-                        .strokeBorder(
-                            isSelected ? Color.clear : Color(.separatorColor),
-                            lineWidth: 0.5
-                        )
-                )
-        }
-        .buttonStyle(.plain)
     }
 }

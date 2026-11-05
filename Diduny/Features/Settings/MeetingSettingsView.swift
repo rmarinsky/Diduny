@@ -3,6 +3,10 @@ import SwiftUI
 
 struct MeetingSettingsView: View {
     var body: some View {
+        PageScaffold(title: "Calendar & meetings", scrolls: false) { formContent }
+    }
+
+    private var formContent: some View {
         Form {
             CalendarSettingsSection()
             Section {
@@ -33,6 +37,7 @@ struct MeetingAudioSettingsView: View {
     @State private var testCaptureURL: URL?
     @State private var testAudioPlayer: AVAudioPlayer?
     @State private var testStatusMessage = String(localized: "")
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var captureService: SystemAudioCaptureService?
 
     var body: some View {
@@ -53,14 +58,16 @@ struct MeetingAudioSettingsView: View {
             }
 
             Section("Meeting Provider") {
-                Picker("Provider", selection: $meetingCloudModeEnabled) {
-                    Text("Cloud").tag(true)
-                    Text("Local").tag(false)
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: meetingCloudModeEnabled) { _, newValue in
-                    SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = newValue
-                }
+                EnginePickerRow(
+                    label: "Engine",
+                    request: JobRequest(job: .meeting, speakerLabels: true),
+                    legacyIsLocal: { !meetingCloudModeEnabled },
+                    setLegacyLocal: { isLocal in
+                        meetingCloudModeEnabled = !isLocal
+                        SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = !isLocal
+                    }
+                )
+                DidunyTranslationGateNotice()
 
                 if meetingCloudModeEnabled {
                     Text(
@@ -221,8 +228,10 @@ struct MeetingAudioSettingsView: View {
                             .font(.caption)
                             .foregroundColor(testStatusMessage.contains("Error") || testStatusMessage
                                 .contains("permission") ? .red : .secondary)
+                            .transition(.opacity)
                     }
                 }
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: testStatusMessage.isEmpty)
             } header: {
                 Text("Test System Audio Capture")
             } footer: {

@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Copy a transcript straight from the Recordings list",
+    "headline": "Parakeet: super-fast dictation right on your Mac",
     "highlights": [
-      "The button next to Delete now copies the recording's transcript, with times and speakers as shown. Recordings without a transcript still get the Transcribe button.",
-      "The in-place selection translation option in Settings → Shortcuts is now fully translated into Ukrainian.",
-      "Double-tap ⌥⌘ now works alongside a Right Option dictation key: tap the left Option with Command. It is turned off only when push-to-talk takes both Option keys or both Command keys."
+      "Parakeet V3 runs offline on the Neural Engine: text 0.2–0.4 s after Stop, also for meetings and files. Pick an engine for each mode in Providers.",
+      "Your own ElevenLabs key: use it for dictation, translation and live meetings. The key stays in your Keychain.",
+      "Benchmark tab to compare engines on your recordings, Force submit (⌘↩ while recording pastes and sends), and a cleaner layout with a new About screen."
     ]
   },
   "uk": {
-    "headline": "Копіюй транскрипт просто зі списку записів",
+    "headline": "Parakeet: супершвидке диктування прямо на твоєму Mac",
     "highlights": [
-      "Кнопка поруч із «Видалити» тепер копіює транскрипт запису з часом і мовцями, як на екрані. Для записів без транскрипту там і далі кнопка «Транскрибувати».",
-      "Опція перекладу виділеного тексту на місці в Налаштуваннях → Клавіатурні скорочення тепер повністю перекладена українською.",
-      "Подвійне натискання ⌥⌘ тепер працює і з диктуванням на правому Option: натискай лівий Option разом із Command. Вимикається воно лише тоді, коли push-to-talk займає обидва Option або обидва Command."
+      "Parakeet V3 працює офлайн на Neural Engine: текст за 0,2–0,4 с після Stop, також для зустрічей і файлів. Рушій для кожного режиму обирай у «Провайдерах».",
+      "Свій ключ ElevenLabs: для диктування, перекладу і живих зустрічей. Ключ лишається в Keychain твого Mac.",
+      "Вкладка «Бенчмарк» для порівняння рушіїв на твоїх записах, Force submit (⌘↩ під час запису вставляє й надсилає) і акуратніший вигляд із новим екраном «Про апку»."
     ]
   }
 }

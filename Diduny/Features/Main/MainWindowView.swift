@@ -1,9 +1,8 @@
 import SwiftUI
 
 private enum MainWindowLayout {
-    static let sidebarWidth: CGFloat = 238
+    static let sidebarWidth: CGFloat = DS.Layout.sidebarWidth
     static let sidebarTopInset: CGFloat = 34
-    static let detailTopInset: CGFloat = 14
 }
 
 struct MainWindowView: View {
@@ -34,13 +33,12 @@ struct MainWindowView: View {
             detailView
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("section.\(selectedSection.rawValue)")
-                .padding(.top, MainWindowLayout.detailTopInset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(Color(.windowBackgroundColor))
         }
         .background(Color(.windowBackgroundColor))
         .ignoresSafeArea(.container, edges: [.top, .bottom])
-        .frame(minWidth: 1000, idealWidth: 1000, minHeight: 680, idealHeight: 680)
+        .frame(minWidth: 1000, minHeight: 680)
         .onAppear {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
@@ -76,6 +74,8 @@ struct MainWindowView: View {
         case .recordings:
             RecordingsLibraryView()
                 .environment(audioDeviceManager)
+        case .benchmark:
+            BenchmarkView()
         case .typingTest:
             TypingTestView()
         case .meetings:
@@ -87,10 +87,14 @@ struct MainWindowView: View {
                 .environment(audioDeviceManager)
         case .models:
             OfflineModelsSettingsView()
+        case .providers:
+            ProvidersSettingsView()
         case .shortcuts:
             ShortcutsSettingsView()
         case .account:
             AccountSettingsView()
+        case .about:
+            AboutSettingsView()
         }
     }
 }

@@ -157,6 +157,30 @@ extension AppDelegate {
             return
         }
 
+        // Meeting translation has its own engine setting; live two-way translation runs on Diduny Cloud,
+        // whatever engine plain meetings use.
+        if onDeviceSelection(for: .meetingTranslation) != nil {
+            // Parakeet / Apple: record and transcribe on this Mac, then translate the final text once.
+            if let message = onDeviceEngineStartError(for: .meetingTranslation) {
+                DictationOverlayController.shared.showInfo(message: message, duration: 4)
+                return
+            }
+            let availability = EngineOptions.translationAvailability()
+            guard availability.available else {
+                DictationOverlayController.shared.showInfo(
+                    message: availability.signedIn
+                        ? String(localized: "Translation uses Diduny quota, which is used up. Upgrade to enable it. Transcription with your own provider still works.")
+                        : String(localized: "Translation uses Diduny. Sign in to enable it. Transcription with your own provider still works."),
+                    duration: 4
+                )
+                return
+            }
+            let pair = requestedPair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+            SettingsStorage.shared.markTranslationLanguagePairUsed(pair)
+            toggleMeetingRecording(provider: .local, translateTarget: pair.languageB)
+            return
+        }
+
         // Request screen capture permission on-demand
         let hasPermission = await PermissionManager.shared.ensureScreenRecordingPermission(context: .meetingTranslation)
         appState.screenCapturePermissionGranted = hasPermission

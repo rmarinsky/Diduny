@@ -45,6 +45,16 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
         return text
     }
 
+    /// Benchmark: Diduny text before server cleanup (tokens joined) next to the cleaned text.
+    func transcribeRawAndCleaned(audioData: Data, language: String?) async throws -> (raw: String, cleaned: String) {
+        let config = Self.makeTranscriptionConfig(languageConfig: Self.resolveLanguageConfig(explicitLanguage: language))
+        let response = try await proxyTranscribe(audioData: audioData, config: config)
+        let raw = response.tokens.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty || !cleaned.isEmpty else { throw TranscriptionError.emptyTranscription }
+        return (raw.isEmpty ? cleaned : raw, cleaned)
+    }
+
     /// Transcribe meeting audio with speaker diarization
     func transcribeMeeting(audioData: Data) async throws -> String {
         Log.transcription.info("transcribeMeeting: BEGIN, audioData size = \(audioData.count) bytes")

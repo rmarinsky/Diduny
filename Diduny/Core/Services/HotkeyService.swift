@@ -13,6 +13,7 @@ extension KeyboardShortcuts.Name {
     static let toggleTranslation = Self("toggleTranslation", default: .init(.slash, modifiers: [.command, .option]))
     static let addMeetingChapter = Self("addMeetingChapter", default: .init(.b, modifiers: [.command, .option]))
     static let toggleHistoryPalette = Self("toggleHistoryPalette", default: .init(.h, modifiers: [.command, .option]))
+    static let forceSubmit = Self("forceSubmit", default: .init(.return, modifiers: [.command]))
     static let translateSelectedText = Self("translateSelectedText", default: .init(.t, modifiers: [.command, .option]))
 }
 

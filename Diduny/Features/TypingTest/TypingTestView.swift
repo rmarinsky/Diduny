@@ -86,22 +86,26 @@ struct TypingTestView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    metrics
-                    referencePanel
-                    inputPanel
-                    footer
+        PageScaffold(
+            title: "Typing Speed Test",
+            subtitle: "Saved baseline: \(formatWordsPerMinute(savedWordsPerMinute)) WPM"
+        ) {
+            Picker("Language", selection: $selectedLanguage) {
+                ForEach(TypingTestLanguage.allCases) { language in
+                    Text(language.label).tag(language)
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 220)
+        } content: {
+            VStack(alignment: .leading, spacing: DS.Space.lg) {
+                metrics
+                referencePanel
+                inputPanel
+                footer
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             isInputFocused = true
         }
@@ -116,34 +120,8 @@ struct TypingTestView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Typing Speed Test")
-                    .font(.system(size: 22, weight: .bold))
-                Text("Saved baseline: \(formatWordsPerMinute(savedWordsPerMinute)) WPM")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-
-            Picker("Language", selection: $selectedLanguage) {
-                ForEach(TypingTestLanguage.allCases) { language in
-                    Text(language.label).tag(language)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 220)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 20)
-        .padding(.bottom, 14)
-    }
-
     private var metrics: some View {
-        Grid(horizontalSpacing: 12, verticalSpacing: 12) {
+        Grid(horizontalSpacing: DS.Space.md, verticalSpacing: DS.Space.md) {
             GridRow {
                 metricTile(
                     title: String(localized: "Net speed"),
@@ -201,7 +179,7 @@ struct TypingTestView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                .background(DS.Palette.cardFill, in: RoundedRectangle(cornerRadius: 8))
 
             if !extraTypedText.isEmpty {
                 Text("Extra input: \(extraTypedText)")
@@ -267,6 +245,7 @@ struct TypingTestView: View {
             } label: {
                 Label("Reset", systemImage: "arrow.counterclockwise")
             }
+            .buttonStyle(.bordered)
 
             Text(footerStatus)
                 .font(.system(size: 12))
@@ -334,26 +313,27 @@ struct TypingTestView: View {
     }
 
     private func metricTile(title: String, value: String, icon: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(Color("BrandAccentDeep"))
-                .frame(width: 24, height: 24)
-                .background(Color("BrandAccentDeep").opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+        Card {
+            HStack(spacing: DS.Space.md) {
+                Image(systemName: icon)
+                    .font(DS.Font.headline)
+                    .foregroundColor(DS.Palette.accent)
+                    .frame(width: 24, height: 24)
+                    .background(DS.Palette.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                Text(LocalizedStringKey(title))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(value)
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Text(LocalizedStringKey(title))
+                        .font(DS.Font.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 62)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func handleInputChange(oldValue: String, newValue: String) {

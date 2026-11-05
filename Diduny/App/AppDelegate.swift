@@ -187,12 +187,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The running app's delegate. NSApp.delegate is SwiftUI's adaptor, not this class.
     static weak var current: AppDelegate?
     private var powerOffObserver: NSObjectProtocol?
-    lazy var realtimeTranscriptionService = CloudRealtimeService()
+    lazy var realtimeTranscriptionService: RealtimeTranscriptionProtocol = CloudRealtimeService()
+    /// BYOK realtime engine for the current dictation; nil = `realtimeTranscriptionService`.
+    var dictationRealtimeService: RealtimeTranscriptionProtocol?
+    /// Set at translation start when the translation engine is ElevenLabs (transcribe, then Diduny text translation).
+    var translationByokPlan: ExecutionPlan?
+    var translationRealtimeService: RealtimeTranscriptionProtocol?
+    /// BYOK realtime engine for the current meeting; nil = `realtimeTranscriptionService`.
+    var meetingRealtimeService: (any RealtimeTranscriptionProtocol)?
+    /// Last ElevenLabs failure in the current meeting, offered with a Diduny Cloud re-run after Stop.
+    var meetingByokError: ElevenLabsError?
+    /// Meeting translation on an on-device engine: target language for the one translation after Stop.
+    /// Set per meeting session at start, cleared with the session; never carried into another meeting.
+    var activeMeetingTranslateTarget: String?
+    var remoteDeletionTimer: Timer?
     var localVoiceStreamingService: LocalWhisperStreamingService?
     var localMeetingStreamingService: LocalWhisperStreamingService?
     var voiceRealtimeAccumulator: RealtimeVoiceAccumulator?
     var voiceRealtimeSessionEnabled: Bool = false
     var voiceRealtimeConnectionError: String?
+    /// Identity of the in-flight dictation realtime connect; a stale result must not touch a newer recording.
+    var voiceRealtimeConnectToken: UUID?
+    var voiceRealtimeConnectTask: Task<Void, Never>?
     var translationRealtimeAccumulator: RealtimeTranslationAccumulator?
     var translationRealtimeSessionEnabled: Bool = false
     var translationRealtimeConnectionError: String?
@@ -204,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var meetingTranslationTimestampBackfill = TranslationTimestampBackfill()
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
-        switch SettingsStorage.shared.effectiveTranscriptionProvider {
+        switch routedProvider(for: .dictation, legacy: SettingsStorage.shared.effectiveTranscriptionProvider) {
         case .cloud: transcriptionService
         case .local: whisperTranscriptionService
         }
@@ -215,6 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         Self.current = self
         let launch = AppLaunchTracker.shared.begin()
+        startRemoteDeletionQueue()
         // Sudden termination can end the process at logout/shutdown without
         // applicationWillTerminate; those exits are clean, not crashes.
         powerOffObserver = NSWorkspace.shared.notificationCenter.addObserver(

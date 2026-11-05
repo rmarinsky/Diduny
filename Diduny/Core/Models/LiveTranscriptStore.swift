@@ -11,6 +11,8 @@ final class LiveTranscriptStore {
     var provisionalSpeaker: String?
     var isActive: Bool = false
     var connectionStatus: RealtimeConnectionStatus = .disconnected
+    /// False for engines without diarization: lines carry no "Unknown" speaker label.
+    var speakerLabels = true
     private var forceNewSegmentForNextFinalToken = false
 
     private(set) var wordCount: Int = 0
@@ -22,6 +24,10 @@ final class LiveTranscriptStore {
             let text = segment.text.trimmingCharacters(in: .whitespaces)
             guard !text.isEmpty else { continue }
 
+            guard speakerLabels else {
+                result += "[\(segment.timestamp)] \(text)\n\n"
+                continue
+            }
             let speakerLabel = segment.speaker.map { "Speaker \($0)" } ?? "Unknown"
             result += "[\(segment.timestamp)] \(speakerLabel): \(text)\n\n"
         }

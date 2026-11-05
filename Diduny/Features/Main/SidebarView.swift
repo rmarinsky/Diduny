@@ -14,7 +14,7 @@ struct SidebarView: View {
     var body: some View {
         VStack(spacing: 0) {
             brandTile
-                .padding(.horizontal, 14)
+                .padding(.horizontal, DS.Space.md)
                 .padding(.top, topInset)
                 .padding(.bottom, 10)
 
@@ -24,25 +24,25 @@ struct SidebarView: View {
                         sidebarRow(for: section)
                     }
 
-                    Text("SETTINGS")
-                        .font(.system(size: 10, weight: .semibold))
+                    Text("Settings")
+                        .font(DS.Font.caption)
                         .foregroundColor(.secondary)
-                        .padding(.top, 14)
-                        .padding(.bottom, 3)
-                        .padding(.leading, 4)
+                        .padding(.top, DS.Space.md)
+                        .padding(.bottom, DS.Space.xs)
+                        .padding(.leading, DS.Space.xs)
 
                     ForEach(MainSection.settingsItems, id: \.self) { section in
                         sidebarRow(for: section)
                     }
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, DS.Space.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollIndicators(.never)
 
             footerCTA
-                .padding(.horizontal, 14)
-                .padding(.bottom, 14)
+                .padding(.horizontal, DS.Space.md)
+                .padding(.bottom, DS.Space.md)
         }
     }
 
@@ -88,21 +88,21 @@ struct SidebarView: View {
             HStack(spacing: 8) {
                 Image(systemName: "mic.fill")
                     .font(.system(size: 13, weight: .semibold))
-                Text("Start Recording")
-                    .font(.system(size: 13, weight: .semibold))
+                Text("Start recording")
+                    .font(DS.Font.headline)
                 Spacer()
                 Text("⌘⇧D")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .opacity(0.7)
             }
             .foregroundColor(.white)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, DS.Space.md)
             .padding(.vertical, 10)
             .background(Color("BrandAccentDeep"), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .help("Start Recording")
-        .accessibilityLabel(Text("Start Recording"))
+        .buttonStyle(PressScaleButtonStyle())
+        .help("Start recording")
+        .accessibilityLabel(Text("Start recording"))
         .accessibilityIdentifier("Start Recording")
     }
 

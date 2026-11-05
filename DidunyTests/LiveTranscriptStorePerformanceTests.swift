@@ -15,6 +15,14 @@ final class LiveTranscriptStorePerformanceTests: XCTestCase {
         RealtimeToken(text: text, isFinal: isFinal, speaker: speaker, startMs: startMs)
     }
 
+    func testFinalTextOmitsSpeakerLabelWhenEngineHasNone() {
+        let store = LiveTranscriptStore()
+        store.speakerLabels = false
+        store.processTokens([RealtimeToken(text: "hello there", isFinal: true)])
+        XCTAssertFalse(store.finalTranscriptText.contains("Unknown"))
+        XCTAssertTrue(store.finalTranscriptText.hasSuffix("] hello there"))
+    }
+
     func testStoredSegmentTextMatchesJoinedTokens() {
         let store = LiveTranscriptStore()
         let tokens = (0 ..< 500).map { token($0 % 7 == 0 ? " word\($0)" : "x") }

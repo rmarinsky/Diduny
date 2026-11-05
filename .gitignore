@@ -169,3 +169,7 @@ coverage/
 # =============================================================================
 /PLAN-*.md
 /PROJECT-INVENTORY.md
+
+# Raw screen recordings for the release GIF (large; the rendered GIF is committed)
+release-demo/clips/
+release-demo/frames/

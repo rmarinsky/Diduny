@@ -38,6 +38,10 @@ jobs:
           python3 scripts/release_highlights.py render \
             Diduny/Resources/ReleaseHighlights.json \
             build/release-notes.md
+          # Every release shows its "What's new" GIF (rendered by scripts/render_release_gif.sh).
+          { echo "![What's new in ${GITHUB_REF_NAME}](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/whats-new.gif)"; echo; cat build/release-notes.md; } > build/notes-with-gif.md
+          mv build/notes-with-gif.md build/release-notes.md
+          cp Diduny/Resources/ReleaseDemo.gif build/whats-new.gif
 
       - name: Select Xcode
         run: |
@@ -217,6 +221,7 @@ jobs:
             gh release upload "${GITHUB_REF_NAME}" \
               "build/${DISPLAY_NAME}-${VERSION}.dmg" \
               "build/${DISPLAY_NAME}-${VERSION}.sha256" \
+              build/whats-new.gif \
               --clobber
             gh release edit "${GITHUB_REF_NAME}" \
               --title "${APP_NAME} ${VERSION}" \
@@ -225,6 +230,7 @@ jobs:
             gh release create "${GITHUB_REF_NAME}" \
               "build/${DISPLAY_NAME}-${VERSION}.dmg" \
               "build/${DISPLAY_NAME}-${VERSION}.sha256" \
+              build/whats-new.gif \
               --title "${APP_NAME} ${VERSION}" \
               --notes-file build/release-notes.md
           fi

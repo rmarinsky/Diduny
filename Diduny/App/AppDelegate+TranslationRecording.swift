@@ -140,6 +140,8 @@ extension AppDelegate {
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
+        ForceSubmitService.shared.deactivate()
+        ForceSubmitService.shared.disarm()
 
         if !forceDiscardAudio, SettingsStorage.shared.escapeCancelSaveAudio, audioRecorder.isRecording {
             do {
@@ -214,9 +216,35 @@ extension AppDelegate {
             return
         }
 
+        if let message = onDeviceEngineStartError(for: .dictationTranslation) {
+            await MainActor.run {
+                appState.errorMessage = message
+                appState.translationRecordingState = .error
+                handleTranslationStateChange(.error)
+            }
+            return
+        }
+
         let pair = requestedPair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+        switch elevenLabsTranslationDecision {
+        case .notSelected:
+            translationByokPlan = nil
+        case let .run(plan):
+            translationByokPlan = plan
+        case let .translationUnavailable(signedIn):
+            // AC 46: no silent fallback; plain ElevenLabs dictation stays available.
+            translationByokPlan = nil
+            await MainActor.run {
+                appState.errorMessage = signedIn
+                    ? String(localized: "Translation uses Diduny quota, which is used up. Upgrade to enable it. Transcription with your own provider still works.")
+                    : String(localized: "Translation uses Diduny. Sign in to enable it. Transcription with your own provider still works.")
+                appState.translationRecordingState = .error
+                handleTranslationStateChange(.error)
+            }
+            return
+        }
         SettingsStorage.shared.markTranslationLanguagePairUsed(pair)
-        let targetLanguage = SettingsStorage.shared.effectiveTranslationProvider == .local ? "en" : pair.languageB
+        let targetLanguage = translationByokPlan == nil && routedTranslationProvider == .local ? "en" : pair.languageB
         activeTranslationLanguagePair = pair
         activeTranslationTargetLanguage = targetLanguage
         SettingsStorage.shared.voiceTranslationTargetLanguage = targetLanguage
@@ -238,7 +266,7 @@ extension AppDelegate {
         }
 
         // Provider-specific validation for Local mode
-        if SettingsStorage.shared.effectiveTranslationProvider == .local {
+        if translationByokPlan == nil, routedTranslationProvider == .local {
             guard let model = WhisperModelManager.shared.selectedModel() else {
                 Log.app.warning("startTranslationRecording: No Whisper model selected")
                 await MainActor.run {
@@ -339,7 +367,7 @@ extension AppDelegate {
                 handleTranslationStateChange(.recording)
                 configureRecordingFeedbackOutput(
                     native: .translation(targetLanguage: targetLanguage),
-                    provider: SettingsStorage.shared.effectiveTranslationProvider
+                    provider: routedTranslationProvider
                 )
 
                 // Pipe audio level to the selected recording feedback surface.
@@ -356,6 +384,7 @@ extension AppDelegate {
             // Activate escape cancel handler
             await MainActor.run {
                 setupTranslationEscapeCancelHandler()
+                setupTranslationForceSubmitHandler()
             }
         } catch is CancellationError {
             // Canceled while the engine was initializing; the canceller owns the state.
@@ -442,6 +471,7 @@ extension AppDelegate {
 
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
+        ForceSubmitService.shared.deactivate()
 
         // Capture recording start time for duration calculation
         let recordingStartTime = appState.translationRecordingStartTime
@@ -473,7 +503,7 @@ extension AppDelegate {
 
             let realtimeResult = await realtimeStopTask.value
             let switchedText: String?
-            let producedOutput: DictationOutput
+            var producedOutput: DictationOutput
             if let voiceCommand = await voiceTranslationCommand(in: realtimeResult.originalText) {
                 let commandResult = await voiceCommandOutputText(voiceCommand)
                 switchedText = commandResult.text
@@ -493,12 +523,26 @@ extension AppDelegate {
                     : output
             }
             let rawText: String
+            var byokTranslationFailed = false
             if let switchedText {
                 rawText = switchedText
+            } else if translationByokPlan != nil {
+                let transcript = realtimeResult.originalText.isEmpty
+                    ? try await transcribeWithOwnEngine(job: .dictationTranslation, audioData: audioData)
+                    : realtimeResult.originalText
+                let step = await ByokTranslationStep.translate(
+                    transcript,
+                    targetLanguage: targetLanguage,
+                    translator: DidunyTextTranslationService()
+                )
+                rawText = step.text
+                byokTranslationFailed = !step.translated
+                if byokTranslationFailed { producedOutput = .original }
+                Log.app.info("stopTranslationRecording: ElevenLabs + Diduny translation (\(rawText.count) chars, translated=\(step.translated))")
             } else if !realtimeResult.text.isEmpty {
                 rawText = realtimeResult.text
                 Log.app.info("stopTranslationRecording: Using realtime translation (\(rawText.count) chars)")
-            } else if SettingsStorage.shared.effectiveTranslationProvider == .local {
+            } else if routedTranslationProvider == .local {
                 // Local Whisper — no WebSocket, transcribe from audio
                 rawText = try await whisperTranscriptionService.translateAndTranscribe(
                     audioData: audioData,
@@ -517,12 +561,14 @@ extension AppDelegate {
                 await cleanRealtimeResultText(
                     rawText,
                     realtimeResult: realtimeResult,
-                    logPrefix: "Translation"
+                    logPrefix: "Translation",
+                    serverCleanup: translationByokPlan == nil
                 )
             } else {
                 await TranscriptCleanupService.shared.clean(
                     rawText,
-                    fillerWords: SettingsStorage.shared.fillerWords
+                    fillerWords: SettingsStorage.shared.fillerWords,
+                    serverCleanup: translationByokPlan == nil
                 )
             }
             let outputText = producedOutput.targetLanguage == nil
@@ -547,12 +593,17 @@ extension AppDelegate {
                 Log.app.info("stopTranslationRecording: Auto-pasting")
                 do {
                     try await clipboardService.paste()
+                    await submitAfterPasteIfRequested(hasText: !text.isEmpty)
                 } catch ClipboardError.accessibilityNotGranted {
+                    ForceSubmitService.shared.disarm()
                     Log.app.warning("stopTranslationRecording: Accessibility permission needed")
                     PermissionManager.shared.showPermissionAlert(for: .accessibility)
                 } catch {
+                    ForceSubmitService.shared.disarm()
                     Log.app.error("stopTranslationRecording: Paste failed - \(error.localizedDescription)")
                 }
+            } else {
+                ForceSubmitService.shared.disarm()
             }
 
             await MainActor.run {
@@ -565,10 +616,17 @@ extension AppDelegate {
                 activeTranslationTargetLanguage = nil
             }
             Log.app.info("stopTranslationRecording: SUCCESS")
+            if byokTranslationFailed {
+                showRecordingFeedbackInfo(
+                    message: String(localized: "Translation failed. Original text kept."),
+                    mode: .translation(targetLanguage: translationPairLabel),
+                    duration: 3
+                )
+            }
             let analyticsDuration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
             Task { await AnalyticsService.shared.record(
                 duration: analyticsDuration,
-                mode: SettingsStorage.shared.effectiveTranslationProvider.rawValue,
+                mode: routedTranslationProvider.rawValue,
                 scenario: "translation"
             ) }
 
@@ -682,7 +740,27 @@ extension AppDelegate {
             }
         }
 
-        guard SettingsStorage.shared.effectiveTranslationProvider == .cloud else {
+        translationRealtimeService = nil
+        if translationByokPlan != nil {
+            if onDeviceSelection(for: .dictationTranslation) == STTProviderID.appleSpeech {
+                // Apple: live text while speaking; the final text is translated on Stop.
+                translationRealtimeService = AppleLiveTranscriptionService()
+            } else if onDeviceSelection(for: .dictationTranslation) != nil {
+                // Parakeet: the capture is transcribed on Stop, then translated.
+                audioRecorder.onRealtimeAudioData = speechGatedAudioDelivery(deliver: { _ in }, onNoSpeech: onNoSpeech)
+                translationRealtimeSessionEnabled = false
+                translationRealtimeAccumulator = nil
+                return
+            } else if translationByokPlan?.mode == .live, let key = ProviderKeyStore.shared.key(for: STTProviderID.elevenLabs) {
+                translationRealtimeService = ElevenLabsRealtimeService(apiKey: key)
+            } else {
+                // After-Stop model: no live stream; the batch request runs on Stop.
+                audioRecorder.onRealtimeAudioData = speechGatedAudioDelivery(deliver: { _ in }, onNoSpeech: onNoSpeech)
+                translationRealtimeSessionEnabled = false
+                translationRealtimeAccumulator = nil
+                return
+            }
+        } else if routedTranslationProvider != .cloud {
             audioRecorder.onRealtimeAudioData = speechGatedAudioDelivery(
                 deliver: { _ in },
                 onNoSpeech: onNoSpeech
@@ -696,7 +774,7 @@ extension AppDelegate {
         let accumulator = RealtimeTranslationAccumulator(targetLanguage: pair.languageB)
         translationRealtimeAccumulator = accumulator
 
-        let rtService = realtimeTranscriptionService
+        let rtService = translationRealtimeService ?? realtimeTranscriptionService
         audioRecorder.onRealtimeAudioData = speechGatedAudioDelivery(
             deliver: { [weak rtService] pcmData in
                 rtService?.sendAudioData(pcmData)
@@ -750,9 +828,10 @@ extension AppDelegate {
                     languageHints: languageHints,
                     strictLanguageHints: !languageHints.isEmpty,
                     audioConfig: .defaultPCM16kMono,
-                    translationConfig: RealtimeTranslationConfig(
-                        mode: .oneWay(targetLanguage: pair.languageB)
-                    ),
+                    // ElevenLabs transcribes only; the Diduny text step translates after Stop.
+                    translationConfig: self.translationRealtimeService == nil
+                        ? RealtimeTranslationConfig(mode: .oneWay(targetLanguage: pair.languageB))
+                        : nil,
                     enableSpeakerDiarization: false
                 )
 
@@ -786,12 +865,13 @@ extension AppDelegate {
 
         let accumulator = translationRealtimeAccumulator
         let wasEnabled = translationRealtimeSessionEnabled
+        let rtService = translationRealtimeService ?? realtimeTranscriptionService
 
         defer {
             audioRecorder.onRealtimeAudioData = nil
             translationRealtimeSessionEnabled = false
             translationRealtimeAccumulator = nil
-            realtimeTranscriptionService.clearCallbacks()
+            rtService.clearCallbacks()
         }
 
         guard wasEnabled else {
@@ -804,13 +884,15 @@ extension AppDelegate {
             ""
         }
         let optimisticCleanupTask = finalize
-            ? startOptimisticRealtimeCleanup(for: preFinalizeText)
+            ? startOptimisticRealtimeCleanup(for: preFinalizeText, serverCleanup: translationByokPlan == nil)
             : nil
         var finalizeResult: RealtimeFinalizeResult = .skipped
         if finalize {
-            finalizeResult = await realtimeTranscriptionService.finalize(profile: .dictationFast)
+            // Push the mic buffer that was filling at Stop so the last words reach the socket.
+            await audioRecorder.flushRealtimeAudio()
+            finalizeResult = await rtService.finalize(profile: .dictationFast)
         }
-        await realtimeTranscriptionService.disconnect()
+        await rtService.disconnect()
 
         let text = await (accumulator?.bestText(includeProvisional: true) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -872,5 +954,11 @@ extension AppDelegate {
         }
 
         escapeService.activate()
+    }
+
+    private func setupTranslationForceSubmitHandler() {
+        ForceSubmitService.shared.activate { [weak self] in
+            Task { @MainActor in await self?.stopTranslationRecordingIfRecording() }
+        }
     }
 }

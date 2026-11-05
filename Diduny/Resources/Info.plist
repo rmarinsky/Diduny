@@ -32,6 +32,8 @@
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
     <key>LSUIElement</key>
     <true/>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Diduny uses Apple speech recognition on this Mac when you include the Apple engine in a benchmark.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Diduny needs microphone access to record your voice for transcription.</string>
     <key>NSPrincipalClass</key>

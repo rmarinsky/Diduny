@@ -35,10 +35,15 @@ final class TranscriptCleanupService {
     func clean(
         _ rawText: String,
         fillerWords: [String],
-        timeoutInterval: TimeInterval = 3
+        timeoutInterval: TimeInterval = 3,
+        serverCleanup: Bool = true
     ) async -> String {
         guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return rawText
+        }
+        // Text from a bring-your-own-key provider never goes to the Diduny server.
+        guard serverCleanup else {
+            return localLexiconPostprocess(rawText)
         }
         guard AuthService.hasStoredSession else {
             Log.app.info("[Cleanup] No auth session — skipping server cleanup")
@@ -112,7 +117,7 @@ final class TranscriptCleanupService {
         text.replacingOccurrences(of: #"[ \t]*;"#, with: ",", options: .regularExpression)
     }
 
-    private func localLexiconPostprocess(_ text: String) -> String {
+    func localLexiconPostprocess(_ text: String) -> String {
         ProtectedLexiconService.shared.postprocessTranscript(text)
     }
 }

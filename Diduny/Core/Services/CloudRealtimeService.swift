@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-final class CloudRealtimeService: NSObject, @unchecked Sendable {
+final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unchecked Sendable {
     private let loadProxyBaseURL: () -> String
     private let loadAccessToken: () async -> String?
     private let loadUsage: () async -> UsageResponse?
@@ -70,6 +70,19 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
     private var audioConfig: RealtimeAudioConfig = .defaultPCM16kMono
     private var translationConfig: RealtimeTranslationConfig?
     private var enableSpeakerDiarization = true
+    /// Set before `connect` to ask the proxy for a cleaned-text frame on finish.
+    /// Consumed by the next `connect`, so other sessions on this shared service don't inherit it.
+    var nextSessionCleanupFillerWords: [String]?
+    private var sessionCleanupFillerWords: [String]?
+    private let cleanedTextLock = NSLock()
+    private var _serverCleanedText: String?
+    /// False once the session reconnected: a "cleaned" frame then covers only the new socket's audio.
+    private var cleanedTextCoversSession = true
+    /// Cleaned text the proxy sent right before `finished` (nil if not requested or not received).
+    var serverCleanedText: String? {
+        cleanedTextLock.lock(); defer { cleanedTextLock.unlock() }
+        return cleanedTextCoversSession ? _serverCleanedText : nil
+    }
     private let finalizeStateLock = NSLock()
     private let lifecycleLock = NSLock()
     private var awaitingFinalizeResponse = false
@@ -136,6 +149,9 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         self.audioConfig = audioConfig
         self.translationConfig = translationConfig
         self.enableSpeakerDiarization = enableSpeakerDiarization
+        sessionCleanupFillerWords = nextSessionCleanupFillerWords
+        nextSessionCleanupFillerWords = nil
+        cleanedTextLock.lock(); _serverCleanedText = nil; cleanedTextCoversSession = true; cleanedTextLock.unlock()
         // Fresh session: start buffering incoming audio right away, so speech
         // during the connect handshake is delivered once the socket is up.
         lifecycleLock.lock()
@@ -227,7 +243,8 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
             strictLanguageHints: strictLanguageHints,
             audioConfig: audioConfig,
             translationConfig: translationConfig,
-            enableSpeakerDiarization: enableSpeakerDiarization
+            enableSpeakerDiarization: enableSpeakerDiarization,
+            cleanupFillerWords: sessionCleanupFillerWords
         )
 
         let configData = try JSONSerialization.data(withJSONObject: config)
@@ -453,17 +470,15 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
             try await task.send(.string(""))
             Log.transcription.info("Cloud RT: Empty frame sent (finalize)")
 
-            // Wait for explicit finished signal and a short quiet window for final tokens.
+            // Wait for the explicit finished signal. Soniox sends nothing after
+            // `finished` and tokens in that frame are delivered before it is marked,
+            // so no quiet window is needed once it arrives (it only applies on timeout).
             let deadline = Date().addingTimeInterval(profile.timeoutSeconds)
 
             while Date() < deadline {
                 let snapshot = readFinalizeState()
-                let hasQuietWindow = hasFinalizeQuietWindow(
-                    snapshot: snapshot,
-                    quietWindowSeconds: profile.quietWindowSeconds
-                )
 
-                if snapshot.finished && hasQuietWindow {
+                if snapshot.finished {
                     let result = makeFinalizeResult(
                         profile: profile,
                         startedAt: startedAt,
@@ -476,7 +491,7 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
                     return result
                 }
 
-                try? await Task.sleep(for: .milliseconds(50))
+                try? await Task.sleep(for: .milliseconds(10))
             }
 
             let timedOutSnapshot = readFinalizeState()
@@ -637,6 +652,13 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
             metrics?.end(.proxyReadyWait)
             resumeProxyReady(with: .success(()))
             NSLog("[Cloud RT] Received proxy_ready signal")
+            return
+        }
+
+        // Cleaned text the proxy sends right before `finished` (when requested).
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           json["type"] as? String == "cleaned", let cleaned = json["text"] as? String {
+            cleanedTextLock.lock(); _serverCleanedText = cleaned; cleanedTextLock.unlock()
             return
         }
 
@@ -836,6 +858,8 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         }
 
         let delay = pow(2.0, Double(attempt)) // 2s, 4s, 8s
+        // Caller falls back to its local cleanup of the full accumulated transcript.
+        cleanedTextLock.lock(); cleanedTextCoversSession = false; cleanedTextLock.unlock()
 
         Log.transcription.info("Cloud RT: Reconnecting (attempt \(attempt))...")
         onConnectionStatusChanged?(.reconnecting(attempt: attempt))
@@ -889,7 +913,8 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
         strictLanguageHints: Bool,
         audioConfig: RealtimeAudioConfig,
         translationConfig: RealtimeTranslationConfig?,
-        enableSpeakerDiarization: Bool
+        enableSpeakerDiarization: Bool,
+        cleanupFillerWords: [String]? = nil
     ) -> [String: Any] {
         var config: [String: Any] = [
             "audio_format": audioConfig.audioFormat,
@@ -907,6 +932,10 @@ final class CloudRealtimeService: NSObject, @unchecked Sendable {
 
         if let translationPayload = makeTranslationPayload(from: translationConfig) {
             config["translation"] = translationPayload
+        }
+
+        if let cleanupFillerWords {
+            config["cleanup"] = ["filler_words": cleanupFillerWords]
         }
 
         return config

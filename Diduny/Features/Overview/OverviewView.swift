@@ -4,7 +4,10 @@ import SwiftUI
 struct OverviewView: View {
     @State private var storage = RecordingsLibraryStorage.shared
     @State private var playbackService = AudioPlaybackService.shared
-    @State private var timePeriod: TimePeriod = .week
+    @State private var timePeriod: TimePeriod = .month
+    @State private var snapshot = Snapshot()
+    @State private var barHeights: [Double] = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedRecording: Recording? = nil
     @State private var typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
 
@@ -40,7 +43,8 @@ struct OverviewView: View {
     // MARK: - Filtered recordings
 
     private var periodStart: Date {
-        Calendar.current.date(byAdding: .day, value: -timePeriod.daysBack, to: Date()) ?? Date()
+        if timePeriod == .month { return Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date() }
+        return Calendar.current.date(byAdding: .day, value: -timePeriod.daysBack, to: Date()) ?? Date()
     }
 
     private var periodRecordings: [Recording] {
@@ -49,9 +53,32 @@ struct OverviewView: View {
 
     // MARK: - Computed stats
 
-    private var periodStatistics: RecordingStatistics {
-        RecordingStatistics(recordings: periodRecordings)
+    /// Stats are computed once per data/period change, not on every redraw:
+    /// each pass word-splits every transcript, and the chart reads them per bar.
+    struct Snapshot {
+        var period = RecordingStatistics(recordings: [])
+        var previousTimeSavedSeconds: Double = 0
+        var series: [DayStat] = []
+        var avgMinutes: Double = 0
+        var maxMinutes: Double = 1
+        var streak = 0
     }
+
+    private func rebuildSnapshot() {
+        let series = computeChartSeries()
+        let nonEmpty = series.filter { !$0.isFuture && $0.minutes > 0 }
+        snapshot = Snapshot(
+            period: RecordingStatistics(recordings: periodRecordings),
+            previousTimeSavedSeconds: RecordingStatistics(recordings: previousPeriodRecordings)
+                .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute),
+            series: series,
+            avgMinutes: nonEmpty.isEmpty ? 0 : nonEmpty.reduce(0) { $0 + $1.minutes } / Double(nonEmpty.count),
+            maxMinutes: series.map(\.minutes).max() ?? 1,
+            streak: computeStreak()
+        )
+    }
+
+    private var periodStatistics: RecordingStatistics { snapshot.period }
 
     private var typingTimeSavedSeconds: Double {
         periodStatistics.typingTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute)
@@ -70,17 +97,15 @@ struct OverviewView: View {
     }
 
     private var previousPeriodStart: Date {
-        Calendar.current.date(byAdding: .day, value: -(timePeriod.daysBack * 2), to: Date()) ?? Date()
+        if timePeriod == .month { return Calendar.current.date(byAdding: .month, value: -1, to: periodStart) ?? Date() }
+        return Calendar.current.date(byAdding: .day, value: -(timePeriod.daysBack * 2), to: Date()) ?? Date()
     }
 
     private var previousPeriodRecordings: [Recording] {
         storage.recordings.filter { $0.createdAt >= previousPeriodStart && $0.createdAt < periodStart }
     }
 
-    private var previousTimeSavedSeconds: Double {
-        RecordingStatistics(recordings: previousPeriodRecordings)
-            .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute)
-    }
+    private var previousTimeSavedSeconds: Double { snapshot.previousTimeSavedSeconds }
 
     private var trendPercent: Int? {
         guard previousTimeSavedSeconds > 0 else { return nil }
@@ -110,7 +135,9 @@ struct OverviewView: View {
         periodStatistics.transcribedWordCount
     }
 
-    private var streak: Int {
+    private var streak: Int { snapshot.streak }
+
+    private func computeStreak() -> Int {
         let cal = Calendar.current
         var count = 0
         var day = cal.startOfDay(for: Date())
@@ -132,7 +159,30 @@ struct OverviewView: View {
         let label: String
     }
 
-    private var chartSeries: [DayStat] {
+    private var chartSeries: [DayStat] { snapshot.series }
+
+    /// Grows bars from zero, left to right; the whole wave stays within ~0.3s of stagger.
+    private func revealBars() {
+        let series = chartSeries
+        barHeights = Array(repeating: 0, count: series.count)
+        guard !reduceMotion else { return syncBars() }
+        let step = min(0.03, 0.3 / Double(max(series.count, 1)))
+        for (index, day) in series.enumerated() {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.85).delay(Double(index) * step)) {
+                barHeights[index] = day.minutes
+            }
+        }
+    }
+
+    private func syncBars() {
+        barHeights = chartSeries.map(\.minutes)
+    }
+
+    private func barHeight(_ index: Int, _ day: DayStat) -> Double {
+        barHeights.indices.contains(index) ? barHeights[index] : day.minutes
+    }
+
+    private func computeChartSeries() -> [DayStat] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
         if timePeriod == .year {
@@ -157,12 +207,19 @@ struct OverviewView: View {
             }
         }
 
-        let days = (0 ..< timePeriod.daysBack).map {
-            cal.date(byAdding: .day, value: -(timePeriod.daysBack - 1 - $0), to: today)!
+        let days: [Date] = if timePeriod == .month {
+            // Whole calendar month; days after today render as future placeholders.
+            (cal.range(of: .day, in: .month, for: today) ?? 1 ..< 31).compactMap {
+                cal.date(byAdding: .day, value: $0 - 1, to: periodStart)
+            }
+        } else {
+            (0 ..< timePeriod.daysBack).map {
+                cal.date(byAdding: .day, value: -(timePeriod.daysBack - 1 - $0), to: today)!
+            }
         }
         let byDay = Dictionary(grouping: periodRecordings) { cal.startOfDay(for: $0.createdAt) }
         let formatter = DateFormatter()
-        formatter.dateFormat = "EEE"
+        formatter.dateFormat = timePeriod == .month ? "d" : "EEE"
         return days.map { day in
             let mins = RecordingStatistics(recordings: byDay[day] ?? [])
                 .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute) / 60
@@ -176,15 +233,9 @@ struct OverviewView: View {
         }
     }
 
-    private var avgMinutes: Double {
-        let nonEmpty = chartSeries.filter { !$0.isFuture && $0.minutes > 0 }
-        guard !nonEmpty.isEmpty else { return 0 }
-        return nonEmpty.reduce(0) { $0 + $1.minutes } / Double(nonEmpty.count)
-    }
+    private var avgMinutes: Double { snapshot.avgMinutes }
 
-    private var maxMinutes: Double {
-        chartSeries.map(\.minutes).max() ?? 1
-    }
+    private var maxMinutes: Double { snapshot.maxMinutes }
 
     // MARK: - Hero description
 
@@ -201,35 +252,21 @@ struct OverviewView: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Text("Overview")
-                    .font(.title2.bold())
-                Spacer()
-                Picker("", selection: $timePeriod) {
-                    ForEach(TimePeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 220)
+        PageScaffold(title: "Overview") {
+            Picker("", selection: $timePeriod) {
+                ForEach(TimePeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 16)
-
-            ScrollView {
-                VStack(spacing: 12) {
-                    OverviewLaunchCard()
-                    heroCard
-                    metricGrid
-                    chartCard
-                    recentCard
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
+            .pickerStyle(.segmented)
+            .frame(width: 220)
+        } content: {
+            VStack(spacing: DS.Space.md) {
+                OverviewLaunchCard()
+                heroCard
+                metricGrid
+                chartCard
+                recentCard
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .sheet(item: Binding(
             get: { selectedRecording },
             set: { next in
@@ -245,6 +282,10 @@ struct OverviewView: View {
         .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
             typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
         }
+        .onAppear { rebuildSnapshot(); revealBars() }
+        .onChange(of: timePeriod) { rebuildSnapshot(); revealBars() }
+        .onChange(of: storage.recordings) { rebuildSnapshot(); syncBars() }
+        .onChange(of: typingSpeedWordsPerMinute) { rebuildSnapshot(); syncBars() }
     }
 
     // MARK: - Hero Card
@@ -255,21 +296,21 @@ struct OverviewView: View {
                 Text(
                     "TIME SAVED · THIS \(NSLocalizedString(timePeriod.rawValue, comment: "Overview period").uppercased())"
                 )
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(Color("BrandAccentDeep"))
+                .font(DS.Font.caption.weight(.semibold))
+                .foregroundColor(DS.Palette.accent)
                 .kerning(0.5)
 
                 HStack(alignment: .lastTextBaseline, spacing: 4) {
                     Text(String(format: "%.1f", totalHours))
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundColor(.primary)
                     Text("hrs")
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .font(DS.Font.headline)
                         .foregroundColor(.primary)
                 }
 
                 Text(heroDescription)
-                    .font(.system(size: 12))
+                    .font(DS.Font.callout)
                     .foregroundColor(.secondary)
             }
 
@@ -280,7 +321,7 @@ struct OverviewView: View {
                 waveformRibbon
             }
         }
-        .padding(20)
+        .padding(DS.Space.lg)
         .background(Color("BrandTintSoft"), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -353,9 +394,9 @@ struct OverviewView: View {
     private var chartCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(timePeriod.chartTitle)
-                .font(.system(size: 14, weight: .semibold))
+                .font(DS.Font.headline)
             Text(timePeriod.chartSubtitle)
-                .font(.system(size: 12))
+                .font(DS.Font.callout)
                 .foregroundColor(.secondary)
 
             Chart {
@@ -370,7 +411,7 @@ struct OverviewView: View {
                         }
                 }
 
-                ForEach(chartSeries) { day in
+                ForEach(Array(chartSeries.enumerated()), id: \.element.id) { index, day in
                     if day.isFuture || day.minutes == 0 {
                         BarMark(
                             x: .value("Day", day.label),
@@ -383,7 +424,7 @@ struct OverviewView: View {
                         let opacity = 0.25 + 0.6 * (day.minutes / max(maxMinutes, 1))
                         BarMark(
                             x: .value("Day", day.label),
-                            y: .value("Min", day.minutes)
+                            y: .value("Min", barHeight(index, day))
                         )
                         .foregroundStyle(
                             day.isToday
@@ -392,7 +433,7 @@ struct OverviewView: View {
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                         .annotation(position: .top) {
-                            if day.isToday, day.minutes > 0 {
+                            if day.isToday, day.minutes > 0, barHeight(index, day) >= day.minutes {
                                 Text(String(format: "%dm", Int(day.minutes)))
                                     .font(.system(size: 10, weight: .semibold))
                                     .foregroundColor(Color("BrandAccentDeep"))
@@ -412,12 +453,12 @@ struct OverviewView: View {
             .frame(height: 120)
             .padding(.top, 8)
         }
-        .padding(20)
-        .background(Color(.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(DS.Space.lg)
+        .background(DS.Palette.cardFill)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         )
     }
 
@@ -428,13 +469,13 @@ struct OverviewView: View {
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Recent recordings")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(DS.Font.headline)
                 Spacer()
                 Button("See all ›") {
                     MainWindowController.shared.showWindow(section: .recordings)
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 12))
+                .font(DS.Font.callout)
                 .foregroundColor(Color("BrandAccentDeep"))
             }
             .padding(.horizontal, 16)
@@ -459,11 +500,11 @@ struct OverviewView: View {
                 .padding(.bottom, 8)
             }
         }
-        .background(Color(.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(DS.Palette.cardFill)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         )
     }
 
@@ -512,19 +553,19 @@ private struct MetricCard: View {
                 .minimumScaleFactor(0.82)
 
             Text(LocalizedStringKey(label))
-                .font(.system(size: 11))
+                .font(DS.Font.caption)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(
-            isStreak ? Color("BrandTintSoft") : Color(.windowBackgroundColor)
+            isStreak ? Color("BrandTintSoft") : DS.Palette.cardFill
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(DS.Palette.cardBorder, lineWidth: 1)
         )
     }
 

@@ -570,10 +570,15 @@ final class EdgeCommandPanelController: NSObject {
         let panel = panel ?? makePanel()
         self.panel = panel
         model?.meetingSuggestion = nil
+        // A fresh appearance morphs the edge tab into the panel. Phase updates
+        // re-enter here while live, so only the first call animates.
+        dismissTask?.cancel()
+        let alreadyLive = model?.isShowingLiveFeedback == true && model?.isLiveFeedbackMinimized != true
+        let shouldMorph = !alreadyLive
         model?.isLiveFeedbackMinimized = false
         model?.isShowingLiveFeedback = true
-        position(panel, presentation: .live(mode))
-        revealPanelIfConcealed()
+        position(panel, presentation: .live(mode), morphFromTab: shouldMorph)
+        if !shouldMorph { revealPanelIfConcealed() }
         panel.orderFrontRegardless()
     }
 
@@ -779,10 +784,27 @@ final class EdgeCommandPanelController: NSObject {
         guard model?.isShowingLiveFeedback == true || model?.isLiveFeedbackMinimized == true else { return }
         // Clear minimized first so showCollapsed proceeds to the idle ribbon tab.
         liveFeedbackRestoredByUser = false
+        let store = DictationOverlayController.shared.store
+        let wasExpanded = model?.isShowingLiveFeedback == true && model?.isLiveFeedbackMinimized != true
         model?.isLiveFeedbackMinimized = false
         model?.isShowingLiveFeedback = false
-        showCollapsed()
+        // Stop: content fades first, then the panel folds back into its tab.
+        guard wasExpanded, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            store.contentRevealed = true
+            showCollapsed()
+            return
+        }
+        store.contentRevealed = false
+        dismissTask?.cancel()
+        dismissTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled, let self else { return }
+            showCollapsed()
+            store.contentRevealed = true
+        }
     }
+
+    private var dismissTask: Task<Void, Never>?
 
     /// True while a live recording is hidden to the red-dot edge tab.
     var isLiveFeedbackMinimized: Bool {
@@ -975,7 +997,8 @@ final class EdgeCommandPanelController: NSObject {
     private func position(
         _ panel: NSPanel,
         presentation: EdgeCommandPanelPresentation,
-        on explicitVisibleFrame: NSRect? = nil
+        on explicitVisibleFrame: NSRect? = nil,
+        morphFromTab: Bool = false
     ) {
         // A live drag owns the frame; phase changes and toasts must not snap
         // the panel back to its dock mid-drag. onDragEnd re-docks and calls
@@ -995,7 +1018,7 @@ final class EdgeCommandPanelController: NSObject {
         model?.dockEdge = resolvedDock.edge
         let isExpanded = presentation != .collapsed
         model?.isExpanded = isExpanded
-        panelContentView?.setExpanded(isExpanded)
+        panelContentView?.setExpanded(isExpanded, animated: morphFromTab || (panel.isVisible && panel.alphaValue > 0))
         // Backstop clip: the SwiftUI material's shape mask can be lost by the
         // window server; the layer clip keeps expanded corners rounded no
         // matter what. The collapsed tab keeps its own edge-flush shape.
@@ -1008,15 +1031,47 @@ final class EdgeCommandPanelController: NSObject {
             dock: resolvedDock,
             presentation: presentation
         )
-        if panel.isVisible {
+        if morphFromTab {
+            let tabFrame = EdgeCommandPanelPlacement.frame(
+                in: visibleFrame,
+                dock: resolvedDock,
+                presentation: .collapsed
+            )
+            morphPanel(panel, from: tabFrame, to: frame)
+        } else if panel.isVisible {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.24
-                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.25, 0.46, 0.45, 0.94)
+                context.timingFunction = isExpanded
+                    ? CAMediaTimingFunction(controlPoints: 0.25, 0.46, 0.45, 0.94)
+                    : CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
                 panel.animator().setFrame(frame, display: true)
             }
         } else {
             panel.setFrame(frame, display: true)
         }
+    }
+
+    /// Fresh appearance: the window grows out of the edge tab's frame while a
+    /// static skeleton fills it; live content cascades in once the morph lands.
+    private func morphPanel(_ panel: NSPanel, from tabFrame: NSRect, to frame: NSRect) {
+        let store = DictationOverlayController.shared.store
+        panel.ignoresMouseEvents = false
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            store.contentRevealed = true
+            panel.setFrame(frame, display: true)
+            NSAnimationContext.runAnimationGroup { $0.duration = 0.15; panel.animator().alphaValue = 1 }
+            return
+        }
+        store.contentRevealed = false
+        panel.setFrame(tabFrame, display: true)
+        panel.alphaValue = 1
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.34
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
+            panel.animator().setFrame(frame, display: true)
+        }, completionHandler: {
+            store.contentRevealed = true
+        })
     }
 
     private func activeScreen() -> NSScreen? {
@@ -1120,9 +1175,37 @@ private final class EdgeCommandPanelContentView: NSView {
         layer?.masksToBounds = radius > 0
     }
 
-    func setExpanded(_ expanded: Bool) {
-        tabHostingView.isHidden = expanded
-        expandedHostingView.isHidden = !expanded
+    /// Identity of the latest transition; a stale cross-fade completion must not hide the current view.
+    private var transitionID = 0
+
+    func setExpanded(_ expanded: Bool, animated: Bool = false) {
+        transitionID += 1
+        let currentTransition = transitionID
+        let incoming: NSView = expanded ? expandedHostingView : tabHostingView
+        let outgoing: NSView = expanded ? tabHostingView : expandedHostingView
+        guard animated, incoming.isHidden,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        else {
+            incoming.alphaValue = 1
+            outgoing.alphaValue = 1
+            incoming.isHidden = false
+            outgoing.isHidden = true
+            return
+        }
+        // Tab ↔ panel morph: the window frame grows from the tab (see position()),
+        // while the two surfaces cross-fade so the tab appears to become the panel.
+        incoming.alphaValue = 0
+        incoming.isHidden = false
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+            incoming.animator().alphaValue = 1
+            outgoing.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self, transitionID == currentTransition else { return }
+            outgoing.isHidden = true
+            outgoing.alphaValue = 1
+        })
     }
 
     func updateTabView(_ tabView: EdgeCommandTabView) {

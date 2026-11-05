@@ -162,13 +162,23 @@ open Diduny.xcodeproj
 **NEVER push directly to `main`** — not commits, not tags. Everything goes through a PR.
 **NEVER create or push `v*` tags by hand** — CI does that.
 **NEVER hand-edit** `MARKETING_VERSION` in `project.yml` or the Sparkle `appcast.xml`.
+**Sparkle is the only distribution channel.** Never use, update or recommend Homebrew (no cask, no `rmarinsky/tap`).
 
 To ship a release:
 
 1. Open a PR into `main`.
 2. Every PR must be prepared for a release. Add exactly one label:
    `release:patch` (bug fix / internal), `release:minor` (new user-facing capability),
-   or `release:major` (breaking change), and update release highlights.
+   or `release:major` (breaking change), and update release highlights
+   (`Diduny/Resources/ReleaseHighlights.json`, EN + UA) **and the "What's new" GIF**:
+   record the real app (demo recordings only; `screencapture -v -V <sec> -R x,y,w,h -x clip.mov`
+   into the gitignored `release-demo/clips/`), cut stills into the gitignored `release-demo/frames/`
+   (raw footage may show private notes; only the masked GIF is committed), script the
+   montage in `release-demo/scenario.js` (camera moves, transitions, highlights, animated shortcut
+   keys, masks over anything private, UA + EN subtitles; preview `open release-demo/player.html`),
+   run `python3 scripts/render_release_gif.py` → `Diduny/Resources/ReleaseDemo.gif`, and embed the GIF at
+   the top of the PR description. CI requires both files to change; the GIF ships in the
+   app's What's New card and is attached to the GitHub Release as `whats-new.gif`.
    Use `release:skip` only if Roman explicitly requests skipping that PR's release.
    Draft status and lack of merge authorization do not justify `release:skip`.
 3. Merge the PR.
