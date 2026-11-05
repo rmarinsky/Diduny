@@ -13,7 +13,12 @@ import Testing
 /// "Action hotkeys", "Recording keys" rows of ~69pt. Update them if that layout changes.
 /// Drives a real key window, so it runs only on CI (`DIDUNY_UI_TESTS=1`), never on a dev Mac.
 @MainActor
-@Suite(.enabled(if: ProcessInfo.processInfo.environment["DIDUNY_UI_TESTS"] == "1", "UI tests run on CI only"))
+// Serialized: every test makes its own window key and spins the run loop, so concurrent
+// tests would interleave inside those spins and steal key window, first responder and clicks.
+@Suite(
+    .serialized,
+    .enabled(if: ProcessInfo.processInfo.environment["DIDUNY_UI_TESTS"] == "1", "UI tests run on CI only")
+)
 struct ShortcutsSettingsHitTestingTests {
     nonisolated private static let windowSize = NSSize(width: 760, height: 1100)
 
@@ -30,28 +35,41 @@ struct ShortcutsSettingsHitTestingTests {
         static let dictationOffPadding = NSPoint(x: 415, y: 479)
     }
 
+    /// A non-activating panel takes clicks without the test host being the active app. macOS
+    /// may refuse to activate the host (cooperative activation, another app in front); in a
+    /// normal window SwiftUI then spends the click on activation and the control never sees it,
+    /// which made these tests flaky. The tests model a settings window the person is already in.
+    private final class TestPanel: NSPanel {
+        override var canBecomeKey: Bool { true }
+    }
+
     private final class Harness {
         let window: NSWindow
 
         init() {
+            // Drop events left from a previous test so the next dequeue is ours.
+            while NSApp.nextEvent(matching: .any, until: nil, inMode: .default, dequeue: true) != nil {}
             let hostingView = NSHostingView(rootView: ShortcutsSettingsView())
-            window = NSWindow(
+            window = TestPanel(
                 contentRect: NSRect(origin: .zero, size: ShortcutsSettingsHitTestingTests.windowSize),
-                styleMask: [.titled],
+                styleMask: [.titled, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
             )
+            window.isReleasedWhenClosed = false
             window.contentView = hostingView
-            // The bugs are about clicks in a settings window the user is already in.
-            // If the window isn't key (headless CI host), AppKit spends the first click
-            // activating it and text fields never receive it.
-            NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
-            let deadline = Date().addingTimeInterval(2)
-            while !window.isKeyWindow, Date() < deadline {
-                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
-            }
+            window.orderFrontRegardless()
             settle()
+        }
+
+        deinit {
+            // A live recorder's local event monitor reacts to clicks in any window; close ours.
+            MainActor.assumeIsolated {
+                window.makeFirstResponder(nil)
+                window.orderOut(nil)
+                window.close()
+            }
         }
 
         func settle() {
@@ -75,22 +93,23 @@ struct ShortcutsSettingsHitTestingTests {
                 // Posted through the event queue, not window.sendEvent, so local event
                 // monitors (the recorder cancels on mouse-up outside itself) see it.
                 NSApp.postEvent(event, atStart: false)
-                if let queued = NSApp.nextEvent(matching: .any, until: Date(), inMode: .default, dequeue: true) {
-                    NSApp.sendEvent(queued)
+                // Deliver exactly the event we posted; nothing else may be dequeued here.
+                let mask: NSEvent.EventTypeMask = type == .leftMouseDown ? .leftMouseDown : .leftMouseUp
+                guard let queued = NSApp.nextEvent(matching: mask, until: Date().addingTimeInterval(1),
+                                                   inMode: .default, dequeue: true),
+                    queued.windowNumber == window.windowNumber
+                else {
+                    Issue.record("posted \(type) was not delivered")
+                    return
                 }
+                NSApp.sendEvent(queued)
             }
             settle()
         }
 
-        /// Focus reaches the recorder's field editor asynchronously; waits up to 1s for it.
         var isShortcutRecorderFocused: Bool {
-            let deadline = Date().addingTimeInterval(1)
-            repeat {
-                let responder = window.firstResponder
-                if responder is NSSearchField || (responder as? NSText)?.delegate is NSSearchField { return true }
-                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
-            } while Date() < deadline
-            return false
+            let responder = window.firstResponder
+            return responder is NSSearchField || (responder as? NSText)?.delegate is NSSearchField
         }
     }
 
