@@ -51,12 +51,14 @@ final class UsageStatsArchiveTests: XCTestCase {
         XCTAssertEqual(store.usageStatRows.count, 1)
     }
 
-    func test_manualDeleteRemovesTheRecordingFromStats() throws {
+    func test_manualDeleteRemovesTheRecordingButKeepsItsStats() throws {
         let store = try makeStore()
         let id = try XCTUnwrap(store.saveRecording(audioData: Data([1]), type: .voice, duration: 2,
-                                                   transcriptionText: "hi", forceSave: true))
+                                                   transcriptionText: "hi there", forceSave: true))
         XCTAssertTrue(store.deleteRecordings([id]))
-        XCTAssertTrue(store.usageStatRows.isEmpty)
+        XCTAssertTrue(store.recordings.isEmpty)
+        XCTAssertEqual(store.usageStatRows.count, 1)
+        XCTAssertEqual(RecordingStatistics(rows: store.usageStatRows).transcribedWordCount, 2)
     }
 
     func test_neverRetentionSavesNoRecordingButCountsItsStats() throws {

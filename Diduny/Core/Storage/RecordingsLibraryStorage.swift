@@ -54,7 +54,7 @@ final class RecordingsLibraryStorage {
     }
 
     private(set) var recordings: [Recording] = []
-    /// Stats of recordings removed by history retention or never saved (see `UsageStatRow`).
+    /// Stats of recordings that were deleted (by retention or by hand) or never saved (see `UsageStatRow`).
     private(set) var archivedUsageStats: [UsageStatRow] = []
 
     /// Rows for Overview: saved recordings plus those retention already removed.
@@ -504,13 +504,7 @@ final class RecordingsLibraryStorage {
 
     @discardableResult
     func deleteRecording(_ recording: Recording) -> Bool {
-        deleteStoredRecordings(Set([recording.id])) {
-            try batchStorage.removeRecordingReferences(
-                Set([recording.id]),
-                allowDuringRecordingRecovery: true,
-                deferDownloadedArtifactRemoval: true
-            )
-        }
+        deleteRecordings(Set([recording.id]))
     }
 
     @discardableResult
@@ -524,27 +518,34 @@ final class RecordingsLibraryStorage {
         }
     }
 
+    /// Deleting removes the content; the recording's numbers stay in Overview (`UsageStatRow`).
     @discardableResult
     func deleteRecordings(_ ids: Set<UUID>) -> Bool {
         guard !ids.isEmpty else { return true }
-        return deleteStoredRecordings(ids) {
+        let rows = recordings.filter { ids.contains($0.id) }.map(UsageStatRow.init(recording:))
+        let deleted = deleteStoredRecordings(ids) {
             try batchStorage.removeRecordingReferences(
                 ids,
                 allowDuringRecordingRecovery: true,
                 deferDownloadedArtifactRemoval: true
             )
         }
+        if deleted { archiveUsageStats(rows) }
+        return deleted
     }
 
     @discardableResult
     func deleteBatch(_ batch: TranscriptionBatch) -> Bool {
-        deleteStoredRecordings(Set(batch.recordingIDs)) {
+        let rows = recordings.filter { batch.recordingIDs.contains($0.id) }.map(UsageStatRow.init(recording:))
+        let deleted = deleteStoredRecordings(Set(batch.recordingIDs)) {
             try batchStorage.delete(
                 batchID: batch.id,
                 allowDuringRecordingRecovery: true,
                 deferDownloadedArtifactRemoval: true
             ).removedItems
         }
+        if deleted { archiveUsageStats(rows) }
+        return deleted
     }
 
     private func deleteStoredRecordings(
@@ -715,9 +716,7 @@ final class RecordingsLibraryStorage {
         })
 
         guard !expiredIds.isEmpty else { return }
-        let expiredRows = recordings.filter { expiredIds.contains($0.id) }.map(UsageStatRow.init(recording:))
         guard deleteRecordings(expiredIds) else { return }
-        archiveUsageStats(expiredRows)
         Log.app.info("Pruned \(expiredIds.count) expired recording entries")
     }
 

@@ -453,8 +453,8 @@ extension Recording {
 }
 
 /// The numbers Overview needs from one recording, without its text or audio. Rows of
-/// recordings pruned by history retention, or never saved because retention is "Never",
-/// are kept: retention governs content, the stats always count.
+/// recordings that were deleted (by retention or by hand) or never saved because retention
+/// is "Never" are kept: deletion and retention govern content, the stats always count.
 struct UsageStatRow: Codable, Equatable {
     let id: UUID
     let createdAt: Date
