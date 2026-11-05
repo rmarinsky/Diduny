@@ -58,8 +58,10 @@ final class RecordingsLibraryStorage {
     private(set) var archivedUsageStats: [UsageStatRow] = []
 
     /// Rows for Overview: saved recordings plus those retention already removed.
+    /// An archived row is written before its recording is deleted, so a saved recording wins.
     var usageStatRows: [UsageStatRow] {
-        recordings.map(UsageStatRow.init(recording:)) + archivedUsageStats
+        let savedIDs = Set(recordings.map(\.id))
+        return recordings.map(UsageStatRow.init(recording:)) + archivedUsageStats.filter { !savedIDs.contains($0.id) }
     }
 
     private let fileManager = FileManager.default
@@ -522,30 +524,27 @@ final class RecordingsLibraryStorage {
     @discardableResult
     func deleteRecordings(_ ids: Set<UUID>) -> Bool {
         guard !ids.isEmpty else { return true }
-        let rows = recordings.filter { ids.contains($0.id) }.map(UsageStatRow.init(recording:))
-        let deleted = deleteStoredRecordings(ids) {
+        // Archived first: a crash after the delete commits must not lose the numbers.
+        archiveUsageStats(recordings.filter { ids.contains($0.id) }.map(UsageStatRow.init(recording:)))
+        return deleteStoredRecordings(ids) {
             try batchStorage.removeRecordingReferences(
                 ids,
                 allowDuringRecordingRecovery: true,
                 deferDownloadedArtifactRemoval: true
             )
         }
-        if deleted { archiveUsageStats(rows) }
-        return deleted
     }
 
     @discardableResult
     func deleteBatch(_ batch: TranscriptionBatch) -> Bool {
-        let rows = recordings.filter { batch.recordingIDs.contains($0.id) }.map(UsageStatRow.init(recording:))
-        let deleted = deleteStoredRecordings(Set(batch.recordingIDs)) {
+        archiveUsageStats(recordings.filter { batch.recordingIDs.contains($0.id) }.map(UsageStatRow.init(recording:)))
+        return deleteStoredRecordings(Set(batch.recordingIDs)) {
             try batchStorage.delete(
                 batchID: batch.id,
                 allowDuringRecordingRecovery: true,
                 deferDownloadedArtifactRemoval: true
             ).removedItems
         }
-        if deleted { archiveUsageStats(rows) }
-        return deleted
     }
 
     private func deleteStoredRecordings(
@@ -735,10 +734,17 @@ final class RecordingsLibraryStorage {
     }
 
     private static func loadUsageStatsArchive(from url: URL) -> [UsageStatRow] {
-        guard let data = try? Data(contentsOf: url) else { return [] }
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode([UsageStatRow].self, from: data)) ?? []
+        if let data = try? Data(contentsOf: url), let rows = try? decoder.decode([UsageStatRow].self, from: data) {
+            return rows
+        }
+        // Keep an unreadable archive instead of overwriting it with the next write.
+        let aside = url.deletingPathExtension().appendingPathExtension("unreadable-\(Int(Date().timeIntervalSince1970)).json")
+        try? FileManager.default.moveItem(at: url, to: aside)
+        Log.app.error("Usage stats archive was unreadable; moved it to \(aside.lastPathComponent)")
+        return []
     }
 
     // MARK: - Update

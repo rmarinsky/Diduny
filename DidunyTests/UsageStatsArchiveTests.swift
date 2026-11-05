@@ -70,4 +70,13 @@ final class UsageStatsArchiveTests: XCTestCase {
         XCTAssertEqual(RecordingStatistics(rows: store.usageStatRows).transcribedWordCount, 5)
         XCTAssertEqual(RecordingStatistics(rows: try makeStore().usageStatRows).recordingCount, 1)
     }
+
+    func test_unreadableArchiveIsMovedAsideNotOverwritten() throws {
+        let archive = directory.appendingPathComponent("usage_stats_archive.json")
+        try Data("not json".utf8).write(to: archive)
+        let store = try makeStore()
+        XCTAssertTrue(store.usageStatRows.isEmpty)
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        XCTAssertTrue(names.contains { $0.hasPrefix("usage_stats_archive.unreadable-") })
+    }
 }
