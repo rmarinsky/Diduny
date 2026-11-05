@@ -177,7 +177,7 @@ To ship a release:
    montage in `release-demo/scenario.js` (camera moves, transitions, highlights, animated shortcut
    keys, masks over anything private, UA + EN subtitles; preview `open release-demo/player.html`),
    run `python3 scripts/render_release_gif.py` → `Diduny/Resources/ReleaseDemo.gif`, and embed the GIF at
-   the top of the PR description. CI requires both files to change; the GIF ships in the
+   the top of the PR description. CI requires both files to change (a `release:patch` PR may keep the previous GIF); the GIF ships in the
    app's What's New card and is attached to the GitHub Release as `whats-new.gif`.
    Use `release:skip` only if Roman explicitly requests skipping that PR's release.
    Draft status and lack of merge authorization do not justify `release:skip`.
