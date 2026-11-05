@@ -82,9 +82,15 @@ struct ShortcutsSettingsHitTestingTests {
             settle()
         }
 
+        /// Focus reaches the recorder's field editor asynchronously; waits up to 1s for it.
         var isShortcutRecorderFocused: Bool {
-            let responder = window.firstResponder
-            return responder is NSSearchField || (responder as? NSText)?.delegate is NSSearchField
+            let deadline = Date().addingTimeInterval(1)
+            repeat {
+                let responder = window.firstResponder
+                if responder is NSSearchField || (responder as? NSText)?.delegate is NSSearchField { return true }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            } while Date() < deadline
+            return false
         }
     }
 
