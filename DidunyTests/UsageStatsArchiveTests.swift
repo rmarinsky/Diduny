@@ -79,4 +79,31 @@ final class UsageStatsArchiveTests: XCTestCase {
         let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
         XCTAssertTrue(names.contains { $0.hasPrefix("usage_stats_archive.unreadable-") })
     }
+
+    func test_failedArchiveWriteKeepsTheRecording() throws {
+        let store = try RecordingsLibraryStorage(
+            baseDirectory: directory,
+            batchStorage: TranscriptionBatchStorage(baseDirectory: directory),
+            usageStatsArchiveWriter: { _, _ in false }
+        )
+        let id = try XCTUnwrap(store.saveRecording(audioData: Data([1]), type: .voice, duration: 2,
+                                                   transcriptionText: "hi", forceSave: true))
+        XCTAssertFalse(store.deleteRecordings([id]))
+        XCTAssertEqual(store.recordings.map(\.id), [id])
+        store.pruneExpiredRecordings(now: Date().addingTimeInterval(30 * 86400))
+        XCTAssertEqual(store.recordings.map(\.id), [id])
+    }
+
+    func test_unreadableArchiveThatCannotMoveIsNeverOverwritten() throws {
+        let archive = directory.appendingPathComponent("usage_stats_archive.json")
+        let original = Data("not json".utf8)
+        try original.write(to: archive)
+        try FileManager.default.createDirectory(at: directory.appendingPathComponent("Recordings"),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path) }
+
+        _ = try makeStore()
+        XCTAssertEqual(try Data(contentsOf: archive), original)
+    }
 }
