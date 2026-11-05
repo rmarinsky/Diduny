@@ -106,4 +106,16 @@ final class UsageStatsArchiveTests: XCTestCase {
         _ = try makeStore()
         XCTAssertEqual(try Data(contentsOf: archive), original)
     }
+
+    func test_refusedDeleteThenLaterDeleteKeepsCurrentNumbers() throws {
+        let store = try makeStore()
+        let id = try XCTUnwrap(store.saveRecording(audioData: Data([1]), type: .voice, duration: 2,
+                                                   transcriptionText: "one", forceSave: true))
+        store.updateRecording(id: id, status: .recording)
+        XCTAssertFalse(store.deleteRecordings([id])) // in-progress capture: refused, row archived early
+
+        store.updateRecording(id: id, status: .transcribed, text: "one two three")
+        XCTAssertTrue(store.deleteRecordings([id]))
+        XCTAssertEqual(RecordingStatistics(rows: store.usageStatRows).transcribedWordCount, 3)
+    }
 }

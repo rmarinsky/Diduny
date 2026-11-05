@@ -735,14 +735,17 @@ final class RecordingsLibraryStorage {
     /// Persists the rows; a delete goes ahead only when this returns true, so stats are never lost.
     @discardableResult
     private func archiveUsageStats(_ rows: [UsageStatRow]) -> Bool {
-        let known = Set(archivedUsageStats.map(\.id))
-        let added = rows.filter { !known.contains($0.id) }
-        guard !added.isEmpty else { return true }
-        guard usageStatsArchiveWritable, usageStatsArchiveWriter(archivedUsageStats + added, usageStatsArchiveURL) else {
+        // Upsert: a row archived by an earlier, refused delete is replaced with current values.
+        var updated = archivedUsageStats
+        for row in rows {
+            if let index = updated.firstIndex(where: { $0.id == row.id }) { updated[index] = row } else { updated.append(row) }
+        }
+        guard updated != archivedUsageStats else { return true }
+        guard usageStatsArchiveWritable, usageStatsArchiveWriter(updated, usageStatsArchiveURL) else {
             Log.app.error("Usage stats archive not saved; keeping the recordings")
             return false
         }
-        archivedUsageStats += added
+        archivedUsageStats = updated
         return true
     }
 
