@@ -54,11 +54,19 @@ final class RecordingsLibraryStorage {
     }
 
     private(set) var recordings: [Recording] = []
+    /// Stats of recordings removed by history retention (see `UsageStatRow`).
+    private(set) var archivedUsageStats: [UsageStatRow] = []
+
+    /// Rows for Overview: saved recordings plus those retention already removed.
+    var usageStatRows: [UsageStatRow] {
+        recordings.map(UsageStatRow.init(recording:)) + archivedUsageStats
+    }
 
     private let fileManager = FileManager.default
     private let appSupportDir: URL
     private let recordingsDir: URL
     private let metadataURL: URL
+    private let usageStatsArchiveURL: URL
     private let deletionRecoveryURL: URL
     private let deletionCleanupURL: URL
     private let deletionCommitURL: URL
@@ -96,10 +104,12 @@ final class RecordingsLibraryStorage {
 
         try? fm.createDirectory(at: appDir, withIntermediateDirectories: true)
         metadataURL = appDir.appendingPathComponent("recordings_metadata.json")
+        usageStatsArchiveURL = appDir.appendingPathComponent("usage_stats_archive.json")
         deletionRecoveryURL = appDir.appendingPathComponent("recordings_delete_recovery.json")
         deletionCleanupURL = appDir.appendingPathComponent("recordings_delete_cleanup.json")
         deletionCommitURL = appDir.appendingPathComponent("recordings_delete_commit.json")
 
+        archivedUsageStats = Self.loadUsageStatsArchive(from: usageStatsArchiveURL)
         loadAndPrune()
     }
 
@@ -689,8 +699,31 @@ final class RecordingsLibraryStorage {
         })
 
         guard !expiredIds.isEmpty else { return }
-        deleteRecordings(expiredIds)
+        let expiredRows = recordings.filter { expiredIds.contains($0.id) }.map(UsageStatRow.init(recording:))
+        guard deleteRecordings(expiredIds) else { return }
+        archiveUsageStats(expiredRows)
         Log.app.info("Pruned \(expiredIds.count) expired recording entries")
+    }
+
+    private func archiveUsageStats(_ rows: [UsageStatRow]) {
+        let known = Set(archivedUsageStats.map(\.id))
+        let added = rows.filter { !known.contains($0.id) }
+        guard !added.isEmpty else { return }
+        archivedUsageStats += added
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            try encoder.encode(archivedUsageStats).write(to: usageStatsArchiveURL, options: .atomic)
+        } catch {
+            Log.app.error("Failed to save usage stats archive: \(error.localizedDescription)")
+        }
+    }
+
+    private static func loadUsageStatsArchive(from url: URL) -> [UsageStatRow] {
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode([UsageStatRow].self, from: data)) ?? []
     }
 
     // MARK: - Update

@@ -157,8 +157,7 @@ struct AccountSettingsView: View {
 
     private var usageSection: some View {
         Section("Usage") {
-            let recordings = RecordingsLibraryStorage.shared.recordings
-            let statistics = RecordingStatistics(recordings: recordings)
+            let statistics = RecordingStatistics(rows: RecordingsLibraryStorage.shared.usageStatRows)
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack {

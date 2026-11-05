@@ -154,6 +154,7 @@
 		8E977D8D5E77C3294E62A0DB /* RecordingTrimNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C1C736D4E502EF81F4E76FE /* RecordingTrimNavigationTests.swift */; };
 		8EEB2723738AE191B5C3314A /* ElevenLabsRealtimeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 360D0D86CF7E7C7D149BCCF2 /* ElevenLabsRealtimeServiceTests.swift */; };
 		8FA6B8A6240D6AE7AEA1754C /* RealtimeTranscription.swift in Sources */ = {isa = PBXBuildFile; fileRef = 158C39D9362442B65F2948C6 /* RealtimeTranscription.swift */; };
+		8FBA3BAA4BFF39325A94A065 /* UsageStatsArchiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96EA1A71C2678B018BD5C113 /* UsageStatsArchiveTests.swift */; };
 		9082E75ACDAF59018B93B6DF /* ProtectedLexiconService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 258680FE2F7ED1EB6DB95757 /* ProtectedLexiconService.swift */; };
 		90AA891C9E5582A61DE05301 /* ReadAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF99819FE0326EF35FAE078D /* ReadAccess.swift */; };
 		910D8A3443B611ED880619D3 /* BrowserCalendarCalendarExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42801A3099B0B446C15F60E7 /* BrowserCalendarCalendarExtractionTests.swift */; };
@@ -465,6 +466,7 @@
 		955BE78738C29B1EDC2E13B4 /* JobRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobRouterTests.swift; sourceTree = "<group>"; };
 		95C548901A7E8B827205B588 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = uk.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		96A94A4425CFD487D68A7D37 /* SpeakerLabelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerLabelsTests.swift; sourceTree = "<group>"; };
+		96EA1A71C2678B018BD5C113 /* UsageStatsArchiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatsArchiveTests.swift; sourceTree = "<group>"; };
 		996036246430D38598423035 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		9982A23ADAEE3F89D3B8C735 /* MeetingBackgroundFinalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingBackgroundFinalizationTests.swift; sourceTree = "<group>"; };
 		9B5D18874A63984BAB21B035 /* MeetingJoinMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingJoinMonitorTests.swift; sourceTree = "<group>"; };
@@ -1141,6 +1143,7 @@
 				650D5A1F7778A1C35AD2F515 /* TranslationPairPickerControllerTests.swift */,
 				C078BA7D295B4041F5488720 /* TranslationTimestampBackfillTests.swift */,
 				D6E3CC8287108DD5E1CCD081 /* TypingSpeedMeasurementTests.swift */,
+				96EA1A71C2678B018BD5C113 /* UsageStatsArchiveTests.swift */,
 				740A3D44AC0DCDDB39A54A0D /* VoiceTranslationCommandTests.swift */,
 				C983964C6A2531BE37CEFC83 /* VoiceTranslationTests.swift */,
 				2EE2A96B32EC6F2E9F93BB51 /* WordDiffTests.swift */,
@@ -1648,6 +1651,7 @@
 				D08BBB9F8D641C3D4ADAD992 /* TranslationPairPickerControllerTests.swift in Sources */,
 				78E5980FBD778FAE4E032ABD /* TranslationTimestampBackfillTests.swift in Sources */,
 				FFBC1497C42CFFB50037E3EA /* TypingSpeedMeasurementTests.swift in Sources */,
+				8FBA3BAA4BFF39325A94A065 /* UsageStatsArchiveTests.swift in Sources */,
 				F422AFD9CDEA731333E7ADA0 /* VoiceTranslationCommandTests.swift in Sources */,
 				3D2EAC579981AC183C7AB330 /* VoiceTranslationTests.swift in Sources */,
 				3C761450C7224C3A65400C44 /* WordDiffTests.swift in Sources */,
