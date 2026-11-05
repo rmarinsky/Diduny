@@ -52,12 +52,14 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          IS_PATCH: ${{ contains(github.event.pull_request.labels.*.name, 'release:patch') }}
         run: |
           if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- Diduny/Resources/ReleaseHighlights.json; then
             echo "::error::Release PRs must update Diduny/Resources/ReleaseHighlights.json"
             exit 1
           fi
-          if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- Diduny/Resources/ReleaseDemo.gif; then
+          # Patch releases (fixes) may reuse the previous "What's new" GIF.
+          if [ "$IS_PATCH" != "true" ] && git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- Diduny/Resources/ReleaseDemo.gif; then
             echo "::error::Release PRs must update Diduny/Resources/ReleaseDemo.gif (edit release-demo/scenario.js, run scripts/render_release_gif.sh)"
             exit 1
           fi
