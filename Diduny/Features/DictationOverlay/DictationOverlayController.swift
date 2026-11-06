@@ -5,6 +5,17 @@ final class DictationOverlayController {
     static let shared = DictationOverlayController()
 
     let store = LiveDictationOverlayStore()
+    /// The outcome after Stop for the command panel (WP-42). Kept until the next recording.
+    let outcomeStore = EdgeCommandOutcomeStore()
+    /// When Stop was pressed; the outcome duration ends here and a paste before it is stale.
+    private var stoppedAt: Date?
+    /// The meeting stop flow hands over the library id before it reports success.
+    private var outcomeRecordingID: UUID?
+
+    /// Meetings: the saved library recording, for Open recording in the outcome.
+    func setOutcomeRecordingID(_ id: UUID?) {
+        outcomeRecordingID = id
+    }
     private var autoHideTask: Task<Void, Never>?
     private var outputPreviewTask: Task<Void, Never>?
     private static let maxPreviewSourceBytes = 1500
@@ -36,6 +47,9 @@ final class DictationOverlayController {
         cancelOutputPreview()
         store.reset(mode: mode)
         configureSession(mode: mode)
+        stoppedAt = nil
+        outcomeRecordingID = nil
+        outcomeStore.clear()
         store.phase = .starting
         if usesNotch {
             NotchManager.shared.resumeRecording(mode: mode)
@@ -65,6 +79,7 @@ final class DictationOverlayController {
             store.mode = mode
         }
         cancelOutputPreview()
+        stoppedAt = stoppedAt ?? Date()
         if mode.isMeeting {
             // The meeting timer stops at Stop; finalizing and the hand-off show the recorded length.
             store.endedAt = Date()
@@ -84,6 +99,7 @@ final class DictationOverlayController {
             store.mode = mode
         }
         cancelOutputPreview()
+        stoppedAt = stoppedAt ?? Date()
         store.phase = .processing
         store.audioLevel = 0
         if usesNotch {
@@ -93,12 +109,14 @@ final class DictationOverlayController {
         }
     }
 
-    func showSuccess(text: String) {
+    /// - Parameter recordingID: meetings, the library recording for Open recording.
+    func showSuccess(text: String, recordingID: UUID? = nil) {
         autoHideTask?.cancel()
         if !text.isEmpty {
             store.finalText = text
             store.provisionalText = ""
         }
+        recordOutcome(resultText: text.isEmpty ? store.finalText : text, recordingID: recordingID)
         store.phase = .pasted
         store.audioLevel = 0
         if usesNotch {
@@ -111,6 +129,48 @@ final class DictationOverlayController {
         if SettingsStorage.shared.autoPaste {
             scheduleAutoHide(delay: 0.8)
         }
+    }
+
+    /// Builds the outcome for the stopped recording from the session (default 8, 02 Q11-Q12).
+    private func recordOutcome(resultText: String, recordingID: UUID?) {
+        let end = stoppedAt ?? store.endedAt ?? Date()
+        let duration = Int(max(end.timeIntervalSince(store.startedAt), 0).rounded())
+        let flow: EdgeCommandOutcome.Flow = switch store.mode {
+        case .meeting:
+            .meeting
+        case .meetingTranslation:
+            // The saved pair comes with WP-41 / WP-30; until then no pair suffix.
+            .meeting
+        default:
+            if store.selectedOutput.targetLanguage != nil {
+                .dictationTranslation(languageName: store.selectedOutput.label)
+            } else {
+                .dictation
+            }
+        }
+        outcomeStore.show(EdgeCommandOutcome(
+            flow: flow,
+            durationSeconds: duration,
+            delivery: Self.delivery(
+                autoPaste: SettingsStorage.shared.autoPaste,
+                lastPaste: ClipboardService.shared.lastPaste,
+                stoppedAt: stoppedAt
+            ),
+            resultText: flow.isMeeting ? "" : resultText,
+            recordingID: recordingID ?? outcomeRecordingID
+        ))
+    }
+
+    /// "Pasted into <app>" only for a paste of this recording; auto-paste off or a failed or
+    /// older paste is "Copied".
+    nonisolated static func delivery(
+        autoPaste: Bool,
+        lastPaste: ClipboardService.PasteRecord?,
+        stoppedAt: Date?
+    ) -> EdgeCommandOutcome.Delivery {
+        guard autoPaste, let lastPaste else { return .copied }
+        if let stoppedAt, lastPaste.at < stoppedAt { return .copied }
+        return .pasted(appName: lastPaste.appName)
     }
 
     func showError(message: String) {
@@ -157,6 +217,7 @@ final class DictationOverlayController {
 
     /// Stop handed the meeting to the transcription queue: say so for 2 s, then close.
     func showBackgroundHandoff(duration: TimeInterval = 2.0) {
+        recordOutcome(resultText: "", recordingID: nil)
         let message = String(localized: "Transcribing in background")
         autoHideTask?.cancel()
         cancelOutputPreview()
