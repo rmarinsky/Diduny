@@ -92,10 +92,6 @@ final class FakeKeySource: KeyEventSource {
     func send(_ event: KeyEvent) {
         handler?(event)
     }
-
-    func send(_ events: [KeyEvent]) {
-        events.forEach(send)
-    }
 }
 
 /// Mirrors the `KeyboardShortcuts` 2.4.0 rules that matter here: `onKeyDown` and `enable` register a
@@ -223,16 +219,13 @@ extension KeyEvent {
 enum KeyCode {
     static let a: UInt16 = 0
     static let x: UInt16 = 7
-    static let b: UInt16 = 11
     static let d: UInt16 = 2
     static let i: UInt16 = 34
-    static let k: UInt16 = 40
     static let tab: UInt16 = 48
     static let delete: UInt16 = 51
     static let escape: UInt16 = 53
     static let f5: UInt16 = 96
     static let f6: UInt16 = 97
-    static let f13: UInt16 = 105
     static let rightShift: UInt16 = 60
     static let leftShift: UInt16 = 56
     static let rightOption: UInt16 = 61
