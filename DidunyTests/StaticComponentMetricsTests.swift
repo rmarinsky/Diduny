@@ -11,9 +11,31 @@ import Testing
 struct StaticComponentMetricsTests {
     private static let tolerance: CGFloat = 1
 
+    /// A window that is never shown and reports a Retina backing scale. SwiftUI snaps text and
+    /// frames to the pixel grid of the window's scale (whole points without a window), so this
+    /// measures what a 2x Mac draws, whatever display the runner has (spec 10.3: ±2 px at 2x).
+    private final class RetinaMeasuringWindow: NSWindow {
+        override var backingScaleFactor: CGFloat { 2 }
+    }
+
     private func size(_ view: some View, width: CGFloat? = nil) -> CGSize {
         let host = NSHostingView(rootView: view.frame(width: width))
+        let window = RetinaMeasuringWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 800),
+            styleMask: [.borderless], backing: .buffered, defer: true
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.contentView = nil }
         return host.fittingSize
+    }
+
+    /// How much wider `text` is in the rounded design than in the system design. The prototype
+    /// measured keyboard glyphs in the system font; D17 draws them rounded.
+    private func roundedExtraWidth(_ text: String, size: CGFloat) -> CGFloat {
+        let rounded = self.size(Text(verbatim: text).font(.system(size: size, weight: .semibold, design: .rounded))).width
+        let system = self.size(Text(verbatim: text).font(.system(size: size, weight: .semibold))).width
+        return rounded - system
     }
 
     private func expectNear(_ actual: CGFloat, _ expected: CGFloat, _ what: String) {
@@ -185,12 +207,13 @@ struct StaticComponentMetricsTests {
 
     // MARK: - Other fixed sizes (3.2)
 
-    @Test("Shortcut field is 25 high, at least 58 wide, 63.9 for ⇧⌥⌘M")
+    @Test("Shortcut field is 25 high, at least 58 wide, 63.9 for ⇧⌥⌘M plus the D17 rounded-font difference")
     func shortcutField() {
         let short = size(ShortcutField(shortcut: "⌥D", rowLabel: "Dictation"))
         expectNear(short.height, DS.Size.shortcutFieldHeight, "field height")
         expectNear(short.width, DS.Size.shortcutFieldMinWidth, "minimum width")
-        expectNear(size(ShortcutField(shortcut: "⇧⌥⌘M", rowLabel: "Meeting")).width, 63.9, "four-glyph width")
+        expectNear(size(ShortcutField(shortcut: "⇧⌥⌘M", rowLabel: "Meeting")).width,
+                   63.9 + roundedExtraWidth("⇧⌥⌘M", size: 12), "four-glyph width")
     }
 
     @Test("Header link 23, progress row 38, progress bar 4, expander 26, trash 24, preview 132 x 78")
