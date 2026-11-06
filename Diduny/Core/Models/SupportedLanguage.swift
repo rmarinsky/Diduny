@@ -172,6 +172,19 @@ struct SupportedLanguage: Identifiable, Hashable {
         let normalized = aliases[languageCode] ?? languageCode
         return cloudLanguages.contains(where: { $0.code == normalized }) ? normalized : nil
     }
+
+    /// Any ISO 639 language code, for lists that may hold languages outside the 60 Cloud languages
+    /// (Your languages, Maltese). Codes in the 60 normalize exactly as `normalizedCode`, which the
+    /// Cloud request path keeps using.
+    static func normalizedISOCode(_ code: String?) -> String? {
+        if let cloudCode = normalizedCode(code) { return cloudCode }
+        guard let base = code?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            .replacingOccurrences(of: "_", with: "-").split(separator: "-").first.map(String.init),
+            (2 ... 3).contains(base.count), base.allSatisfy({ $0.isASCII && $0.isLetter }),
+            Locale.LanguageCode(base).isISOLanguage
+        else { return nil }
+        return base
+    }
 }
 
 struct TranslationLanguagePair: Identifiable, Codable, Hashable {
