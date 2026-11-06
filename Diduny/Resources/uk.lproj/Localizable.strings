@@ -1841,3 +1841,8 @@
 "%@ · transcript ready" = "%@ · транскрипт готовий";
 "%@ · transcript ready, translated %@" = "%@ · транскрипт готовий, переклад %@";
 "Open recording" = "Відкрити запис";
+
+/* Panels redesign WP-43 */
+"Record it?" = "Записати її?";
+"Transcript after Stop" = "Транскрипт після зупинки";
+"Keep suggesting when a meeting starts" = "Пропонувати запис, коли починається зустріч";

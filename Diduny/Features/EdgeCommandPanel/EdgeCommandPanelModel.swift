@@ -40,55 +40,78 @@ enum EdgeCommandPanelPresentation: Equatable {
     case meetingSuggestion
 }
 
-enum MeetingSuggestionProcessingMode: Equatable {
-    case cloud
-    case local
-    case recordingOnly
+/// What the meeting prompt reads from Settings > Modes > Meeting: "Starts in" and each segment's
+/// default engine (02 section 7). Until WP-13 stores these, the controller builds it from today's settings.
+struct MeetingPromptDefaults: Equatable {
+    var startsIn: MeetingSegment
+    var engines: [MeetingSegment: EngineID]
 
-    static func resolve(cloudEnabled: Bool, hasLocalModel: Bool) -> Self {
-        if cloudEnabled { return .cloud }
-        return hasLocalModel ? .local : .recordingOnly
+    /// Modes defaults (Proto:754): Cloud; This Mac Whisper, Cloud Diduny Cloud, Record only Parakeet V3.
+    static let standard = Self(
+        startsIn: .cloud,
+        engines: [.thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .parakeet]
+    )
+
+    func engine(for segment: MeetingSegment) -> EngineID {
+        engines[segment] ?? Self.standard.engines[segment] ?? .didunyCloud
     }
+}
 
-    var label: String {
-        switch self {
-        case .cloud: String(localized: "Cloud - live transcription")
-        case .local: String(localized: "Local - transcription on this Mac")
-        case .recordingOnly:
-            String(localized: "Recording only - download a local model for transcription")
-        }
-    }
+/// The meeting the prompt starts: its segment and that segment's default engine.
+struct MeetingPromptStart: Equatable {
+    let segment: MeetingSegment
+    let engine: EngineID
 
-    var icon: String {
-        switch self {
-        case .cloud: "cloud"
-        case .local: "desktopcomputer"
-        case .recordingOnly: "exclamationmark.triangle"
-        }
+    /// Today's start path only knows Cloud or Local; Record only records on this Mac.
+    var legacyProvider: TranscriptionProvider {
+        segment == .cloud ? .cloud : .local
     }
 }
 
 struct MeetingSuggestion: Equatable {
     let meeting: DetectedMeeting
-    var selectedProvider: TranscriptionProvider
+    let defaults: MeetingPromptDefaults
+    /// For this prompt only (02 Q8 default): a click does not write Modes.
+    var selectedSegment: MeetingSegment
     var isCloudAvailable: Bool
-    let hasLocalModel: Bool
 
-    var processingMode: MeetingSuggestionProcessingMode {
-        .resolve(cloudEnabled: selectedProvider == .cloud, hasLocalModel: hasLocalModel)
+    var engine: EngineID {
+        defaults.engine(for: selectedSegment)
+    }
+
+    /// Field label "Transcript after Stop" instead of "Engine".
+    var isEngineAfterStop: Bool {
+        selectedSegment == .recordOnly
+    }
+
+    var engineName: String {
+        switch engine {
+        case .didunyCloud: "Diduny Cloud"
+        case .elevenLabs: "ElevenLabs"
+        case .whisper: "Whisper"
+        case .parakeet: "Parakeet V3"
+        case .appleSpeech: "Apple Speech"
+        }
+    }
+
+    var start: MeetingPromptStart {
+        MeetingPromptStart(segment: selectedSegment, engine: engine)
+    }
+
+    func isSelectable(_ segment: MeetingSegment) -> Bool {
+        segment != .cloud || isCloudAvailable
     }
 
     static func resolve(
         meeting: DetectedMeeting,
-        preferredProvider: TranscriptionProvider,
-        cloudAvailable: Bool,
-        hasLocalModel: Bool
+        defaults: MeetingPromptDefaults,
+        cloudAvailable: Bool
     ) -> Self {
         Self(
             meeting: meeting,
-            selectedProvider: preferredProvider == .cloud && cloudAvailable ? .cloud : .local,
-            isCloudAvailable: cloudAvailable,
-            hasLocalModel: hasLocalModel
+            defaults: defaults,
+            selectedSegment: defaults.startsIn == .cloud && !cloudAvailable ? .thisMac : defaults.startsIn,
+            isCloudAvailable: cloudAvailable
         )
     }
 }
@@ -201,11 +224,9 @@ final class EdgeCommandPanelModel {
     }
 
     @discardableResult
-    func selectMeetingSuggestionProvider(_ provider: TranscriptionProvider) -> Bool {
-        guard var suggestion = meetingSuggestion,
-              provider != .cloud || suggestion.isCloudAvailable
-        else { return false }
-        suggestion.selectedProvider = provider
+    func selectMeetingSuggestionSegment(_ segment: MeetingSegment) -> Bool {
+        guard var suggestion = meetingSuggestion, suggestion.isSelectable(segment) else { return false }
+        suggestion.selectedSegment = segment
         meetingSuggestion = suggestion
         return true
     }

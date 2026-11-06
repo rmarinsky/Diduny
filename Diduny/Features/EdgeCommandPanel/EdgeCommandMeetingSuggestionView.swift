@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// "Looks like a meeting started" (design-spec 7.8, 02 section 7): segments preset from Modes, a static
+/// engine field, the Keep suggesting switch, Not now / Start recording. 300 x 229.
 struct MeetingSuggestionView: View {
     let model: EdgeCommandPanelModel
     let suggestion: MeetingSuggestion
@@ -9,135 +11,103 @@ struct MeetingSuggestionView: View {
     let onDrag: () -> Void
     let onDragEnd: () -> Void
 
+    /// 229 - 2 x 12 padding - 4 x 10 gaps - header 28, segments 34, field 42, buttons 38.
+    static let switchRowHeight: CGFloat = 23
+
+    private var current: MeetingSuggestion {
+        model.meetingSuggestion ?? suggestion
+    }
+
     var body: some View {
         @Bindable var model = model
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "record.circle")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Color("BrandAccentDeep"))
-                    .frame(
-                        width: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight,
-                        height: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight
-                    )
-                    .background(Color("BrandTintSoft"), in: RoundedRectangle(cornerRadius: 11))
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Looks like a meeting started")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text(message)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(
-                            width: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight,
-                            height: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight
-                        )
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close meeting recording suggestion")
+        return VStack(alignment: .leading, spacing: 10) {
+            PanelHeader(
+                icon: PanelIconTile(symbol: "person.2"),
+                title: "Looks like a meeting started",
+                status: .plain("Record it?"),
+                titleID: "prompt.title",
+                statusID: "prompt.subtitle"
+            ) {
+                PanelIconButton(kind: .close, action: onDismiss)
+                    .accessibilityIdentifier("prompt.close")
             }
             .contentShape(Rectangle())
             .gesture(dragGesture)
 
-            Picker(
-                "Meeting transcription provider",
+            ModeSegments(
+                items: MeetingSegment.allCases.map { segment in
+                    .init(
+                        id: segment,
+                        title: Self.title(for: segment),
+                        isEnabled: current.isSelectable(segment),
+                        accessibilityID: Self.accessibilityID(for: segment)
+                    )
+                },
                 selection: Binding(
-                    get: { model.meetingSuggestion?.selectedProvider ?? suggestion.selectedProvider },
-                    set: { model.selectMeetingSuggestionProvider($0) }
+                    get: { current.selectedSegment },
+                    set: { model.selectMeetingSuggestionSegment($0) }
                 )
-            ) {
-                Text("Cloud").tag(TranscriptionProvider.cloud)
-                Text("Local").tag(TranscriptionProvider.local)
+            )
+
+            PickerField(
+                staticLabel: current.isEngineAfterStop ? "Transcript after Stop" : "Engine",
+                value: current.engineName,
+                layout: .stacked,
+                identifier: "prompt.engine"
+            )
+
+            HStack(spacing: DS.Space.sm) {
+                Text("Keep suggesting when a meeting starts")
+                    .font(DS.Font.meta)
+                    .foregroundStyle(DS.Palette.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                SettingsSwitch(title: "Keep suggesting when a meeting starts", isOn: $model.meetingSuggestionsEnabled)
+                    .accessibilityIdentifier("prompt.keepSuggesting")
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .disabled(!suggestion.isCloudAvailable)
-            .frame(minHeight: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight)
-            .accessibilityLabel("Meeting transcription provider")
-            .accessibilityHint(
-                suggestion.isCloudAvailable
-                    ? "Choose Cloud or Local transcription"
-                    : "Cloud is unavailable. Local transcription will be used."
-            )
-
-            Label(suggestion.processingMode.label, systemImage: suggestion.processingMode.icon)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .frame(minHeight: 32)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-
-            Toggle(
-                "Continue tracking meetings and suggesting recordings",
-                isOn: $model.meetingSuggestionsEnabled
-            )
-            .toggleStyle(.checkbox)
-            .font(.system(size: 11.5))
-            .frame(
-                minHeight: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight,
-                alignment: .leading
-            )
+            .frame(height: Self.switchRowHeight)
             .onChange(of: model.meetingSuggestionsEnabled) { _, enabled in
                 onTrackingChanged(enabled)
             }
-            .accessibilityLabel("Continue tracking meetings and suggesting recordings")
 
-            HStack(spacing: 8) {
-                Button(action: onDismiss) {
-                    Text("Not now")
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight
-                        )
-                }
-                .buttonStyle(.bordered)
-                .keyboardShortcut(.cancelAction)
-                .accessibilityLabel("Not now")
-
-                Button(action: onStart) {
-                    Text("Start recording")
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight
-                        )
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-                .accessibilityLabel("Start recording and transcription")
+            HStack(spacing: DS.Space.sm) {
+                PanelButton(title: "Not now", action: onDismiss)
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("prompt.notNow")
+                PanelButton(title: "Start recording", role: .primary, action: onStart)
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("prompt.start")
             }
         }
-        .padding(16)
-        .background(.regularMaterial, in: panelShape)
-        .overlay(panelShape.stroke(Color.primary.opacity(0.10), lineWidth: 0.5))
+        .padding(DS.Space.md)
+        .frame(width: 300)
+        .background(DS.Palette.panel, in: panelShape)
+        .overlay(panelShape.stroke(DS.Palette.line, lineWidth: 1))
         .onExitCommand(perform: onDismiss)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Meeting recording suggestion")
+        .accessibilityIdentifier("commandPanel.prompt")
     }
 
-    private var message: String {
-        String(
-            format: String(
-                localized: "Start recording and transcription in %@ so you can return to the materials after the meeting?"
-            ),
-            suggestion.meeting.client.displayName
-        )
+    static func title(for segment: MeetingSegment) -> LocalizedStringKey {
+        switch segment {
+        case .thisMac: "This Mac"
+        case .cloud: "Cloud"
+        case .recordOnly: "Record only"
+        }
+    }
+
+    /// test-plan 2.1 names the segments by `meetingTranscriptMode` values.
+    static func accessibilityID(for segment: MeetingSegment) -> String {
+        switch segment {
+        case .thisMac: "prompt.segment.localLive"
+        case .cloud: "prompt.segment.cloudLive"
+        case .recordOnly: "prompt.segment.recordOnly"
+        }
     }
 
     private var panelShape: RoundedRectangle {
-        RoundedRectangle(
-            cornerRadius: EdgeCommandPanelPlacement.expandedCornerRadius,
-            style: .continuous
-        )
+        RoundedRectangle(cornerRadius: DS.Radius.panel, style: .continuous)
     }
 
     private var dragGesture: some Gesture {
