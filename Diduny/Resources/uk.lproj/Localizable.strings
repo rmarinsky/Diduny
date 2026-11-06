@@ -1770,3 +1770,15 @@
 "Right Arrow" = "Стрілка вправо";
 "Up Arrow" = "Стрілка вгору";
 "Down Arrow" = "Стрілка вниз";
+
+/* Panels redesign WP-42 */
+"Pasted into %@" = "Вставлено в %@";
+"Pasted" = "Вставлено";
+"%lld s · also in Recordings" = "%lld с · також у Записах";
+"Translated into %@ · %lld s" = "Перекладено: %@ · %lld с";
+"New recording" = "Новий запис";
+"Meeting saved" = "Зустріч збережено";
+"%@ · making the transcript..." = "%@ · готуємо транскрипт...";
+"%@ · transcript ready" = "%@ · транскрипт готовий";
+"%@ · transcript ready, translated %@" = "%@ · транскрипт готовий, переклад %@";
+"Open recording" = "Відкрити запис";

@@ -1057,6 +1057,8 @@ extension AppDelegate {
                 return
             }
 
+            await MainActor.run { DictationOverlayController.shared.setOutcomeRecordingID(librarySavedId) }
+
             if let text {
                 clipboardService.copy(text: text, behavior: .raw)
                 Log.app.info("stopMeetingRecording: Text copied to clipboard")

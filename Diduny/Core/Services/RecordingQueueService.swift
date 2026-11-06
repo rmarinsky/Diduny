@@ -462,6 +462,17 @@ final class RecordingQueueService {
         pendingItems.contains { $0.id == id }
     }
 
+    /// The transcript of one recording for the command panel outcome; another recording's
+    /// progress never shows (WP-42).
+    func transcriptState(for id: UUID?) -> OutcomeTranscriptState {
+        OutcomeTranscriptState.make(
+            recordingID: id,
+            isQueued: id.map(isQueued) ?? false,
+            currentRecordingID: currentRecordingId,
+            currentProgress: currentProgress
+        )
+    }
+
     private func handleCloudJobStatus(_ status: JobStatus, totalSeconds: TimeInterval, itemID: UUID) {
         // Status callbacks hop to the main actor and can arrive after the item finished.
         guard currentRecordingId == itemID else { return }

@@ -1770,3 +1770,15 @@
 "Right Arrow" = "Right Arrow";
 "Up Arrow" = "Up Arrow";
 "Down Arrow" = "Down Arrow";
+
+/* Panels redesign WP-42 */
+"Pasted into %@" = "Pasted into %@";
+"Pasted" = "Pasted";
+"%lld s · also in Recordings" = "%lld s · also in Recordings";
+"Translated into %@ · %lld s" = "Translated into %@ · %lld s";
+"New recording" = "New recording";
+"Meeting saved" = "Meeting saved";
+"%@ · making the transcript..." = "%@ · making the transcript...";
+"%@ · transcript ready" = "%@ · transcript ready";
+"%@ · transcript ready, translated %@" = "%@ · transcript ready, translated %@";
+"Open recording" = "Open recording";

@@ -70,6 +70,24 @@ final class ClipboardService: ClipboardServiceProtocol {
 
     private let pasteboard = NSPasteboard.general
 
+    /// The app that got the last ⌘V, for the outcome title "Pasted into <app>".
+    struct PasteRecord: Equatable {
+        /// Nil when unknown or Diduny itself was frontmost.
+        let appName: String?
+        let at: Date
+    }
+
+    /// Set when ⌘V is posted; cleared when a paste starts, so a failed paste leaves nil.
+    private(set) var lastPaste: PasteRecord?
+
+    /// The frontmost app's name, unless it is Diduny itself (the panel is non-activating, so the
+    /// person's app normally stays frontmost).
+    static func pasteTargetName(localizedName: String?, bundleIdentifier: String?, ownBundleIdentifier: String?) -> String? {
+        guard let localizedName, !localizedName.isEmpty else { return nil }
+        if let bundleIdentifier, bundleIdentifier == ownBundleIdentifier { return nil }
+        return localizedName
+    }
+
     static func preparedText(_ text: String, behavior: ClipboardCopyBehavior = .cleaned) -> String {
         switch behavior {
         case .cleaned:
@@ -121,6 +139,7 @@ final class ClipboardService: ClipboardServiceProtocol {
     }
 
     func paste(expectedProcessIdentifier: pid_t?) async throws {
+        lastPaste = nil
         // Check accessibility permission first
         let isGranted = ClipboardService.isAccessibilityGranted()
         Log.app.info("Accessibility permission check: \(isGranted)")
@@ -138,7 +157,14 @@ final class ClipboardService: ClipboardServiceProtocol {
             throw ClipboardError.pasteEventFailed
         }
 
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        let targetName = Self.pasteTargetName(
+            localizedName: frontmost?.localizedName,
+            bundleIdentifier: frontmost?.bundleIdentifier,
+            ownBundleIdentifier: Bundle.main.bundleIdentifier
+        )
         try await postCommandShortcut(keyCode: CGKeyCode(9), error: .pasteEventFailed)
+        lastPaste = PasteRecord(appName: targetName, at: Date())
 
         Log.app.info("Paste event sent successfully to frontmost app")
     }
