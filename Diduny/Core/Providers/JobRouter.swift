@@ -8,6 +8,11 @@ struct JobRequest: Equatable, Sendable {
     var speakerLabels: Bool = false
     /// Meetings: live two-way translation is on.
     var meetingTranslation: Bool = false
+    /// Record only: transcribe after Stop through `batch` even when the model streams live.
+    var afterStop: Bool = false
+    /// The selected local model can run the engine's own batch translation into the target language.
+    /// Whisper: only multilingual non-Turbo models, and only into English (bug 9). Other engines: true.
+    var ownBatchTranslationUsable: Bool = true
     /// Files only.
     var fileDurationSeconds: TimeInterval?
     var fileBytes: Int64?
@@ -89,9 +94,9 @@ enum JobRouter {
         }
         switch request.job {
         case .dictation:
-            return dictationPlan(caps, translate: false, context: context)
+            return dictationPlan(request, caps, translate: false, context: context)
         case .dictationTranslation:
-            return dictationPlan(caps, translate: true, context: context)
+            return dictationPlan(request, caps, translate: true, context: context)
         case .meeting:
             return meetingPlan(request, caps, context: context)
         case .meetingTranslation:
@@ -124,24 +129,25 @@ enum JobRouter {
     }
 
     private static func dictationPlan(
+        _ request: JobRequest,
         _ caps: STTModelCapabilities,
         translate: Bool,
         context: RoutingContext
     ) -> RoutingResult {
         let mode: ExecutionPlan.Mode
-        let native: TranslationCaps?
-        if let realtime = caps.realtime {
+        let nativeOK: Bool
+        if let realtime = caps.realtime, !request.afterStop {
             mode = .live
-            native = realtime.translation
+            nativeOK = realtime.translation?.oneWay == true
         } else if let batch = caps.batch {
             mode = .afterStop
-            native = batch.translation
+            nativeOK = batch.translation?.oneWay == true && request.ownBatchTranslationUsable
         } else {
             return .unsupported(.noUsableMode)
         }
         var plan = ExecutionPlan(mode: mode)
         if translate {
-            guard let translation = translation(nativeOK: native?.oneWay == true, context: context) else {
+            guard let translation = translation(nativeOK: nativeOK, context: context) else {
                 return .unsupported(.translationNeedsDiduny)
             }
             plan.translation = translation
@@ -154,17 +160,21 @@ enum JobRouter {
         _ caps: STTModelCapabilities,
         context: RoutingContext
     ) -> RoutingResult {
+        // Translation the model cannot do live both ways runs after Stop with the Diduny step, when it can.
+        let liveTwoWay = caps.realtime?.translation?.twoWay == true
+        let translationAfterStop = request.meetingTranslation && !liveTwoWay && caps.batch != nil
         var plan: ExecutionPlan
         let diarization: Bool
-        let native: TranslationCaps?
-        if let realtime = caps.realtime {
+        let nativeTwoWay: Bool
+        if let realtime = caps.realtime, !request.afterStop, !translationAfterStop {
             plan = ExecutionPlan(mode: .live)
             diarization = realtime.diarization
-            native = realtime.translation
+            nativeTwoWay = realtime.translation?.twoWay == true
         } else if let batch = caps.batch {
             plan = ExecutionPlan(mode: .afterStop)
+            // After-Stop labels are `EngineCapabilities.speakerLabelsAfterStop`, i.e. batch diarization.
             diarization = batch.diarization
-            native = batch.translation
+            nativeTwoWay = batch.translation?.twoWay == true
         } else {
             return .unsupported(.noUsableMode)
         }
@@ -173,7 +183,7 @@ enum JobRouter {
             plan.noSpeakerLabelsNote = !diarization
         }
         if request.meetingTranslation {
-            guard let translation = translation(nativeOK: native?.twoWay == true, context: context) else {
+            guard let translation = translation(nativeOK: nativeTwoWay, context: context) else {
                 return .unsupported(.translationNeedsDiduny)
             }
             plan.translation = translation
