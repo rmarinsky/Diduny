@@ -17,7 +17,7 @@ final class LocalWhisperStreamingServiceTests: XCTestCase {
 
         DictationOverlayController.shared.startRecording(mode: .meeting)
         let flowPanel = NSApp.windows.first {
-            $0.identifier?.rawValue == "ua.com.rmarinsky.diduny.edge-command-panel"
+            $0.identifier?.rawValue == "commandPanel"
         }
         XCTAssertEqual(flowPanel?.isVisible, true)
         XCTAssertEqual(flowPanel?.level, .floating)
