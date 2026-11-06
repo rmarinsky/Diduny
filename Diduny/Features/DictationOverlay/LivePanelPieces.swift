@@ -90,7 +90,7 @@ struct LiveTranscriptContent: View {
     let store: LiveDictationOverlayStore
 
     var body: some View {
-        if let command = store.voiceCommand, command.position == .leading, store.isShowingConvertedPreview {
+        if let command = store.voiceCommand, command.position != .trailing, store.isShowingConvertedPreview {
             commandLine("Command:", command)
         }
         transcriptText

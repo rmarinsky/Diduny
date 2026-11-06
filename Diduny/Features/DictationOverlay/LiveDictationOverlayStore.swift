@@ -59,7 +59,15 @@ final class LiveDictationOverlayStore {
 
     private var fallbackFinalText = ""
     private var fallbackProvisionalText = ""
-    private let meetingTranscript = LiveTranscriptStore()
+    /// Meeting turns behind `MeetingLiveContent` (WP-31).
+    let meetingTranscript = LiveTranscriptStore()
+    /// Translate meeting: the session's pair, engine and two-way transcript (WP-32).
+    var meetingTranslationPair = TranslationLanguagePair(languageA: "en", languageB: "uk")
+    var meetingTranslationEngine: EngineID = .didunyCloud
+    var meetingTranslation = TranslateMeetingTranscript(pair: TranslationLanguagePair(languageA: "en", languageB: "uk"))
+    var meetingTranslationShowsOriginal = false
+    /// Battery warning on This Mac (WP-16, WP-31).
+    @ObservationIgnored private(set) lazy var powerSource = PowerSourceMonitor()
 
     var title: String {
         panelState.title
@@ -209,6 +217,7 @@ final class LiveDictationOverlayStore {
         fallbackFinalText = ""
         fallbackProvisionalText = ""
         meetingTranscript.reset()
+        applyMeetingDefaults()
         copiedAt = nil
         nativeOutput = .original
         pickedOutput = .original
@@ -254,6 +263,8 @@ final class LiveDictationOverlayStore {
     func processTokens(_ tokens: [RealtimeToken]) {
         if mode == .meeting {
             meetingTranscript.processTokens(tokens)
+        } else if mode == .meetingTranslation {
+            meetingTranslation.process(tokens)
         }
 
         let isTranslationMode = switch mode {

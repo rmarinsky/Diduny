@@ -92,7 +92,7 @@ struct LivePanelView: View {
     private var content: some View {
         switch store.mode {
         case .meeting:
-            MeetingLiveContent(store: store)
+            MeetingLiveSection(store: store)
         case .meetingTranslation:
             TranslateMeetingLiveContent(store: store)
         case .voice, .translation, .fileTranscription:
@@ -104,7 +104,7 @@ struct LivePanelView: View {
         PanelHeader(
             icon: PanelIconTile(symbol: state.icon, hasGlobeBadge: store.mode == .meetingTranslation),
             title: LocalizedStringKey(state.title),
-            status: Self.panelStatus(state.status),
+            status: status(state),
             titleID: "livePanel.title",
             statusID: "livePanel.status"
         ) {
@@ -124,6 +124,27 @@ struct LivePanelView: View {
         .help("Drag to attach to another screen edge")
     }
 
+    /// While recording a meeting: WP-31's status (segment and connection), or WP-32's status
+    /// without live text. Otherwise the shell's.
+    private func status(_ state: LivePanelState) -> PanelStatus {
+        guard store.phase == .recording else { return Self.panelStatus(state.status) }
+        switch store.mode {
+        case .meeting:
+            let meeting = store.meetingPanelState.status
+            return meeting.isLive ? .live(LocalizedStringKey(meeting.text)) : .plain(LocalizedStringKey(meeting.text))
+        case .meetingTranslation:
+            if let text = store.translateMeetingPanelModel?.notLiveStatus { return .plain(LocalizedStringKey(text)) }
+            return Self.panelStatus(state.status)
+        case .voice, .translation, .fileTranscription:
+            return Self.panelStatus(state.status)
+        }
+    }
+
+    /// Record only has no live text to copy (WP-31).
+    private func isCopyEnabled(_ state: LivePanelState) -> Bool {
+        state.isCopyEnabled && (store.mode != .meeting || store.meetingPanelState.isCopyEnabled)
+    }
+
     static func panelStatus(_ status: LivePanelState.Status) -> PanelStatus {
         switch status {
         case let .live(text): .live(LocalizedStringKey(text))
@@ -139,7 +160,7 @@ struct LivePanelView: View {
         } else {
             PanelControlsLayout(weights: [1, 1.6]) {
                 CopyButton(isCopied: store.copiedAt != nil, action: onCopy)
-                    .disabled(!state.isCopyEnabled)
+                    .disabled(!isCopyEnabled(state))
                     .help("Copy transcript")
                     .accessibilityIdentifier("livePanel.copy")
                 if showsCloseButton {
