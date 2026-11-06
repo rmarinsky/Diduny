@@ -59,53 +59,36 @@ final class LiveDictationOverlayStore {
     private let meetingTranscript = LiveTranscriptStore()
 
     var title: String {
-        if !outputOptions.isEmpty {
-            return selectedOutput == .original
-                ? String(localized: "Transcribing")
-                : String(localized: "Translating")
-        }
-        return switch mode {
-        case .voice:
-            String(localized: "Transcribing")
-        case .translation:
-            String(localized: "Translating")
-        case .meeting:
-            String(localized: "Recording meeting")
-        case .meetingTranslation:
-            String(localized: "Translating meeting")
-        case .fileTranscription:
-            String(localized: "File Transcription")
-        }
+        panelState.title
     }
 
-    var statusText: String {
-        switch phase {
-        case .starting:
-            String(localized: "Starting")
-        case .recording:
-            switch connectionStatus {
-            case .connected:
-                String(localized: "Recording live")
-            case .connecting:
-                String(localized: "Connecting")
-            case .reconnecting:
-                String(localized: "Reconnecting")
-            case .failed:
-                String(localized: "Recording offline")
-            case .disconnected:
-                String(localized: "Recording")
-            }
-        case .finalizing:
-            String(localized: "Finalizing")
-        case .processing:
-            String(localized: "Formatting")
-        case .pasted:
-            String(localized: "Complete")
-        case let .error(message):
-            message
-        case let .info(message):
-            message
-        }
+    /// Engine of the running session (N6, N18); nil until the controller sets it at start.
+    var sessionEngine: LiveSessionEngine?
+    /// Settings > Languages, first in the Output menu.
+    var yourLanguages: [String] = YourLanguages.defaultCodes
+
+    /// What the live panel shows now.
+    var panelState: LivePanelState {
+        LivePanelState(
+            mode: mode,
+            phase: phase,
+            connectionStatus: connectionStatus,
+            engine: sessionEngine,
+            output: mode.isMeeting ? .original : displayedOutput,
+            hasText: hasText
+        )
+    }
+
+    /// The Output the title and caption follow: the picked output, or the session's own target.
+    private var displayedOutput: DictationOutput {
+        if !outputOptions.isEmpty { return selectedOutput }
+        if case let .translation(target) = mode { return .translation(targetLanguage: target) }
+        return .original
+    }
+
+    /// Output menu: Original, your languages, all languages (01 §4 item 3).
+    var outputMenu: PickerMenuModel {
+        DictationOutputMenu.model(yourLanguages: yourLanguages, selected: selectedOutput)
     }
 
     var visibleText: String {
@@ -210,34 +193,6 @@ final class LiveDictationOverlayStore {
         )
     }
 
-    var providerLabel: String {
-        let provider: TranscriptionProvider = switch mode {
-        case .translation, .meetingTranslation:
-            SettingsStorage.shared.effectiveTranslationProvider
-        case .voice, .meeting, .fileTranscription:
-            SettingsStorage.shared.effectiveTranscriptionProvider
-        }
-        return provider == .cloud ? "Cloud" : "Local"
-    }
-
-    var sourceLabel: String {
-        mode.isMeeting ? String(localized: "System + microphone") : "Microphone"
-    }
-
-    var targetLabel: String? {
-        if !outputOptions.isEmpty {
-            return selectedOutput.targetLanguage.map { _ in selectedOutput.label }
-        }
-        return switch mode {
-        case let .translation(targetLanguage):
-            targetLanguage
-        case .meetingTranslation:
-            SettingsStorage.shared.resolveTranslationLanguagePair().displayLabel
-        case .voice, .meeting, .fileTranscription:
-            nil
-        }
-    }
-
     func reset(mode: RecordingMode) {
         self.mode = mode
         phase = .starting
@@ -259,6 +214,7 @@ final class LiveDictationOverlayStore {
         outputOptions = []
         convertedPreview = nil
         onTurnOnLiveTranscript = nil
+        sessionEngine = nil
     }
 
     func configureOutput(native: DictationOutput, options: [DictationOutput], listensForVoiceCommands: Bool) {

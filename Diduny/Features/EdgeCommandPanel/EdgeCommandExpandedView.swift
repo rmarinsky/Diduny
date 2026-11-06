@@ -32,7 +32,7 @@ struct EdgeCommandExpandedView: View {
                 )
                 .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
             } else if model.isShowingLiveFeedback {
-                LiveDictationOverlayView(
+                LivePanelView(
                     store: liveStore,
                     onCopy: onCopy,
                     onStop: onStop,

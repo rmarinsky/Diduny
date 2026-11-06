@@ -141,7 +141,7 @@ struct EdgeCommandPanelModelTests {
             presentation: .live(.meeting)
         )
 
-        #expect(dictation == NSRect(x: 1130, y: 295, width: 310, height: 310))
+        #expect(dictation == NSRect(x: 1140, y: 294, width: 300, height: 312))
         #expect(meeting == NSRect(x: 1080, y: 240, width: 360, height: 420))
     }
 

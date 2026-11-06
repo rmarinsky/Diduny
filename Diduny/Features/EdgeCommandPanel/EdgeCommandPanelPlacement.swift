@@ -114,7 +114,8 @@ enum EdgeCommandPanelPlacement {
         case let .commands(isCloud):
             NSSize(width: 286, height: isCloud ? 326 : 250)
         case let .live(mode):
-            mode.isMeeting ? NSSize(width: 360, height: 420) : NSSize(width: 310, height: 310)
+            // Dictation: design-spec 7.2, 300 x 311.7 with a one-line caption. Meetings: WP-31 and WP-32.
+            mode.isMeeting ? NSSize(width: 360, height: 420) : NSSize(width: DS.Panel.width, height: 312)
         case .meetingSuggestion:
             NSSize(width: 390, height: 350)
         }
