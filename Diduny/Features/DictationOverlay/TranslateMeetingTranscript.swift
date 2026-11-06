@@ -58,10 +58,6 @@ struct TranslateMeetingTranscript: Equatable {
         return committed.dropLast() + [last] + provisional.dropFirst()
     }
 
-    var isEmpty: Bool {
-        turns.allSatisfy { $0.original.isEmpty && $0.translation.isEmpty }
-    }
-
     /// Translations only, one turn per paragraph, with its label: the text Copy takes.
     var translationText: String {
         turns.filter { !$0.translation.isEmpty }.map { turn in

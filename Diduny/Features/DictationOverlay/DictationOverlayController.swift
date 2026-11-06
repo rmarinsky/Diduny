@@ -93,22 +93,6 @@ final class DictationOverlayController {
         }
     }
 
-    func startProcessing(mode: RecordingMode) {
-        autoHideTask?.cancel()
-        if store.mode != mode {
-            store.mode = mode
-        }
-        cancelOutputPreview()
-        stoppedAt = stoppedAt ?? Date()
-        store.phase = .processing
-        store.audioLevel = 0
-        if usesNotch {
-            NotchManager.shared.startProcessing(mode: mode)
-        } else {
-            showPanel()
-        }
-    }
-
     /// - Parameter recordingID: meetings, the library recording for Open recording.
     func showSuccess(text: String, recordingID: UUID? = nil) {
         autoHideTask?.cancel()
