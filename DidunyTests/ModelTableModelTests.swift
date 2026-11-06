@@ -6,11 +6,16 @@ import Testing
 @Suite("Local models table model (T4-ROW, T4-FIL, T4-SORT, T4-CELL)")
 struct ModelTableModelTests {
     private func make(
-        whisper: FakeWhisperModelStore = FakeWhisperModelStore(),
-        parakeet: FakeParakeetModelStore = FakeParakeetModelStore(),
+        whisper: FakeWhisperModelStore? = nil,
+        parakeet: FakeParakeetModelStore? = nil,
         apple: Bool = true
     ) -> LocalModelsModel {
-        LocalModelsModel(whisper: whisper, parakeet: parakeet, isAppleSpeechAvailable: apple, yourLanguages: ["uk", "en"])
+        LocalModelsModel(
+            whisper: whisper ?? FakeWhisperModelStore(),
+            parakeet: parakeet ?? FakeParakeetModelStore(),
+            isAppleSpeechAvailable: apple,
+            yourLanguages: ["uk", "en"]
+        )
     }
 
     private func row(_ model: LocalModelsModel, _ id: String) throws -> LocalModelRow {

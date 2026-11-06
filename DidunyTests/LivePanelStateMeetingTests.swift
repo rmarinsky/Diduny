@@ -37,7 +37,7 @@ struct LivePanelStateMeetingTests {
         #expect(items.map(\.accessibilityID) == [
             "livePanel.segment.localLive", "livePanel.segment.cloudLive", "livePanel.segment.recordOnly",
         ])
-        #expect(items.allSatisfy(\.isEnabled))
+        #expect(items.allSatisfy { $0.isEnabled })
     }
 
     @Test("Four or more segments fit the 226 pt track")
@@ -104,8 +104,8 @@ struct LivePanelStateMeetingTests {
         #expect(Self.state(.cloud).status == .init(text: "Recording live", isLive: true))
         #expect(Self.state(.recordOnly).status == .init(text: "Recording, no live text", isLive: false))
         #expect(Self.state(.cloud, connection: .connecting).status == .init(text: "Connecting", isLive: false))
-        #expect(Self.state(.cloud, connection: .reconnecting).status == .init(text: "Reconnecting", isLive: false))
-        #expect(Self.state(.thisMac, connection: .failed).status == .init(text: "Recording offline", isLive: false))
+        #expect(Self.state(.cloud, connection: .reconnecting(attempt: 1)).status == .init(text: "Reconnecting", isLive: false))
+        #expect(Self.state(.thisMac, connection: .failed("offline")).status == .init(text: "Recording offline", isLive: false))
     }
 
     // MARK: T1-MT-06

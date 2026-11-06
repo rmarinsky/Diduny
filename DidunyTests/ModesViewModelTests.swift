@@ -45,12 +45,12 @@ struct ModesViewModelTests {
     }
 
     func model(
-        _ source: FakeSource = FakeSource(),
+        _ source: FakeSource? = nil,
         readiness: [EngineID: EngineReadiness] = [:],
         signedIn: Bool = true
     ) throws -> ModesViewModel {
         try ModesViewModel(
-            source: source,
+            source: source ?? FakeSource(),
             readiness: FakeEngineReadinessSource(readiness),
             engines: Self.allCaps(),
             isSignedIn: { signedIn }
