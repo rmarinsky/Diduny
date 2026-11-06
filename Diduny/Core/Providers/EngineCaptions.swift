@@ -95,6 +95,56 @@ enum EngineCaptions {
             : String(localized: "You see your words. The translation by Diduny is pasted after Stop")
     }
 
+    /// Translate meeting panel (design-spec 12.3): only an engine that translates live in both directions
+    /// shows live text there.
+    static func translateMeetingIsLive(_ caps: EngineCapabilities) -> Bool {
+        caps.meetingTranslation == .liveBothDirections
+    }
+
+    /// Translate meeting panel status without live text (no dot).
+    static var translateMeetingNotLiveStatus: String {
+        String(localized: "Recording · no live text")
+    }
+
+    /// Translate meeting panel caption: live, or one direction into the pair's second language after Stop.
+    static func translateMeetingPanelCaption(
+        caps: EngineCapabilities,
+        pair: TranslationLanguagePair,
+        locale: Locale = EngineLanguages.appLocale
+    ) -> String {
+        guard !translateMeetingIsLive(caps) else { return String(localized: "Live · both directions · speaker labels") }
+        let language = languageName(pair.languageB, locale)
+        return String(localized: "After Stop · everything into \(language) · no speaker labels")
+    }
+
+    /// Translate meeting calm box line 2 for an engine without live text; nil for a live engine.
+    static func translateMeetingCalmDetail(
+        caps: EngineCapabilities,
+        engineName: String,
+        pair: TranslationLanguagePair,
+        locale: Locale = EngineLanguages.appLocale
+    ) -> String? {
+        guard !translateMeetingIsLive(caps) else { return nil }
+        let language = languageName(pair.languageB, locale)
+        return caps.traits.runsOn == .thisMac
+            ? String(localized: "No live text with \(engineName). It transcribes on this Mac after Stop, then Diduny translates all of it into \(language). Both directions need Diduny Cloud.")
+            : String(localized: "No live text with \(engineName). It transcribes after Stop, then Diduny translates all of it into \(language). Both directions need Diduny Cloud.")
+    }
+
+    /// Command home Translate meeting tile caption: "Live · EN ↔ UK" or "After Stop → UK".
+    static func translateMeetingTileCaption(caps: EngineCapabilities, pair: TranslationLanguagePair) -> String {
+        guard !translateMeetingIsLive(caps) else {
+            let label = pair.shortLabel
+            return String(localized: "Live · \(label)")
+        }
+        let code = pair.languageB.uppercased()
+        return String(localized: "After Stop → \(code)")
+    }
+
+    private static func languageName(_ code: String, _ locale: Locale) -> String {
+        locale.localizedString(forLanguageCode: code) ?? SupportedLanguage.language(for: code)?.name ?? code.uppercased()
+    }
+
     // MARK: Command panel and Providers
 
     /// Command panel engine menu subline, e.g. "Live text, speaker labels, 60 languages".

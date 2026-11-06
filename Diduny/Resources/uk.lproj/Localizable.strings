@@ -1800,3 +1800,19 @@
 "Transcript after Stop" = "Транскрипт після зупинки";
 "Recording, no live text" = "Запис, без живого тексту";
 "Sign in to record." = "Увійдіть, щоб записувати.";
+
+/* Panels redesign WP-32 */
+"Recording · no live text" = "Запис · без живого тексту";
+"Live · both directions · speaker labels" = "Наживо · в обидва боки · мітки мовців";
+"After Stop · everything into %@ · no speaker labels" = "Після зупинки · усе мовою: %@ · без міток мовців";
+"No live text with %@. It transcribes on this Mac after Stop, then Diduny translates all of it into %@. Both directions need Diduny Cloud." = "%@ не дає живого тексту. Він розпізнає на цьому Mac після зупинки, а потім Diduny перекладає все мовою: %@. Для обох напрямків потрібен Diduny Cloud.";
+"No live text with %@. It transcribes after Stop, then Diduny translates all of it into %@. Both directions need Diduny Cloud." = "%@ не дає живого тексту. Він розпізнає після зупинки, а потім Diduny перекладає все мовою: %@. Для обох напрямків потрібен Diduny Cloud.";
+"Live · %@" = "Наживо · %@";
+"After Stop → %@" = "Після зупинки → %@";
+"Speaker %@" = "Мовець %@";
+"Both directions, between your languages" = "В обидва боки, між вашими мовами";
+"Other languages..." = "Інші мови...";
+"Add them to Your languages in Settings" = "Додайте їх до «Ваших мов» у Налаштуваннях";
+"Between" = "Між";
+"Show original text" = "Показати оригінал";
+"Hide original text" = "Сховати оригінал";
