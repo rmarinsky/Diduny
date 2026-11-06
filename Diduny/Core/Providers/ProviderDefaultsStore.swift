@@ -36,7 +36,10 @@ struct ProviderDefaultsStore {
     }
 
     func setSelection(_ selection: JobProviderSelection, forKey key: String) {
-        guard let data = try? JSONEncoder().encode(selection) else { return }
+        // Sorted keys: the same selection always stores the same bytes, so a migration re-run is a no-op.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        guard let data = try? encoder.encode(selection) else { return }
         defaults.set(data, forKey: key)
     }
 

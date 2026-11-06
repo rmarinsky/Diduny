@@ -48,9 +48,9 @@ private final class ControlledLoad {
     func controller(supported: Bool = true) -> ParakeetModelController {
         ParakeetModelController(
             isSupportedHardware: supported,
-            isDownloaded: { [unowned self] in onDisk },
-            load: { [unowned self] progress in try await run(progress) },
-            remove: { [unowned self] in remove() }
+            isDownloaded: { [weak self] in self?.onDisk ?? false },
+            load: { [weak self] progress in try await self?.run(progress) },
+            remove: { [weak self] in self?.remove() }
         )
     }
 }
@@ -68,8 +68,9 @@ private final class StubbornLoad {
         ParakeetModelController(
             isSupportedHardware: true,
             isDownloaded: { false },
-            load: { [unowned self] _ in await run() },
-            remove: { [unowned self] in
+            load: { [weak self] _ in await self?.run() },
+            remove: { [weak self] in
+                guard let self else { return }
                 removeCount += 1
                 if writing { removedWhileWriting = true }
             }
@@ -142,6 +143,9 @@ struct ParakeetModelStoreTests {
         #expect(controller.state == .failed("No network"))
         controller.download()
         #expect(controller.state == .downloading(0))
+        // End the retry so its task does not outlive this test's fake.
+        controller.cancel()
+        await controller.pendingWork?.value
     }
 
     @Test("Delete returns to Download")
