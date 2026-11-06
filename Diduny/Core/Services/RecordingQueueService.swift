@@ -397,8 +397,14 @@ final class RecordingQueueService {
     }
 
     private func buildCloudTranscriptionConfig(enableSpeakerDiarization: Bool) -> [String: Any] {
-        let hints = SettingsStorage.shared.speechLanguageHints
+        Self.buildCloudTranscriptionConfig(
+            hints: SettingsStorage.shared.speechLanguageHints,
+            enableSpeakerDiarization: enableSpeakerDiarization
+        )
+    }
 
+    /// Empty hints (no "Languages you speak") send no hint and no strict flag: the engine detects (T5-LA-23).
+    static func buildCloudTranscriptionConfig(hints: [String], enableSpeakerDiarization: Bool) -> [String: Any] {
         var config: [String: Any] = ["mode": "transcribe"]
         if enableSpeakerDiarization {
             config["enable_speaker_diarization"] = true
