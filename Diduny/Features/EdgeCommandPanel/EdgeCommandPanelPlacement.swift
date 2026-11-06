@@ -99,14 +99,6 @@ enum EdgeCommandPanelPlacement {
         return NSRect(origin: origin, size: size)
     }
 
-    static func frame(in visibleFrame: NSRect, dock: EdgeCommandPanelDock, expanded: Bool) -> NSRect {
-        frame(
-            in: visibleFrame,
-            dock: dock,
-            presentation: expanded ? .commands(isCloud: true) : .collapsed
-        )
-    }
-
     static func size(
         for presentation: EdgeCommandPanelPresentation,
         edge: EdgeCommandPanelDockEdge,
