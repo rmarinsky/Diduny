@@ -93,7 +93,7 @@ final class SettingsStorage {
         }
     }
 
-    private let defaults = UserDefaults.standard
+    let defaults: UserDefaults
     private static let baseFillerWords = [
         "е-е",
         "ем",
@@ -201,7 +201,8 @@ final class SettingsStorage {
         case remoteMediaRightsAcknowledged
     }
 
-    private init() {
+    init(defaults: UserDefaults = .standard, migrationEnvironment: SettingsMigration.Environment = .live) {
+        self.defaults = defaults
         migrateSelectedDeviceIfNeeded()
         migratePreferredDeviceKeyIfNeeded()
         migrateTranscriptionProviderIfNeeded()
