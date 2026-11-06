@@ -1704,3 +1704,10 @@
 "Language Diduny detected for this recording" = "Мова, яку Diduny розпізнав для цього запису";
 "Mostly different from Reference" = "Здебільшого відрізняється від еталона";
 "What’s new in this release, animated" = "Що нового в цьому релізі, анімація";
+
+/* Picker menus and popups (panels redesign WP-20) */
+"Search" = "Пошук";
+"Nothing found" = "Нічого не знайдено";
+"Your languages" = "Ваші мови";
+"All languages" = "Усі мови";
+"Opens a list" = "Відкриває список";

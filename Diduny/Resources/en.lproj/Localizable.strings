@@ -1704,3 +1704,10 @@
 "Language Diduny detected for this recording" = "Language Diduny detected for this recording";
 "Mostly different from Reference" = "Mostly different from Reference";
 "What’s new in this release, animated" = "What’s new in this release, animated";
+
+/* Picker menus and popups (panels redesign WP-20) */
+"Search" = "Search";
+"Nothing found" = "Nothing found";
+"Your languages" = "Your languages";
+"All languages" = "All languages";
+"Opens a list" = "Opens a list";
