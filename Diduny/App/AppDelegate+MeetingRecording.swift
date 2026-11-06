@@ -16,10 +16,25 @@ extension AppDelegate {
         toggleMeetingRecording(provider: provider)
     }
 
+    /// Start from the meeting prompt (WP-43): the prompt's segment decides where audio goes.
+    /// Record only never streams live; it records on this Mac and transcribes after Stop.
+    func startMeetingRecording(from start: MeetingPromptStart) {
+        guard appState.meetingRecordingState == .idle else { return }
+        if let message = onDeviceEngineStartError(for: .meeting) {
+            DictationOverlayController.shared.showInfo(message: message, duration: 4)
+            return
+        }
+        let provider: TranscriptionProvider = start.segment == .recordOnly
+            ? .local
+            : routedProvider(for: .meeting, legacy: start.legacyProvider)
+        toggleMeetingRecording(provider: provider, recordOnly: start.segment == .recordOnly)
+    }
+
     func toggleMeetingRecording(
         provider: TranscriptionProvider,
         calendarMeeting: CalendarMeeting? = nil,
         translateTarget: String? = nil,
+        recordOnly: Bool = false,
         cancelPipeline: (() async -> Void)? = nil
     ) {
         let meetingRecordingState = appState.meetingRecordingState
@@ -45,6 +60,7 @@ extension AppDelegate {
             meetingPipelineTask = Task {
                 await self.startMeetingRecording(provider: provider, calendarMeeting: calendarMeeting,
                                                  translateTarget: translateTarget,
+                                                 recordOnly: recordOnly,
                                                  pipelineGeneration: generation)
             }
         case .recording:
@@ -253,6 +269,7 @@ extension AppDelegate {
         provider requestedProvider: TranscriptionProvider,
         calendarMeeting: CalendarMeeting? = nil,
         translateTarget: String? = nil,
+        recordOnly: Bool = false,
         pipelineGeneration: UInt64? = nil,
         canStart: (() -> Bool)? = nil,
         ensureScreenRecordingPermission: @escaping () async -> Bool = {
@@ -280,8 +297,8 @@ extension AppDelegate {
         // Calendar recordings capture audio only, so they keep the existing Cloud/Local path.
         // The user's own live engine: ElevenLabs (their key) or Apple on this Mac.
         activeMeetingTranslateTarget = translateTarget
-        if translateTarget != nil {
-            // Meeting translation on an on-device engine: no live stream; transcribed and translated after Stop.
+        if translateTarget != nil || recordOnly {
+            // Record only, or meeting translation on an on-device engine: no live stream; transcribed and translated after Stop.
             meetingRealtimeService = nil
         } else if calendarMeeting == nil, let elevenLabs = makeElevenLabsMeetingService() {
             meetingRealtimeService = elevenLabs
@@ -292,7 +309,8 @@ extension AppDelegate {
         }
         meetingByokError = nil
         // Own engines stream live like Cloud (no Diduny sign-in needed) and never fall back to Cloud on their own.
-        let provider: TranscriptionProvider = meetingRealtimeService != nil ? .cloud
+        let provider: TranscriptionProvider = recordOnly ? .local
+            : meetingRealtimeService != nil ? .cloud
             : Self.resolveMeetingTranscriptionProvider(
                 requestedProvider: requestedProvider,
                 hasStoredSession: AuthService.hasStoredSession,
@@ -382,7 +400,7 @@ extension AppDelegate {
             // recording never waits for the network.
             guard !Task.isCancelled, activeMeetingTranscriptionSessionID == sessionID else { return }
             // Calendar recordings capture audio only; the transcript is made after the meeting.
-            let localPreview = calendarMeeting == nil && SettingsStorage.shared.meetingLocalLivePreviewEnabled
+            let localPreview = !recordOnly && calendarMeeting == nil && SettingsStorage.shared.meetingLocalLivePreviewEnabled
                 && onDeviceSelection(for: .meeting) == nil
             let store = await setupMeetingLiveTranscription(cloudModeEnabled: cloudModeEnabled, localPreview: localPreview)
             let stillOwnsSession = activeMeetingTranscriptionSessionID == sessionID
@@ -435,6 +453,21 @@ extension AppDelegate {
                 appState.meetingRecordingStartTime = Date()
                 appState.liveTranscriptStore = store
                 handleMeetingStateChange(.recording)
+                let runningSegment = RunningMeetingSession.segment(
+                    recordOnly: recordOnly, cloudMode: cloudModeEnabled, localPreview: localPreview)
+                let ownLiveEngine: EngineID? = meetingRealtimeService is ElevenLabsRealtimeService ? .elevenLabs
+                    : meetingRealtimeService is AppleLiveTranscriptionService ? .appleSpeech : nil
+                let overlayStore = DictationOverlayController.shared.store
+                overlayStore.showRunningMeeting(
+                    segment: runningSegment,
+                    engine: RunningMeetingSession.engine(
+                        segment: runningSegment, ownLiveEngine: ownLiveEngine,
+                        afterStopEngine: onDeviceSelection(for: translateTarget != nil ? .meetingTranslation : .meeting))
+                )
+                if translateTarget != nil {
+                    overlayStore.showRunningMeetingTranslation(
+                        engine: onDeviceSelection(for: .meetingTranslation).flatMap(EngineID.init(rawValue:)) ?? .whisper)
+                }
                 if !cloudModeEnabled {
                     updateRecordingFeedbackConnectionStatus(.connected, mode: .meeting)
                 }
@@ -602,6 +635,7 @@ extension AppDelegate {
                 return
             }
             appState.liveTranscriptStore = store
+            DictationOverlayController.shared.store.showRunningMeeting(segment: .cloud, engine: .didunyCloud)
         }
     }
 

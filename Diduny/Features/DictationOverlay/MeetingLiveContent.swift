@@ -59,6 +59,7 @@ struct MeetingPanelState {
     init(
         segment: MeetingSegment,
         engines: [MeetingSegment: EngineID],
+        switchingLocked: Bool = false,
         readiness: any EngineReadinessSource,
         isAppleSilicon: Bool = ParakeetModelStore.isSupportedHardware,
         isOnBattery: Bool,
@@ -97,7 +98,7 @@ struct MeetingPanelState {
             Segment(
                 id: seg,
                 title: EngineCaptions.startsIn(seg).title,
-                isEnabled: groups(seg).flatMap(\.engines).contains(where: usable),
+                isEnabled: switchingLocked ? seg == segment : groups(seg).flatMap(\.engines).contains(where: usable),
                 accessibilityID: "livePanel.segment." + Self.testID(seg)
             )
         }
@@ -109,7 +110,7 @@ struct MeetingPanelState {
         engine = resolved
         engineName = Self.name(resolved)
         fieldLabel = segment == .recordOnly ? String(localized: "Transcript after Stop") : String(localized: "Engine")
-        isFieldStatic = all.count <= 1
+        isFieldStatic = switchingLocked || all.count <= 1
 
         menu = PickerMenuModel(
             groups: list.map { group in
@@ -231,6 +232,8 @@ struct MeetingLiveContent<Waveform: View>: View {
     @Binding var segment: MeetingSegment
     let onPickEngine: (EngineID) -> Void
     let onDownloadParakeet: () -> Void
+    /// Record only: streams the rest of the meeting to Cloud (nil hides the link).
+    var onTurnOnLiveTranscript: (() -> Void)?
     /// The level meter; drawn inside the 38 pt tint circle.
     @ViewBuilder let waveform: () -> Waveform
 
@@ -253,7 +256,10 @@ struct MeetingLiveContent<Waveform: View>: View {
                 CalmBox(
                     title: LocalizedStringKey(MeetingPanelState.calmTitle),
                     detail: LocalizedStringKey(MeetingPanelState.calmDetail),
-                    height: DS.Size.transcriptMeeting
+                    height: DS.Size.transcriptMeeting,
+                    action: onTurnOnLiveTranscript.map {
+                        (title: "Turn on live transcript", id: "livePanel.turnOnLiveTranscript", run: $0)
+                    }
                 )
             } else {
                 TranscriptBox(height: DS.Size.transcriptMeeting) {

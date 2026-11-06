@@ -19,6 +19,7 @@ extension LiveDictationOverlayStore {
         MeetingPanelState(
             segment: meetingSegment,
             engines: meetingEngines,
+            switchingLocked: meetingSwitchingLocked,
             readiness: ModesInterimReadiness(),
             isOnBattery: powerSource.isOnBattery,
             connection: connectionStatus
@@ -36,7 +37,7 @@ extension LiveDictationOverlayStore {
 
     var translateMeetingPanelModel: TranslateMeetingPanelModel? {
         let readiness = ModesInterimReadiness()
-        let options = EngineID.allCases.compactMap { id -> TranslateMeetingEngineOption? in
+        let options = EngineID.allCases.filter { !meetingSwitchingLocked || $0 == meetingTranslationEngine }.compactMap { id -> TranslateMeetingEngineOption? in
             MeetingPanelState.registryCapabilities(id).map {
                 TranslateMeetingEngineOption(caps: $0, name: MeetingPanelState.name(id), readiness: readiness.readiness(of: id))
             }
@@ -50,8 +51,43 @@ extension LiveDictationOverlayStore {
         )
     }
 
+    /// "Turn on live transcript" in the Record only calm box (WP-30); nil in other segments.
+    var meetingTurnOnLiveTranscript: (() -> Void)? {
+        meetingSegment == .recordOnly ? onTurnOnLiveTranscript : nil
+    }
+
+    /// What the running meeting session uses (set by AppDelegate after Start).
+    func showRunningMeeting(segment: MeetingSegment, engine: EngineID) {
+        meetingSegment = segment
+        meetingEngines[segment] = engine
+    }
+
+    /// The engine the running Translate meeting session uses.
+    func showRunningMeetingTranslation(engine: EngineID) {
+        meetingTranslationEngine = engine
+    }
+
     /// A pair picked in the panel holds for this meeting only (decision 14 DEFAULT).
     func pickMeetingTranslationPair(_ pair: TranslationLanguagePair) {
         meetingTranslationPair = pair
+    }
+}
+
+/// The segment and engine a started meeting really runs (WP-31): the live panel shows these,
+/// not the Settings > Modes defaults.
+enum RunningMeetingSession {
+    static func segment(recordOnly: Bool, cloudMode: Bool, localPreview: Bool) -> MeetingSegment {
+        if recordOnly { return .recordOnly }
+        if cloudMode { return .cloud }
+        return localPreview ? .thisMac : .recordOnly
+    }
+
+    /// `ownLiveEngine`: ElevenLabs or Apple streaming live; `afterStopEngine`: the on-device pick for after Stop.
+    static func engine(segment: MeetingSegment, ownLiveEngine: EngineID?, afterStopEngine: String?) -> EngineID {
+        switch segment {
+        case .cloud: ownLiveEngine ?? .didunyCloud
+        case .thisMac: .whisper
+        case .recordOnly: afterStopEngine.flatMap(EngineID.init(rawValue:)) ?? .whisper
+        }
     }
 }

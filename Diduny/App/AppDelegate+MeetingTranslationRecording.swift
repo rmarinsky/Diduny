@@ -275,6 +275,8 @@ extension AppDelegate {
                 appState.meetingTranslationRecordingStartTime = Date()
                 appState.liveTranscriptStore = store
                 handleMeetingTranslationStateChange(.recording)
+                // Live two-way translation runs on Diduny Cloud (WP-32).
+                DictationOverlayController.shared.store.showRunningMeetingTranslation(engine: .didunyCloud)
             }
 
             if let recordingId = meetingRecorderService.currentRecordingId {

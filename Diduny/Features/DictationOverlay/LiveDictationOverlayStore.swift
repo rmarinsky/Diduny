@@ -40,6 +40,9 @@ final class LiveDictationOverlayStore {
     /// Meeting panel segment and engine per segment (WP-31). Seeded from Settings > Modes once WP-13 lands.
     var meetingSegment: MeetingSegment = .cloud
     var meetingEngines: [MeetingSegment: EngineID] = MeetingPanelState.defaultEngines
+    /// Until WP-63 moves audio mid-meeting, the panel shows the running segment and engine and
+    /// offers no switch: a pick that only changed the label would misreport where audio goes.
+    var meetingSwitchingLocked = true
     /// What the live STT stream produces for this session.
     private(set) var nativeOutput: DictationOutput = .original
     /// Output of the session or picked in the panel, before any spoken command.

@@ -28,6 +28,8 @@ struct CalmBox: View {
     let title: LocalizedStringKey
     let detail: LocalizedStringKey
     let height: CGFloat
+    /// Optional link under the detail, for example "Turn on live transcript" (WP-30).
+    var action: (title: LocalizedStringKey, id: String, run: () -> Void)?
 
     var body: some View {
         VStack(spacing: 6) {
@@ -41,6 +43,11 @@ struct CalmBox: View {
                 .frame(maxWidth: DS.Size.calmDetailMaxWidth)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("livePanel.calm.detail")
+            if let action {
+                InlineLink(title: action.title, action: action.run)
+                    .font(DS.Font.meta)
+                    .accessibilityIdentifier(action.id)
+            }
         }
         .multilineTextAlignment(.center)
         .padding(DS.Space.lg)

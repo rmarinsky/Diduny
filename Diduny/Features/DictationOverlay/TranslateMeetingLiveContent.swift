@@ -13,7 +13,7 @@ struct TranslateMeetingLiveContent: View {
                 turns: store.meetingTranslation.turns,
                 showsOriginal: $store.meetingTranslationShowsOriginal,
                 onPickPair: store.pickMeetingTranslationPair,
-                onPickEngine: { store.meetingTranslationEngine = $0 },
+                onPickEngine: { if !store.meetingSwitchingLocked { store.meetingTranslationEngine = $0 } },
                 onOpenLanguages: { (NSApp.delegate as? AppDelegate)?.openSettings(tab: .languages) }
             ) {
                 LiveWaveformCircle(store: store)
@@ -32,9 +32,14 @@ struct MeetingLiveSection: View {
         MeetingLiveContent(
             state: store.meetingPanelState,
             lines: store.meetingLines,
-            segment: $store.meetingSegment,
-            onPickEngine: { store.meetingEngines[store.meetingSegment] = $0 },
-            onDownloadParakeet: { ParakeetModelController.shared.download() }
+            // Locked until WP-63: a segment pick would not move the audio.
+            segment: Binding(
+                get: { store.meetingSegment },
+                set: { if !store.meetingSwitchingLocked { store.meetingSegment = $0 } }
+            ),
+            onPickEngine: { if !store.meetingSwitchingLocked { store.meetingEngines[store.meetingSegment] = $0 } },
+            onDownloadParakeet: { ParakeetModelController.shared.download() },
+            onTurnOnLiveTranscript: store.meetingTurnOnLiveTranscript
         ) {
             LiveWaveformCircle(store: store)
         }

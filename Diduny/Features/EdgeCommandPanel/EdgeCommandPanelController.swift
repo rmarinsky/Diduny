@@ -299,7 +299,7 @@ final class EdgeCommandPanelController: NSObject {
               !appDelegate.hasAnyRecordingInProgress,
               appDelegate.canStartRecording(kind: .meeting)
         else { return }
-        appDelegate.toggleMeetingRecording(provider: suggestion.start.legacyProvider)
+        appDelegate.startMeetingRecording(from: suggestion.start)
     }
 
     func setMeetingSuggestionsEnabled(_ enabled: Bool) {

@@ -52,12 +52,18 @@ struct TranslateMeetingPanelContent<Waveform: View>: View {
                     }
                 )
                 .frame(width: width * 0.475)
-                PickerField(
-                    label: "Engine", value: model.engine.name, layout: .stackedInPair, menuAlignment: .trailing,
-                    identifier: "livePanel.engine",
-                    menu: { model.engineMenu },
-                    onPick: { id in EngineID(rawValue: id).map(onPickEngine) }
-                )
+                Group {
+                    if model.engines.count <= 1 {
+                        PickerField(staticLabel: "Engine", value: model.engine.name, layout: .stackedInPair, identifier: "livePanel.engine")
+                    } else {
+                        PickerField(
+                            label: "Engine", value: model.engine.name, layout: .stackedInPair, menuAlignment: .trailing,
+                            identifier: "livePanel.engine",
+                            menu: { model.engineMenu },
+                            onPick: { id in EngineID(rawValue: id).map(onPickEngine) }
+                        )
+                    }
+                }
                 .frame(width: width * 0.525)
             }
         }
