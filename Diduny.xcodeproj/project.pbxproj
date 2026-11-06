@@ -187,7 +187,9 @@
 		A3BF71ECE1878DF71825E45E /* OnboardingWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA1CEBFBA57A3FF72625C986 /* OnboardingWindow.swift */; };
 		A546AE88A1817EF822FFEAE1 /* AudioCompressionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 741C4E6B6495E48C5D14392E /* AudioCompressionService.swift */; };
 		A54834A0C0E38D58020B70D6 /* CalendarSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4708FFCBA85750F57938D66 /* CalendarSettingsSection.swift */; };
+		A5A3D3AA007E37DB3B560F87 /* EngineCaptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 448E912109BEC01019197A85 /* EngineCaptions.swift */; };
 		A7F5CADFF3FC11FCA4261373 /* ImportedMediaAudioPreparerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1023A30E21CD6C2DF35A832B /* ImportedMediaAudioPreparerTests.swift */; };
+		AAE33D499F21862CFF298E72 /* EngineCaptionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F75D65F9110B2E6CC00D8A5 /* EngineCaptionsTests.swift */; };
 		AAFD3D772F6157207AEF6ED6 /* RemoteMediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49E8CCC2E5C38B9099C8E8D2 /* RemoteMediaService.swift */; };
 		ACAD1265239FA9A32565242B /* AccountSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7074B6A737CE72D77BD9AE8F /* AccountSettingsView.swift */; };
 		ACAD779FD4C1F66271F40F69 /* ElevenLabsRealtimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C785D8CFF80253E7C50A6BD /* ElevenLabsRealtimeService.swift */; };
@@ -399,6 +401,7 @@
 		42801A3099B0B446C15F60E7 /* BrowserCalendarCalendarExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserCalendarCalendarExtractionTests.swift; sourceTree = "<group>"; };
 		43B871F73D29CA8D9A39918B /* InplaceTranslationFeedbackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InplaceTranslationFeedbackController.swift; sourceTree = "<group>"; };
 		43BB15D67013E36E021C9AA2 /* AppDelegate+ProviderRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+ProviderRouting.swift"; sourceTree = "<group>"; };
+		448E912109BEC01019197A85 /* EngineCaptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineCaptions.swift; sourceTree = "<group>"; };
 		44C5A3AF31756F85C9143656 /* ShareableContentCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareableContentCache.swift; sourceTree = "<group>"; };
 		44E093E80060FCC25BFDA560 /* AudioTrimService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTrimService.swift; sourceTree = "<group>"; };
 		44E5C44735AFF2B3983C06A1 /* RecordingModelMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingModelMigrationTests.swift; sourceTree = "<group>"; };
@@ -500,6 +503,7 @@
 		9D73646890B3E7956455A0BA /* SavedConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedConnection.swift; sourceTree = "<group>"; };
 		9DA67BAF2C72B05D5443D3CC /* RecordingTrimEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingTrimEditorView.swift; sourceTree = "<group>"; };
 		9DAE7F462D2FF4B4107711A5 /* MeetingRecoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingRecoveryService.swift; sourceTree = "<group>"; };
+		9F75D65F9110B2E6CC00D8A5 /* EngineCaptionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineCaptionsTests.swift; sourceTree = "<group>"; };
 		9F81DB03BFE440BD64876657 /* ReleaseHighlights.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ReleaseHighlights.json; sourceTree = "<group>"; };
 		A71FCAF64D600F8EFA8B20A2 /* WhisperModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModelManager.swift; sourceTree = "<group>"; };
 		A90DC34399C728FB2BD9C292 /* AuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthServiceTests.swift; sourceTree = "<group>"; };
@@ -767,6 +771,7 @@
 				EDF37D140C6180E76B832711 /* AppleSpeechProvider.swift */,
 				FEB55C33FF3E4FDBDA3B9155 /* BuiltInProviders.swift */,
 				BEA9E12869D2DC3FB2308593 /* EngineCapabilities.swift */,
+				448E912109BEC01019197A85 /* EngineCaptions.swift */,
 				F4D8C8D03C35198DEC5F5AAF /* EngineLanguages.swift */,
 				BD65B28BA3D34336B06CEB8B /* EngineReadiness.swift */,
 				FE5D58F11D75BEFFF90E7FE6 /* JobRouter.swift */,
@@ -1143,6 +1148,7 @@
 				30BB49D5A3301957E724BC89 /* ElevenLabsBatchServiceTests.swift */,
 				360D0D86CF7E7C7D149BCCF2 /* ElevenLabsRealtimeServiceTests.swift */,
 				620E69E1E41C7316D3223014 /* EngineCapabilitiesTests.swift */,
+				9F75D65F9110B2E6CC00D8A5 /* EngineCaptionsTests.swift */,
 				F9061BC822D53A7B619E454C /* EngineLanguagesTests.swift */,
 				C46453045F6E830B4B5B48D4 /* EscapeCancelServiceTests.swift */,
 				A93C5FD49F98345A448E9EA7 /* FileTranscriptionBatchServiceTests.swift */,
@@ -1512,6 +1518,7 @@
 				ACAD779FD4C1F66271F40F69 /* ElevenLabsRealtimeService.swift in Sources */,
 				B55909FA5686432DF56E99B2 /* EmptyState.swift in Sources */,
 				2DD4E17E60E77A953DE263F0 /* EngineCapabilities.swift in Sources */,
+				A5A3D3AA007E37DB3B560F87 /* EngineCaptions.swift in Sources */,
 				CBB844782CC1AFE613EBC823 /* EngineLanguages.swift in Sources */,
 				6C1456971B211C5CDE273703 /* EnginePicker.swift in Sources */,
 				8B5F93ABEF3AC9DDBDBCCE02 /* EngineReadiness.swift in Sources */,
@@ -1676,6 +1683,7 @@
 				97B8B20E07E4327B1E8BA4CF /* ElevenLabsBatchServiceTests.swift in Sources */,
 				8EEB2723738AE191B5C3314A /* ElevenLabsRealtimeServiceTests.swift in Sources */,
 				A02CE7D3335AD7AFBCE5BB04 /* EngineCapabilitiesTests.swift in Sources */,
+				AAE33D499F21862CFF298E72 /* EngineCaptionsTests.swift in Sources */,
 				E1C0DF15CA7EB033182B6D08 /* EngineLanguagesTests.swift in Sources */,
 				03386BD1EB00ACDF8DD60759 /* EscapeCancelServiceTests.swift in Sources */,
 				076DA9ECAA569742F70794BF /* FileTranscriptionBatchServiceTests.swift in Sources */,
