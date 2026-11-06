@@ -185,12 +185,25 @@ extension AppDelegate {
         )
     }
 
-    /// Local Whisper translation (Whisper alone, or Diduny Cloud signed out): Whisper translates only where its
-    /// model can (bug 9); otherwise the transcript is returned untranslated.
+    /// Local Whisper translation (Whisper alone, or Diduny Cloud signed out), per `RunTimeRouting.localTranslation`.
+    /// Signed out with a model that cannot translate it throws instead of returning wrong-language text.
     func localWhisperTranslation(audioData: Data, targetLanguage: String) async throws -> String {
-        guard JobRequest.whisperTranslationUsable(model: WhisperModelManager.shared.selectedModel()?.name, target: targetLanguage)
-        else { return try await whisperTranscriptionService.transcribe(audioData: audioData) }
-        return try await whisperTranscriptionService.translateAndTranscribe(audioData: audioData, targetLanguage: targetLanguage)
+        switch RunTimeRouting.localTranslation(model: WhisperModelManager.shared.selectedModel()?.name,
+                                               target: targetLanguage, signedIn: AuthService.hasStoredSession) {
+        case .whisper:
+            return try await whisperTranscriptionService.translateAndTranscribe(audioData: audioData, targetLanguage: targetLanguage)
+        case .didunyStep:
+            let transcript = try await whisperTranscriptionService.transcribe(audioData: audioData)
+            let step = await ByokTranslationStep.translate(transcript, targetLanguage: targetLanguage,
+                                                           translator: DidunyTextTranslationService())
+            guard step.translated else {
+                throw TranscriptionError.apiError(String(localized: "Translation failed. Try again from the recording."))
+            }
+            return step.text
+        case .signInNeeded:
+            throw TranscriptionError.apiError(String(
+                localized: "Translation uses Diduny. Sign in to enable it. Transcription with your own provider still works."))
+        }
     }
 
     var routedTranslationProvider: TranscriptionProvider {

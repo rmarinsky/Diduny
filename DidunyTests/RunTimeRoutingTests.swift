@@ -181,4 +181,20 @@ struct RunTimeRoutingTests {
         delegate.activeMeetingStartRoute = nil
         #expect(delegate.meetingStartRoute(segment: .cloud).segment == .cloud)
     }
+
+    @Test("Local translation without a capable model: Diduny step signed in, sign-in needed signed out")
+    func localTranslationSteps() {
+        let turbo = WhisperModelManager.WhisperModel.recommendedName
+        #expect(RunTimeRouting.localTranslation(model: turbo, target: "en", signedIn: true) == .didunyStep)
+        #expect(RunTimeRouting.localTranslation(model: turbo, target: "en", signedIn: false) == .signInNeeded)
+        #expect(RunTimeRouting.localTranslation(model: "ggml-large-v3", target: "uk", signedIn: true) == .didunyStep)
+        #expect(RunTimeRouting.localTranslation(model: "ggml-large-v3", target: "en", signedIn: false) == .whisper)
+    }
+
+    @Test("Translate meeting recovery uses the saved target")
+    func meetingTranslationRecoveryTarget() {
+        let pair = TranslationLanguagePair(languageA: "en", languageB: "uk")
+        #expect(RunTimeRouting.meetingTranslationRecoveryTarget(saved: "pl", pair: pair) == "pl")
+        #expect(RunTimeRouting.meetingTranslationRecoveryTarget(saved: nil, pair: pair) == "uk")
+    }
 }

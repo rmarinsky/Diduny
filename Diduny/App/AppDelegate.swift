@@ -701,7 +701,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         }
                     case .meetingTranslation:
                         rawText = self.routedProvider(for: .meetingTranslation) == .local
-                            ? try await self.localWhisperTranslation(audioData: audioData, targetLanguage: "en")
+                            ? try await self.localWhisperTranslation(
+                                audioData: audioData,
+                                targetLanguage: RunTimeRouting.meetingTranslationRecoveryTarget(
+                                    saved: state.translationTargetLanguage,
+                                    pair: SettingsStorage.shared.resolveTranslationLanguagePair()))
                             : try await self.transcriptionService.translateAndTranscribe(audioData: audioData)
                     }
 

@@ -88,6 +88,20 @@ enum RunTimeRouting {
             : String(localized: "The selected engine isn't available. Check Settings › Providers.")
     }
 
+    /// Local Whisper translation into `target` (bug 9): Whisper itself where its model can; else Whisper
+    /// transcribes and the Diduny text step translates; signed out that step cannot run.
+    enum LocalTranslation: Equatable { case whisper, didunyStep, signInNeeded }
+
+    static func localTranslation(model: String?, target: String, signedIn: Bool) -> LocalTranslation {
+        if JobRequest.whisperTranslationUsable(model: model, target: target) { return .whisper }
+        return signedIn ? .didunyStep : .signInNeeded
+    }
+
+    /// Translate meeting recovery: the target saved with the session, else the pair's Language B.
+    static func meetingTranslationRecoveryTarget(saved: String?, pair: TranslationLanguagePair) -> String {
+        saved ?? pair.languageB
+    }
+
     static func baseProvider(for engine: EngineID, signedIn: Bool) -> TranscriptionProvider {
         engine == .whisper || !signedIn ? .local : .cloud
     }
