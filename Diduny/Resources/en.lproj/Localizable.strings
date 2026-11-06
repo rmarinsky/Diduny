@@ -1770,3 +1770,19 @@
 "Right Arrow" = "Right Arrow";
 "Up Arrow" = "Up Arrow";
 "Down Arrow" = "Down Arrow";
+
+/* Panels redesign WP-32 */
+"Recording · no live text" = "Recording · no live text";
+"Live · both directions · speaker labels" = "Live · both directions · speaker labels";
+"After Stop · everything into %@ · no speaker labels" = "After Stop · everything into %@ · no speaker labels";
+"No live text with %@. It transcribes on this Mac after Stop, then Diduny translates all of it into %@. Both directions need Diduny Cloud." = "No live text with %@. It transcribes on this Mac after Stop, then Diduny translates all of it into %@. Both directions need Diduny Cloud.";
+"No live text with %@. It transcribes after Stop, then Diduny translates all of it into %@. Both directions need Diduny Cloud." = "No live text with %@. It transcribes after Stop, then Diduny translates all of it into %@. Both directions need Diduny Cloud.";
+"Live · %@" = "Live · %@";
+"After Stop → %@" = "After Stop → %@";
+"Speaker %@" = "Speaker %@";
+"Both directions, between your languages" = "Both directions, between your languages";
+"Other languages..." = "Other languages...";
+"Add them to Your languages in Settings" = "Add them to Your languages in Settings";
+"Between" = "Between";
+"Show original text" = "Show original text";
+"Hide original text" = "Hide original text";

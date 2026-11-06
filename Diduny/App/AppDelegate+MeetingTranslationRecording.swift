@@ -340,11 +340,15 @@ extension AppDelegate {
         rtService.onTokensReceived = { [weak self, weak store] tokens in
             guard let self else { return }
             let annotated = meetingTranslationTimestampBackfill.annotate(tokens)
+            // The saved transcript keeps translations only; the live panel also gets the originals
+            // (with speakers and languages) for "Show original text" and the direction labels.
             let translatedTokens = filterMeetingTranslatedTokens(annotated)
-            guard !translatedTokens.isEmpty else { return }
+            guard !annotated.isEmpty else { return }
             Task { @MainActor in
-                store?.processTokens(translatedTokens)
-                self.updateRecordingFeedbackTokens(translatedTokens, mode: .meetingTranslation)
+                if !translatedTokens.isEmpty {
+                    store?.processTokens(translatedTokens)
+                }
+                self.updateRecordingFeedbackTokens(annotated, mode: .meetingTranslation)
             }
         }
 
