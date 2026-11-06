@@ -65,15 +65,12 @@ struct YourLanguages: Equatable {
         return offered.first { $0.hasSameLanguages(as: defaultPair) } ?? offered.first
     }
 
-    /// The one default target: the stored one while it is in the list; unset, Language B of the
-    /// default pair; else the first translatable language.
+    /// The one default target: the stored one while it is in the list, else the first translatable
+    /// language (prototype v9 `sel(MINE, MINE[0])`). Language B of the default pair only when no
+    /// language in the list is translatable.
     func target(stored: String?, defaultPair: TranslationLanguagePair) -> String {
         let candidates = translatableCodes
-        if let stored = SupportedLanguage.normalizedCode(stored) {
-            if candidates.contains(stored) { return stored }
-        } else if candidates.contains(defaultPair.languageB) {
-            return defaultPair.languageB
-        }
+        if let stored = SupportedLanguage.normalizedCode(stored), candidates.contains(stored) { return stored }
         return candidates.first ?? defaultPair.languageB
     }
 }

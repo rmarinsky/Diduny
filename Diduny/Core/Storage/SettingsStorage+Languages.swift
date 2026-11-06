@@ -2,8 +2,9 @@ import Foundation
 
 /// Your languages, the one default target and the one pair (plan 3.4, ADR-0012 D4).
 /// The pair keeps its existing keys, `translationLanguagePairs` and `defaultTranslationLanguagePairID`.
-/// Unset values read what `SettingsMigration.migrateLanguages` writes (one function for both), so
-/// existing users read the same before and after the migration.
+/// Unset `yourLanguages` reads what `SettingsMigration.migrateLanguages` writes (one function for both).
+/// Unset `defaultTranslationTargetLanguage` reads the first of Your languages; the migration writes
+/// Language B of the default pair for existing users (05 §4.3 step 7).
 extension SettingsStorage {
     private enum LanguagesKey: String {
         case yourLanguages
@@ -47,15 +48,14 @@ extension SettingsStorage {
     }
 
     /// Makes `pair` the one pair. A pair not stored yet is added; a stored pair with the same two
-    /// languages is selected instead. Its languages join a stored Your languages list.
+    /// languages is selected instead. Your languages is stored first, with the pair's languages added,
+    /// so a list derived from favorites does not change when the pair list does.
     func selectTranslationPair(_ pair: TranslationLanguagePair) {
         let stored = translationLanguagePairs
         let selected = stored.first { $0.hasSameLanguages(as: pair) } ?? pair
+        yourLanguages = yourLanguages + selected.codes
         if !stored.contains(selected) { translationLanguagePairs = stored + [selected] }
         defaultTranslationLanguagePairID = selected.id
-        if defaults.object(forKey: LanguagesKey.yourLanguages.rawValue) != nil {
-            yourLanguages = yourLanguages + selected.codes
-        }
     }
 
     private var yourLanguagesValue: YourLanguages {
@@ -82,17 +82,22 @@ extension SettingsStorage {
         )
     }
 
-    /// What `defaultTranslationTargetLanguage` reads; unset, Language B of the default pair.
+    /// What `defaultTranslationTargetLanguage` reads; unset, the first of Your languages.
     static func defaultTranslationTarget(in defaults: UserDefaults) -> String {
-        let pairs = storedTranslationPairs(in: defaults) ?? [.defaultPair]
-        return yourLanguages(in: defaults).target(
+        yourLanguages(in: defaults).target(
             stored: defaults.string(forKey: LanguagesKey.defaultTranslationTargetLanguage.rawValue),
-            defaultPair: defaultTranslationPair(in: pairs, defaults: defaults)
+            defaultPair: defaultTranslationPair(in: defaults)
         )
     }
 
+    /// `defaultTranslationLanguagePair` as read today, from raw `UserDefaults`.
+    static func defaultTranslationPair(in defaults: UserDefaults) -> TranslationLanguagePair {
+        defaultTranslationPair(in: storedTranslationPairs(in: defaults) ?? [.defaultPair], defaults: defaults)
+    }
+
     /// `translationLanguagePairs` as read today, or nil when neither the pair list nor the legacy
-    /// single pair keys are stored.
+    /// single pair keys are stored. Copies the getter `SettingsStorage.translationLanguagePairs` and
+    /// `sanitizedTranslationPairs` (`SettingsStorage.swift`); keep them in step.
     private static func storedTranslationPairs(in defaults: UserDefaults) -> [TranslationLanguagePair]? {
         let keys: [LanguagesKey] = [.translationLanguagePairs, .translationLanguageA, .translationLanguageB]
         guard keys.contains(where: { defaults.object(forKey: $0.rawValue) != nil }) else { return nil }
@@ -109,7 +114,9 @@ extension SettingsStorage {
         )]
     }
 
-    /// `defaultTranslationLanguagePair` as read today.
+    /// `defaultTranslationLanguagePair` as read today. Copies the getters
+    /// `SettingsStorage.defaultTranslationLanguagePairID` and `defaultTranslationLanguagePair`
+    /// (`SettingsStorage.swift`); keep them in step.
     private static func defaultTranslationPair(
         in pairs: [TranslationLanguagePair],
         defaults: UserDefaults

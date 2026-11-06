@@ -447,8 +447,11 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(storage.voiceTranslationTargetLanguage, "uk")
         // Your languages come from the pair; favorites are only the fallback when no pair is stored.
         XCTAssertEqual(storage.yourLanguages, ["en", "uk"])
-        XCTAssertEqual(storage.defaultTranslationTargetLanguage, "uk")
         XCTAssertEqual(storage.offeredTranslationPairs, [TranslationLanguagePair(languageA: "en", languageB: "uk")])
+        // Unset, the target is the first of Your languages; the migration keeps Language B for existing users.
+        XCTAssertEqual(storage.defaultTranslationTargetLanguage, "en")
+        SettingsMigration.migrateLanguages(defaults: defaults)
+        XCTAssertEqual(storage.defaultTranslationTargetLanguage, "uk")
     }
 
     func test_translationPairs_migrateFromLegacyPair() {

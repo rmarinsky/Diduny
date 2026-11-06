@@ -8,8 +8,8 @@ final class YourLanguagesTests {
     private let suiteName = "YourLanguagesTests.\(UUID().uuidString)"
     private let defaults: UserDefaults
 
-    init() {
-        defaults = UserDefaults(suiteName: suiteName)!
+    init() throws {
+        defaults = try #require(UserDefaults(suiteName: suiteName))
     }
 
     deinit {
@@ -106,11 +106,14 @@ final class YourLanguagesTests {
         #expect(store.translationPair == nil)
     }
 
-    @Test("T5-LA-05 Languages you speak keep their order; unticking a detected language is stored")
-    func languagesYouSpeak() {
+    @Test("T5-LA-05 (partial, WP-14 part) Languages you speak keep their order; unticking a detected language is stored")
+    func languagesYouSpeakPartial() {
         let store = storage()
         store.manualSpeechLanguageHints = []
         #expect(store.manualSpeechLanguageHints.isEmpty)
+        // Today's fallback stays: with nothing chosen or detected, the hints are en, uk.
+        // "Sends no hint" belongs to WP-53.
+        #expect(store.effectiveSpeechLanguageHints(detectedCodes: []) == ["en", "uk"])
 
         store.manualSpeechLanguageHints = ["pl", "en"]
         #expect(store.manualSpeechLanguageHints == ["pl", "en"])
@@ -171,28 +174,38 @@ final class YourLanguagesTests {
         #expect(store.translationPair?.id == "en-de")
     }
 
+    @Test("Picking a pair keeps Your languages derived from favorites")
+    func pickedPairKeepsFavorites() {
+        defaults.set(["de", "fr"], forKey: "favoriteLanguages")
+        let store = storage()
+        #expect(store.yourLanguages == ["de", "fr", "en", "uk"])
+        store.selectTranslationPair(pair("en", "pl"))
+        #expect(store.yourLanguages == ["de", "fr", "en", "uk", "pl"])
+        #expect(store.translationPair?.id == "en-pl")
+    }
+
     @Test("A stored pair keeps its direction and id in the offered list")
     func storedPairDirectionKept() throws {
         try storePairs([pair("uk", "en"), pair("de", "en")], defaultID: "de-en")
         let store = storage()
         #expect(store.offeredTranslationPairs.map(\.id) == ["uk-en", "uk-de", "de-en"])
         #expect(store.translationPair?.id == "de-en")
-        #expect(store.defaultTranslationTargetLanguage == "en")
+        #expect(store.defaultTranslationTargetLanguage == "uk")
     }
 
     // MARK: - Read-time defaults for users who never saw the new keys
 
-    @Test("Fresh install: Your languages English, Ukrainian; target Ukrainian; pair EN ↔ UK")
+    @Test("Fresh install: Your languages English, Ukrainian; target English; pair EN ↔ UK")
     func freshInstallDefaults() {
         let store = storage()
         #expect(store.yourLanguages == ["en", "uk"])
-        #expect(store.defaultTranslationTargetLanguage == "uk")
+        #expect(store.defaultTranslationTargetLanguage == "en")
         #expect(store.translationPair?.id == "en-uk")
         #expect(defaults.object(forKey: "yourLanguages") == nil)
         #expect(defaults.object(forKey: "defaultTranslationTargetLanguage") == nil)
     }
 
-    @Test("Unset values read what the migration writes, so values are the same before and after")
+    @Test("Your languages and the pair read the same before and after the migration; the target becomes Language B")
     func readTimeEqualsMigration() throws {
         try storePairs([pair("en", "uk"), pair("uk", "pl"), pair("de", "en")], defaultID: "uk-pl")
         let before = storage()
@@ -204,7 +217,8 @@ final class YourLanguagesTests {
 
         let after = storage()
         #expect(after.yourLanguages == languages)
-        #expect(after.defaultTranslationTargetLanguage == target)
+        #expect(target == "en")
+        #expect(after.defaultTranslationTargetLanguage == "pl")
         #expect(after.translationPair?.id == pairID)
         #expect(pairID == before.defaultTranslationLanguagePair.id)
     }
