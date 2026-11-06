@@ -1770,3 +1770,25 @@
 "Right Arrow" = "Right Arrow";
 "Up Arrow" = "Up Arrow";
 "Down Arrow" = "Down Arrow";
+
+/* Panels redesign WP-52 */
+"How the app behaves, whatever the mode." = "How the app behaves, whatever the mode.";
+"After a recording" = "After a recording";
+"Paste the text where I was typing" = "Paste the text where I was typing";
+"Off: the text is only copied." = "Off: the text is only copied.";
+"Play a sound when done" = "Play a sound when done";
+"Normal" = "Normal";
+"For chat" = "For chat";
+"While recording" = "While recording";
+"Show the recording in" = "Show the recording in";
+"Pick how a recording looks on screen." = "Pick how a recording looks on screen.";
+"Open the panel when a recording starts" = "Open the panel when a recording starts";
+"Keep dictation and translation" = "Keep dictation and translation";
+"Keep meeting recordings" = "Keep meeting recordings";
+"Expired history" = "Expired history";
+"Delete now" = "Delete now";
+"Setup guide" = "Setup guide";
+"Open" = "Open";
+"Permission to record system audio" = "Permission to record system audio";
+"Ask again" = "Ask again";
+"You said no to Screen Recording earlier. Meetings need it to record the other side." = "You said no to Screen Recording earlier. Meetings need it to record the other side.";
