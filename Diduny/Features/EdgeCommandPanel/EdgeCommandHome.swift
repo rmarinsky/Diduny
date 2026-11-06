@@ -49,8 +49,8 @@ enum CommandHome {
     static let tiles: [EdgeCommandAction] = [.transcribe, .translate, .meeting, .translateMeeting]
     static let asInSettingsRowID = "asInSettings"
     static let providersRowID = "providers"
-    /// The header "Settings" link: Settings > Modes (02 Q2) once WP-50 adds that section; General until then.
-    static let settingsSection = MainSection.general
+    /// The header "Settings" link: Settings > Modes (02 Q2).
+    static let settingsSection = MainSection.modes
     static let fallbackTarget = "en"
     /// `PickerMenuModel.languageRowID` prefix.
     static let languageRowPrefix = "lang."

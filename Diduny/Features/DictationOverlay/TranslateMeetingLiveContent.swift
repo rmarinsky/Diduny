@@ -17,8 +17,6 @@ struct TranslateMeetingLiveContent: View {
                 onOpenLanguages: { (NSApp.delegate as? AppDelegate)?.openSettings(tab: .languages) }
             ) {
                 LiveWaveformCircle(store: store)
-                    .frame(width: DS.Size.waveformCircle, height: DS.Size.waveformCircle)
-                    .accessibilityIdentifier("livePanel.waveform")
             }
         }
     }

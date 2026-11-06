@@ -48,7 +48,7 @@ enum ModeEngineRules {
         return caps.liveMeetingText == .none ? .recordOnly : .thisMac
     }
 
-    /// ADR-0012 D2: the router must read only batch caps. Wired into `JobRequest.afterStop` by WP-12.
+    /// ADR-0012 D2: the router must read only batch caps. Wired into `JobRequest.afterStop` by WP-17.
     static func runsAfterStop(job: STTJob, segment: MeetingSegment?, caps: EngineCapabilities) -> Bool {
         switch job {
         case .meeting: segment == .recordOnly

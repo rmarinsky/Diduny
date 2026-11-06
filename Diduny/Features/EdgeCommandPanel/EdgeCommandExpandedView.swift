@@ -94,11 +94,12 @@ struct EdgeCommandExpandedView: View {
                     onDrag: onDrag,
                     onDragEnd: onDragEnd
                 )
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("commandPanel.live")
                 .transition(swap?.transition ?? .identity)
             } else {
+                // `commandView` sets `.contain` and `commandPanel.home` itself.
                 commandView
-                    .accessibilityIdentifier("commandPanel.home")
                     .transition(swap?.transition ?? .identity)
             }
         }

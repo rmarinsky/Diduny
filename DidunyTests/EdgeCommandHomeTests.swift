@@ -24,6 +24,11 @@ struct EdgeCommandHomeTests {
         }
     }
 
+    @Test("The header Settings link opens Settings > Modes (02 Q2)")
+    func settingsLinkOpensModes() {
+        #expect(CommandHome.settingsSection == .modes)
+    }
+
     @Test("T2-EN-01 As in Settings: each tile uses its mode default")
     func asInSettingsUsesModeDefaults() {
         let home = model(defaults: CommandHomeDefaults(

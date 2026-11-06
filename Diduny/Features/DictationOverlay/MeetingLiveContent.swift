@@ -234,16 +234,13 @@ struct MeetingLiveContent<Waveform: View>: View {
     let onDownloadParakeet: () -> Void
     /// Record only: streams the rest of the meeting to Cloud (nil hides the link).
     var onTurnOnLiveTranscript: (() -> Void)?
-    /// The level meter; drawn inside the 38 pt tint circle.
+    /// The 38 pt waveform circle (`LiveWaveformCircle` draws its own frame, tint and identifier).
     @ViewBuilder let waveform: () -> Waveform
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Panel.blockGap) {
             HStack(spacing: DS.Panel.blockGap) {
                 waveform()
-                    .frame(width: DS.Size.waveformCircle, height: DS.Size.waveformCircle)
-                    .background(DS.Palette.tint, in: Circle())
-                    .accessibilityIdentifier("livePanel.waveform")
                 ModeSegments(
                     items: state.segments.map {
                         .init(id: $0.id, title: LocalizedStringKey($0.title), isEnabled: $0.isEnabled, accessibilityID: $0.accessibilityID)
