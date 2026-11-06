@@ -337,10 +337,6 @@ import SwiftUI
             settings.appearance = NSAppearance(named: appearance)
             settings.frame = CGRect(x: 0, y: 0, width: 640, height: 820)
             try write(settings, "reference-meetings-settings-\(appearanceName)")
-            let audio = NSHostingView(rootView: MeetingAudioSettingsView().frame(width: 640, height: 900))
-            audio.appearance = NSAppearance(named: appearance)
-            audio.frame = CGRect(x: 0, y: 0, width: 640, height: 900)
-            try write(audio, "reference-meeting-audio-settings-\(appearanceName)")
         }
 
         let menu = NSMenu()

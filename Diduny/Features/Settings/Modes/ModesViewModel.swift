@@ -53,6 +53,12 @@ final class ModesViewModel {
 
     var showsSignedOutNotice: Bool { !signedIn }
 
+    /// Opens one expander, as when another page links to it.
+    func expand(_ job: STTJob) {
+        guard job != .file else { return }
+        expandedJob = job
+    }
+
     func toggleExpander(_ job: STTJob) {
         guard job != .file else { return }
         expandedJob = expandedJob == job ? nil : job

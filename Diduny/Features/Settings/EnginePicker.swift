@@ -253,30 +253,6 @@ extension EngineOptions {
     }
 }
 
-/// Meetings live-translation hint when the Diduny translation step is not available (signed out / no quota).
-struct DidunyTranslationGateNotice: View {
-    var body: some View {
-        let availability = EngineOptions.translationAvailability()
-        if !availability.available {
-            VStack(alignment: .leading, spacing: 6) {
-                Label(
-                    availability.signedIn
-                        ? "Translation uses Diduny quota, which is used up. Upgrade to enable it. Transcription with your own provider still works."
-                        : "Translation uses Diduny. Sign in to enable it. Transcription with your own provider still works.",
-                    systemImage: "info.circle"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                Button(availability.signedIn ? "Upgrade" : "Sign in") {
-                    MainWindowController.shared.showWindow(section: .account)
-                }
-                .buttonStyle(.link)
-                .font(.caption)
-            }
-        }
-    }
-}
-
 /// Capability chip: available = tinted with a checkmark; not available = outlined with a minus.
 struct CapabilityChip: View {
     let text: String

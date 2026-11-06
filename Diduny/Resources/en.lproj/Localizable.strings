@@ -2042,3 +2042,6 @@
 "Frees memory when you are not recording." = "Frees memory when you are not recording.";
 "%1$@. Memory: %2$@" = "%1$@. Memory: %2$@";
 "Sort" = "Sort";
+
+/* Panels redesign fix queue */
+"Choose the engine, audio sources and recording levels in Modes." = "Choose the engine, audio sources and recording levels in Modes.";

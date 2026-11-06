@@ -210,6 +210,18 @@ struct ModesViewModelTests {
         #expect(modes.expandedJob == nil)
     }
 
+    @Test("WP-51: the Calendar & meetings link opens Modes with Meeting expanded; Files has none")
+    func expandFromLink() throws {
+        let modes = try model()
+        modes.toggleExpander(.dictation)
+        modes.expand(.meeting)
+        #expect(modes.expandedJob == .meeting)
+        modes.expand(.meeting)
+        #expect(modes.expandedJob == .meeting)
+        modes.expand(.file)
+        #expect(modes.expandedJob == .meeting)
+    }
+
     @Test("T5-MD-11: Tap to start and stop writes the switch and the count")
     func tapSelection() throws {
         let source = FakeSource()

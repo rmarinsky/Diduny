@@ -38,8 +38,18 @@ struct ModesSettingsView: View {
                 footer.padding(.top, 12)
             }
         }
-        .onAppear { model.reload() }
+        .onAppear {
+            model.reload()
+            openRequestedExpander()
+        }
+        .onChange(of: MainWindowController.shared.requestedModesExpander) { _, _ in openRequestedExpander() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in model.reload() }
+    }
+
+    private func openRequestedExpander() {
+        guard let job = MainWindowController.shared.requestedModesExpander else { return }
+        MainWindowController.shared.requestedModesExpander = nil
+        model.expand(job)
     }
 
     /// Content column at the default window size (design-spec 3.5); measured on layout.

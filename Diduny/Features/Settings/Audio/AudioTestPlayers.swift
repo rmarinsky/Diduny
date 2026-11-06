@@ -33,7 +33,7 @@ final class AudioTestPlayback: NSObject, AVAudioPlayerDelegate {
 }
 
 /// "Test system audio": capture a short clip of what the Mac plays, then play it back.
-/// Same flow as today's `MeetingAudioSettingsView` test section.
+/// The meeting audio test flow (moved here from the removed `MeetingAudioSettingsView`).
 @Observable
 @MainActor
 final class SystemAudioTester {
