@@ -2,19 +2,35 @@ import AppKit
 import KeyboardShortcuts
 import SwiftUI
 
+/// Menu bar "Processing": Cloud or Local writes what "Use one engine for everything" writes with
+/// Diduny Cloud or Whisper (decision 12 DEFAULT). Shows nil (no tick) while modes use different engines.
 struct MenuBarProcessingModeSelection {
     private let settings: SettingsStorage
-    private(set) var provider: TranscriptionProvider
+    private(set) var provider: TranscriptionProvider?
 
     init(settings: SettingsStorage = .shared) {
         self.settings = settings
-        provider = settings.effectiveTranscriptionProvider == .cloud
-            && settings.effectiveTranslationProvider == .cloud ? .cloud : .local
+        provider = Self.displayed(settings)
     }
 
     mutating func select(_ provider: TranscriptionProvider) {
-        settings.selectProcessingProvider(provider)
-        self.provider = provider
+        let engine: EngineID = provider == .cloud ? .didunyCloud : .whisper
+        guard let caps = Self.capabilities(engine) else { return }
+        settings.modeDefaults.apply(ModeEngineRules.useOneEngineForEverything(caps))
+        self.provider = Self.displayed(settings)
+    }
+
+    private static func capabilities(_ id: EngineID) -> EngineCapabilities? {
+        ProviderRegistry.shared.module(id: id.rawValue).flatMap { EngineCapabilities.make($0, activeWhisperModel: nil) }
+    }
+
+    private static func displayed(_ settings: SettingsStorage) -> TranscriptionProvider? {
+        let available = [EngineID.didunyCloud, .whisper].compactMap(capabilities)
+        switch ModeEngineRules.displayedUniformEngine(defaults: settings.modeDefaults, available: available) {
+        case .didunyCloud: return .cloud
+        case .whisper: return .local
+        default: return nil
+        }
     }
 }
 
@@ -319,13 +335,12 @@ private struct StatusItemLabel: View {
         switch appState.meetingTranslationRecordingState {
         case .recording: String(localized: "Stop Meeting Translation")
         case .processing: String(localized: "Processing Meeting Translation…")
-        default: String(localized: "Meeting Translation \(translationTargetLabel)")
+        default: String(localized: "Meeting Translation \(SettingsStorage.shared.resolveTranslationLanguagePair().displayLabel)")
         }
     }
 
     private var translationTargetLabel: String {
-        if SettingsStorage.shared.effectiveTranslationProvider == .local { return "EN" }
-        return SettingsStorage.shared.resolveTranslationLanguagePair().displayLabel
+        SettingsStorage.shared.effectiveDictationTranslationTargetLanguage.uppercased()
     }
 
     // MARK: Input, windows, app
@@ -333,6 +348,7 @@ private struct StatusItemLabel: View {
     /// One submenu for where audio comes from and where it is processed.
     func inputItem() -> NSMenuItem {
         let isCloud = processingMode.provider == .cloud
+        let isLocal = processingMode.provider == .local
         let item = NSMenuItem(title: String(localized: "Input: \(microphoneLabel) · \(isCloud ? String(localized: "Cloud") : String(localized: "Local"))"),
                               action: nil, keyEquivalent: "")
         let menu = NSMenu()
@@ -352,7 +368,7 @@ private struct StatusItemLabel: View {
             var mode = processingMode
             mode.select(.local)
         }
-        local.state = isCloud ? .off : .on
+        local.state = isLocal ? .on : .off
         menu.addItem(cloud)
         menu.addItem(local)
         menu.addItem(.sectionHeader(title: String(localized: "Microphone")))

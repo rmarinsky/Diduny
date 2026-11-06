@@ -347,20 +347,34 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(SettingsStorage.shared.transcriptionProvider, .local)
     }
 
+    /// Decision 12 DEFAULT: Processing writes what "Use one engine for everything" writes; legacy keys stay.
     func test_menuBarProcessingModeSelection_updatesDisplayedAndStoredProviders() {
-        UserDefaults.standard.set(true, forKey: sessionPresentKey)
-        SettingsStorage.shared.transcriptionProvider = .local
-        SettingsStorage.shared.translationProvider = .local
-        SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = false
-        var selection = MenuBarProcessingModeSelection()
+        let suite = "MenuBarProcessing.\(UUID().uuidString)"
+        let settings = SettingsStorage(defaults: UserDefaults(suiteName: suite)!)
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        settings.transcriptionProvider = .local
+        var selection = MenuBarProcessingModeSelection(settings: settings)
+
+        selection.select(.local)
+        XCTAssertEqual(selection.provider, .local)
+        for job in [STTJob.dictation, .dictationTranslation, .meetingTranslation, .file] {
+            XCTAssertEqual(settings.modeDefaults.engine(for: job), .whisper, "\(job)")
+        }
+        XCTAssertEqual(settings.modeDefaults.meetingStartsIn, .thisMac)
+        XCTAssertEqual(settings.modeDefaults.engine(for: .thisMac), .whisper)
 
         selection.select(.cloud)
-
         XCTAssertEqual(selection.provider, .cloud)
-        XCTAssertEqual(SettingsStorage.shared.transcriptionProvider, .cloud)
-        XCTAssertEqual(SettingsStorage.shared.translationProvider, .cloud)
-        XCTAssertTrue(SettingsStorage.shared.meetingRealtimeTranscriptionEnabled)
-        XCTAssertTrue(SettingsStorage.shared.effectiveMeetingRealtimeTranscriptionEnabled)
+        for job in [STTJob.dictation, .dictationTranslation, .meetingTranslation] {
+            XCTAssertEqual(settings.modeDefaults.engine(for: job), .didunyCloud, "\(job)")
+        }
+        XCTAssertEqual(settings.modeDefaults.engine(for: .file), .whisper, "Files keep an engine on this Mac")
+        XCTAssertEqual(settings.modeDefaults.meetingStartsIn, .cloud)
+        XCTAssertEqual(settings.modeDefaults.engine(for: .cloud), .didunyCloud)
+        XCTAssertEqual(settings.transcriptionProvider, .local, "legacy key is not written")
+
+        settings.modeDefaults.apply([.engine(.dictation, JobProviderSelection(providerID: "parakeet-v3"))])
+        XCTAssertNil(MenuBarProcessingModeSelection(settings: settings).provider, "different per mode shows no tick")
     }
 
     func test_defaultHistoryRetentionPolicies_areForever() {
