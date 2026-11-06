@@ -1888,3 +1888,25 @@
 "Add them to Your languages in Settings" = "Додайте їх до «Ваших мов» у Налаштуваннях";
 "Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript." = "Parakeet V3 не завантажено. Доки його немає, транскрипт робить Whisper Large v3 Turbo.";
 "Download %@" = "Завантажити %@";
+
+/* Panels redesign WP-52 */
+"How the app behaves, whatever the mode." = "Як поводиться застосунок у будь-якому режимі.";
+"After a recording" = "Після запису";
+"Paste the text where I was typing" = "Вставляти текст туди, де я друкував";
+"Off: the text is only copied." = "Вимкнено: текст лише копіюється.";
+"Play a sound when done" = "Грати звук після завершення";
+"Normal" = "Звичайний";
+"For chat" = "Для чату";
+"While recording" = "Під час запису";
+"Show the recording in" = "Показувати запис у";
+"Pick how a recording looks on screen." = "Виберіть, як запис виглядає на екрані.";
+"Open the panel when a recording starts" = "Відкривати панель, коли починається запис";
+"Keep dictation and translation" = "Зберігати диктування й переклад";
+"Keep meeting recordings" = "Зберігати записи зустрічей";
+"Expired history" = "Застаріла історія";
+"Delete now" = "Видалити зараз";
+"Setup guide" = "Посібник із налаштування";
+"Open" = "Відкрити";
+"Permission to record system audio" = "Дозвіл на запис системного звуку";
+"Ask again" = "Запитати знову";
+"You said no to Screen Recording earlier. Meetings need it to record the other side." = "Раніше ви відмовили в записі екрана. Він потрібен, щоб записувати співрозмовників на зустрічах.";
