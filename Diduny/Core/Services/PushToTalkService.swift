@@ -4,12 +4,15 @@ import Foundation
 import os
 
 final class PushToTalkService: PushToTalkServiceProtocol {
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
+    /// Events in the first 0.5 s after `start()` are ignored.
+    private static let startCooldown: TimeInterval = 0.5
+
+    private let source: KeyEventSource
+    private let scheduler: DelayScheduler
     private var isKeyPressed = false
     private var isReady = false
-    private var startTime: Date?
-    private var pendingHoldStartTask: Task<Void, Never>?
+    private var readyWork: (any ScheduledWork)?
+    private var pendingHoldStart: (any ScheduledWork)?
     private var hasStartedAfterHold = false
     private var sanitizedHoldStartDelaySeconds: TimeInterval = 1.2
 
@@ -17,7 +20,7 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     private var lastToggleTapTime: TimeInterval?
     private var consecutiveToggleTapCount = 0
     private let toggleTapThreshold: TimeInterval = 0.3
-    private var isHandsFreeMode = false
+    private(set) var isHandsFreeMode = false
 
     var selectedKey: PushToTalkKey = .none
     var holdModeEnabled = true
@@ -39,6 +42,14 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     /// Called when recording should toggle (for hands-free mode)
     var onToggle: (() -> Void)?
 
+    init(
+        source: KeyEventSource = NSEventKeySource(.flagsChanged),
+        scheduler: DelayScheduler = TaskDelayScheduler()
+    ) {
+        self.source = source
+        self.scheduler = scheduler
+    }
+
     func start() {
         stop()
 
@@ -46,26 +57,19 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
         // Mark not ready initially - ignore events for first 0.5 seconds
         isReady = false
-        startTime = Date()
         isHandsFreeMode = false
         lastToggleTapTime = nil
         consecutiveToggleTapCount = 0
 
-        // Monitor flags changed events globally
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            self?.handleFlagsChanged(event)
-        }
-
-        // Also monitor locally when app is active
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            self?.handleFlagsChanged(event)
-            return event
+        // Global + local flagsChanged monitors; they observe and never consume.
+        source.start { [weak self] event in
+            self?.handle(event)
         }
 
         // Become ready after cooldown
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(500))
+        readyWork = scheduler.schedule(after: Self.startCooldown) { [weak self] in
             self?.isReady = true
+            self?.readyWork = nil
             Log.app.info("Push-to-talk ready for \(self?.selectedKey.displayName ?? "unknown")")
         }
 
@@ -74,17 +78,11 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     }
 
     func stop() {
-        if let monitor = globalMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalMonitor = nil
-        }
-        if let monitor = localMonitor {
-            NSEvent.removeMonitor(monitor)
-            localMonitor = nil
-        }
+        source.stop()
+        readyWork?.cancel()
+        readyWork = nil
         isKeyPressed = false
         isReady = false
-        startTime = nil
         cancelPendingHoldStart()
         hasStartedAfterHold = false
         isHandsFreeMode = false
@@ -106,13 +104,12 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         consecutiveToggleTapCount = 0
     }
 
-    private func handleFlagsChanged(_ event: NSEvent) {
+    private func handle(_ event: KeyEvent) {
+        guard case let .flagsChanged(keyCode, flagsRawValue, eventTime) = event else { return }
         // Ignore events during cooldown period
         guard isReady else { return }
 
-        let flags = event.modifierFlags
-        let keyCode = event.keyCode
-        let eventTime = event.timestamp
+        let flags = NSEvent.ModifierFlags(rawValue: flagsRawValue)
 
         guard isCorrectKeyCode(keyCode) else { return }
 
@@ -188,12 +185,8 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         let delay = holdStartDelaySeconds
         Log.app.info("\(keyLabel) pressed - waiting \(String(format: "%.1f", delay))s before starting recording")
 
-        pendingHoldStartTask = Task { @MainActor [weak self] in
-            let milliseconds = Int((delay * 1000).rounded())
-            try? await Task.sleep(for: .milliseconds(milliseconds))
-
-            guard !Task.isCancelled,
-                  let self,
+        pendingHoldStart = scheduler.schedule(after: delay) { [weak self] in
+            guard let self,
                   isKeyPressed,
                   !self.hasStartedAfterHold,
                   self.holdModeEnabled,
@@ -201,15 +194,15 @@ final class PushToTalkService: PushToTalkServiceProtocol {
             else { return }
 
             hasStartedAfterHold = true
-            pendingHoldStartTask = nil
+            pendingHoldStart = nil
             Log.app.info("\(keyLabel) held for \(String(format: "%.1f", delay))s - starting recording")
             onKeyDown?()
         }
     }
 
     private func cancelPendingHoldStart() {
-        pendingHoldStartTask?.cancel()
-        pendingHoldStartTask = nil
+        pendingHoldStart?.cancel()
+        pendingHoldStart = nil
     }
 
     @discardableResult
@@ -314,6 +307,62 @@ final class PushToTalkService: PushToTalkServiceProtocol {
             keyCode == 54
         case .rightControl:
             keyCode == 62
+        }
+    }
+}
+
+// MARK: - Settings → service
+
+/// Applies stored push-to-talk settings to a service (test-plan T5-PT-17); one place for the
+/// dictation and translation set-up that `AppDelegate+Hotkeys` repeated.
+enum PushToTalkConfigurator {
+    struct Config: Equatable {
+        let key: PushToTalkKey
+        let hold: Bool
+        let toggle: Bool
+        let tapCount: Int
+        let holdDelay: TimeInterval
+
+        var shouldMonitor: Bool {
+            key != .none && (hold || toggle)
+        }
+
+        /// The key a change notification carries, with the other stored values.
+        func with(key: PushToTalkKey) -> Config {
+            Config(key: key, hold: hold, toggle: toggle, tapCount: tapCount, holdDelay: holdDelay)
+        }
+    }
+
+    static func dictation(_ settings: SettingsStorage) -> Config {
+        Config(
+            key: settings.pushToTalkKey,
+            hold: settings.pushToTalkHoldEnabled,
+            toggle: settings.pushToTalkToggleEnabled,
+            tapCount: settings.pushToTalkToggleTapCount,
+            holdDelay: settings.pushToTalkHoldStartDelaySeconds
+        )
+    }
+
+    static func translation(_ settings: SettingsStorage) -> Config {
+        Config(
+            key: settings.translationPushToTalkKey,
+            hold: settings.translationPushToTalkHoldEnabled,
+            toggle: settings.translationPushToTalkToggleEnabled,
+            tapCount: settings.translationPushToTalkToggleTapCount,
+            holdDelay: settings.translationPushToTalkHoldStartDelaySeconds
+        )
+    }
+
+    /// Stops the service, sets every field, and starts it again when a key and a mode are on.
+    static func apply(_ config: Config, to service: PushToTalkServiceProtocol) {
+        service.stop()
+        service.selectedKey = config.key
+        service.holdModeEnabled = config.hold
+        service.toggleModeEnabled = config.toggle
+        service.toggleTapCount = config.tapCount
+        service.holdStartDelaySeconds = config.holdDelay
+        if config.shouldMonitor {
+            service.start()
         }
     }
 }

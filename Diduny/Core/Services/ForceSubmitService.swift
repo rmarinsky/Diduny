@@ -23,30 +23,47 @@ final class ForceSubmitService {
     private(set) var isActive = false
     private(set) var isArmed = false
     private var onTrigger: (() -> Void)?
+    private var counter = PressCounter()
 
-    private init() {}
+    private let settings: SettingsStorage
+    private let registrar: HotkeyRegistrar
+    private let clock: MonotonicClock
+
+    init(
+        settings: SettingsStorage = .shared,
+        registrar: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared,
+        clock: MonotonicClock = SystemClock()
+    ) {
+        self.settings = settings
+        self.registrar = registrar
+        self.clock = clock
+    }
 
     func activate(onTrigger: @escaping () -> Void) {
-        guard SettingsStorage.shared.forceSubmitEnabled else {
+        guard settings.forceSubmitEnabled else {
             deactivate()
             return
         }
         isArmed = false
+        counter.reset()
         self.onTrigger = onTrigger
         guard !isActive else { return }
         isActive = true
-        KeyboardShortcuts.removeHandler(for: .forceSubmit)
-        KeyboardShortcuts.onKeyDown(for: .forceSubmit) { [weak self] in
-            Task { @MainActor in self?.trigger() }
+        registrar.removeHandler(for: .forceSubmit)
+        // Carbon delivers hotkeys on the main thread.
+        registrar.onKeyDown(for: .forceSubmit) { [weak self] in
+            MainActor.assumeIsolated { self?.trigger() }
         }
+        registrar.enable(.forceSubmit)
     }
 
     /// Unregisters the hotkey. Keeps the armed flag so the stop pipeline can still submit after paste.
     func deactivate() {
         isActive = false
         onTrigger = nil
-        KeyboardShortcuts.removeHandler(for: .forceSubmit)
-        KeyboardShortcuts.disable(.forceSubmit)
+        counter.reset()
+        registrar.removeHandler(for: .forceSubmit)
+        registrar.disable(.forceSubmit)
     }
 
     func disarm() {
@@ -61,6 +78,7 @@ final class ForceSubmitService {
 
     private func trigger() {
         guard isActive, !isArmed else { return }
+        guard counter.register(at: clock.now, required: settings.forceSubmitPressCount) else { return }
         isArmed = true
         onTrigger?()
     }
