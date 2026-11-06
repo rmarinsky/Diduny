@@ -33,7 +33,9 @@ class DidunyUITestCase: XCTestCase {
         freshInstall: Bool = true,
         onboardingCompleted: Bool = false,
         proxyURL: String = DidunyUITestCase.unreachableProxyURL,
-        appearance: String? = nil
+        appearance: String? = nil,
+        arguments: [String] = [],
+        environment: [String: String] = [:]
     ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -52,6 +54,8 @@ class DidunyUITestCase: XCTestCase {
         if let appearance {
             app.launchArguments += ["-AppleInterfaceStyle", appearance]
         }
+        app.launchArguments += arguments
+        app.launchEnvironment.merge(environment) { _, new in new }
         app.launch()
         self.app = app
         return app
