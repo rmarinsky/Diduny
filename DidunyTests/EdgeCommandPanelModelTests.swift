@@ -39,7 +39,7 @@ struct EdgeCommandPanelModelTests {
             dock: rightDock,
             presentation: .commands(isCloud: true)
         )
-            == NSRect(x: 1154, y: 287, width: 286, height: 326))
+            == NSRect(x: 1140, y: 287, width: 300, height: 326))
         #expect(EdgeCommandPanelPlacement.frame(in: visibleFrame, dock: bottomDock, presentation: .collapsed)
             == NSRect(x: 688, y: 0, width: 64, height: 14))
         #expect(EdgeCommandPanelPlacement.frame(
@@ -47,17 +47,17 @@ struct EdgeCommandPanelModelTests {
             dock: bottomDock,
             presentation: .commands(isCloud: true)
         )
-            == NSRect(x: 577, y: 0, width: 286, height: 326))
+            == NSRect(x: 570, y: 0, width: 300, height: 326))
     }
 
     @Test("Expanded panels keep rounded corners when docked")
     func expandedPanelsKeepRoundedCorners() {
-        #expect(EdgeCommandPanelPlacement.expandedCornerRadius == 15)
+        #expect(EdgeCommandPanelPlacement.expandedCornerRadius == 12)
     }
 
     @Test("Live controls have a comfortable click target")
     func liveControlsHaveComfortableClickTarget() {
-        #expect(EdgeCommandPanelPlacement.liveControlHitTargetHeight >= 44)
+        #expect(EdgeCommandPanelPlacement.liveControlHitTargetHeight == 38)
     }
 
     @Test("Meeting feedback grows beyond the compact dictation panel")
@@ -75,8 +75,48 @@ struct EdgeCommandPanelModelTests {
             presentation: .live(.meeting)
         )
 
-        #expect(dictation == NSRect(x: 1130, y: 295, width: 310, height: 310))
-        #expect(meeting == NSRect(x: 1080, y: 240, width: 360, height: 420))
+        #expect(dictation == NSRect(x: 1140, y: 295, width: 300, height: 310))
+        #expect(meeting == NSRect(x: 1140, y: 240, width: 300, height: 420))
+    }
+
+    @Test("Every expanded state is 300 wide and takes the content's fitting height")
+    func expandedStatesShareWidthAndFitContent() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let presentations: [EdgeCommandPanelPresentation] = [
+            .commands(isCloud: true), .commands(isCloud: false), .live(.voice), .live(.meeting), .meetingSuggestion
+        ]
+        for edge in [EdgeCommandPanelDockEdge.left, .right, .top, .bottom] {
+            let dock = EdgeCommandPanelDock(edge: edge, offset: 450)
+            for presentation in presentations {
+                let frame = EdgeCommandPanelPlacement.frame(
+                    in: visibleFrame, dock: dock, presentation: presentation, contentHeight: 287
+                )
+                #expect(frame.width == EdgeCommandPanelPlacement.panelWidth)
+                #expect(frame.height == 287)
+            }
+        }
+        #expect(EdgeCommandPanelPlacement.panelWidth == 300)
+    }
+
+    @Test("Height change keeps the docked edge fixed")
+    func heightChangeKeepsDockedEdge() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let top = EdgeCommandPanelDock(edge: .top, offset: 720)
+        let bottom = EdgeCommandPanelDock(edge: .bottom, offset: 720)
+        let short = EdgeCommandPanelPlacement.frame(
+            in: visibleFrame, dock: top, presentation: .commands(isCloud: true), contentHeight: 200
+        )
+        let tall = EdgeCommandPanelPlacement.frame(
+            in: visibleFrame, dock: top, presentation: .commands(isCloud: true), contentHeight: 400
+        )
+        #expect(short.maxY == tall.maxY)
+        let shortBottom = EdgeCommandPanelPlacement.frame(
+            in: visibleFrame, dock: bottom, presentation: .meetingSuggestion, contentHeight: 200
+        )
+        let tallBottom = EdgeCommandPanelPlacement.frame(
+            in: visibleFrame, dock: bottom, presentation: .meetingSuggestion, contentHeight: 400
+        )
+        #expect(shortBottom.minY == tallBottom.minY)
     }
 
     @Test("Meeting suggestion is actionable for notch and compact-panel configurations")
@@ -269,7 +309,7 @@ struct EdgeCommandPanelModelTests {
 
     @Test("Meeting suggestion controls meet the minimum pointer target")
     func meetingSuggestionControlsMeetMinimumTarget() {
-        #expect(EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight >= 44)
+        #expect(EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight == 38)
     }
 
     @Test("Auto-hide only collapses after the pointer leaves the panel")

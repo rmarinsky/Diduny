@@ -10,7 +10,9 @@ struct CloudTranscriptionConfigTests {
         let suite = "CloudTranscriptionConfigTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let hints = SettingsStorage(defaults: defaults).effectiveSpeechLanguageHints(detectedCodes: [])
+        let storage = SettingsStorage(defaults: defaults)
+        storage.manualSpeechLanguageHints = [] // "Languages you speak" changed to none
+        let hints = storage.effectiveSpeechLanguageHints(detectedCodes: [])
         #expect(hints.isEmpty)
 
         let config = RecordingQueueService.buildCloudTranscriptionConfig(hints: hints, enableSpeakerDiarization: false)

@@ -1111,7 +1111,9 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         )
         XCTAssertEqual(delegate.activeMeetingTranscriptionProvider, .local)
         XCTAssertNil(delegate.meetingRealtimeService)
-        XCTAssertNil(delegate.appState.liveTranscriptStore)
+        // Record only keeps an empty, inactive store; nothing streams.
+        XCTAssertNil(delegate.localMeetingStreamingService)
+        XCTAssertEqual(delegate.appState.liveTranscriptStore?.isActive, false)
 
         if let token = delegate.meetingActivityToken {
             ProcessInfo.processInfo.endActivity(token)
