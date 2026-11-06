@@ -20,7 +20,7 @@ extension LiveDictationOverlayStore {
             segment: meetingSegment,
             engines: meetingEngines,
             switchingLocked: meetingSwitchingLocked,
-            readiness: ModesInterimReadiness(),
+            readiness: LiveEngineReadinessSource(),
             isOnBattery: powerSource.isOnBattery,
             connection: connectionStatus
         )
@@ -36,7 +36,7 @@ extension LiveDictationOverlayStore {
     }
 
     var translateMeetingPanelModel: TranslateMeetingPanelModel? {
-        let readiness = ModesInterimReadiness()
+        let readiness = LiveEngineReadinessSource()
         let options = EngineID.allCases.filter { !meetingSwitchingLocked || $0 == meetingTranslationEngine }.compactMap { id -> TranslateMeetingEngineOption? in
             MeetingPanelState.registryCapabilities(id).map {
                 TranslateMeetingEngineOption(caps: $0, name: MeetingPanelState.name(id), readiness: readiness.readiness(of: id))

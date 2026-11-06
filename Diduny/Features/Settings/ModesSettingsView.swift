@@ -14,7 +14,7 @@ struct ModesSettingsView: View {
         let whisper = WhisperModelManager.availableModels.first { $0.name == SettingsStorage.shared.selectedWhisperModel }
         return ModesViewModel(
             source: LiveModesSettingsSource(),
-            readiness: ModesInterimReadiness(),
+            readiness: LiveEngineReadinessSource(),
             engines: ProviderRegistry.shared.modules.compactMap { EngineCapabilities.make($0, activeWhisperModel: whisper) },
             isSignedIn: { AuthService.hasStoredSession }
         )
