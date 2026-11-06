@@ -18,16 +18,26 @@ struct ProviderDefaultsStore {
     }
 
     func selection(for job: STTJob) -> JobProviderSelection {
-        guard let data = defaults.data(forKey: Self.storageKey(for: job)),
-              let selection = try? JSONDecoder().decode(JobProviderSelection.self, from: data),
-              knownProviderIDs.contains(selection.providerID)
-        else { return .didunyCloud }
-        return selection
+        storedSelection(forKey: Self.storageKey(for: job)) ?? .didunyCloud
     }
 
     func setSelection(_ selection: JobProviderSelection, for job: STTJob) {
+        setSelection(selection, forKey: Self.storageKey(for: job))
+    }
+
+    /// The raw stored value of any `sttJobDefault.*` key (also the meeting segment keys); nil when unset,
+    /// unreadable or an unknown provider. `ModeDefaults` applies its own read-time defaults (ADR-0012 D4).
+    func storedSelection(forKey key: String) -> JobProviderSelection? {
+        guard let data = defaults.data(forKey: key),
+              let selection = try? JSONDecoder().decode(JobProviderSelection.self, from: data),
+              knownProviderIDs.contains(selection.providerID)
+        else { return nil }
+        return selection
+    }
+
+    func setSelection(_ selection: JobProviderSelection, forKey key: String) {
         guard let data = try? JSONEncoder().encode(selection) else { return }
-        defaults.set(data, forKey: Self.storageKey(for: job))
+        defaults.set(data, forKey: key)
     }
 
     /// Resets every job using `providerID` to Diduny Cloud; returns those jobs.
