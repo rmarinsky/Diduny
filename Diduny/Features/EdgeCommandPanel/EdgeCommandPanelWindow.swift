@@ -112,6 +112,16 @@ final class EdgeCommandPanelContentView: NSView {
         })
     }
 
+    /// WP-40: the expanded content's fitting height at the panel width (design-spec 3.3); nil when it reports none.
+    func expandedFittingHeight() -> CGFloat? {
+        // Measured off-screen at the fixed width, so the live window (mid-morph or mid-resize) is untouched.
+        let probe = NSHostingView(
+            rootView: expandedHostingView.rootView.frame(width: EdgeCommandPanelPlacement.panelWidth)
+        )
+        let height = probe.fittingSize.height
+        return height.isFinite && height > 0 ? ceil(height) : nil
+    }
+
     func updateTabView(_ tabView: EdgeCommandTabView) {
         tabHostingView.rootView = tabView
     }

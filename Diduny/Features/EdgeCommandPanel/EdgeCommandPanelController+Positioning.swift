@@ -37,8 +37,10 @@ extension EdgeCommandPanelController {
         let frame = EdgeCommandPanelPlacement.frame(
             in: visibleFrame,
             dock: resolvedDock,
-            presentation: presentation
+            presentation: presentation,
+            contentHeight: fittingHeight(for: presentation, maximum: visibleFrame.height)
         )
+        let motion = MotionPreference.current
         if morphFromTab {
             let tabFrame = EdgeCommandPanelPlacement.frame(
                 in: visibleFrame,
@@ -46,12 +48,25 @@ extension EdgeCommandPanelController {
                 presentation: .collapsed
             )
             morphPanel(panel, from: tabFrame, to: frame)
+        } else if panel.isVisible, isExpanded {
+            // M2: height follows the content swap; the docked edge stays fixed (placement).
+            let height = MotionPolicy.heightChange(preference: motion)
+            guard height.animated else {
+                panel.setFrame(frame, display: true)
+                return
+            }
+            let points = height.controlPoints
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = height.duration
+                context.timingFunction = CAMediaTimingFunction(
+                    controlPoints: points[0], points[1], points[2], points[3]
+                )
+                panel.animator().setFrame(frame, display: true)
+            }
         } else if panel.isVisible {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.24
-                context.timingFunction = isExpanded
-                    ? CAMediaTimingFunction(controlPoints: 0.25, 0.46, 0.45, 0.94)
-                    : CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
                 panel.animator().setFrame(frame, display: true)
             }
         } else {
@@ -64,7 +79,7 @@ extension EdgeCommandPanelController {
     private func morphPanel(_ panel: NSPanel, from tabFrame: NSRect, to frame: NSRect) {
         let store = DictationOverlayController.shared.store
         panel.ignoresMouseEvents = false
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+        guard !MotionPreference.current.reduceMotion else {
             store.contentRevealed = true
             panel.setFrame(frame, display: true)
             NSAnimationContext.runAnimationGroup { $0.duration = 0.15; panel.animator().alphaValue = 1 }
@@ -80,6 +95,16 @@ extension EdgeCommandPanelController {
         }, completionHandler: {
             store.contentRevealed = true
         })
+    }
+
+    /// Live panels fill the window until WP-30/31/32 give them an intrinsic height, so they keep fixed heights.
+    private func fittingHeight(for presentation: EdgeCommandPanelPresentation, maximum: CGFloat) -> CGFloat? {
+        switch presentation {
+        case .commands, .meetingSuggestion:
+            panelContentView?.expandedFittingHeight().map { min($0, maximum) }
+        case .collapsed, .live:
+            nil
+        }
     }
 
     func activeScreen() -> NSScreen? {
