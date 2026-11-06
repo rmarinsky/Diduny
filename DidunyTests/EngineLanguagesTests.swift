@@ -100,6 +100,33 @@ struct EngineLanguagesTests {
         }
     }
 
+    /// ElevenLabs entries whose vendor code may name a different language than the app code:
+    /// Mandarin (cmn) vs Chinese (zh), Filipino (fil) vs Tagalog (tl), Malay macrolanguage (msa).
+    static let nameRoundTripExceptions: Set<String> = ["cmn", "fil", "msa"]
+
+    @Test("The round-trip exceptions are ElevenLabs entries")
+    func roundTripExceptionsAreListed() {
+        #expect(Self.nameRoundTripExceptions.isSubset(of: Set(EngineLanguages.elevenLabsCodes.keys)))
+    }
+
+    @Test("ElevenLabs vendor code and app code name the same language",
+          arguments: EngineLanguages.elevenLabsCodes.keys.filter { !nameRoundTripExceptions.contains($0) }.sorted())
+    func elevenLabsNameRoundTrip(_ vendorCode: String) throws {
+        let code = try #require(EngineLanguages.elevenLabsCodes[vendorCode])
+        #expect(EngineLanguages.name(of: EngineLanguage(code, vendorCode: vendorCode), locale: Self.english)
+            == EngineLanguages.name(of: EngineLanguage(code), locale: Self.english))
+    }
+
+    static let pinnedNames: [(String, String)] = [
+        ("cmn", "Chinese"), ("fil", "Filipino"), ("yue", "Cantonese"), ("nso", "Northern Sotho"), ("ast", "Asturian")
+    ]
+
+    @Test("ElevenLabs names for codes that differ from the app's", arguments: pinnedNames)
+    func elevenLabsPinnedNames(_ vendorCode: String, _ name: String) throws {
+        let language = try #require(Self.languages(.elevenLabs).languages.first { $0.vendorCode == vendorCode })
+        #expect(EngineLanguages.name(of: language, locale: Self.english) == name)
+    }
+
     @Test("Your languages are matched by code")
     func yourLanguagesMatchByCode() throws {
         let marked = try Self.languages(.elevenLabs).marked(by: ["uk", "zh"])

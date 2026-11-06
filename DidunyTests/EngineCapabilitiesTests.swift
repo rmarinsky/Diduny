@@ -48,7 +48,7 @@ struct EngineCapabilitiesTests {
 
     static func capabilities(_ id: EngineID, whisper: WhisperModelManager.WhisperModel? = nil) throws -> EngineCapabilities {
         let module = try #require(ProviderRegistry.shared.module(id: id.rawValue))
-        return EngineCapabilities.make(module, activeWhisperModel: whisper)
+        return try #require(EngineCapabilities.make(module, activeWhisperModel: whisper))
     }
 
     static func whisperModel(_ name: String) throws -> WhisperModelManager.WhisperModel {
@@ -65,7 +65,8 @@ struct EngineCapabilitiesTests {
 
     @Test("Capability record matches the design table", arguments: table)
     func recordMatchesTable(_ row: Row) throws {
-        let caps = try Self.capabilities(row.id)
+        // Whisper's "English plus Diduny" needs a model that translates; Large v3 does.
+        let caps = try Self.capabilities(row.id, whisper: Self.whisperModel("ggml-large-v3"))
         #expect(caps.traits.runsOn == row.runsOn)
         #expect(caps.traits.obtainedBy == row.obtainedBy)
         #expect(caps.traits.needs == row.needs)
@@ -82,7 +83,7 @@ struct EngineCapabilitiesTests {
     @Test("Bring-your-own-key matches how the engine is obtained", arguments: EngineID.allCases)
     func requiresKeyMatchesObtainedBy(_ id: EngineID) throws {
         let module = try #require(ProviderRegistry.shared.module(id: id.rawValue))
-        let caps = EngineCapabilities.make(module, activeWhisperModel: nil)
+        let caps = try #require(EngineCapabilities.make(module, activeWhisperModel: nil))
         #expect(module.requiresKey == (caps.traits.obtainedBy == .ownKey))
     }
 
@@ -101,6 +102,28 @@ struct EngineCapabilitiesTests {
         #expect(model.translatesToEnglish == translates)
         let caps = try Self.capabilities(.whisper, whisper: model)
         #expect(caps.dictationTranslation == (translates ? .englishOnlyItselfPlusDiduny : .byDiduny))
+    }
+
+    @Test("Without a Whisper model, Whisper does not claim to translate itself")
+    func whisperWithoutModel() throws {
+        #expect(try Self.capabilities(.whisper).dictationTranslation == .byDiduny)
+    }
+
+    @Test("A module that is not one of the five engines has no record")
+    func unknownModuleHasNoRecord() {
+        struct Unknown: STTProviderModule {
+            let id = "unknown-engine"
+            let displayName = "Unknown"
+            let requiresKey = false
+            let models: [STTModel] = []
+            let traits = EngineTraits(runsOn: .cloud, obtainedBy: .builtIn, needs: [], recommended: .none, languages: .system)
+        }
+        #expect(EngineCapabilities.make(Unknown(), activeWhisperModel: nil) == nil)
+    }
+
+    @Test("Whisper download size comes from the catalog", arguments: WhisperModelManager.availableModels.map(\.name))
+    func whisperCatalogSizes(_ name: String) throws {
+        #expect(try Self.whisperModel(name).sizeBytes > 0)
     }
 
     @Test("Every Whisper model is in the translation table")

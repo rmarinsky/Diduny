@@ -21,15 +21,22 @@ enum EngineCaptions {
         job: STTJob,
         segment: MeetingSegment? = nil,
         caps: EngineCapabilities,
-        readiness: EngineReadiness = .ready
+        readiness: EngineReadiness = .ready,
+        locale: Locale = EngineLanguages.appLocale
     ) -> String {
-        withNote(caption(job: job, segment: segment, caps: caps), caps: caps, readiness: readiness)
+        withNote(caption(job: job, segment: segment, caps: caps), caps: caps, readiness: readiness, locale: locale)
     }
 
     /// Appends " · <note>". An engine that is not downloaded shows only "Not downloaded, <size>" (design-spec 12.1.2).
-    static func withNote(_ text: String, caps: EngineCapabilities, readiness: EngineReadiness = .ready) -> String {
+    /// `locale` formats the size ("480 MB").
+    static func withNote(
+        _ text: String,
+        caps: EngineCapabilities,
+        readiness: EngineReadiness = .ready,
+        locale: Locale = EngineLanguages.appLocale
+    ) -> String {
         if case let .notDownloaded(bytes) = readiness {
-            let size = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+            let size = bytes.formatted(.byteCount(style: .file).locale(locale))
             return String(localized: "Not downloaded, \(size)")
         }
         return note(caps).map { "\(text) · \($0)" } ?? text

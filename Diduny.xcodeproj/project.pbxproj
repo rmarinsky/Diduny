@@ -265,6 +265,7 @@
 		E2A1278EF4D20EC10319BBF4 /* Recording.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5D4FC33778F42CC48FF44C5 /* Recording.swift */; };
 		E3E8F971F59805899C8277E0 /* MultipartFormDataFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4731B0DD26DB57F2EAE71F8C /* MultipartFormDataFile.swift */; };
 		E49E98100BDACA9804603BC6 /* InProgressRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C38884243E804534AE077F9 /* InProgressRecordingStore.swift */; };
+		E4C95C7BDB960A0E3DD9AA36 /* FakeEngineReadinessSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BE72E5A5BCFFE200C45D4AD /* FakeEngineReadinessSource.swift */; };
 		E4DA7F7432AC5A880F8D5CE8 /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B850C5D55AE7652A88CE36F5 /* GeneralSettingsView.swift */; };
 		E52ED7C098FF6FA9C0554C28 /* RecordingsLibraryStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 865E86F8079EAE7A9BFB178E /* RecordingsLibraryStorage.swift */; };
 		E5A43EA1048E2701A2B0498B /* RecordingRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30A4F862A41E4EC48E5CAEFB /* RecordingRowView.swift */; };
@@ -335,6 +336,7 @@
 		0B1B86B6C7ECD0E87920F9AA /* ElevenLabsBatchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsBatchService.swift; sourceTree = "<group>"; };
 		0B43D2844894F848F20BFDEB /* MenuBarIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconView.swift; sourceTree = "<group>"; };
 		0BC53822E243EB2275568A78 /* ReleaseDemo.gif */ = {isa = PBXFileReference; lastKnownFileType = image.gif; path = ReleaseDemo.gif; sourceTree = "<group>"; };
+		0BE72E5A5BCFFE200C45D4AD /* FakeEngineReadinessSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeEngineReadinessSource.swift; sourceTree = "<group>"; };
 		0C49EEDF9A5AEED5B941A6AF /* Test.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Test.xcconfig; sourceTree = "<group>"; };
 		0C6F0ACF93EFE09C0E36A170 /* LocalSpeakerDiarizerIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSpeakerDiarizerIntegrationTests.swift; sourceTree = "<group>"; };
 		0CA68D80B03C5B98EDEAE055 /* AudioTrimEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTrimEditorTests.swift; sourceTree = "<group>"; };
@@ -1012,6 +1014,7 @@
 		99D0D844034D9012BF4C980D /* Support */ = {
 			isa = PBXGroup;
 			children = (
+				0BE72E5A5BCFFE200C45D4AD /* FakeEngineReadinessSource.swift */,
 				18A791DB6F3FB03EDF66D53C /* StubURLProtocol.swift */,
 			);
 			path = Support;
@@ -1686,6 +1689,7 @@
 				AAE33D499F21862CFF298E72 /* EngineCaptionsTests.swift in Sources */,
 				E1C0DF15CA7EB033182B6D08 /* EngineLanguagesTests.swift in Sources */,
 				03386BD1EB00ACDF8DD60759 /* EscapeCancelServiceTests.swift in Sources */,
+				E4C95C7BDB960A0E3DD9AA36 /* FakeEngineReadinessSource.swift in Sources */,
 				076DA9ECAA569742F70794BF /* FileTranscriptionBatchServiceTests.swift in Sources */,
 				E15B63E1525F544EB755DFAE /* ForceSubmitPolicyTests.swift in Sources */,
 				A7F5CADFF3FC11FCA4261373 /* ImportedMediaAudioPreparerTests.swift in Sources */,

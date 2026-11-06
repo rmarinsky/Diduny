@@ -71,13 +71,11 @@ struct EngineCapabilities: Equatable, Sendable {
     let meetingTranslation: MeetingTranslation
     let returnsOriginalWithTranslation: Bool
 
-    /// `module` must be one of the five engines (a `ProviderRegistry.shared` module).
-    /// `activeWhisperModel` is the selected Whisper model; it decides whether batch translation
-    /// into English is usable (Turbo and `.en` models do not translate).
-    static func make(_ module: any STTProviderModule, activeWhisperModel: WhisperModelManager.WhisperModel?) -> Self {
-        guard let id = EngineID(rawValue: module.id) else {
-            preconditionFailure("\(module.id) is not an engine")
-        }
+    /// nil when `module` is not one of the five engines.
+    /// `activeWhisperModel` is the selected Whisper model: Whisper translates into English itself only with a
+    /// model that can (Turbo and `.en` models cannot); with no model it never claims to.
+    static func make(_ module: any STTProviderModule, activeWhisperModel: WhisperModelManager.WhisperModel?) -> Self? {
+        guard let id = EngineID(rawValue: module.id) else { return nil }
         let realtime = module.models.lazy.compactMap(\.capabilities.realtime).first
         let batch = module.models.lazy.compactMap(\.capabilities.batch).first
         let live = realtime?.liveQuality ?? .none
@@ -85,7 +83,7 @@ struct EngineCapabilities: Equatable, Sendable {
         let dictationTranslation: DictationTranslation
         if realtime?.translation?.oneWay == true {
             dictationTranslation = .itself
-        } else if batch?.translation?.oneWay == true, activeWhisperModel?.translatesToEnglish ?? true {
+        } else if batch?.translation?.oneWay == true, activeWhisperModel?.translatesToEnglish == true {
             // Only Whisper declares batch-only one-way translation: its translate pass targets English.
             dictationTranslation = .englishOnlyItselfPlusDiduny
         } else {

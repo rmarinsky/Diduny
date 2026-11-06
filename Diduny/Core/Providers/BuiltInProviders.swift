@@ -78,10 +78,10 @@ struct LocalWhisperProvider: STTProviderModule {
             )
         )
     ]
-    /// Download size of the recommended model, Large v3 Turbo (catalog "1.5 GB"); models range 75 MB to 2.9 GB.
+    /// Download size of the recommended model, from the catalog; models range 75 MB to 2.9 GB.
     let traits = EngineTraits(
         runsOn: .thisMac,
-        obtainedBy: .download(bytes: 1_500_000_000),
+        obtainedBy: .download(bytes: WhisperModelManager.availableModels.first(where: \.isRecommended)?.sizeBytes ?? 0),
         needs: [.download],
         recommended: .model(id: WhisperModelManager.WhisperModel.recommendedName),
         languages: EngineLanguages.whisper

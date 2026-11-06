@@ -27,6 +27,18 @@ final class WhisperModelManager: NSObject {
         /// OpenAI says Turbo is not trained for translation (`translation-support.md` bug 1).
         var translatesToEnglish: Bool { !isEnglishOnly && !name.contains("turbo") }
 
+        /// `sizeDescription` in bytes, decimal units as the catalog prints them ("547 MB", "1.5 GB"); 0 if unreadable.
+        var sizeBytes: Int64 {
+            let parts = sizeDescription.split(separator: " ")
+            guard parts.count == 2, let value = Double(parts[0]) else { return 0 }
+            let unit: Double = switch parts[1] {
+            case "GB": 1_000_000_000
+            case "MB": 1_000_000
+            default: 0
+            }
+            return Int64((value * unit).rounded())
+        }
+
         var filename: String { "\(name).bin" }
 
         var downloadURL: URL {

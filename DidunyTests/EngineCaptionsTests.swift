@@ -101,16 +101,35 @@ struct EngineCaptionsTests {
     func notDownloadedSubline(_ column: Column) throws {
         let subline = EngineCaptions.menuSubline(
             job: column.job, segment: column.segment, caps: try Self.caps(.parakeet),
-            readiness: .notDownloaded(bytes: 480_000_000)
+            readiness: .notDownloaded(bytes: 480_000_000), locale: Self.enUS
         )
         #expect(subline == "Not downloaded, 480 MB")
+    }
+
+    /// Fixed locale for byte counts, so "480 MB" does not follow the test machine's region.
+    static let enUS = Locale(identifier: "en_US")
+
+    @Test("Menu sublines read readiness from an EngineReadinessSource")
+    @MainActor
+    func sublinesFromReadinessSource() throws {
+        let source = FakeEngineReadinessSource([.parakeet: .notDownloaded(bytes: ParakeetProvider.downloadBytes)])
+        for engine in EngineID.allCases {
+            let caps = try Self.caps(engine)
+            let subline = EngineCaptions.menuSubline(
+                job: .file, caps: caps, readiness: source.readiness(of: engine), locale: Self.enUS
+            )
+            let expected = engine == .parakeet ? "Not downloaded, 480 MB" : EngineCaptions.menuSubline(job: .file, caps: caps)
+            #expect(subline == expected, "\(engine.rawValue)")
+        }
+        #expect(source.requested == EngineID.allCases)
     }
 
     @Test("Command panel blurb replaced while Parakeet is not downloaded")
     func notDownloadedBlurb() throws {
         let caps = try Self.caps(.parakeet)
-        #expect(EngineCaptions.withNote(EngineCaptions.blurb(caps), caps: caps, readiness: .notDownloaded(bytes: 480_000_000))
-            == "Not downloaded, 480 MB")
+        #expect(EngineCaptions.withNote(
+            EngineCaptions.blurb(caps), caps: caps, readiness: .notDownloaded(bytes: 480_000_000), locale: Self.enUS
+        ) == "Not downloaded, 480 MB")
         #expect(EngineCaptions.withNote(EngineCaptions.blurb(caps), caps: caps) == "After Stop, 25 languages · recommended")
     }
 
