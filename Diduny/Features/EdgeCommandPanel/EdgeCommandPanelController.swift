@@ -5,7 +5,7 @@ import SwiftUI
 final class EdgeCommandPanelController: NSObject {
     static let shared = EdgeCommandPanelController()
     static let panelIdentifier = NSUserInterfaceItemIdentifier(
-        "ua.com.rmarinsky.diduny.edge-command-panel"
+        "commandPanel"
     )
 
     weak var appDelegate: AppDelegate?
