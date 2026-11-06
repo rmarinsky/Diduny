@@ -43,18 +43,13 @@
 "%lld versions" = "%lld versions";
 "%lld%%" = "%lld%%";
 "%lld-day streak" = "%lld-day streak";
-"1 Minute" = "1 Minute";
 "1 hour before" = "1 hour before";
 "1 month" = "1 month";
 "1 year" = "1 year";
-"10 Minutes" = "10 Minutes";
 "12 months" = "12 months";
 "15 minutes before" = "15 minutes before";
-"2 Minutes" = "2 Minutes";
 "2 months free" = "2 months free";
-"30 Seconds" = "30 Seconds";
 "30 days" = "30 days";
-"5 Minutes" = "5 Minutes";
 "5 minutes before" = "5 minutes before";
 "7 days" = "7 days";
 "90 days" = "90 days";
@@ -384,7 +379,6 @@
 "Failed to simulate paste keyboard event" = "Failed to simulate paste keyboard event";
 "Failed to start recording" = "Failed to start recording";
 "Features" = "Features";
-"Fidelity" = "Fidelity";
 "File Transcription" = "File Transcription";
 "File — %@" = "File — %@";
 "Files" = "Files";
@@ -397,7 +391,6 @@
 "Firefox" = "Firefox";
 "Fix highlighted characters before saving." = "Fix highlighted characters before saving.";
 "Fix time" = "Fix time";
-"Floating modal" = "Floating modal";
 "Floating modal shows the live transcript. Turn the toggle off to start on the edge tab (red dot); click the tab to open the window. Minus hides it again." = "Floating modal shows the live transcript. Turn the toggle off to start on the edge tab (red dot); click the tab to open the window. Minus hides it again.";
 "For chat applies to dictation and translated messages up to 280 characters and 50 words on one line. It always lowercases the first word, including names and acronyms, and omits the final period. Internal punctuation, question marks, exclamation marks and ellipses are preserved. Meeting transcripts are unchanged." = "For chat applies to dictation and translated messages up to 280 characters and 50 words on one line. It always lowercases the first word, including names and acronyms, and omits the final period. Internal punctuation, question marks, exclamation marks and ellipses are preserved. Meeting transcripts are unchanged.";
 "Forever" = "Forever";
@@ -437,7 +430,6 @@
 "Invalid response from server" = "Invalid response from server";
 "Invalid server response" = "Invalid server response";
 "Join" = "Join";
-"Keep Loaded" = "Keep Loaded";
 "Keep editing" = "Keep editing";
 "Keep your train of thought" = "Keep your train of thought";
 "Language" = "Language";
@@ -458,12 +450,10 @@
 "Live preview during recording" = "Live preview during recording";
 "Loading subscription…" = "Loading subscription…";
 "Local" = "Local";
-"Local (Whisper)" = "Local (Whisper)";
 "Local - transcription on this Mac" = "Local - transcription on this Mac";
 "Local Whisper Translation" = "Local Whisper Translation";
 "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English." = "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English.";
 "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English. Target: %@." = "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English. Target: %@.";
-"Local Whisper translates to English only." = "Local Whisper translates to English only.";
 "Local mode transcribes on this Mac after stop when a model is ready. Without one, saved audio stays unprocessed in Recordings." = "Local mode transcribes on this Mac after stop when a model is ready. Without one, saved audio stays unprocessed in Recordings.";
 "Local models stay free without an hourly limit, with two free cloud hours per calendar month." = "Local models stay free without an hourly limit, with two free cloud hours per calendar month.";
 "Local transcription failed" = "Local transcription failed";
@@ -478,8 +468,6 @@
 "Made in Ukraine · © 2024–2026 Roman Marinsky" = "Made in Ukraine · © 2024–2026 Roman Marinsky";
 "Make conversations useful" = "Make conversations useful";
 "Make default" = "Make default";
-"Manage..." = "Manage...";
-"Manual" = "Manual";
 "Meet Diduny" = "Meet Diduny";
 "Meeting" = "Meeting";
 "Meeting Provider" = "Meeting Provider";
@@ -552,7 +540,6 @@
 "No transcriptions yet" = "No transcriptions yet";
 "No upcoming meetings" = "No upcoming meetings";
 "No upcoming timed events in the selected calendars." = "No upcoming timed events in the selected calendars.";
-"Noise" = "Noise";
 "None" = "None";
 "None of the recorded chunks could be read." = "None of the recorded chunks could be read.";
 "Not Now" = "Not Now";
@@ -648,7 +635,6 @@
 "Quit" = "Quit";
 "RECORDING IN PROGRESS" = "RECORDING IN PROGRESS";
 "RECORDINGS" = "RECORDINGS";
-"Re-enable Screen Recording prompt" = "Re-enable Screen Recording prompt";
 "Read a calendar from a browser" = "Read a calendar from a browser";
 "Read now" = "Read now";
 "Read this browser calendar" = "Read this browser calendar";
@@ -780,7 +766,6 @@
 "Sign in to view subscription prices and upgrade." = "Sign in to view subscription prices and upgrade.";
 "Sign in with an email code for local and cloud features. Local models stay free; cloud includes two free hours each month." = "Sign in with an email code for local and cloud features. Local models stay free; cloud includes two free hours each month.";
 "Signing in" = "Signing in";
-"Skip" = "Skip";
 "Skip meeting recording prompt" = "Skip meeting recording prompt";
 "Slack Huddle" = "Slack Huddle";
 "Sort by" = "Sort by";
@@ -920,7 +905,6 @@
 "Translate Selected Text" = "Translate Selected Text";
 "Translate automatically" = "Translate automatically";
 "Translate meeting" = "Translate meeting";
-"Translate speech between" = "Translate speech between";
 "Translate to" = "Translate to";
 "Translate: %@ → %@" = "Translate: %@ → %@";
 "Translated" = "Translated";
@@ -930,7 +914,6 @@
 "Translating..." = "Translating...";
 "Translation" = "Translation";
 "Translation %@" = "Translation %@";
-"Translation Pair" = "Translation Pair";
 "Translation Pairs" = "Translation Pairs";
 "Translation direction: %@ → %@" = "Translation direction: %@ → %@";
 "Translation failed: %@" = "Translation failed: %@";
@@ -1454,11 +1437,8 @@
 "Translation uses Diduny quota, which is used up. Upgrade to enable it. Transcription with your own provider still works." = "Translation uses Diduny quota, which is used up. Upgrade to enable it. Transcription with your own provider still works.";
 "Translation uses Diduny. Sign in to enable it. Transcription with your own provider still works." = "Translation uses Diduny. Sign in to enable it. Transcription with your own provider still works.";
 "Upgrade" = "Upgrade";
-"%@, not available" = "%@, not available";
 "Live" = "Live";
 "After Stop" = "After Stop";
-"Speaker labels · up to %lld" = "Speaker labels · up to %lld";
-"Speaker labels" = "Speaker labels";
 "No speaker labels" = "No speaker labels";
 /* Engine captions and language data (WP-11) */
 "Text as you speak" = "Text as you speak";
@@ -1495,13 +1475,10 @@
 "High accuracy" = "High accuracy";
 "Good accuracy" = "Good accuracy";
 "Moderate accuracy" = "Moderate accuracy";
-"English only" = "English only";
-"Translation via Diduny" = "Translation via Diduny";
 "Your recording is saved." = "Your recording is saved.";
 "Use Diduny Cloud for this recording" = "Use Diduny Cloud for this recording";
 "Sign in to use Diduny Cloud" = "Sign in to use Diduny Cloud";
 "Uses your Diduny quota for this recording only. Your defaults don't change." = "Uses your Diduny quota for this recording only. Your defaults don't change.";
-"Open Providers" = "Open Providers";
 "Open ElevenLabs dashboard" = "Open ElevenLabs dashboard";
 "The key was removed. %@ now use Diduny Cloud." = "The key was removed. %@ now use Diduny Cloud.";
 "File transcription" = "File transcription";
@@ -1560,8 +1537,6 @@
 
 "Translation failed. Original text kept." = "Translation failed. Original text kept.";
 "Stop after silence" = "Stop after silence";
-"Stop After Silence" = "Stop After Silence";
-"Silence" = "Silence";
 "Stopping in %llds" = "Stopping in %llds";
 "%lld s" = "%lld s";
 "%lld min" = "%lld min";

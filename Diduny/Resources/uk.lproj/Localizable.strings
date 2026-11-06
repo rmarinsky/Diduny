@@ -43,18 +43,13 @@
 "%lld versions" = "Версій: %lld";
 "%lld%%" = "%lld%%";
 "%lld-day streak" = "Днів поспіль: %lld";
-"1 Minute" = "1 хвилина";
 "1 hour before" = "За годину";
 "1 month" = "1 місяць";
 "1 year" = "1 рік";
-"10 Minutes" = "10 хвилин";
 "12 months" = "12 місяців";
 "15 minutes before" = "За 15 хвилин";
-"2 Minutes" = "2 хвилини";
 "2 months free" = "2 місяці безкоштовно";
-"30 Seconds" = "30 секунд";
 "30 days" = "30 днів";
-"5 Minutes" = "5 хвилин";
 "5 minutes before" = "За 5 хвилин";
 "7 days" = "7 днів";
 "90 days" = "90 днів";
@@ -384,7 +379,6 @@
 "Failed to simulate paste keyboard event" = "Не вдалося виконати клавіатурне вставлення";
 "Failed to start recording" = "Не вдалося почати запис";
 "Features" = "Можливості";
-"Fidelity" = "Якість звуку";
 "File Transcription" = "Транскрипція файлу";
 "File — %@" = "Файл - %@";
 "Files" = "Файли";
@@ -397,7 +391,6 @@
 "Firefox" = "Firefox";
 "Fix highlighted characters before saving." = "Виправте виділені символи перед збереженням.";
 "Fix time" = "Час виправлень";
-"Floating modal" = "Плавуче вікно";
 "Floating modal shows the live transcript. Turn the toggle off to start on the edge tab (red dot); click the tab to open the window. Minus hides it again." = "Плавуче вікно показує транскрипцію наживо. Вимкніть перемикач, щоб починати з бічної вкладки з червоною крапкою. Натисніть вкладку, щоб відкрити вікно. Кнопка мінуса згортає його.";
 "For chat applies to dictation and translated messages up to 280 characters and 50 words on one line. It always lowercases the first word, including names and acronyms, and omits the final period. Internal punctuation, question marks, exclamation marks and ellipses are preserved. Meeting transcripts are unchanged." = "Стиль «Для чату» застосовується до диктування й перекладених повідомлень до 280 символів і 50 слів в одному рядку. Перше слово завжди починається з малої літери, навіть імена й абревіатури, а кінцева крапка прибирається. Внутрішні розділові знаки, знаки питання, оклику й трикрапки зберігаються. Транскрипції зустрічей не змінюються.";
 "Forever" = "Назавжди";
@@ -437,7 +430,6 @@
 "Invalid response from server" = "Некоректна відповідь сервера";
 "Invalid server response" = "Некоректна відповідь сервера";
 "Join" = "Приєднатися";
-"Keep Loaded" = "Не вивантажувати";
 "Keep editing" = "Продовжити редагування";
 "Keep your train of thought" = "Не втрачайте думку";
 "Language" = "Мова";
@@ -458,12 +450,10 @@
 "Live preview during recording" = "Попередній перегляд під час запису";
 "Loading subscription…" = "Завантаження підписки…";
 "Local" = "Локально";
-"Local (Whisper)" = "Локально (Whisper)";
 "Local - transcription on this Mac" = "Локально - транскрипція на цьому Mac";
 "Local Whisper Translation" = "Локальний переклад Whisper";
 "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English." = "Локальний Whisper перекладає лише англійською. Виберіть хмарний переклад або англійську мову.";
 "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English. Target: %@." = "Локальний Whisper перекладає лише англійською. Виберіть хмарний переклад або англійську мову. Цільова мова: %@.";
-"Local Whisper translates to English only." = "Локальна модель Whisper перекладає лише англійською.";
 "Local mode transcribes on this Mac after stop when a model is ready. Without one, saved audio stays unprocessed in Recordings." = "Локальний режим транскрибує на цьому Mac після зупинки, якщо модель готова. Без неї збережене аудіо лишається необробленим у «Записах».";
 "Local models stay free without an hourly limit, with two free cloud hours per calendar month." = "Локальні моделі залишаються безкоштовними без обмеження часу. Щомісяця доступні дві безкоштовні години хмари.";
 "Local transcription failed" = "Не вдалося виконати локальну транскрипцію";
@@ -478,8 +468,6 @@
 "Made in Ukraine · © 2024–2026 Roman Marinsky" = "Створено в Україні · © 2024–2026 Роман Марінський";
 "Make conversations useful" = "Зберігайте користь від розмов";
 "Make default" = "Використовувати за замовчуванням";
-"Manage..." = "Керувати…";
-"Manual" = "Вручну";
 "Meet Diduny" = "Знайомтеся — Diduny";
 "Meeting" = "Зустріч";
 "Meeting Provider" = "Спосіб обробки зустрічей";
@@ -552,7 +540,6 @@
 "No transcriptions yet" = "Транскрипцій ще немає";
 "No upcoming meetings" = "Немає майбутніх зустрічей";
 "No upcoming timed events in the selected calendars." = "У вибраних календарях немає майбутніх подій із визначеним часом.";
-"Noise" = "Шум";
 "None" = "Немає";
 "None of the recorded chunks could be read." = "Не вдалося прочитати жоден записаний фрагмент.";
 "Not Now" = "Не зараз";
@@ -648,7 +635,6 @@
 "Quit" = "Завершити роботу";
 "RECORDING IN PROGRESS" = "ТРИВАЄ ЗАПИС";
 "RECORDINGS" = "ЗАПИСИ";
-"Re-enable Screen Recording prompt" = "Знову запитувати дозвіл на запис екрана";
 "Read a calendar from a browser" = "Читати календар із браузера";
 "Read now" = "Прочитати зараз";
 "Read this browser calendar" = "Читати календар цього браузера";
@@ -780,7 +766,6 @@
 "Sign in to view subscription prices and upgrade." = "Увійдіть, щоб переглянути ціни й оформити підписку.";
 "Sign in with an email code for local and cloud features. Local models stay free; cloud includes two free hours each month." = "Увійдіть за кодом з електронного листа для локальних і хмарних функцій. Локальні моделі безкоштовні; хмара включає дві безкоштовні години щомісяця.";
 "Signing in" = "Вхід";
-"Skip" = "Пропустити";
 "Skip meeting recording prompt" = "Пропустити пропозицію запису зустрічі";
 "Slack Huddle" = "Slack Huddle";
 "Sort by" = "Сортувати за";
@@ -920,7 +905,6 @@
 "Translate Selected Text" = "Перекласти виділений текст";
 "Translate automatically" = "Автоматично перекласти";
 "Translate meeting" = "Перекладати зустріч";
-"Translate speech between" = "Перекладати мовлення між";
 "Translate to" = "Перекласти мовою";
 "Translate: %@ → %@" = "Перекласти: %@ → %@";
 "Translated" = "Перекладено";
@@ -930,7 +914,6 @@
 "Translating..." = "Переклад…";
 "Translation" = "Переклад";
 "Translation %@" = "Переклад %@";
-"Translation Pair" = "Мовна пара";
 "Translation Pairs" = "Мовні пари";
 "Translation direction: %@ → %@" = "Напрямок перекладу: %@ → %@";
 "Translation failed: %@" = "Не вдалося перекласти: %@";
@@ -1454,11 +1437,8 @@
 "Translation uses Diduny quota, which is used up. Upgrade to enable it. Transcription with your own provider still works." = "Переклад витрачає квоту Diduny, яку вичерпано. Оновіть тариф, щоб увімкнути його. Транскрибування через ваш провайдер працює й без цього.";
 "Translation uses Diduny. Sign in to enable it. Transcription with your own provider still works." = "Переклад іде через Diduny. Увійдіть, щоб увімкнути його. Транскрибування через ваш провайдер працює й без цього.";
 "Upgrade" = "Оновити тариф";
-"%@, not available" = "%@, недоступно";
 "Live" = "Наживо";
 "After Stop" = "Після Stop";
-"Speaker labels · up to %lld" = "Мітки спікерів · до %lld";
-"Speaker labels" = "Мітки спікерів";
 "No speaker labels" = "Без міток спікерів";
 /* Engine captions and language data (WP-11) */
 "Text as you speak" = "Текст під час мовлення";
@@ -1495,13 +1475,10 @@
 "High accuracy" = "Висока точність";
 "Good accuracy" = "Добра точність";
 "Moderate accuracy" = "Помірна точність";
-"English only" = "Лише англійська";
-"Translation via Diduny" = "Переклад через Diduny";
 "Your recording is saved." = "Запис збережено.";
 "Use Diduny Cloud for this recording" = "Використати Diduny Cloud для цього запису";
 "Sign in to use Diduny Cloud" = "Увійдіть, щоб використати Diduny Cloud";
 "Uses your Diduny quota for this recording only. Your defaults don't change." = "Витрачає квоту Diduny лише для цього запису. Ваші налаштування за замовчуванням не змінюються.";
-"Open Providers" = "Відкрити Провайдери";
 "Open ElevenLabs dashboard" = "Відкрити панель ElevenLabs";
 "The key was removed. %@ now use Diduny Cloud." = "Ключ видалено. %@ тепер використовують Diduny Cloud.";
 "File transcription" = "Транскрибування файлів";
@@ -1560,8 +1537,6 @@
 
 "Translation failed. Original text kept." = "Переклад не вдався. Збережено оригінал.";
 "Stop after silence" = "Зупиняти після тиші";
-"Stop After Silence" = "Зупинка після тиші";
-"Silence" = "Тиша";
 "Stopping in %llds" = "Зупинка через %lld с";
 "%lld s" = "%lld с";
 "%lld min" = "%lld хв";
