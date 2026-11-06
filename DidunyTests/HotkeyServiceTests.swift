@@ -143,6 +143,15 @@ final class HotkeyServiceTests {
         #expect(!registrar.isEnabled(.toggleHistoryPalette))
     }
 
+    @Test("The owned raw values name exactly the names the service registers")
+    func ownedNameValuesMatchTheNames() {
+        let names: [KeyboardShortcuts.Name] = [
+            .toggleRecording, .toggleTranslation, .toggleMeetingRecording, .toggleMeetingTranslation,
+            .addMeetingChapter, .toggleHistoryPalette, .translateSelectedText
+        ]
+        #expect(HotkeyService.ownedNameValues == Set(names.map(\.rawValue)))
+    }
+
     @Test("The copied notification name still matches KeyboardShortcuts (pinned 2.4.0)")
     func packageNotificationNameMatches() {
         // A probe name with no default and an unlikely chord; removed again at the end.

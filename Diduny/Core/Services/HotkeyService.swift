@@ -37,10 +37,13 @@ final class HotkeyService {
         var counter = PressCounter()
     }
 
-    /// Names this service registers; their keys may change while some are switched off or idle.
-    private static let ownedNames: Set<KeyboardShortcuts.Name> = [
-        .toggleRecording, .toggleTranslation, .toggleMeetingRecording, .toggleMeetingTranslation,
-        .addMeetingChapter, .toggleHistoryPalette, .translateSelectedText
+    /// Raw values of the names this service registers; their keys may change while some are switched
+    /// off or idle. Plain strings on purpose: on a fresh install `Name(_:default:)` stores its default
+    /// and posts `packageShortcutDidChange` from inside the name's static initializer, so building this
+    /// set from the `Name` statics re-entered its own one-time initializer and trapped at launch.
+    static let ownedNameValues: Set<String> = [
+        "toggleRecording", "toggleTranslation", "toggleMeetingRecording", "toggleMeetingTranslation",
+        "addMeetingChapter", "toggleHistoryPalette", "translateSelectedText"
     ]
 
     private let settings: SettingsStorage
@@ -210,7 +213,7 @@ final class HotkeyService {
 
     private func reapply(_ name: KeyboardShortcuts.Name) {
         guard let binding = bindings[name] else {
-            if Self.ownedNames.contains(name) { registrar.disable(name) }
+            if Self.ownedNameValues.contains(name.rawValue) { registrar.disable(name) }
             return
         }
         bindings[name]?.counter.reset()
