@@ -43,24 +43,6 @@ final class RemoteConfigService: @unchecked Sendable {
         return cachedConfig?.messages?.maintenanceMessage
     }
 
-    var updateAvailableMessage: String? {
-        lock.lock()
-        defer { lock.unlock() }
-        return cachedConfig?.messages?.updateAvailableMessage
-    }
-
-    func sttBaseURL(default fallback: String) -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        return cachedConfig?.endpoints?.sttBaseURL ?? fallback
-    }
-
-    func sttModel(default fallback: String) -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        return cachedConfig?.endpoints?.sttModel ?? fallback
-    }
-
     // MARK: - Private
 
     private func loadCachedConfig() {

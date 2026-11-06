@@ -1308,10 +1308,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         translationTargetLanguage.uppercased()
     }
 
-    var translationTargetDisplayName: String {
-        SupportedLanguage.language(for: translationTargetLanguage)?.name ?? translationTargetLabel
-    }
-
     var translationPairLabel: String {
         "→ \(translationTargetLabel)"
     }

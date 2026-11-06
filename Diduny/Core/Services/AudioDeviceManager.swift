@@ -4,7 +4,7 @@ import Foundation
 import Observation
 
 @Observable
-final class AudioDeviceManager: AudioDeviceManagerProtocol {
+final class AudioDeviceManager {
     private(set) var availableDevices: [AudioDevice] = [] {
         didSet {
             onDevicesChanged?(availableDevices)

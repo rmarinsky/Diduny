@@ -169,11 +169,6 @@ struct BatchTranscriptionItem: Codable, Identifiable, Equatable {
         remoteMetadata?.source.title
             ?? (remoteSource == nil ? sourceURL.lastPathComponent : sourceURL.absoluteString)
     }
-
-    func elapsedTime(at date: Date) -> TimeInterval? {
-        guard let startedAt else { return nil }
-        return max(0, (finishedAt ?? date).timeIntervalSince(startedAt))
-    }
 }
 
 struct BatchTranscriptionDuplicate: Equatable {
@@ -355,21 +350,9 @@ final class FileTranscriptionBatchService {
         items.count(where: { $0.status == .failed })
     }
 
-    var partialResultCount: Int {
-        items.count(where: { $0.status == .partialResult })
-    }
-
-    var isAuthorizationPaused: Bool {
-        items.contains(where: { $0.status == .authorizationPaused })
-    }
-
     var progress: Double {
         guard !items.isEmpty else { return 0 }
         return Double(finishedCount) / Double(items.count)
-    }
-
-    var activeCount: Int {
-        activeItemIDs.count
     }
 
     var activeBatchID: UUID? {
@@ -814,16 +797,6 @@ final class FileTranscriptionBatchService {
         }
         processingTask?.cancel()
         wakeScheduler()
-    }
-
-    func clearFinished() {
-        guard !isProcessing else { return }
-        items.removeAll(where: { $0.status.isTerminal })
-        batchError = nil
-        if items.isEmpty {
-            activeSettingsSnapshot = nil
-            hasPlayedCompletionSound = false
-        }
     }
 
     private func processQueuedItems(settings: FileTranscriptionSettingsSnapshot) async {

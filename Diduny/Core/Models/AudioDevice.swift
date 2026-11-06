@@ -55,28 +55,6 @@ enum MicrophoneSelectionStrategy: String, CaseIterable, Identifiable {
     var id: String {
         rawValue
     }
-
-    var displayName: String {
-        switch self {
-        case .manual: String(localized: "Manual")
-        case .auto: String(localized: "Auto")
-        case .preferNoiseReduction: String(localized: "Noise")
-        case .preferFidelity: String(localized: "Fidelity")
-        }
-    }
-
-    var helpText: String {
-        switch self {
-        case .manual:
-            "Use the exact microphone you selected below."
-        case .auto:
-            "Balance proximity, noise handling, and fidelity."
-        case .preferNoiseReduction:
-            "Prefer headset-style microphones like AirPods in noisy places."
-        case .preferFidelity:
-            "Prefer built-in or wired microphones with wider bandwidth."
-        }
-    }
 }
 
 struct AudioDeviceScore {

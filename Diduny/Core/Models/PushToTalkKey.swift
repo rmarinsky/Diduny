@@ -173,10 +173,6 @@ struct RecordingCancelShortcut: Codable, Equatable {
         return Self.normalizedModifiers(NSEvent.ModifierFlags(rawValue: modifiers)).rawValue == modifiersRawValue
     }
 
-    static func from(event: NSEvent) -> RecordingCancelShortcut {
-        make(keyCode: event.keyCode, modifierFlags: event.modifierFlags, characters: event.charactersIgnoringModifiers)
-    }
-
     static func make(keyCode: UInt16, modifierFlags: NSEvent.ModifierFlags, characters: String?) -> RecordingCancelShortcut {
         RecordingCancelShortcut(
             keyCode: keyCode,

@@ -11,10 +11,6 @@ enum MessageFormattingMode: String, CaseIterable, Identifiable {
         rawValue
     }
 
-    var displayName: String {
-        self == .normal ? "Normal" : "For chat"
-    }
-
     func format(_ text: String) -> String {
         var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard self == .chat, result.count <= 280,
@@ -63,7 +59,7 @@ enum ClipboardError: LocalizedError {
     }
 }
 
-final class ClipboardService: ClipboardServiceProtocol {
+final class ClipboardService {
     static let shared = ClipboardService()
     static let pasteReadinessDelayNanoseconds: UInt64 = 15_000_000
     static let shortcutKeyHoldMicroseconds: useconds_t = 12000
@@ -125,12 +121,6 @@ final class ClipboardService: ClipboardServiceProtocol {
     /// Check if accessibility permission is granted
     static func isAccessibilityGranted() -> Bool {
         AXIsProcessTrusted()
-    }
-
-    /// Request accessibility permission (opens System Settings)
-    static func requestAccessibilityPermission() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        AXIsProcessTrustedWithOptions(options)
     }
 
     /// - Parameter expectedProcessIdentifier: when set, ⌘V is posted only if that app is still frontmost after the delay.
@@ -196,10 +186,6 @@ final class ClipboardService: ClipboardServiceProtocol {
         }
 
         throw ClipboardError.captureSelectionFailed
-    }
-
-    func getContent() -> String? {
-        pasteboard.string(forType: .string)
     }
 
     /// Sends the given shortcut to the frontmost app (used by Force submit after a successful paste).

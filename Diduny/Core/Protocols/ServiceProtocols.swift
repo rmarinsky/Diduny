@@ -2,19 +2,6 @@ import AVFoundation
 import CoreAudio
 import Foundation
 
-// MARK: - Audio Recording Protocol
-
-@MainActor
-protocol AudioRecorderProtocol: AnyObject {
-    var isRecording: Bool { get }
-    var audioLevel: Float { get }
-    var currentRecordingPath: String? { get }
-    var currentRecordingDeviceInfo: RecordingDeviceInfo? { get }
-    func startRecording(device: AudioDevice?) async throws
-    func stopRecording() async throws -> Data
-    func cancelRecording()
-}
-
 // MARK: - Transcription Service Protocol
 
 protocol TranscriptionServiceProtocol {
@@ -81,49 +68,6 @@ protocol TextTranslationProtocol: Sendable {
     func translate(text: String, sourceLanguage: String, targetLanguage: String) async throws -> String
 }
 
-// MARK: - Clipboard Service Protocol
-
-protocol ClipboardServiceProtocol {
-    func copy(text: String)
-    func paste() async throws
-}
-
-// MARK: - Hotkey Service Protocol
-
-protocol HotkeyServiceProtocol {
-    func registerRecordingHotkey(handler: @escaping () -> Void)
-    func registerMeetingHotkey(handler: @escaping () -> Void)
-    func registerMeetingTranslationHotkey(handler: @escaping () -> Void)
-    func registerTranslationHotkey(handler: @escaping () -> Void)
-    func registerHistoryPaletteHotkey(handler: @escaping () -> Void)
-    func unregisterRecordingHotkey()
-    func unregisterMeetingHotkey()
-    func unregisterMeetingTranslationHotkey()
-    func unregisterTranslationHotkey()
-    func unregisterHistoryPaletteHotkey()
-    func registerChapterHotkey(handler: @escaping () -> Void)
-    func unregisterChapterHotkey()
-    func registerTranslateSelectedTextHotkey(handler: @escaping () -> Void)
-    func unregisterTranslateSelectedTextHotkey()
-    func unregisterAll()
-}
-
-// MARK: - Audio Device Manager Protocol
-
-protocol AudioDeviceManagerProtocol: AnyObject {
-    var availableDevices: [AudioDevice] { get }
-    var defaultDevice: AudioDevice? { get }
-    func refreshDevices()
-    func isDeviceAvailable(uid: String) -> Bool
-    func device(forUID uid: String) -> AudioDevice?
-    func bestDevice() -> AudioDevice?
-    func score(for device: AudioDevice, strategy: MicrophoneSelectionStrategy) -> AudioDeviceScore
-    func recommendedDevice(strategy: MicrophoneSelectionStrategy) -> AudioDevice?
-    func resolveDevice(preferredUID: String?) -> (device: AudioDevice?, didFallback: Bool)
-    func resolveDevice(preferredUID: String?, strategy: MicrophoneSelectionStrategy)
-        -> (device: AudioDevice?, didFallback: Bool)
-}
-
 // MARK: - Push To Talk Service Protocol
 
 protocol PushToTalkServiceProtocol: AnyObject {
@@ -140,16 +84,4 @@ protocol PushToTalkServiceProtocol: AnyObject {
     func stop()
     /// Reset hands-free mode (call when recording is cancelled externally)
     func resetHandsFreeMode()
-}
-
-// MARK: - Meeting Recorder Service Protocol
-
-protocol MeetingRecorderServiceProtocol: AnyObject {
-    var isRecording: Bool { get }
-    var currentRecordingPath: String? { get }
-    var audioSource: MeetingAudioSource { get set }
-    var recordingDuration: TimeInterval { get }
-    func startRecording() async throws
-    func stopRecording() async throws -> URL?
-    func cancelRecording() async
 }

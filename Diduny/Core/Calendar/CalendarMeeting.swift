@@ -65,7 +65,6 @@ struct CalendarReminderLedger: Codable, Equatable {
         meeting.reminderKey + "|" + (meeting.meetingURL?.absoluteString ?? "")
     }
 
-    func isAcknowledged(_ meeting: CalendarMeeting) -> Bool { acknowledged[Self.acknowledgementKey(meeting)] != nil }
     mutating func acknowledge(_ meeting: CalendarMeeting, at now: Date) { acknowledged[Self.acknowledgementKey(meeting)] = now }
     mutating func snooze(_ meeting: CalendarMeeting, until date: Date) {
         let key = Self.acknowledgementKey(meeting)

@@ -18,7 +18,7 @@ struct AudioTimeoutError: Error, LocalizedError {
 }
 
 @MainActor
-final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
+final class AudioRecorderService: ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var audioLevel: Float = 0
 

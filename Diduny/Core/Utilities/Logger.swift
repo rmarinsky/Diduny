@@ -24,7 +24,6 @@ enum Log {
     static let recording = Logger(subsystem: subsystem, category: "recording")
     static let transcription = Logger(subsystem: subsystem, category: "transcription")
     static let audio = Logger(subsystem: subsystem, category: "audio")
-    static let permissions = Logger(subsystem: subsystem, category: "permissions")
     static let whisper = Logger(subsystem: subsystem, category: "whisper")
     static let playback = Logger(subsystem: subsystem, category: "playback")
     static let network = Logger(subsystem: subsystem, category: "network")

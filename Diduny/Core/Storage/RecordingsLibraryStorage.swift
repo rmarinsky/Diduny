@@ -1064,10 +1064,6 @@ final class RecordingsLibraryStorage {
 
     // MARK: - Stats
 
-    var totalSizeBytes: Int64 {
-        recordings.reduce(0) { $0 + $1.fileSizeBytes }
-    }
-
     // MARK: - Persistence
 
     private func loadAndPrune() {

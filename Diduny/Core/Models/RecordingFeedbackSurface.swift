@@ -7,13 +7,4 @@ enum RecordingFeedbackSurface: String, CaseIterable, Identifiable {
     var id: String {
         rawValue
     }
-
-    var displayName: String {
-        switch self {
-        case .notch:
-            String(localized: "Dynamic Notch")
-        case .compactPanel:
-            String(localized: "Floating modal")
-        }
-    }
 }

@@ -209,14 +209,6 @@ final class WhisperModelManager: NSObject {
         return isModelDownloaded(model) ? model : nil
     }
 
-    func diskUsage(for model: WhisperModel) -> String? {
-        let path = modelPath(for: model)
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-              let size = attrs[.size] as? UInt64
-        else { return nil }
-        return ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
-    }
-
     func downloadModel(_ model: WhisperModel) {
         guard activeTasks[model.name] == nil else { return }
 

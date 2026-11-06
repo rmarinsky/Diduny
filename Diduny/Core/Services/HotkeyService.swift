@@ -23,7 +23,7 @@ extension KeyboardShortcuts.Name {
 
 /// Carbon hotkeys through `HotkeyRegistrar`, with one `PressCounter` per name (plan 3.5).
 /// Counts and switches are read at press time; a switch change calls `refreshSwitches()`.
-final class HotkeyService: HotkeyServiceProtocol {
+final class HotkeyService {
     /// Posted by `KeyboardShortcuts` when a name's keys change, with `userInfo["name"]`.
     /// The package declares it `internal` (`Notification.Name.shortcutByNameDidChange`), so the raw
     /// string is copied here. Pinned to KeyboardShortcuts 2.4.0 (`project.yml` `exactVersion`); when the

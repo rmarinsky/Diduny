@@ -99,26 +99,6 @@ final class AppState {
 
     var translationRecordingStartTime: Date?
 
-    var recordingDuration: TimeInterval {
-        guard let startTime = recordingStartTime else { return 0 }
-        return Date().timeIntervalSince(startTime)
-    }
-
-    var meetingRecordingDuration: TimeInterval {
-        guard let startTime = meetingRecordingStartTime else { return 0 }
-        return Date().timeIntervalSince(startTime)
-    }
-
-    var translationRecordingDuration: TimeInterval {
-        guard let startTime = translationRecordingStartTime else { return 0 }
-        return Date().timeIntervalSince(startTime)
-    }
-
-    var meetingTranslationRecordingDuration: TimeInterval {
-        guard let startTime = meetingTranslationRecordingStartTime else { return 0 }
-        return Date().timeIntervalSince(startTime)
-    }
-
     init() {
         #if DEBUG || TEST_BUILD
             UITestLaunchState.applyIfRequested()
