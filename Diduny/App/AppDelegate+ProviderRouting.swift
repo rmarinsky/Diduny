@@ -65,12 +65,15 @@ extension AppDelegate {
 
     /// Error to show at Start when the job's on-device engine is selected but not ready; nil when fine.
     func onDeviceEngineStartError(for job: STTJob) -> String? {
+        let route = modeRoute(for: job)
+        if let error = RunTimeRouting.startError(route.unavailable, engine: route.engine) { return error }
         guard onDeviceSelection(for: job) != nil, onDeviceEngine(for: job) == nil else { return nil }
         return OnDeviceEngines.notReadyMessage
     }
 
     /// Same check for a meeting about to start in a given segment.
     func onDeviceEngineStartError(for start: MeetingStartRoute) -> String? {
+        if let error = RunTimeRouting.startError(start.unavailable, engine: start.engine) { return error }
         guard let id = start.afterStopEngineID, OnDeviceEngines.engine(id: id) == nil else { return nil }
         return OnDeviceEngines.notReadyMessage
     }
@@ -180,6 +183,14 @@ extension AppDelegate {
             context: context,
             signedIn: availability.signedIn
         )
+    }
+
+    /// Local Whisper translation (Whisper alone, or Diduny Cloud signed out): Whisper translates only where its
+    /// model can (bug 9); otherwise the transcript is returned untranslated.
+    func localWhisperTranslation(audioData: Data, targetLanguage: String) async throws -> String {
+        guard JobRequest.whisperTranslationUsable(model: WhisperModelManager.shared.selectedModel()?.name, target: targetLanguage)
+        else { return try await whisperTranscriptionService.transcribe(audioData: audioData) }
+        return try await whisperTranscriptionService.translateAndTranscribe(audioData: audioData, targetLanguage: targetLanguage)
     }
 
     var routedTranslationProvider: TranscriptionProvider {

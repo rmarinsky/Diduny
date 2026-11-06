@@ -522,10 +522,7 @@ extension AppDelegate {
                 Log.app.info("stopTranslationRecording: Using realtime translation (\(rawText.count) chars)")
             } else if routedTranslationProvider == .local {
                 // Local Whisper — no WebSocket, transcribe from audio
-                rawText = try await whisperTranscriptionService.translateAndTranscribe(
-                    audioData: audioData,
-                    targetLanguage: targetLanguage
-                )
+                rawText = try await localWhisperTranslation(audioData: audioData, targetLanguage: targetLanguage)
                 Log.app.info("stopTranslationRecording: Local Whisper translation (\(rawText.count) chars)")
             } else {
                 rawText = try await transcriptionService.translateAndTranscribe(

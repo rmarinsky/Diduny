@@ -5,7 +5,7 @@ import Foundation
 struct RunTimeRoute: Equatable {
     var engine: EngineID
     var modelID: String?
-    /// The engine cannot run and nothing stands in; Start shows the reason.
+    /// The engine cannot run and nothing stands in; Start refuses with `RunTimeRouting.startError`.
     var unavailable: EngineReadiness?
     /// The Cloud/Local flow the recording code branches on. Own engines (ElevenLabs, Parakeet, Apple) branch
     /// before it. Whisper is Local; any other engine is Cloud when signed in, else Local (today's rule).
@@ -31,12 +31,20 @@ struct MeetingStartRoute: Equatable {
     var localPreview: Bool
     /// Parakeet or Apple makes the transcript after Stop.
     var afterStopEngineID: String?
+    /// The segment's engine cannot run and nothing stands in; Start shows the reason.
+    var unavailable: EngineReadiness?
 
     var selection: JobProviderSelection { JobProviderSelection(providerID: engine.rawValue, modelID: modelID) }
 
     /// The engine that makes the text: a cloud engine in Record only is Whisper until WP-62.
     var runningEngine: EngineID {
         recordOnly && (engine == .didunyCloud || engine == .elevenLabs) ? .whisper : engine
+    }
+
+    /// Recovering an orphaned capture: Cloud only for a signed-in Cloud segment without an after-Stop
+    /// engine on this Mac; Record only, This Mac, Parakeet and Apple recover on this Mac.
+    func recoversInCloud(signedIn: Bool) -> Bool {
+        provider == .cloud && !recordOnly && afterStopEngineID == nil && signedIn
     }
 }
 
@@ -71,6 +79,15 @@ enum RunTimeRouting {
                             baseProvider: baseProvider(for: engine, signedIn: signedIn))
     }
 
+    /// The Start refusal for an engine that cannot run: on-device engines name the download, others
+    /// (ElevenLabs without a key) point to Providers. Nil when it can run.
+    static func startError(_ unavailable: EngineReadiness?, engine: EngineID) -> String? {
+        guard unavailable != nil else { return nil }
+        return STTProviderID.onDeviceEngines.contains(engine.rawValue)
+            ? OnDeviceEngines.notReadyMessage
+            : String(localized: "The selected engine isn't available. Check Settings › Providers.")
+    }
+
     static func baseProvider(for engine: EngineID, signedIn: Bool) -> TranscriptionProvider {
         engine == .whisper || !signedIn ? .local : .cloud
     }
@@ -82,7 +99,7 @@ enum RunTimeRouting {
         let onDevice = route.onDeviceEngineID
         var start = MeetingStartRoute(segment: segment, engine: route.engine, modelID: route.modelID,
                                       provider: .local, recordOnly: false, localPreview: false,
-                                      afterStopEngineID: onDevice)
+                                      afterStopEngineID: onDevice, unavailable: route.unavailable)
         switch segment {
         case .cloud:
             start.provider = .cloud

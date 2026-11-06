@@ -678,14 +678,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     case .voice:
                         rawText = try await self.activeTranscriptionService.transcribe(audioData: audioData)
                     case .meeting:
-                        if self.routedProvider(for: .meeting) == .cloud {
+                        let start = self.meetingStartRoute()
+                        if start.recoversInCloud(signedIn: AuthService.hasStoredSession) {
                             rawText = try await self.transcriptionService.transcribeMeeting(audioData: audioData)
+                        } else if self.onDeviceEngine(for: .meeting) != nil {
+                            rawText = try await self.transcribeWithOwnEngine(job: .meeting, audioData: audioData)
                         } else {
                             rawText = try await self.whisperTranscriptionService.transcribe(audioData: audioData)
                         }
                     case .translation:
                         if self.routedTranslationProvider == .local {
-                            rawText = try await self.whisperTranscriptionService.translateAndTranscribe(
+                            rawText = try await self.localWhisperTranslation(
                                 audioData: audioData,
                                 targetLanguage: translationTarget
                             )
@@ -697,9 +700,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             )
                         }
                     case .meetingTranslation:
-                        let service: TranscriptionServiceProtocol = self.routedProvider(for: .meetingTranslation) == .local
-                            ? self.whisperTranscriptionService : self.transcriptionService
-                        rawText = try await service.translateAndTranscribe(audioData: audioData)
+                        rawText = self.routedProvider(for: .meetingTranslation) == .local
+                            ? try await self.localWhisperTranslation(audioData: audioData, targetLanguage: "en")
+                            : try await self.transcriptionService.translateAndTranscribe(audioData: audioData)
                     }
 
                     let cleanedText = await TranscriptCleanupService.shared.clean(

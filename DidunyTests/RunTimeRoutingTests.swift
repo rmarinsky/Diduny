@@ -123,4 +123,62 @@ struct RunTimeRoutingTests {
         #expect(start.provider == .local && start.recordOnly && !start.localPreview)
         #expect(start.runningEngine == .whisper)
     }
+
+    @Test("Signed out: the Cloud persona runs Local, recovers on this Mac, and Turbo does not translate (bug 9)")
+    func signedOutCloudPersona() throws {
+        let (defaults, _) = try SettingsMigrationTests.load("cloud-default")
+        SettingsMigrationTests.migrate(defaults, hasKey: false, appleSilicon: true)
+        let modes = ModeDefaults(defaults: defaults)
+        let fake = FakeEngineReadinessSource()
+        for job in [STTJob.dictation, .dictationTranslation] {
+            let route = RunTimeRouting.route(job: job, defaults: modes, readiness: fake,
+                                             whisper: .init(downloaded: [], selected: nil), signedIn: false)
+            #expect(route.engine == .didunyCloud && route.baseProvider == .local)
+        }
+        let start = RunTimeRouting.meetingStart(segment: .cloud, route: route(.meeting, defaults, segment: .cloud))
+        #expect(start.recoversInCloud(signedIn: true))
+        #expect(!start.recoversInCloud(signedIn: false))
+        #expect(!JobRequest.whisperTranslationUsable(model: WhisperModelManager.WhisperModel.recommendedName, target: "en"))
+    }
+
+    @Test("Recovery: Record only, Parakeet and Apple meetings recover on this Mac")
+    func recoveryStaysLocal() {
+        let cloud = RunTimeRoute(engine: .didunyCloud, modelID: nil, unavailable: nil, baseProvider: .cloud)
+        #expect(!RunTimeRouting.meetingStart(segment: .recordOnly, route: cloud).recoversInCloud(signedIn: true))
+        for engine in [EngineID.parakeet, .appleSpeech] {
+            let local = RunTimeRoute(engine: engine, modelID: nil, unavailable: nil, baseProvider: .cloud)
+            for segment in MeetingSegment.allCases {
+                #expect(!RunTimeRouting.meetingStart(segment: segment, route: local).recoversInCloud(signedIn: true))
+            }
+        }
+        let whisper = RunTimeRoute(engine: .whisper, modelID: nil, unavailable: nil, baseProvider: .local)
+        #expect(!RunTimeRouting.meetingStart(segment: .thisMac, route: whisper).recoversInCloud(signedIn: true))
+    }
+
+    @Test("An engine that cannot run refuses Start with the reason (ElevenLabs key removed)")
+    func unavailableRefusesStart() throws {
+        let defaults = try #require(UserDefaults(suiteName: "test.\(UUID().uuidString)"))
+        let modes = ModeDefaults(defaults: defaults)
+        modes.apply([.engine(.dictation, ModeEngineRules.selection(engine: .elevenLabs, job: .dictation))])
+        let route = RunTimeRouting.route(job: .dictation, defaults: modes, readiness: FakeEngineReadinessSource([.elevenLabs: .needsKey]),
+                                         whisper: .init(downloaded: [], selected: nil), signedIn: true)
+        #expect(route.unavailable == .needsKey)
+        #expect(RunTimeRouting.startError(route.unavailable, engine: route.engine)
+            == String(localized: "The selected engine isn't available. Check Settings › Providers."))
+        #expect(RunTimeRouting.startError(nil, engine: .didunyCloud) == nil)
+        #expect(RunTimeRouting.startError(.notDownloaded(bytes: 1), engine: .parakeet) == OnDeviceEngines.notReadyMessage)
+    }
+
+    @Test("AppDelegate.modeRoute: a running meeting overrides Settings")
+    func runningMeetingOverridesSettings() {
+        let delegate = AppDelegate()
+        delegate.activeMeetingStartRoute = MeetingStartRoute(segment: .recordOnly, engine: .parakeet, provider: .local,
+                                                             recordOnly: true, localPreview: false,
+                                                             afterStopEngineID: STTProviderID.parakeet)
+        #expect(delegate.modeRoute(for: .meeting).engine == .parakeet)
+        #expect(delegate.modeRoute(for: .meeting).baseProvider == .local)
+        #expect(delegate.onDeviceSelection(for: .meeting) == STTProviderID.parakeet)
+        delegate.activeMeetingStartRoute = nil
+        #expect(delegate.meetingStartRoute(segment: .cloud).segment == .cloud)
+    }
 }

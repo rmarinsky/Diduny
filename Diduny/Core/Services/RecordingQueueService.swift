@@ -623,9 +623,10 @@ final class RecordingQueueService {
         }
 
         // Inventory F8: no override reads the Dictation (or Translation) engine from Settings > Modes,
-        // the mode whose legacy Cloud/Local key this used to read. Whisper is Local, any other engine Cloud.
+        // the mode whose legacy Cloud/Local key this used to read, with the run-time Cloud/Local rule.
         let job: STTJob = item.action == .translate ? .dictationTranslation : .dictation
-        return SettingsStorage.shared.modeDefaults.engine(for: job) == .whisper ? .local : .cloud
+        return RunTimeRouting.baseProvider(for: SettingsStorage.shared.modeDefaults.engine(for: job),
+                                           signedIn: AuthService.hasStoredSession)
     }
 
     private func preflightError(for item: QueueItem) -> String? {
