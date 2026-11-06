@@ -1704,3 +1704,13 @@
 "Language Diduny detected for this recording" = "Language Diduny detected for this recording";
 "Mostly different from Reference" = "Mostly different from Reference";
 "What’s new in this release, animated" = "What’s new in this release, animated";
+
+/* Panels redesign: static components (WP-21) */
+"Transcript mode" = "Transcript mode";
+"Yes" = "Yes";
+"No" = "No";
+"By Diduny" = "By Diduny";
+"Press keys..." = "Press keys...";
+"%@ shortcut" = "%@ shortcut";
+"Press count" = "Press count";
+"Floating panel" = "Floating panel";

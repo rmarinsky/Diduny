@@ -1704,3 +1704,13 @@
 "Language Diduny detected for this recording" = "Мова, яку Diduny розпізнав для цього запису";
 "Mostly different from Reference" = "Здебільшого відрізняється від еталона";
 "What’s new in this release, animated" = "Що нового в цьому релізі, анімація";
+
+/* Panels redesign: static components (WP-21) */
+"Transcript mode" = "Режим транскрипції";
+"Yes" = "Так";
+"No" = "Ні";
+"By Diduny" = "Через Diduny";
+"Press keys..." = "Натисніть клавіші...";
+"%@ shortcut" = "Комбінація: %@";
+"Press count" = "Кількість натискань";
+"Floating panel" = "Плавуча панель";
