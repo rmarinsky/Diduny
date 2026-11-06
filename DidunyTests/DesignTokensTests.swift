@@ -11,8 +11,8 @@ struct DesignTokensTests {
     enum Mode: String, CaseIterable, Sendable, CustomTestStringConvertible {
         case light, dark
 
-        var appearance: NSAppearance {
-            NSAppearance(named: self == .light ? .aqua : .darkAqua)!
+        var appearance: NSAppearance? {
+            NSAppearance(named: self == .light ? .aqua : .darkAqua)
         }
 
         var testDescription: String { rawValue }
@@ -74,7 +74,7 @@ struct DesignTokensTests {
             case .accent: DS.Palette.accent
             case .accentFill: DS.Palette.accentFill
             case .accentText: DS.Palette.accentText
-            case .tint: DS.Palette.tintSoft
+            case .tint: DS.Palette.tint
             case .window: DS.Palette.window
             case .sidebar: DS.Palette.sidebar
             case .panel: DS.Palette.panel
@@ -168,9 +168,8 @@ struct DesignTokensTests {
         let fromAsset = try #require(Self.resolve(asset, in: mode))
         let fromPalette = try #require(Self.resolve(NSColor(token.paletteColor), in: mode))
 
-        for resolved in [fromAsset, fromPalette] {
-            #expect(resolved.isClose(to: expected), "\(token.assetName) \(mode): got \(resolved), want \(expected)")
-        }
+        #expect(fromAsset.isClose(to: expected), "asset \(token.assetName) \(mode): got \(fromAsset), want \(expected)")
+        #expect(fromPalette.isClose(to: expected), "DS.Palette.\(token.rawValue) \(mode): got \(fromPalette), want \(expected)")
     }
 
     // MARK: - TS-CON-02
@@ -183,12 +182,6 @@ struct DesignTokensTests {
         #expect(ratio >= pair.needs, "\(pair.testDescription), \(mode): \(ratio)")
     }
 
-    @Test("White on accent fill in dark is at least 4.5")
-    func whiteOnAccentFillDark() throws {
-        let fill = try #require(Self.resolve(.token(.accentFill), in: .dark))
-        #expect(RGBA.white.contrastRatio(with: fill) >= 4.5)
-    }
-
     // MARK: - Helpers
 
     private static func resolve(_ ink: Ink, in mode: Mode) -> RGBA? {
@@ -199,8 +192,9 @@ struct DesignTokensTests {
     }
 
     private static func resolve(_ color: NSColor, in mode: Mode) -> RGBA? {
+        guard let appearance = mode.appearance else { return nil }
         var result: RGBA?
-        mode.appearance.performAsCurrentDrawingAppearance {
+        appearance.performAsCurrentDrawingAppearance {
             guard let srgb = color.usingColorSpace(.sRGB) else { return }
             result = RGBA(
                 red: Double(srgb.redComponent),

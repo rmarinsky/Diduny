@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Layout standard for the main window. Source: docs/design/ui-unification/README.md.
+/// Layout standard for the main window. Sources: docs/design/ui-unification/README.md and,
+/// for the panels redesign tokens, docs/design/panels-and-capabilities-redesign/design-spec.md.
 enum DS {
     /// Spacing scale: 4 / 8 / 12 / 16 / 24 only.
     enum Space {
@@ -117,6 +118,8 @@ enum DS {
 
     /// Four type levels: title, headline, body, secondary (callout 12 / caption 11).
     enum Font {
+        /// TODO(panels redesign): stays until the first Settings package moves `Scaffold`
+        /// to `settingsTitle`; that package then removes `pageTitle`.
         static let pageTitle = SwiftUI.Font.system(size: 22, weight: .bold)
         static let headline = SwiftUI.Font.system(size: 13, weight: .semibold)
         static let body = SwiftUI.Font.system(size: 13)
@@ -170,10 +173,11 @@ enum DS {
     }
 
     /// Colour roles. Redesign roles: docs/design/panels-and-capabilities-redesign/design-spec.md 1.1 and 1.2.
-    /// The spec's `tint` role is `tintSoft`.
     enum Palette {
         static let accent = Color("BrandAccentDeep")
         static let tintSoft = Color("BrandTintSoft")
+        /// The spec's name for `tintSoft`.
+        static let tint = tintSoft
         static let tintBorder = Color("BrandTintBorder")
         static let cardFill = Color(.controlBackgroundColor)
         static let cardBorder = Color.primary.opacity(0.08)
