@@ -1554,6 +1554,7 @@
 "Voice commands need Cloud translation. Local Whisper translates to English only." = "Голосові команди працюють лише з хмарним перекладом. Локальний Whisper перекладає тільки англійською.";
 "Start and end" = "На початку й у кінці";
 "End only" = "Лише в кінці";
+"Anywhere" = "Будь-де";
 "%@ ↔ %@" = "%@ ↔ %@";
 "Any supported language" = "Будь-яка підтримувана мова";
 "Only my translation pairs" = "Лише мої мовні пари";
