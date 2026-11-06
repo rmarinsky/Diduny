@@ -256,21 +256,21 @@ struct PickerMenuModelTests {
     // MARK: - Menu state (keys)
 
     @MainActor
-    @Test("Return closes the menu, then reports the pick; Escape only closes")
+    @Test("Return closes the menu as picked, then reports the pick; Escape closes as escape")
     func stateHandlesKeys() {
         var events: [String] = []
         let state = PickerMenuState(model: PickerMenuModel(groups: Self.engines, selectedID: "diduny-cloud")) {
             events.append("pick \($0)")
         }
-        state.close = { events.append("close") }
+        state.close = { events.append("close \($0)") }
 
         #expect(state.handle(.down))
         #expect(state.handle(.return))
-        #expect(events == ["close", "pick elevenlabs"])
+        #expect(events == ["close picked", "pick elevenlabs"])
 
         events = []
         #expect(state.handle(.escape))
-        #expect(events == ["close"])
+        #expect(events == ["close escape"])
     }
 
     @MainActor
@@ -280,7 +280,7 @@ struct PickerMenuModelTests {
         let state = PickerMenuState(model: PickerMenuModel(groups: Self.engines, selectedID: nil)) {
             events.append("pick \($0)")
         }
-        state.close = { events.append("close") }
+        state.close = { events.append("close \($0)") }
 
         #expect(state.handle(.return))
         #expect(events.isEmpty)

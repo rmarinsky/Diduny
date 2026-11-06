@@ -163,6 +163,17 @@ enum EdgeCommandPanelHoverPolicy {
     ) -> Bool {
         openSurfaceFrame == nil && !isDragging && !panelFrame.contains(pointer)
     }
+
+    /// A picker menu or popup just closed. No hover-exit event follows if the pointer already left the panel
+    /// while the surface was open, so the expanded panel re-runs the collapse when the pointer is outside.
+    static func shouldCollapseAfterSurfaceClose(
+        pointer: NSPoint,
+        panelFrame: NSRect,
+        isExpanded: Bool,
+        isDragging: Bool
+    ) -> Bool {
+        isExpanded && shouldCollapse(pointer: pointer, panelFrame: panelFrame, isDragging: isDragging)
+    }
 }
 
 /// The collapsed edge tab auto-hides after a few idle seconds (it annoys

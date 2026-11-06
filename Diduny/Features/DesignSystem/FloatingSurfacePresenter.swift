@@ -18,15 +18,33 @@ final class FloatingSurfacePresenter {
         current?.panel.frame
     }
 
+    /// Posted after a surface closes (not when another one replaces it). `userInfo[closeReasonKey]` holds the
+    /// `FloatingSurfaceCloseReason`. The command panel re-checks its collapse rule on it.
+    static let didCloseNotification = Notification.Name("FloatingSurfacePresenter.didClose")
+    static let closeReasonKey = "reason"
+
     init() {}
 
-    /// The parent gets key back only if it had key and the person stayed in Diduny; otherwise key returns to
-    /// the app they are typing in.
-    static func restoresParentKey(parentWasKey: Bool, reason: FloatingSurfaceCloseReason) -> Bool {
-        guard parentWasKey else { return false }
+    /// Where key focus goes when a surface closes (ADR-0012 D7 and its risks section).
+    enum KeyAfterClose: Equatable, Sendable {
+        /// `parent.makeKey()`: Diduny is the active app (Settings) and the parent had key.
+        case parentKey
+        /// `parent.orderFront(nil)` only, never `makeKey`: the person's front app keeps the keyboard
+        /// (the command panel over TextEdit). The ADR's fallback.
+        case parentFront
+        /// Leave key where it already went: another app, or the surface that replaced this one.
+        case unchanged
+    }
+
+    static func keyAfterClose(
+        parentWasKey: Bool,
+        appIsActive: Bool,
+        reason: FloatingSurfaceCloseReason
+    ) -> KeyAfterClose {
         switch reason {
-        case .picked, .escape, .trigger, .clickInApp, .programmatic: return true
-        case .clickInOtherApp, .resignedKey, .replaced: return false
+        case .clickInOtherApp, .resignedKey, .replaced: .unchanged
+        case .picked, .escape, .trigger, .clickInApp, .programmatic:
+            appIsActive && parentWasKey ? .parentKey : .parentFront
         }
     }
 
@@ -56,7 +74,7 @@ final class FloatingSurfacePresenter {
             owner: owner, identifier: PickerMenuModel.Identifier.menu, kind: .menu(alignment), motion: .menu,
             anchor: anchor, parent: parent, fromKeyboard: fromKeyboard, root: AnyView(PickerMenu(state: state))
         )
-        state.close = { [weak self] in self?.close(.picked) }
+        state.close = { [weak self] reason in self?.close(reason) }
         state.onLayoutChange = { [weak self, weak surface] in
             guard let surface else { return }
             self?.refit(surface)
@@ -129,6 +147,7 @@ final class FloatingSurfacePresenter {
             anchor: anchor, size: hosting.fittingSize, kind: kind, visibleFrame: visibleFrame
         )
         transition.scaleAnchor = placement.scaleAnchor
+        transition.onShown = { [weak panel] in panel?.invalidateShadow() }
         panel.setFrame(placement.frame, display: false)
 
         let surface = OpenSurface(
@@ -142,6 +161,8 @@ final class FloatingSurfacePresenter {
         panel.level = .popUpMenu
         // Never `NSApp.activate`: the person keeps typing context in the app in front.
         panel.makeKeyAndOrderFront(nil)
+        // Focus once the panel is key, not on appear: the search field takes typing at once.
+        panel.focusFirstTextField()
         installCloseTriggers(for: surface)
         return surface
     }
@@ -153,11 +174,11 @@ final class FloatingSurfacePresenter {
         current = nil
         openOwnerID = nil
         surface.removeCloseTriggers()
-        surface.panel.onKey = nil
 
         let parent = surface.parent
-        let restoreKey = Self.restoresParentKey(parentWasKey: surface.parentWasKey, reason: reason)
         let panel = surface.panel
+        // A popup fades out for 150 ms (M7): its search field takes no more keys meanwhile.
+        panel.beginClosing()
         let remove = {
             parent?.removeChildWindow(panel)
             panel.orderOut(nil)
@@ -165,10 +186,18 @@ final class FloatingSurfacePresenter {
         if reason == .replaced {
             remove()
         } else {
-            panel.ignoresMouseEvents = true
             surface.transition.hide(then: remove)
         }
-        if restoreKey { parent?.makeKey() }
+        switch Self.keyAfterClose(parentWasKey: surface.parentWasKey, appIsActive: NSApp.isActive, reason: reason) {
+        case .parentKey: parent?.makeKey()
+        case .parentFront: parent?.orderFront(nil)
+        case .unchanged: break
+        }
+        if reason != .replaced {
+            NotificationCenter.default.post(
+                name: Self.didCloseNotification, object: self, userInfo: [Self.closeReasonKey: reason]
+            )
+        }
     }
 
     // MARK: - Private
@@ -182,6 +211,7 @@ final class FloatingSurfacePresenter {
                 visibleFrame: surface.visibleFrame, keeping: surface.side
             )
             surface.panel.setFrame(placement.frame, display: true)
+            surface.panel.invalidateShadow()
         }
     }
 
@@ -272,6 +302,8 @@ final class FloatingSurfaceTransition {
     private(set) var isShown: Bool
     private(set) var hiddenScale: CGFloat
     var scaleAnchor: UnitPoint = .top
+    /// The open animation finished (or there was none): the window shadow must follow the drawn shape.
+    @ObservationIgnored var onShown: (() -> Void)?
     private let openStep: FloatingSurfaceMotion.Step
     private let closeStep: FloatingSurfaceMotion.Step
 
@@ -286,9 +318,14 @@ final class FloatingSurfaceTransition {
     func show() {
         guard !isShown, let animation = FloatingSurfaceMotion.animation(for: openStep) else {
             isShown = true
+            DispatchQueue.main.async { [weak self] in self?.onShown?() }
             return
         }
-        withAnimation(animation) { isShown = true }
+        withAnimation(animation) {
+            isShown = true
+        } completion: { [weak self] in
+            self?.onShown?()
+        }
     }
 
     func hide(then remove: @escaping () -> Void) {

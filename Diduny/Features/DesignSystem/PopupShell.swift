@@ -41,8 +41,6 @@ struct PopupShell<Content: View, Footer: View>: View {
     private let content: () -> Content
     private let footer: () -> Footer
 
-    @FocusState private var isSearchFocused: Bool
-
     /// - Parameters:
     ///   - icon: SF Symbol for the header tile (`globe`, `key`).
     ///   - accessibilityTitle: the popup's label ("ElevenLabs languages", "ElevenLabs key"); defaults to the title.
@@ -77,8 +75,8 @@ struct PopupShell<Content: View, Footer: View>: View {
         VStack(alignment: .leading, spacing: DS.Panel.blockGap) {
             header
             if let search {
+                // The presenter focuses it once the surface is key (`focusFirstTextField`).
                 SurfaceSearchField(text: search, identifier: PopupShellIdentifier.search)
-                    .focused($isSearchFocused)
             }
             if Content.self != EmptyView.self {
                 PopupShellBody(style: bodyStyle, content: content)
@@ -100,9 +98,6 @@ struct PopupShell<Content: View, Footer: View>: View {
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .accessibilityLabel(Text(verbatim: accessibilityTitle ?? title))
-        .onAppear {
-            if search != nil { isSearchFocused = true }
-        }
     }
 
     private var header: some View {

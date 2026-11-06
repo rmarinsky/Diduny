@@ -9,8 +9,9 @@ extension DS {
         static let stackedHorizontalPadding: CGFloat = 9
         static let pairHorizontalPadding: CGFloat = DS.Space.sm
         static let stackedColumnGap: CGFloat = DS.Space.xs
-        /// 10.5 pt at line height 1.2.
-        static let stackedLabelLineHeight: CGFloat = 12.6
+        /// Stacked rows as the prototype lays them out: 5 + 14.8 label row + 17.2 value row + 5 = 42.
+        static let stackedLabelRowHeight: CGFloat = 14.8
+        static let stackedValueRowHeight: CGFloat = 17.2
         static let chevronSize: CGFloat = 9
         static let disabledOpacity: Double = 0.5
     }
@@ -142,10 +143,9 @@ struct PickerField: View {
                         .font(DS.Font.meta)
                         .foregroundStyle(DS.Palette.secondary)
                         .fixedSize()
-                    Spacer(minLength: 0)
                 }
-                valueText(font: DS.Font.headline, color: valueColor)
-                if label == nil { Spacer(minLength: 0) }
+                // Gaps label 8 value 8 chevron: the value takes the free width, trailing after a label.
+                valueText(font: DS.Font.headline, color: valueColor, alignment: label == nil ? .leading : .trailing)
                 if showsChevron { chevron(valueColor) }
             }
             .padding(.horizontal, DS.Field.inlineHorizontalPadding)
@@ -158,13 +158,17 @@ struct PickerField: View {
                         .font(DS.Font.fieldLabel)
                         .foregroundStyle(DS.Palette.secondary)
                         .fixedSize()
-                        .frame(height: DS.Field.stackedLabelLineHeight)
+                        .frame(height: DS.Field.stackedLabelRowHeight)
                 }
                 HStack(spacing: DS.Field.stackedColumnGap) {
-                    valueText(font: layout == .stackedInPair ? DS.Font.calloutStrong : DS.Font.contentStrong, color: valueColor)
-                    Spacer(minLength: 0)
+                    valueText(
+                        font: layout == .stackedInPair ? DS.Font.calloutStrong : DS.Font.contentStrong,
+                        color: valueColor,
+                        alignment: .leading
+                    )
                     if showsChevron { chevron(valueColor) }
                 }
+                .frame(height: DS.Field.stackedValueRowHeight)
             }
             .padding(.vertical, DS.Field.stackedVerticalPadding)
             .padding(
@@ -176,12 +180,13 @@ struct PickerField: View {
         }
     }
 
-    private func valueText(font: Font, color: Color) -> some View {
+    private func valueText(font: Font, color: Color, alignment: Alignment) -> some View {
         Text(verbatim: value)
             .font(font)
             .foregroundStyle(color)
             .lineLimit(1)
             .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: alignment)
     }
 
     private func chevron(_ color: Color) -> some View {

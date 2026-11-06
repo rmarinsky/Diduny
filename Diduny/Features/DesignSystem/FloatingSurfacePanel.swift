@@ -28,10 +28,38 @@ final class FloatingSurfacePanel: NSPanel {
         level = .popUpMenu
     }
 
-    override var canBecomeKey: Bool { true }
+    /// Set when the surface starts to close: it takes no more keys while it fades out.
+    private(set) var isClosing = false
+
+    override var canBecomeKey: Bool { !isClosing }
     override var canBecomeMain: Bool { false }
 
+    func beginClosing() {
+        isClosing = true
+        onKey = nil
+        ignoresMouseEvents = true
+        makeFirstResponder(nil)
+    }
+
+    /// Puts the caret in the first editable text field (the search field), if there is one. Call after the
+    /// panel became key.
+    func focusFirstTextField() {
+        contentView?.layoutSubtreeIfNeeded()
+        if let field = contentView.flatMap(Self.firstEditableTextField) {
+            makeFirstResponder(field)
+        }
+    }
+
+    private static func firstEditableTextField(in view: NSView) -> NSTextField? {
+        if let field = view as? NSTextField, field.isEditable { return field }
+        for subview in view.subviews {
+            if let field = firstEditableTextField(in: subview) { return field }
+        }
+        return nil
+    }
+
     override func sendEvent(_ event: NSEvent) {
+        if isClosing, event.type == .keyDown || event.type == .keyUp { return }
         if event.type == .keyDown,
            !isComposingText,
            let key = FloatingSurfaceKey(keyCode: event.keyCode),

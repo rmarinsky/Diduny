@@ -211,8 +211,8 @@ struct PickerMenuModel: Equatable {
 final class PickerMenuState {
     var model: PickerMenuModel
     let onPick: (String) -> Void
-    /// Set by the presenter.
-    @ObservationIgnored var close: () -> Void = {}
+    /// Set by the presenter: `.picked` after a pick, `.escape` on Escape.
+    @ObservationIgnored var close: (FloatingSurfaceCloseReason) -> Void = { _ in }
     /// The list changed size; the presenter refits the window.
     @ObservationIgnored var onLayoutChange: (() -> Void)?
 
@@ -226,14 +226,14 @@ final class PickerMenuState {
         case .up: model.moveHighlight(.up)
         case .down: model.moveHighlight(.down)
         case .return: if let id = model.highlightedPick { pick(id) }
-        case .escape: close()
+        case .escape: close(.escape)
         }
         return true
     }
 
     func pick(_ id: String) {
         guard model.canPick(id) else { return }
-        close()
+        close(.picked)
         onPick(id)
     }
 
@@ -248,8 +248,8 @@ final class PickerMenuState {
 /// The menu card (design-spec 4.2): 262 wide, up to 320 high, scrolls inside. The search field scrolls with the
 /// list, as in the prototype (`.menu` P:78).
 struct PickerMenu: View {
+    /// The presenter puts the caret in the search field once the surface is key (`focusFirstTextField`).
     let state: PickerMenuState
-    @FocusState private var isSearchFocused: Bool
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: DS.Radius.menu, style: .continuous)
@@ -264,7 +264,6 @@ struct PickerMenu: View {
                             text: Binding(get: { state.model.query }, set: { state.updateQuery($0) }),
                             identifier: PickerMenuModel.Identifier.search
                         )
-                        .focused($isSearchFocused)
                         .padding(.bottom, DS.Menu.searchGap)
                     }
                     if state.model.showsNothingFound {
@@ -307,10 +306,6 @@ struct PickerMenu: View {
         .overlay(shape.strokeBorder(DS.Palette.line, lineWidth: DS.Panel.borderWidth))
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
-        .onAppear {
-            // On open, focus goes to the search field when there is one; else the highlight sits on the selected row.
-            if state.model.showsSearch { isSearchFocused = true }
-        }
     }
 }
 
