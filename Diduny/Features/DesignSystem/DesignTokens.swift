@@ -93,6 +93,34 @@ enum DS {
         static let legendMark: CGFloat = 16
         /// Live control and meeting suggestion hit targets (pointer-only panel).
         static let panelHitTarget: CGFloat = 38
+        /// Transcript and calm box height in meeting panels (D9).
+        static let transcriptMeeting: CGFloat = 170
+        /// Transcript and calm box height in dictation panels (D9).
+        static let transcriptDictation: CGFloat = 120
+        /// The result box grows with its text up to this, then scrolls.
+        static let resultMaxHeight: CGFloat = 170
+        /// Widest the calm box's second line gets.
+        static let calmDetailMaxWidth: CGFloat = 230
+        /// Padding inside the transcript and result boxes.
+        static let boxPadding: CGFloat = 10
+        /// White square in the Stop button, square.
+        static let stopGlyph: CGFloat = 10
+
+        // SF Symbol point sizes (design-spec 9.1).
+        /// Tiles and Modes rows.
+        static let symbolTile: CGFloat = 16
+        /// Panel and popup header tiles.
+        static let symbolHeader: CGFloat = 15
+        /// Command home header `mic`.
+        static let symbolHomeHeader: CGFloat = 14
+        /// Trash and Change ticks.
+        static let symbolSmall: CGFloat = 12
+        /// Close and minimize glyphs.
+        static let symbolIconButton: CGFloat = 11
+        /// Translate meeting badge `globe`.
+        static let symbolBadge: CGFloat = 10
+        /// `chevron.down` in fields, links and the expander.
+        static let symbolChevron: CGFloat = 9
     }
 
     /// Floating panel metrics (design-spec 3.3). Height is the content's fitting height.

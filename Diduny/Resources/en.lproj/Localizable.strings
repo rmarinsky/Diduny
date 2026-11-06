@@ -1748,3 +1748,25 @@
 "Your languages" = "Your languages";
 "All languages" = "All languages";
 "Opens a list" = "Opens a list";
+/* Panels redesign: static components (WP-21) */
+"Transcript mode" = "Transcript mode";
+"Yes" = "Yes";
+"No" = "No";
+"Press keys..." = "Press keys...";
+"%@ shortcut" = "%@ shortcut";
+"Press count" = "Press count";
+"Floating panel" = "Floating panel";
+/* Shortcut field key names, spoken (WP-21) */
+"Command" = "Command";
+"Option" = "Option";
+"Control" = "Control";
+"Shift" = "Shift";
+"Return" = "Return";
+"Escape" = "Escape";
+"Tab" = "Tab";
+"Delete key" = "Delete";
+"Space" = "Space";
+"Left Arrow" = "Left Arrow";
+"Right Arrow" = "Right Arrow";
+"Up Arrow" = "Up Arrow";
+"Down Arrow" = "Down Arrow";

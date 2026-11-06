@@ -1748,3 +1748,25 @@
 "Your languages" = "Ваші мови";
 "All languages" = "Усі мови";
 "Opens a list" = "Відкриває список";
+/* Panels redesign: static components (WP-21) */
+"Transcript mode" = "Режим транскрипції";
+"Yes" = "Так";
+"No" = "Ні";
+"Press keys..." = "Натисніть клавіші...";
+"%@ shortcut" = "Комбінація: %@";
+"Press count" = "Кількість натискань";
+"Floating panel" = "Плавуча панель";
+/* Shortcut field key names, spoken (WP-21) */
+"Command" = "Command";
+"Option" = "Option";
+"Control" = "Control";
+"Shift" = "Shift";
+"Return" = "Return";
+"Escape" = "Escape";
+"Tab" = "Tab";
+"Delete key" = "Delete";
+"Space" = "Пробіл";
+"Left Arrow" = "Стрілка вліво";
+"Right Arrow" = "Стрілка вправо";
+"Up Arrow" = "Стрілка вгору";
+"Down Arrow" = "Стрілка вниз";
