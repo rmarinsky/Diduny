@@ -126,6 +126,12 @@ struct EngineCapabilitiesTests {
         #expect(try Self.whisperModel(name).sizeBytes > 0)
     }
 
+    @Test("The recommended Whisper model has a parsed download size")
+    func recommendedWhisperSize() throws {
+        let recommended = try #require(WhisperModelManager.availableModels.first { $0.isRecommended })
+        #expect(recommended.sizeBytes > 0)
+    }
+
     @Test("Every Whisper model is in the translation table")
     func whisperTableCoversCatalog() {
         #expect(Set(Self.whisperTranslation.map(\.0)) == Set(WhisperModelManager.availableModels.map(\.name)))

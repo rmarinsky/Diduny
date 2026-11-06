@@ -113,8 +113,9 @@ struct EngineLanguagesTests {
           arguments: EngineLanguages.elevenLabsCodes.keys.filter { !nameRoundTripExceptions.contains($0) }.sorted())
     func elevenLabsNameRoundTrip(_ vendorCode: String) throws {
         let code = try #require(EngineLanguages.elevenLabsCodes[vendorCode])
-        #expect(EngineLanguages.name(of: EngineLanguage(code, vendorCode: vendorCode), locale: Self.english)
-            == EngineLanguages.name(of: EngineLanguage(code), locale: Self.english))
+        // The vendor side resolves on its own, so a swapped mapping (slk to sl) fails.
+        let vendorName = try #require(Self.english.localizedString(forLanguageCode: vendorCode))
+        #expect(vendorName == EngineLanguages.name(of: EngineLanguage(code), locale: Self.english))
     }
 
     static let pinnedNames: [(String, String)] = [
