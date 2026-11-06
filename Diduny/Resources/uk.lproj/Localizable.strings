@@ -1816,3 +1816,16 @@
 "Between" = "Між";
 "Show original text" = "Показати оригінал";
 "Hide original text" = "Сховати оригінал";
+
+/* Panels redesign WP-41 */
+"Engine, next recording" = "Рушій, наступний запис";
+"As in Settings" = "Як у Налаштуваннях";
+"Each mode uses its own default" = "Кожен режим має свій типовий";
+"Providers..." = "Провайдери...";
+"Compare engines, add a key" = "Порівняти рушії, додати ключ";
+"Translate into" = "Перекласти на";
+"Sign in to record." = "Увійдіть, щоб записувати.";
+"Voice → %@" = "Голос → %@";
+"Live · %@" = "Наживо · %@";
+"After Stop · %@" = "Після Stop · %@";
+"Not on this Mac" = "Недоступно на цьому Mac";

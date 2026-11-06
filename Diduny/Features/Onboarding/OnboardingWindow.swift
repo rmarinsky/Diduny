@@ -670,12 +670,10 @@ private struct OnboardingProductionPanelPreview: View {
     @MainActor
     init(onAction: @escaping () -> Void) {
         self.onAction = onAction
-        let pair = SettingsStorage.shared.resolveTranslationLanguagePair()
         _model = State(initialValue: EdgeCommandPanelModel(
-            pairs: [pair],
-            selectedPair: pair,
-            provider: .local,
-            isSignedIn: false
+            pair: SettingsStorage.shared.resolveTranslationLanguagePair(),
+            // Signed in, so the preview's tiles stay clickable as before (signed out disables them).
+            isSignedIn: true
         ))
     }
 
@@ -684,7 +682,12 @@ private struct OnboardingProductionPanelPreview: View {
             model: model,
             liveStore: DictationOverlayController.shared.store,
             onAction: { _ in onAction() },
-            onProvider: { _ in onAction() },
+            capabilities: EdgeCommandPanelController.engineCapabilities,
+            readiness: EdgeCommandPanelController.engineReadiness,
+            onEngineRow: { _ in onAction() },
+            onTarget: { _ in },
+            onRecordings: onAction,
+            onSettings: onAction,
             onSignIn: onAction,
             onCopy: {},
             onStop: {},

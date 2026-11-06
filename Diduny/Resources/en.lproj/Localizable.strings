@@ -1816,3 +1816,16 @@
 "Between" = "Between";
 "Show original text" = "Show original text";
 "Hide original text" = "Hide original text";
+
+/* Panels redesign WP-41 */
+"Engine, next recording" = "Engine, next recording";
+"As in Settings" = "As in Settings";
+"Each mode uses its own default" = "Each mode uses its own default";
+"Providers..." = "Providers...";
+"Compare engines, add a key" = "Compare engines, add a key";
+"Translate into" = "Translate into";
+"Sign in to record." = "Sign in to record.";
+"Voice → %@" = "Voice → %@";
+"Live · %@" = "Live · %@";
+"After Stop · %@" = "After Stop · %@";
+"Not on this Mac" = "Not on this Mac";

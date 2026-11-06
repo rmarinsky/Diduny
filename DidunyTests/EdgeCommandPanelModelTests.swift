@@ -4,72 +4,6 @@ import Testing
 
 @MainActor
 struct EdgeCommandPanelModelTests {
-    @Test("Translation actions use the language pair selected in the edge panel")
-    func selectedPairDrivesTranslationActions() {
-        let english = TranslationLanguagePair(languageA: "uk", languageB: "en")
-        let polish = TranslationLanguagePair(languageA: "uk", languageB: "pl")
-        let model = EdgeCommandPanelModel(pairs: [english, polish], selectedPair: english)
-
-        model.select(polish)
-
-        #expect(model.selectedPair == polish)
-        #expect(EdgeCommandAction.translate.usesLanguagePair)
-        #expect(EdgeCommandAction.translateMeeting.usesLanguagePair)
-        #expect(!EdgeCommandAction.transcribe.usesLanguagePair)
-    }
-
-    @Test("Refreshing configured pairs keeps a valid selected target")
-    func refreshReplacesPairsWithoutLeavingAStaleSelection() {
-        let english = TranslationLanguagePair(languageA: "uk", languageB: "en")
-        let polish = TranslationLanguagePair(languageA: "uk", languageB: "pl")
-        let model = EdgeCommandPanelModel(pairs: [english], selectedPair: english)
-
-        model.refresh(pairs: [polish], selectedPair: polish)
-
-        #expect(model.pairs == [polish])
-        #expect(model.selectedPair == polish)
-    }
-
-    @Test("Local mode exposes only transcription and meeting capture")
-    func localModeHidesCloudActions() {
-        let model = EdgeCommandPanelModel(
-            pairs: [.defaultPair],
-            selectedPair: .defaultPair,
-            provider: .local,
-            isSignedIn: true
-        )
-
-        #expect(model.availableActions == [.transcribe, .meeting])
-        #expect(!model.showsTranslationControls)
-    }
-
-    @Test("Cloud mode adds translation actions and target language")
-    func cloudModeAddsTranslationActions() {
-        let model = EdgeCommandPanelModel(
-            pairs: [.defaultPair],
-            selectedPair: .defaultPair,
-            provider: .local,
-            isSignedIn: true
-        )
-
-        #expect(model.selectProvider(.cloud))
-        #expect(model.availableActions == [.transcribe, .translate, .meeting, .translateMeeting])
-        #expect(model.showsTranslationControls)
-    }
-
-    @Test("Cloud mode requires an authenticated session")
-    func signedOutUserCannotSelectCloud() {
-        let model = EdgeCommandPanelModel(
-            pairs: [.defaultPair],
-            selectedPair: .defaultPair,
-            provider: .local,
-            isSignedIn: false
-        )
-
-        #expect(!model.selectProvider(.cloud))
-        #expect(model.provider == .local)
-    }
-
     @Test("A dragged panel snaps to the nearest screen edge")
     func draggedPanelSnapsToNearestEdge() {
         let visibleFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
@@ -221,7 +155,7 @@ struct EdgeCommandPanelModelTests {
 
     @Test("Meeting suggestion falls back to Local when Cloud is unavailable")
     func unavailableCloudFallsBackToLocal() {
-        let model = EdgeCommandPanelModel(pairs: [.defaultPair], selectedPair: .defaultPair)
+        let model = EdgeCommandPanelModel()
         let suggestion = MeetingSuggestion.resolve(
             meeting: DetectedMeeting(id: UUID(), client: .googleMeet),
             preferredProvider: .cloud,
@@ -284,7 +218,7 @@ struct EdgeCommandPanelModelTests {
 
     @Test("Disabling future suggestions keeps the current meeting suggestion open")
     func disablingTrackingDoesNotDismissCurrentSuggestion() {
-        let model = EdgeCommandPanelModel(pairs: [.defaultPair], selectedPair: .defaultPair)
+        let model = EdgeCommandPanelModel()
         let suggestion = MeetingSuggestion(
             meeting: DetectedMeeting(id: UUID(), client: .teams),
             selectedProvider: .cloud,
