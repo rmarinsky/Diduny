@@ -1716,6 +1716,7 @@
 "Floating panel" = "Floating panel";
 /* Shortcut field key names, spoken (WP-21) */
 "Command" = "Command";
+"Caps Lock" = "Caps Lock";
 "Option" = "Option";
 "Control" = "Control";
 "Shift" = "Shift";
