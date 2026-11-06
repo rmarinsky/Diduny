@@ -1770,3 +1770,8 @@
 "Right Arrow" = "Стрілка вправо";
 "Up Arrow" = "Стрілка вгору";
 "Down Arrow" = "Стрілка вниз";
+
+/* Panels redesign WP-50 */
+"Modes" = "Режими";
+"Languages" = "Мови";
+"Audio" = "Аудіо";
