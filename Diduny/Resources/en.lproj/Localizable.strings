@@ -1951,3 +1951,22 @@
 "Re-record" = "Re-record";
 "Labels your own voice as you." = "Labels your own voice as you.";
 "Set up" = "Set up";
+
+/* Panels redesign WP-55 */
+"Each one has its keys, how many times you press them, and a switch. Shortcuts that start a mode are in Modes." = "Each one has its keys, how many times you press them, and a switch. Shortcuts that start a mode are in Modes.";
+"While recording" = "While recording";
+"Keep the audio when cancelled" = "Keep the audio when cancelled";
+"Stop, paste and send" = "Stop, paste and send";
+"Stops, pastes, then presses ⌘↩." = "Stops, pastes, then presses ⌘↩.";
+"Add a meeting chapter" = "Add a meeting chapter";
+"Text" = "Text";
+"Translate selected text" = "Translate selected text";
+"Opens the translation window with the selection." = "Opens the translation window with the selection.";
+"Translate the selection in place" = "Translate the selection in place";
+"Replaces the selected text with its translation." = "Replaces the selected text with its translation.";
+"Translate in place between" = "Translate in place between";
+"Works in both directions: the direction follows the language of the selected text." = "Works in both directions: the direction follows the language of the selected text.";
+"App" = "App";
+"History palette" = "History palette";
+"Open Settings" = "Open Settings";
+"The standard macOS shortcut. It cannot be changed." = "The standard macOS shortcut. It cannot be changed.";

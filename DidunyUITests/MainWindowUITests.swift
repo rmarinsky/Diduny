@@ -33,6 +33,7 @@ final class MainWindowUITests: DidunyUITestCase {
             ("Local models", "models", { $0.staticTexts["Whisper options"] }),
             ("Providers", "providers", { $0.staticTexts["In Diduny"] }),
             ("Shortcuts", "shortcuts", { $0.staticTexts["While recording"] }),
+            ("About", "about", { $0.staticTexts["Author"] }),
             ("Account", "account", { $0.textFields["account.email"] }),
             ("About", "about", { $0.staticTexts["Author"] }),
             ("Benchmark", "benchmark", { $0.staticTexts["Benchmark"] }),
