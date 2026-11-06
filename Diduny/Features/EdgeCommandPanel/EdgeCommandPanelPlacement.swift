@@ -154,8 +154,25 @@ enum EdgeCommandPanelPlacement {
 }
 
 enum EdgeCommandPanelHoverPolicy {
-    static func shouldCollapse(pointer: NSPoint, panelFrame: NSRect, isDragging: Bool) -> Bool {
-        !isDragging && !panelFrame.contains(pointer)
+    /// - Parameter openSurfaceFrame: an open picker menu or popup; the panel never collapses under it (ADR-0012 D7).
+    static func shouldCollapse(
+        pointer: NSPoint,
+        panelFrame: NSRect,
+        isDragging: Bool,
+        openSurfaceFrame: NSRect? = nil
+    ) -> Bool {
+        openSurfaceFrame == nil && !isDragging && !panelFrame.contains(pointer)
+    }
+
+    /// A picker menu or popup just closed. No hover-exit event follows if the pointer already left the panel
+    /// while the surface was open, so the expanded panel re-runs the collapse when the pointer is outside.
+    static func shouldCollapseAfterSurfaceClose(
+        pointer: NSPoint,
+        panelFrame: NSRect,
+        isExpanded: Bool,
+        isDragging: Bool
+    ) -> Bool {
+        isExpanded && shouldCollapse(pointer: pointer, panelFrame: panelFrame, isDragging: isDragging)
     }
 }
 
@@ -173,10 +190,12 @@ enum EdgeCommandPanelAutoHidePolicy {
         isDragging: Bool,
         isExpanded: Bool,
         isShowingLiveFeedback: Bool,
-        isLiveFeedbackMinimized: Bool = false
+        isLiveFeedbackMinimized: Bool = false,
+        openSurfaceFrame: NSRect? = nil
     ) -> Bool {
         let liveModalExpanded = isShowingLiveFeedback && !isLiveFeedbackMinimized
-        return !isDragging
+        return openSurfaceFrame == nil
+            && !isDragging
             && !isExpanded
             && !liveModalExpanded
             && !panelFrame.contains(pointer)

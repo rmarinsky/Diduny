@@ -27,10 +27,16 @@ final class EdgeCommandPanelController: NSObject {
     /// After the user click-restores a minimized live panel, keep it open for
     /// the rest of the session even if "show modal on start" is off.
     private var liveFeedbackRestoredByUser = false
+    private var surfaceCloseObserver: NSObjectProtocol?
 
     init(meetingRecordingStarter: ((TranscriptionProvider) -> Void)? = nil) {
         self.meetingRecordingStarter = meetingRecordingStarter
         super.init()
+        surfaceCloseObserver = NotificationCenter.default.addObserver(
+            forName: FloatingSurfacePresenter.didCloseNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.floatingSurfaceDidClose() }
+        }
     }
 
     func configure(appDelegate: AppDelegate) {
@@ -320,7 +326,8 @@ final class EdgeCommandPanelController: NSObject {
                 isDragging: dragCursorOffset != nil,
                 isExpanded: model?.isExpanded == true,
                 isShowingLiveFeedback: model?.isShowingLiveFeedback == true,
-                isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true
+                isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true,
+                openSurfaceFrame: FloatingSurfacePresenter.shared.openSurfaceFrame
             ) else {
                 // Busy or hovered — try again after another idle interval.
                 scheduleTabAutoHide()
@@ -439,11 +446,24 @@ final class EdgeCommandPanelController: NSObject {
                 guard EdgeCommandPanelHoverPolicy.shouldCollapse(
                     pointer: NSEvent.mouseLocation,
                     panelFrame: panel.frame,
-                    isDragging: dragCursorOffset != nil
+                    isDragging: dragCursorOffset != nil,
+                    openSurfaceFrame: FloatingSurfacePresenter.shared.openSurfaceFrame
                 ) else { return }
                 showCollapsed()
             }
         }
+    }
+
+    /// The panel stayed expanded while a menu or popup was open (`openSurfaceFrame`); collapse it now if the
+    /// pointer is already outside, since no hover-exit event will come.
+    private func floatingSurfaceDidClose() {
+        guard let panel, EdgeCommandPanelHoverPolicy.shouldCollapseAfterSurfaceClose(
+            pointer: NSEvent.mouseLocation,
+            panelFrame: panel.frame,
+            isExpanded: model?.isExpanded == true,
+            isDragging: dragCursorOffset != nil
+        ) else { return }
+        setHovering(false)
     }
 
     private func dragPanel() {
