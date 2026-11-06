@@ -1770,3 +1770,22 @@
 "Right Arrow" = "Стрілка вправо";
 "Up Arrow" = "Стрілка вгору";
 "Down Arrow" = "Стрілка вниз";
+
+/* Panels redesign WP-54 */
+"Audio" = "Аудіо";
+"Devices and levels." = "Пристрої та рівні.";
+"Test the microphone" = "Перевірити мікрофон";
+"Input level" = "Рівень входу";
+"System audio only" = "Лише системний звук";
+"Microphone level" = "Рівень мікрофона";
+"System audio level" = "Рівень системного звуку";
+"Test system audio" = "Перевірити системний звук";
+"Capture" = "Записати";
+"Speaker labels on this Mac" = "Мітки мовців на цьому Mac";
+"Identify speakers" = "Розпізнавати мовців";
+"After Stop, Diduny tells the voices apart on this Mac when the engine cannot." = "Після зупинки Diduny розрізняє голоси на цьому Mac, якщо рушій цього не вміє.";
+"Ready to use." = "Готово до роботи.";
+"My voice profile" = "Мій голосовий профіль";
+"Re-record" = "Перезаписати";
+"Labels your own voice as you." = "Позначає ваш голос як ваш.";
+"Set up" = "Налаштувати";
