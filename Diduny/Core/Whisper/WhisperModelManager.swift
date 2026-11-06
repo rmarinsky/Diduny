@@ -18,6 +18,15 @@ final class WhisperModelManager: NSObject {
 
         var id: String { name }
 
+        static let recommendedName = "ggml-large-v3-turbo"
+
+        /// Large v3 Turbo is the model the menus recommend.
+        var isRecommended: Bool { name == Self.recommendedName }
+
+        /// Whisper translates only into English, and only multilingual non-Turbo models do:
+        /// OpenAI says Turbo is not trained for translation (`translation-support.md` bug 1).
+        var translatesToEnglish: Bool { !isEnglishOnly && !name.contains("turbo") }
+
         var filename: String { "\(name).bin" }
 
         var downloadURL: URL {

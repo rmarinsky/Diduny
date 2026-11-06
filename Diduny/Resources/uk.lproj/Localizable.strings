@@ -1460,6 +1460,11 @@
 "Speaker labels · up to %lld" = "Мітки спікерів · до %lld";
 "Speaker labels" = "Мітки спікерів";
 "No speaker labels" = "Без міток спікерів";
+/* Engine language data (WP-11) */
+"Excellent accuracy" = "Відмінна точність";
+"High accuracy" = "Висока точність";
+"Good accuracy" = "Добра точність";
+"Moderate accuracy" = "Помірна точність";
 "English only" = "Лише англійська";
 "Translation via Diduny" = "Переклад через Diduny";
 "Your recording is saved." = "Запис збережено.";

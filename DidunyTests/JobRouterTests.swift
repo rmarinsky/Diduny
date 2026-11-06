@@ -7,6 +7,7 @@ final class JobRouterTests: XCTestCase {
         let displayName: String
         let requiresKey: Bool
         let models: [STTModel]
+        let traits = EngineTraits(runsOn: .cloud, obtainedBy: .ownKey, needs: [.ownKey], recommended: .none, languages: .system)
     }
 
     private let byok = "byok-fake"
@@ -31,7 +32,7 @@ final class JobRouterTests: XCTestCase {
 
     private var realtimeOnly: STTModel {
         STTModel(id: "rt", displayName: "RT", capabilities: caps(
-            realtime: RealtimeCaps(idleTimeoutSeconds: 15, diarization: false, manualCommit: true),
+            realtime: RealtimeCaps(idleTimeoutSeconds: 15, liveQuality: .final, diarization: false, manualCommit: true),
             languages: .set(["en", "uk"])
         ))
     }
@@ -40,7 +41,7 @@ final class JobRouterTests: XCTestCase {
         let translation = TranslationCaps(oneWay: true, twoWay: true)
         return STTModel(id: "native", displayName: "Native", capabilities: caps(
             batch: BatchCaps(diarization: true, translation: translation),
-            realtime: RealtimeCaps(diarization: true, manualCommit: true, translation: translation)
+            realtime: RealtimeCaps(liveQuality: .final, diarization: true, manualCommit: true, translation: translation)
         ))
     }
 

@@ -31,7 +31,8 @@ struct ProvidersSettingsView: View {
 
                 EnginesByModeSection()
 
-                ForEach(registry.modules, id: \.id) { module in
+                // Parakeet V3 and Apple Speech get their Providers column at WP-56; until then this page is unchanged.
+                ForEach(registry.modules.filter { !STTProviderID.onDeviceEngines.contains($0.id) }, id: \.id) { module in
                     if module.requiresKey {
                         ByokProviderSection(module: module, onRemoved: { resetJobs = $0 })
                     } else {

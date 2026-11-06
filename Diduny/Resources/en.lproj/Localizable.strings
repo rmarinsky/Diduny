@@ -1460,6 +1460,11 @@
 "Speaker labels · up to %lld" = "Speaker labels · up to %lld";
 "Speaker labels" = "Speaker labels";
 "No speaker labels" = "No speaker labels";
+/* Engine language data (WP-11) */
+"Excellent accuracy" = "Excellent accuracy";
+"High accuracy" = "High accuracy";
+"Good accuracy" = "Good accuracy";
+"Moderate accuracy" = "Moderate accuracy";
 "English only" = "English only";
 "Translation via Diduny" = "Translation via Diduny";
 "Your recording is saved." = "Your recording is saved.";

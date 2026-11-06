@@ -26,7 +26,7 @@ struct ElevenLabsProvider: STTProviderModule {
                     translation: nil
                 ),
                 realtime: nil,
-                // 90+ languages; the docs publish no machine-readable list, so nothing is blocked up front.
+                // 94 published languages are display data (`EngineLanguages.elevenLabs`); nothing is blocked up front.
                 languages: .all,
                 autoLanguageDetection: true,
                 batchDeletion: .byID,
@@ -41,6 +41,7 @@ struct ElevenLabsProvider: STTProviderModule {
                 realtime: RealtimeCaps(
                     maxSessionSeconds: nil,
                     idleTimeoutSeconds: 15,
+                    liveQuality: .final,
                     diarization: false,
                     manualCommit: true,
                     translation: nil
@@ -52,4 +53,11 @@ struct ElevenLabsProvider: STTProviderModule {
             )
         )
     ]
+    let traits = EngineTraits(
+        runsOn: .cloud,
+        obtainedBy: .ownKey,
+        needs: [.ownKey],
+        recommended: .none,
+        languages: EngineLanguages.elevenLabs
+    )
 }
