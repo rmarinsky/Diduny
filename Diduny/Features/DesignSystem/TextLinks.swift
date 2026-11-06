@@ -43,7 +43,7 @@ struct InlineLink: View {
                     .underline(isHovered)
                 if showsChevron {
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: DS.Size.symbolChevron, weight: .semibold))
                         .accessibilityHidden(true)
                 }
             }

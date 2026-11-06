@@ -49,9 +49,7 @@ struct SettingsLineRow<Control: View>: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                HStack(spacing: DS.Space.sm) { control() }
-                    .fixedSize()
-                    .frame(height: kind.slotHeight)
+                controls
             }
             .padding(.vertical, 9)
             if showsHairline {
@@ -59,8 +57,21 @@ struct SettingsLineRow<Control: View>: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text(title))
-        .accessibilityHint(caption.map { Text($0) } ?? Text(verbatim: ""))
+    }
+
+    /// With a caption the controls take the row label as their label and the caption as their
+    /// hint (spec 4.10); without one each control keeps its own label.
+    @ViewBuilder private var controls: some View {
+        let cluster = HStack(spacing: DS.Space.sm) { control() }
+            .fixedSize()
+            .frame(height: kind.slotHeight)
+        if let caption {
+            cluster
+                .accessibilityLabel(Text(title))
+                .accessibilityHint(Text(caption))
+        } else {
+            cluster
+        }
     }
 }
 
@@ -91,7 +102,7 @@ struct ExpanderButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(size: DS.Size.symbolChevron, weight: .semibold))
                 .foregroundStyle(DS.Palette.secondary)
                 .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 .animation(reduceMotion ? nil : DS.Motion.easeOut(DS.Motion.m14Expander.duration), value: isExpanded)
@@ -118,7 +129,7 @@ struct TrashButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "trash")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: DS.Size.symbolSmall, weight: .medium))
                 .foregroundStyle(isHovered ? DS.Palette.no : DS.Palette.secondary)
                 .frame(width: DS.Size.trash, height: DS.Size.trash)
                 .background(isHovered ? DS.Palette.chip : Color.clear,

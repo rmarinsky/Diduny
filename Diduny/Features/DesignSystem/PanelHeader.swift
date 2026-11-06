@@ -7,6 +7,10 @@ struct PanelHeader<Trailing: View>: View {
     let icon: PanelIconTile
     let title: LocalizedStringKey
     var status: PanelStatus?
+    /// For example `livePanel.title`, `outcome.title`, `prompt.title`.
+    var titleID: String?
+    /// For example `livePanel.status`, `outcome.subtitle`; its value is `live` or `notLive`.
+    var statusID: String?
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
@@ -18,7 +22,11 @@ struct PanelHeader<Trailing: View>: View {
                     .foregroundStyle(DS.Palette.text)
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
-                if let status { PanelStatusLine(status: status) }
+                    .accessibilityIdentifier(ifPresent: titleID)
+                if let status {
+                    PanelStatusLine(status: status)
+                        .accessibilityIdentifier(ifPresent: statusID)
+                }
             }
             Spacer(minLength: 0)
             trailing()
@@ -34,6 +42,11 @@ enum PanelStatus {
     case plain(LocalizedStringKey)
     /// Text in `no`.
     case error(LocalizedStringKey)
+
+    /// Accessibility value for the dot (test-plan 2.1): `live` only while live text runs.
+    var accessibilityValue: String {
+        if case .live = self { "live" } else { "notLive" }
+    }
 }
 
 private struct PanelStatusLine: View {
@@ -56,6 +69,8 @@ private struct PanelStatusLine: View {
         }
         .font(DS.Font.caption)
         .lineLimit(1)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(Text(verbatim: status.accessibilityValue))
     }
 }
 
@@ -64,8 +79,8 @@ struct PanelIconTile: View {
     enum Style { case accent, ok }
 
     let symbol: String
-    /// 15 in live panels, prompt, outcome and popups; 14 for the command home `mic`.
-    var symbolSize: CGFloat = 15
+    /// `symbolHeader` in live panels, prompt, outcome and popups; `symbolHomeHeader` for the command home `mic`.
+    var symbolSize: CGFloat = DS.Size.symbolHeader
     var style: Style = .accent
     /// Translate meeting: a `globe` badge at the bottom-right corner.
     var hasGlobeBadge = false
@@ -87,7 +102,7 @@ struct PanelIconTile: View {
             .overlay(alignment: .bottomTrailing) {
                 if hasGlobeBadge {
                     Image(systemName: "globe")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: DS.Size.symbolBadge, weight: .medium))
                         .foregroundStyle(DS.Palette.accent)
                         .frame(width: DS.Size.badge, height: DS.Size.badge)
                         .background(DS.Palette.panel, in: Circle())
@@ -121,7 +136,7 @@ struct PanelIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: kind == .minimize ? "minus" : "xmark")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: DS.Size.symbolIconButton, weight: .semibold))
                 .foregroundStyle(isHovered ? DS.Palette.text : DS.Palette.secondary)
                 .frame(width: DS.Size.iconButton, height: DS.Size.iconButton)
                 .background(DS.Palette.chip, in: RoundedRectangle(cornerRadius: DS.Radius.iconButton, style: .continuous))

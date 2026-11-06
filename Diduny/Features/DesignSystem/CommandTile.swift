@@ -15,12 +15,14 @@ struct CommandTile: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: DS.Space.sm) {
+                // Scaled to fit 16 x 16 so wide symbols (`person.2`) keep the 16 pt column and
+                // the text column stays 89 pt in a 133 pt tile (spec 4.6).
                 Image(systemName: symbol)
-                    .font(.system(size: 16, weight: .medium))
+                    .resizable()
+                    .fontWeight(.medium)
+                    .scaledToFit()
+                    .frame(width: DS.Size.symbolTile, height: DS.Size.symbolTile)
                     .foregroundStyle(DS.Palette.accent)
-                    // The prototype's icons are 16 wide; SF `person.2` is wider. Keep the 16 pt
-                    // column so the text column stays 89 pt in a 133 pt tile (spec 4.6).
-                    .frame(width: 16)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)

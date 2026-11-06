@@ -11,23 +11,10 @@ import Testing
 struct StaticComponentMetricsTests {
     private static let tolerance: CGFloat = 1
 
-    /// A window that is never shown and reports a Retina backing scale. SwiftUI snaps text and
-    /// frames to the pixel grid of the window's scale (whole points without a window), so this
-    /// measures what a 2x Mac draws, whatever display the runner has (spec 10.3: ±2 px at 2x).
-    private final class RetinaMeasuringWindow: NSWindow {
-        override var backingScaleFactor: CGFloat { 2 }
-    }
-
+    /// Measured in a `RetinaHostingWindow` (DidunyTests/Support): never shown, never key, no
+    /// events, so this suite needs no `DIDUNY_UI_TESTS` gate and runs on a dev Mac and on CI.
     private func size(_ view: some View, width: CGFloat? = nil) -> CGSize {
-        let host = NSHostingView(rootView: view.frame(width: width))
-        let window = RetinaMeasuringWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 800),
-            styleMask: [.borderless], backing: .buffered, defer: true
-        )
-        window.isReleasedWhenClosed = false
-        window.contentView = host
-        defer { window.contentView = nil }
-        return host.fittingSize
+        RetinaHost.fittingSize(view.frame(width: width))
     }
 
     /// How much wider `text` is in the rounded design than in the system design. The prototype
@@ -42,6 +29,16 @@ struct StaticComponentMetricsTests {
         #expect(abs(actual - expected) <= Self.tolerance, "\(what): \(actual), expected \(expected)")
     }
 
+    // MARK: - Measurement probe
+
+    @Test("The 2x override works: a text with a fractional width measures to half a point")
+    func retinaProbe() throws {
+        // "⌥ ×2" in 10 pt semibold rounded is 26.5 at 2x and 27 at 1x (whole points).
+        let width = size(Text(verbatim: "⌥ ×2").font(DS.Font.keycap)).width
+        try #require((width * 2).rounded() == width * 2, "not on the 2x pixel grid: \(width)")
+        try #require(width.rounded() != width, "snapped to whole points, the 2x override did not apply: \(width)")
+    }
+
     // MARK: - Mode segments (4.3)
 
     @Test("Mode segment track is 34 high and a segment 30")
@@ -54,17 +51,30 @@ struct StaticComponentMetricsTests {
         expectNear(size(ModeSegmentButton(title: "Cloud", isSelected: true) {}).height, DS.Size.segment, "segment height")
     }
 
-    @Test("Mode segments in a 226 pt track are 73.1, 55.3 and 89.6 wide")
-    func modeSegmentWidths() {
-        let ideal = ["This Mac", "Cloud", "Record only"].map { title in
-            size(ModeSegmentButton(title: LocalizedStringKey(title), isSelected: false) {}).width
+    /// Records the width each segment gets when laid out.
+    private final class WidthRecorder {
+        var widths: [Int: CGFloat] = [:]
+        func record(_ index: Int, _ width: CGFloat) { widths[index] = width }
+    }
+
+    @Test("Mode segments laid out in a 226 pt track are 73.1, 55.3 and 89.6 wide")
+    func modeSegmentWidths() throws {
+        // The same Layout and segment button `ModeSegments` composes, with a recorder behind each.
+        let recorder = WidthRecorder()
+        let titles = ["This Mac", "Cloud", "Record only"]
+        let track = ModeSegmentsLayout {
+            ForEach(Array(titles.enumerated()), id: \.offset) { index, title in
+                ModeSegmentButton(title: LocalizedStringKey(title), isSelected: index == 1) {}
+                    .background(GeometryReader { proxy in
+                        let _ = recorder.record(index, proxy.size.width)
+                        Color.clear
+                    })
+            }
         }
-        let widths = ModeSegmentsLayout.widths(
-            ideal: ideal,
-            available: 226 - DS.Size.segmentInset * 2,
-            spacing: DS.Size.segmentInset
-        )
-        #expect(widths.count == 3)
+        .padding(DS.Size.segmentInset)
+        .frame(width: 226)
+        _ = try #require(RetinaHost.render(track))
+        let widths = try titles.indices.map { try #require(recorder.widths[$0], "segment \($0) not laid out") }
         for (actual, expected) in zip(widths, [73.1, 55.3, 89.6] as [CGFloat]) {
             expectNear(actual, expected, "segment width")
         }
@@ -214,6 +224,26 @@ struct StaticComponentMetricsTests {
         expectNear(short.width, DS.Size.shortcutFieldMinWidth, "minimum width")
         expectNear(size(ShortcutField(shortcut: "⇧⌥⌘M", rowLabel: "Meeting")).width,
                    63.9 + roundedExtraWidth("⇧⌥⌘M", size: 12), "four-glyph width")
+    }
+
+    // MARK: - Accessibility values (4.4, 4.14)
+
+    @Test("Shortcut field speaks key names", arguments: [
+        ("⌥⌘D", "en", "Option Command D"),
+        ("⇧⌥⌘M", "en", "Shift Option Command M"),
+        ("Esc", "en", "Escape"),
+        ("⌃Space", "en", "Control Space"),
+        ("⌃Space", "uk", "Control Пробіл"),
+        ("⌘←", "uk", "Command Стрілка вліво"),
+    ])
+    func spokenShortcut(_ shortcut: String, _ language: String, _ expected: String) {
+        #expect(ShortcutField.spokenName(shortcut, locale: Locale(identifier: language)) == expected)
+    }
+
+    @Test("Stop exposes its keycap and cancel hint as the accessibility value")
+    func stopAccessibilityValue() {
+        #expect(StopButton.accessibilityValue(shortcut: "⌥ ×2", cancelHint: "Cancel: Esc ×3") == "⌥ ×2, Cancel: Esc ×3")
+        #expect(StopButton.accessibilityValue(shortcut: nil, cancelHint: nil).isEmpty)
     }
 
     @Test("Header link 23, progress row 38, progress bar 4, expander 26, trash 24, preview 132 x 78")

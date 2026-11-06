@@ -6,13 +6,19 @@ import Testing
 /// Renders every WP-21 component in light and dark for the designer's review against
 /// prototype v9. No pixel assertion: the test only checks that a non-empty PNG was made.
 /// PNGs go to `$SCREENSHOT_DIR/components` (the runner strips `TEST_RUNNER_` from
-/// `TEST_RUNNER_SCREENSHOT_DIR`); without it they are rendered and dropped. Rendered without
-/// presenting a window, as `VoiceTranslationTests` does, so it needs no UI-test gate.
+/// `TEST_RUNNER_SCREENSHOT_DIR`); without it they are rendered and dropped. Rendered at 2x in a
+/// `RetinaHostingWindow` that is never shown, so it needs no UI-test gate. Each sample is drawn
+/// in light and dark, in English and Ukrainian (overlong Ukrainian strings go to WP-70).
 @MainActor
 struct ComponentRenderTests {
-    enum Appearance: String, CaseIterable, Sendable, CustomTestStringConvertible {
-        case light, dark
-        var name: NSAppearance.Name { self == .light ? .aqua : .darkAqua }
+    enum Variant: String, CaseIterable, Sendable, CustomTestStringConvertible {
+        case lightEN = "light-en", darkEN = "dark-en", lightUK = "light-uk", darkUK = "dark-uk"
+
+        var appearance: NSAppearance? {
+            NSAppearance(named: self == .lightEN || self == .lightUK ? .aqua : .darkAqua)
+        }
+
+        var locale: Locale { Locale(identifier: self == .lightUK || self == .darkUK ? "uk" : "en") }
         var testDescription: String { rawValue }
     }
 
@@ -60,25 +66,21 @@ struct ComponentRenderTests {
     private static let outputDirectory: URL? = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"]
         .map { URL(fileURLWithPath: $0).appendingPathComponent("components", isDirectory: true) }
 
-    @Test("Component renders to a PNG", arguments: Sample.allCases, Appearance.allCases)
-    func render(_ sample: Sample, _ appearance: Appearance) throws {
+    @Test("Component renders to a PNG", arguments: Sample.allCases, Variant.allCases)
+    func render(_ sample: Sample, _ variant: Variant) throws {
         let content = sample.view
             .frame(width: sample.width, alignment: .leading)
             .padding(DS.Panel.padding)
             .background(sample.background)
-        let host = NSHostingView(rootView: content)
-        host.appearance = NSAppearance(named: appearance.name)
-        host.frame = CGRect(origin: .zero, size: host.fittingSize)
-        host.layoutSubtreeIfNeeded()
-        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-        host.cacheDisplay(in: host.bounds, to: bitmap)
+            .environment(\.locale, variant.locale)
+        let bitmap = try #require(RetinaHost.render(content, appearance: variant.appearance))
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
         #expect(!png.isEmpty)
-        #expect(host.bounds.width > 0 && host.bounds.height > 0)
+        #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
 
         if let directory = Self.outputDirectory {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try png.write(to: directory.appendingPathComponent("\(sample.rawValue)-\(appearance.rawValue).png"))
+            try png.write(to: directory.appendingPathComponent("\(sample.rawValue)-\(variant.rawValue).png"))
         }
     }
 }

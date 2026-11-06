@@ -21,20 +21,19 @@ struct StopButton: View {
                 HStack(spacing: DS.Space.sm) {
                     RoundedRectangle(cornerRadius: DS.Radius.stopGlyph, style: .continuous)
                         .fill(Color.white)
-                        .frame(width: 10, height: 10)
+                        .frame(width: DS.Size.stopGlyph, height: DS.Size.stopGlyph)
                     VStack(alignment: .leading, spacing: 0) {
                         Text("Stop").font(DS.Font.headline)
                         if let cancelHint {
                             Text(verbatim: cancelHint)
                                 .font(DS.Font.footnote)
                                 .lineLimit(1)
-                                .accessibilityIdentifier("livePanel.stop.cancelHint")
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if let shortcut {
-                    Keycap(text: shortcut).accessibilityIdentifier("livePanel.stop.keycap")
+                    Keycap(text: shortcut)
                 }
             }
             .foregroundStyle(Color.white)
@@ -47,6 +46,13 @@ struct StopButton: View {
         .opacity(isEnabled ? 1 : 0.5)
         .accessibilityLabel(Text("Stop"))
         .accessibilityHint(Text(verbatim: accessibilityHint))
+        // XCUI cannot reach children inside a Button label, so the keycap and the cancel hint
+        // are the button's value, for example "⌥ ×2, Cancel: Esc ×3".
+        .accessibilityValue(Text(verbatim: Self.accessibilityValue(shortcut: shortcut, cancelHint: cancelHint)))
+    }
+
+    static func accessibilityValue(shortcut: String?, cancelHint: String?) -> String {
+        [shortcut, cancelHint].compactMap { $0 }.joined(separator: ", ")
     }
 }
 

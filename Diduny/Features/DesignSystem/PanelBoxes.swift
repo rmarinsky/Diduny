@@ -1,14 +1,5 @@
 import SwiftUI
 
-extension DS.Size {
-    /// Transcript and calm box height in meeting panels (D9).
-    static let transcriptMeeting: CGFloat = 170
-    /// Transcript and calm box height in dictation panels (D9).
-    static let transcriptDictation: CGFloat = 120
-    /// The result box grows with its text up to this, then scrolls.
-    static let resultMaxHeight: CGFloat = 170
-}
-
 /// Live transcript (design-spec 4.18): `box` fill, radius 8, padding 10, 12.5 `text` at line
 /// height 18.1, paragraphs 6 apart, fixed height, content kept at the bottom as it grows.
 struct TranscriptBox<Content: View>: View {
@@ -21,8 +12,8 @@ struct TranscriptBox<Content: View>: View {
                 .font(DS.Font.content)
                 .foregroundStyle(DS.Palette.text)
                 .lineSpacing(DS.Font.LineSpacing.content)
-                .frame(maxWidth: .infinity, minHeight: height - 20, alignment: .bottomLeading)
-                .padding(10)
+                .frame(maxWidth: .infinity, minHeight: height - DS.Size.boxPadding * 2, alignment: .bottomLeading)
+                .padding(DS.Size.boxPadding)
         }
         .defaultScrollAnchor(.bottom)
         .frame(height: height)
@@ -47,12 +38,12 @@ struct CalmBox: View {
             Text(detail)
                 .font(DS.Font.meta)
                 .foregroundStyle(DS.Palette.secondary)
-                .frame(maxWidth: 230)
+                .frame(maxWidth: DS.Size.calmDetailMaxWidth)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("livePanel.calm.detail")
         }
         .multilineTextAlignment(.center)
-        .padding(16)
+        .padding(DS.Space.lg)
         .frame(maxWidth: .infinity)
         .frame(height: height)
         .background(DS.Palette.box, in: RoundedRectangle(cornerRadius: DS.Radius.box, style: .continuous))
@@ -75,7 +66,7 @@ struct ResultBox: View {
                     .lineSpacing(DS.Font.LineSpacing.content)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
+                    .padding(DS.Size.boxPadding)
             }
         }
         .background(DS.Palette.box, in: RoundedRectangle(cornerRadius: DS.Radius.box, style: .continuous))

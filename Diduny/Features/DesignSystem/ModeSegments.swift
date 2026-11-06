@@ -64,12 +64,12 @@ struct ModeSegments<ID: Hashable>: View {
 
     var body: some View {
         ModeSegmentsLayout {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+            ForEach(items, id: \.id) { item in
                 ModeSegmentButton(title: item.title, isSelected: item.id == selection) {
                     selection = item.id
                 }
                 .disabled(!item.isEnabled)
-                .accessibilityIdentifier(item.accessibilityID ?? "")
+                .accessibilityIdentifier(ifPresent: item.accessibilityID)
             }
         }
         .padding(DS.Size.segmentInset)
@@ -116,5 +116,16 @@ struct ModeSegmentButton: View {
         .buttonStyle(PressScaleButtonStyle(scale: DS.Motion.pressScale))
         .opacity(isEnabled ? 1 : 0.5)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+extension View {
+    /// Sets the accessibility identifier only when there is one.
+    @ViewBuilder func accessibilityIdentifier(ifPresent identifier: String?) -> some View {
+        if let identifier {
+            accessibilityIdentifier(identifier)
+        } else {
+            self
+        }
     }
 }
