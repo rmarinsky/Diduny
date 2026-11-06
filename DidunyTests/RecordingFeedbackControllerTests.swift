@@ -164,6 +164,30 @@ struct RecordingFeedbackControllerTests {
         #expect(!sut.store.displayText.contains("hidden"))
     }
 
+    @Test("Meeting stop dismisses minimized live feedback still finalizing")
+    func meetingStopDismissesMinimizedFinalizingFeedback() {
+        let settings = SettingsStorage.shared
+        let previousSurface = settings.recordingFeedbackSurface
+        let previousShowLiveTranscriptModal = settings.showLiveTranscriptModal
+        defer {
+            settings.recordingFeedbackSurface = previousSurface
+            settings.showLiveTranscriptModal = previousShowLiveTranscriptModal
+            DictationOverlayController.shared.dismiss()
+        }
+
+        settings.recordingFeedbackSurface = .compactPanel
+        settings.showLiveTranscriptModal = false
+        let sut = DictationOverlayController.shared
+        sut.begin(mode: .meeting)
+        #expect(EdgeCommandPanelController.shared.isLiveFeedbackMinimized)
+
+        // Stop: the panel shows Finalizing, then the meeting ends in .success → hide().
+        sut.startFinalizing(mode: .meeting)
+        sut.hide()
+
+        #expect(!EdgeCommandPanelController.shared.isLiveFeedbackMinimized)
+    }
+
     @Test("Error dismisses minimized live feedback")
     func errorDismissesMinimizedLiveFeedback() {
         let settings = SettingsStorage.shared
