@@ -57,12 +57,13 @@ struct PageScaffold<Trailing: View, Content: View>: View {
         HStack(alignment: .center, spacing: DS.Space.lg) {
             VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text(title)
-                    .font(DS.Font.pageTitle)
+                    .font(DS.Font.settingsTitle)
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
                 if let subtitle {
                     Text(subtitle)
-                        .font(DS.Font.callout)
+                        .font(DS.Font.body)
+                        .lineSpacing(DS.Font.LineSpacing.lead)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -72,7 +73,8 @@ struct PageScaffold<Trailing: View, Content: View>: View {
         }
         .padding(.horizontal, DS.Layout.pagePadding)
         .padding(.top, DS.Layout.pagePadding)
-        .padding(.bottom, DS.Space.lg)
+        // Lead to first block 14 (design-spec 3.5).
+        .padding(.bottom, 14)
         .frame(maxWidth: DS.Layout.outerColumnMaxWidth, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
     }

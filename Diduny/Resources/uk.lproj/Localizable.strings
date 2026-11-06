@@ -1846,3 +1846,8 @@
 "Record it?" = "Записати її?";
 "Transcript after Stop" = "Транскрипт після зупинки";
 "Keep suggesting when a meeting starts" = "Пропонувати запис, коли починається зустріч";
+
+/* Panels redesign WP-50 */
+"Modes" = "Режими";
+"Languages" = "Мови";
+"Audio" = "Аудіо";

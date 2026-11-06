@@ -24,7 +24,7 @@ struct MainWindowView: View {
                 topInset: MainWindowLayout.sidebarTopInset
             )
             .frame(width: MainWindowLayout.sidebarWidth)
-            .background(.bar)
+            .background(DS.Palette.sidebar)
 
             Rectangle()
                 .fill(Color(.separatorColor).opacity(0.35))
@@ -34,9 +34,9 @@ struct MainWindowView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("section.\(selectedSection.rawValue)")
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(Color(.windowBackgroundColor))
+                .background(DS.Palette.window)
         }
-        .background(Color(.windowBackgroundColor))
+        .background(DS.Palette.window)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
         .frame(minWidth: 1000, minHeight: 680)
         .onAppear {
@@ -82,8 +82,12 @@ struct MainWindowView: View {
             MeetingSettingsView()
         case .general:
             GeneralSettingsView()
+        case .modes:
+            ModesSettingsView()
+        case .languages:
+            LanguagesSettingsView()
         case .audioDictation:
-            AudioDictationSettingsView()
+            AudioSettingsView()
                 .environment(audioDeviceManager)
         case .models:
             OfflineModelsSettingsView()

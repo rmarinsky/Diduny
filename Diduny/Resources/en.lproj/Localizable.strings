@@ -1846,3 +1846,8 @@
 "Record it?" = "Record it?";
 "Transcript after Stop" = "Transcript after Stop";
 "Keep suggesting when a meeting starts" = "Keep suggesting when a meeting starts";
+
+/* Panels redesign WP-50 */
+"Modes" = "Modes";
+"Languages" = "Languages";
+"Audio" = "Audio";
