@@ -273,11 +273,13 @@ final class EdgeCommandPanelController: NSObject {
         model?.selectMeetingSuggestionSegment(segment) ?? false
     }
 
-    /// Today's settings until WP-13: Cloud when live meeting transcription is on, else This Mac.
+    /// Settings > Modes (WP-13): "Starts in" and each segment's engine.
     static func todaysMeetingPromptDefaults() -> MeetingPromptDefaults {
-        var defaults = MeetingPromptDefaults.standard
-        defaults.startsIn = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled ? .cloud : .thisMac
-        return defaults
+        let modeDefaults = SettingsStorage.shared.modeDefaults
+        return MeetingPromptDefaults(
+            startsIn: modeDefaults.meetingStartsIn,
+            engines: Dictionary(uniqueKeysWithValues: MeetingSegment.allCases.map { ($0, modeDefaults.engine(for: $0)) })
+        )
     }
 
     func dismissMeetingSuggestion(id: UUID) {

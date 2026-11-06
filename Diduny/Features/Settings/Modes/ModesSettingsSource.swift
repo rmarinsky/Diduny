@@ -54,8 +54,7 @@ protocol ModesSettingsSource: AnyObject {
     func setPressCount(_ count: Int, for job: STTJob)
 }
 
-/// The mode x engine rules (05 2.1.1 and section 3). WP-13's `ModeEngineRules` (ADR-0012 D3) conforms to this
-/// once it lands; until then `InterimModeEngineRules` holds the same two rules.
+/// The mode x engine rules (05 2.1.1 and section 3), backed by WP-13's `ModeEngineRules` (ADR-0012 D3).
 protocol ModeEngineRuleSource {
     /// Engines a mode (and Meeting segment) offers, in `all` order. Readiness is applied by the caller.
     func offeredEngines(job: STTJob, segment: MeetingSegment?, all: [EngineCapabilities]) -> [EngineCapabilities]
@@ -63,27 +62,14 @@ protocol ModeEngineRuleSource {
     func segment(implyingEngine engine: EngineCapabilities) -> MeetingSegment
 }
 
-/// Stand-in for WP-13's `ModeEngineRules`. Reads capabilities only, never the engine id (rule C1).
-struct InterimModeEngineRules: ModeEngineRuleSource {
+/// WP-13's `ModeEngineRules` (ADR-0012 D3) as the Modes page reads it: one flat list in `all` order.
+struct StandardModeEngineRules: ModeEngineRuleSource {
     func offeredEngines(job: STTJob, segment: MeetingSegment?, all: [EngineCapabilities]) -> [EngineCapabilities] {
-        all.filter { caps in
-            switch job {
-            case .file:
-                return caps.traits.runsOn == .thisMac
-            case .meeting:
-                switch segment ?? .cloud {
-                case .thisMac: return caps.traits.runsOn == .thisMac && caps.liveMeetingText != .none
-                case .cloud: return caps.traits.runsOn == .cloud
-                case .recordOnly: return true
-                }
-            case .dictation, .dictationTranslation, .meetingTranslation:
-                return true
-            }
-        }
+        let offered = Set(ModeEngineRules.offeredEngines(job: job, segment: segment, available: all).flatMap(\.engines))
+        return all.filter { offered.contains($0.id) }
     }
 
     func segment(implyingEngine engine: EngineCapabilities) -> MeetingSegment {
-        if engine.traits.runsOn == .cloud { return .cloud }
-        return engine.liveMeetingText == .none ? .recordOnly : .thisMac
+        ModeEngineRules.segment(implyingEngine: engine)
     }
 }

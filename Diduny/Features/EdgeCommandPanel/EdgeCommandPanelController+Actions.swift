@@ -59,7 +59,7 @@ extension EdgeCommandPanelController {
         model?.pickEngine(rowID: rowID)
     }
 
-    // MARK: Inputs until WP-13 and WP-17 land
+    // MARK: Inputs until WP-17 lands
 
     static func engineCapabilities(_ id: EngineID) -> EngineCapabilities? {
         ProviderRegistry.shared.module(id: id.rawValue).flatMap {
@@ -75,19 +75,16 @@ extension EdgeCommandPanelController {
         return .ready
     }
 
-    /// Today's per-job defaults; WP-13 replaces this with `ModeDefaults` and the meeting "Starts in".
+    /// Per-mode defaults from Settings > Modes (WP-13, ADR-0012 D4), with the meeting "Starts in".
     static func currentDefaults() -> CommandHomeDefaults {
-        let defaults = SettingsStorage.shared.providerDefaults
-        func engine(_ job: STTJob) -> EngineID {
-            EngineID(rawValue: defaults.selection(for: job).providerID) ?? .didunyCloud
-        }
-        let meeting = engine(.meeting)
+        let modeDefaults = SettingsStorage.shared.modeDefaults
+        let segment = modeDefaults.meetingStartsIn
         return CommandHomeDefaults(
-            dictation: engine(.dictation),
-            translation: engine(.dictationTranslation),
-            meetingSegment: engineCapabilities(meeting).map(CommandHome.segment(for:)) ?? .cloud,
-            meetingEngine: meeting,
-            translateMeeting: engine(.meetingTranslation)
+            dictation: modeDefaults.engine(for: .dictation),
+            translation: modeDefaults.engine(for: .dictationTranslation),
+            meetingSegment: segment,
+            meetingEngine: modeDefaults.engine(for: segment),
+            translateMeeting: modeDefaults.engine(for: .meetingTranslation)
         )
     }
 }

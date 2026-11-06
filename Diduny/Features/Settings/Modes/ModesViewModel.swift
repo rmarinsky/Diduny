@@ -25,7 +25,7 @@ final class ModesViewModel {
 
     init(
         source: any ModesSettingsSource,
-        rules: any ModeEngineRuleSource = InterimModeEngineRules(),
+        rules: any ModeEngineRuleSource = StandardModeEngineRules(),
         readiness: any EngineReadinessSource,
         engines: [EngineCapabilities],
         isSignedIn: @escaping () -> Bool
