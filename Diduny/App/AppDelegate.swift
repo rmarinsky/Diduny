@@ -145,6 +145,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var meetingPipelineGeneration: UInt64 = 0
     var activeMeetingTranscriptionSessionID: UUID?
     var activeMeetingTranscriptionProvider: TranscriptionProvider?
+    /// The segment and engine the running meeting started with (WP-17); nil when idle.
+    var activeMeetingStartRoute: MeetingStartRoute?
     var meetingTranslationPipelineTask: Task<Void, Never>?
     /// In-flight meeting realtime WS connect, launched before capture setup so
     /// the handshake overlaps it. Held so stop/cancel can abort a connect that
@@ -220,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var meetingTranslationTimestampBackfill = TranslationTimestampBackfill()
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
-        switch routedProvider(for: .dictation, legacy: SettingsStorage.shared.effectiveTranscriptionProvider) {
+        switch routedProvider(for: .dictation) {
         case .cloud: transcriptionService
         case .local: whisperTranscriptionService
         }
@@ -637,8 +639,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func recoverRecording(from state: RecoveryState) {
         Task {
             let translationTarget = state.translationTargetLanguage
-                ?? (SettingsStorage.shared.effectiveTranslationProvider == .local
-                    ? "en" : SettingsStorage.shared.resolveTranslationLanguagePair().languageB)
+                ?? (self.routedTranslationProvider == .local
+                    ? "en" : SettingsStorage.shared.effectiveDictationTranslationTargetLanguage)
             var recoveredRecordingID: UUID?
             let processor = RecoveryRecordingProcessor(
                 save: { audioData, state, duration in
@@ -676,13 +678,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     case .voice:
                         rawText = try await self.activeTranscriptionService.transcribe(audioData: audioData)
                     case .meeting:
-                        if SettingsStorage.shared.effectiveTranscriptionProvider == .cloud {
+                        if self.routedProvider(for: .meeting) == .cloud {
                             rawText = try await self.transcriptionService.transcribeMeeting(audioData: audioData)
                         } else {
                             rawText = try await self.whisperTranscriptionService.transcribe(audioData: audioData)
                         }
                     case .translation:
-                        if SettingsStorage.shared.effectiveTranslationProvider == .local {
+                        if self.routedTranslationProvider == .local {
                             rawText = try await self.whisperTranscriptionService.translateAndTranscribe(
                                 audioData: audioData,
                                 targetLanguage: translationTarget
@@ -695,8 +697,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             )
                         }
                     case .meetingTranslation:
-                        let service: TranscriptionServiceProtocol = SettingsStorage.shared
-                            .effectiveTranslationProvider == .local
+                        let service: TranscriptionServiceProtocol = self.routedProvider(for: .meetingTranslation) == .local
                             ? self.whisperTranscriptionService : self.transcriptionService
                         rawText = try await service.translateAndTranscribe(audioData: audioData)
                     }
@@ -1256,7 +1257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if state != .recording, state != .processing { whisperTranscriptionService.endRecordingHold() }
         if state == .recording {
-            startMeetingSilenceMonitor { [weak self] in
+            startMeetingSilenceMonitor(job: .meeting) { [weak self] in
                 guard self?.appState.meetingRecordingState == .recording else { return }
                 await self?.stopMeetingRecording()
             }
@@ -1278,7 +1279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func handleMeetingTranslationStateChange(_ state: RecordingState) {
         if state == .recording {
-            startMeetingSilenceMonitor { [weak self] in
+            startMeetingSilenceMonitor(job: .meetingTranslation) { [weak self] in
                 guard self?.appState.meetingTranslationRecordingState == .recording else { return }
                 await self?.stopMeetingTranslationRecording()
             }
@@ -1300,8 +1301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var translationTargetLanguage: String {
         activeTranslationTargetLanguage
             ?? activeTranslationLanguagePair?.languageB
-            ?? (SettingsStorage.shared.effectiveTranslationProvider == .local
-                ? "en" : SettingsStorage.shared.defaultTranslationLanguagePair.languageB)
+            ?? SettingsStorage.shared.effectiveDictationTranslationTargetLanguage
     }
 
     var translationTargetLabel: String {

@@ -16,10 +16,8 @@ extension EdgeCommandPanelController {
             if appDelegate.appState.translationRecordingState == .idle {
                 guard appDelegate.canStartRecording(kind: .translation) else { showCollapsed(); return }
                 let start = model.consumeStart(.translate, caps: Self.engineCapabilities)
-                let pair = CommandHome.translatePair(
-                    target: start.targetLanguage ?? model.target, pair: model.pair, yourLanguages: model.yourLanguages
-                )
-                Task { await appDelegate.startTranslationRecording(languagePair: pair) }
+                let target = start.targetLanguage ?? model.target
+                Task { await appDelegate.startTranslationRecording(targetLanguage: target) }
             } else {
                 appDelegate.toggleTranslationRecording()
             }
@@ -30,9 +28,12 @@ extension EdgeCommandPanelController {
             }
             guard appDelegate.canStartRecording(kind: .meeting) else { showCollapsed(); return }
             let start = model.consumeStart(.meeting, caps: Self.engineCapabilities)
-            if start.isPick {
-                // The segment follows the picked engine (02 section 8 step 0).
-                appDelegate.toggleMeetingRecording(provider: start.segment == .cloud ? .cloud : .local)
+            if start.isPick, let segment = start.segment {
+                // The segment follows the picked engine (02 section 8 step 0); the pick holds for this meeting.
+                appDelegate.startMeeting(appDelegate.meetingStartRoute(
+                    segment: segment,
+                    override: ModeEngineRules.selection(engine: start.engine, job: .meeting, segment: segment)
+                ))
             } else {
                 appDelegate.toggleMeetingRecording()
             }
@@ -59,7 +60,7 @@ extension EdgeCommandPanelController {
         model?.pickEngine(rowID: rowID)
     }
 
-    // MARK: Inputs until WP-17 lands
+    // MARK: Inputs
 
     static func engineCapabilities(_ id: EngineID) -> EngineCapabilities? {
         ProviderRegistry.shared.module(id: id.rawValue).flatMap {
@@ -67,12 +68,8 @@ extension EdgeCommandPanelController {
         }
     }
 
-    /// Only what decides a row's presence today: a missing key and Parakeet on an Intel Mac.
     static func engineReadiness(_ id: EngineID) -> EngineReadiness {
-        guard let module = ProviderRegistry.shared.module(id: id.rawValue) else { return .unavailable }
-        if module.requiresKey, !ProviderKeyStore.shared.hasKey(for: module.id) { return .needsKey }
-        if id == .parakeet, !ParakeetModelStore.isSupportedHardware { return .unsupportedHardware }
-        return .ready
+        LiveEngineReadinessSource().readiness(of: id)
     }
 
     /// Per-mode defaults from Settings > Modes (WP-13, ADR-0012 D4), with the meeting "Starts in".

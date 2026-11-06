@@ -239,13 +239,6 @@ struct EdgeCommandPanelModelTests {
         #expect(model.selectMeetingSuggestionSegment(.recordOnly))
     }
 
-    @Test("Today's start path maps a segment to Cloud or Local")
-    func legacyProviderMapping() {
-        #expect(MeetingPromptStart(segment: .cloud, engine: .didunyCloud).legacyProvider == .cloud)
-        #expect(MeetingPromptStart(segment: .thisMac, engine: .whisper).legacyProvider == .local)
-        #expect(MeetingPromptStart(segment: .recordOnly, engine: .parakeet).legacyProvider == .local)
-    }
-
     @Test("Paid Pro access works without a whitelist and without remaining free hours")
     func paidProCloudAccessIsRecognized() throws {
         let data = Data(#"{"isWhitelisted":false,"isUnlimited":true,"usedHours":8,"limitHours":null,"remainingHours":null,"usedMs":28800000,"limitMs":null,"remainingMs":null}"#.utf8)

@@ -50,6 +50,17 @@ extension SettingsStorage {
         set { set(newValue, .meetingTranslationSilenceAutoStopSeconds, Self.meetingSilenceAutoStopRange) }
     }
 
+    /// "Stop after silence" of a mode; Files has none and reads Dictation's.
+    func silenceAutoStop(for job: STTJob) -> ModeSilence {
+        switch job {
+        case .dictation, .file: ModeSilence(enabled: dictationSilenceAutoStopEnabled, seconds: dictationSilenceAutoStopSeconds)
+        case .dictationTranslation: ModeSilence(enabled: translationSilenceAutoStopEnabled, seconds: translationSilenceAutoStopSeconds)
+        case .meeting: ModeSilence(enabled: meetingSilenceAutoStopEnabled, seconds: meetingSilenceAutoStopSeconds)
+        case .meetingTranslation:
+            ModeSilence(enabled: meetingTranslationSilenceAutoStopEnabled, seconds: meetingTranslationSilenceAutoStopSeconds)
+        }
+    }
+
     private func bool(_ key: ModeDefaultsKey) -> Bool? {
         defaults.object(forKey: key.rawValue) == nil ? nil : defaults.bool(forKey: key.rawValue)
     }

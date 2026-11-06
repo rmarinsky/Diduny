@@ -159,8 +159,8 @@ extension AppDelegate {
 
         // Meeting translation has its own engine setting; live two-way translation runs on Diduny Cloud,
         // whatever engine plain meetings use.
-        if onDeviceSelection(for: .meetingTranslation) != nil {
-            // Parakeet / Apple: record and transcribe on this Mac, then translate the final text once.
+        if onDeviceSelection(for: .meetingTranslation) != nil || modeRoute(for: .meetingTranslation).engine == .whisper {
+            // Parakeet / Apple / Whisper: record and transcribe on this Mac, then translate the final text once.
             if let message = onDeviceEngineStartError(for: .meetingTranslation) {
                 DictationOverlayController.shared.showInfo(message: message, duration: 4)
                 return

@@ -4,14 +4,33 @@ import Foundation
 // MARK: - Provider Routing
 
 extension AppDelegate {
-    /// Engine for a job, resolved through ProviderRegistry + JobRouter from the per-job default.
-    func routedProvider(for job: STTJob, legacy: TranscriptionProvider) -> TranscriptionProvider {
-        ProviderEngineRouting.engine(
-            for: job,
-            selection: SettingsStorage.shared.providerDefaults.selection(for: job),
-            legacy: legacy,
-            context: providerRoutingContext
+    /// What a job runs now, from Settings > Modes (WP-17). `.meeting` reads the running meeting, else "Starts in".
+    func modeRoute(for job: STTJob, segment: MeetingSegment? = nil, override: JobProviderSelection? = nil) -> RunTimeRoute {
+        if job == .meeting, segment == nil, override == nil, let running = activeMeetingStartRoute {
+            return RunTimeRoute(engine: running.engine, modelID: running.modelID, unavailable: nil,
+                                baseProvider: running.provider)
+        }
+        let whisper = WhisperModelManager.shared
+        return RunTimeRouting.route(
+            job: job,
+            segment: segment,
+            override: override,
+            defaults: SettingsStorage.shared.modeDefaults,
+            readiness: LiveEngineReadinessSource(),
+            whisper: .init(downloaded: whisper.downloadedModels, selected: whisper.selectedModel()?.name),
+            signedIn: AuthService.hasStoredSession
         )
+    }
+
+    /// How a meeting starts in `segment` (default "Starts in"); `override` is a pick for this meeting only.
+    func meetingStartRoute(segment: MeetingSegment? = nil, override: JobProviderSelection? = nil) -> MeetingStartRoute {
+        let segment = segment ?? SettingsStorage.shared.modeDefaults.meetingStartsIn
+        return RunTimeRouting.meetingStart(segment: segment, route: modeRoute(for: .meeting, segment: segment, override: override))
+    }
+
+    /// The Cloud/Local flow for a job.
+    func routedProvider(for job: STTJob) -> TranscriptionProvider {
+        modeRoute(for: job).baseProvider
     }
 
     var providerRoutingContext: RoutingContext {
@@ -28,25 +47,31 @@ extension AppDelegate {
         ProviderEngineRouting.byokPlan(
             for: .dictation,
             providerID: STTProviderID.elevenLabs,
-            selection: SettingsStorage.shared.providerDefaults.selection(for: .dictation),
+            selection: modeRoute(for: .dictation).selection,
             context: providerRoutingContext
         )
     }
 
     /// Parakeet V3 or Apple selected for the job and ready on this Mac; they transcribe the capture after Stop.
     func onDeviceEngine(for job: STTJob) -> (any BenchmarkEngine)? {
-        OnDeviceEngines.engine(id: SettingsStorage.shared.providerDefaults.selection(for: job).providerID)
+        OnDeviceEngines.engine(id: onDeviceSelection(for: job))
     }
 
-    /// Parakeet / Apple id when the user picked one for the job, ready or not.
+    /// Parakeet / Apple id when the job runs one, ready or not. A meeting reads its after-Stop engine.
     func onDeviceSelection(for job: STTJob) -> String? {
-        let id = SettingsStorage.shared.providerDefaults.selection(for: job).providerID
-        return STTProviderID.onDeviceEngines.contains(id) ? id : nil
+        if job == .meeting { return (activeMeetingStartRoute ?? meetingStartRoute()).afterStopEngineID }
+        return modeRoute(for: job).onDeviceEngineID
     }
 
     /// Error to show at Start when the job's on-device engine is selected but not ready; nil when fine.
     func onDeviceEngineStartError(for job: STTJob) -> String? {
         guard onDeviceSelection(for: job) != nil, onDeviceEngine(for: job) == nil else { return nil }
+        return OnDeviceEngines.notReadyMessage
+    }
+
+    /// Same check for a meeting about to start in a given segment.
+    func onDeviceEngineStartError(for start: MeetingStartRoute) -> String? {
+        guard let id = start.afterStopEngineID, OnDeviceEngines.engine(id: id) == nil else { return nil }
         return OnDeviceEngines.notReadyMessage
     }
 
@@ -60,7 +85,9 @@ extension AppDelegate {
     /// Transcribes a capture with the engine the user picked for the job. Never falls back to another provider.
     func transcribeWithOwnEngine(job: STTJob, audioData: Data) async throws -> String {
         guard onDeviceSelection(for: job) != nil else {
-            guard SettingsStorage.shared.providerDefaults.selection(for: job).providerID == STTProviderID.elevenLabs else {
+            let engine = modeRoute(for: job).engine
+            if engine == .whisper { return try await whisperTranscriptionService.transcribe(audioData: audioData) }
+            guard engine == .elevenLabs else {
                 throw TranscriptionError.apiError(String(localized: "The selected engine isn't available. Check Settings › Providers."))
             }
             return try await transcribeWithElevenLabsBatch(audioData: audioData)
@@ -82,7 +109,7 @@ extension AppDelegate {
         ProviderEngineRouting.byokPlan(
             for: .meeting,
             providerID: STTProviderID.elevenLabs,
-            selection: SettingsStorage.shared.providerDefaults.selection(for: .meeting),
+            selection: (activeMeetingStartRoute ?? meetingStartRoute()).selection,
             context: providerRoutingContext
         )
     }
@@ -103,7 +130,9 @@ extension AppDelegate {
 
     /// Live Apple session for a meeting when Apple is the meeting engine and ready; nil otherwise.
     func makeAppleMeetingService() -> AppleLiveTranscriptionService? {
-        guard onDeviceSelection(for: .meeting) == STTProviderID.appleSpeech, onDeviceEngine(for: .meeting) != nil else { return nil }
+        let start = activeMeetingStartRoute ?? meetingStartRoute()
+        guard start.segment != .recordOnly, start.engine == .appleSpeech,
+              OnDeviceEngines.engine(id: STTProviderID.appleSpeech) != nil else { return nil }
         return AppleLiveTranscriptionService(farField: true)
     }
 
@@ -124,16 +153,19 @@ extension AppDelegate {
         RecordingQueueService.shared.enqueue([recordingID], action: .transcribeDiarize, providerOverride: .cloud)
     }
 
-    /// Whether dictation translation runs on the user's own engine (then the Diduny text translation step).
-    var elevenLabsTranslationDecision: ByokTranslationStep.StartDecision {
-        if onDeviceSelection(for: .dictationTranslation) != nil {
-            let availability = EngineOptions.translationAvailability()
+    /// Whether dictation translation into `target` runs on the user's own engine, then the Diduny text step.
+    /// Whisper translates itself only where its model can (bug 9); otherwise it transcribes and Diduny translates.
+    func translationStartDecision(target: String) -> ByokTranslationStep.StartDecision {
+        let route = modeRoute(for: .dictationTranslation)
+        let availability = EngineOptions.translationAvailability()
+        let whisperStep = route.engine == .whisper && !JobRequest.whisperTranslationUsable(
+            model: WhisperModelManager.shared.selectedModel()?.name, target: target)
+        if route.onDeviceEngineID != nil || whisperStep {
             return availability.available
                 ? .run(ExecutionPlan(mode: .afterStop, translation: .didunyStep))
                 : .translationUnavailable(signedIn: availability.signedIn)
         }
-        let selection = SettingsStorage.shared.providerDefaults.selection(for: .dictationTranslation)
-        let availability = EngineOptions.translationAvailability()
+        let selection = route.selection
         var context = providerRoutingContext
         context.didunyTranslationAvailable = availability.available
         return ByokTranslationStep.startDecision(
@@ -151,10 +183,7 @@ extension AppDelegate {
     }
 
     var routedTranslationProvider: TranscriptionProvider {
-        routedProvider(
-            for: .dictationTranslation,
-            legacy: SettingsStorage.shared.effectiveTranslationProvider
-        )
+        routedProvider(for: .dictationTranslation)
     }
 
     /// Transcribes a WAV capture with ElevenLabs batch and queues the provider-side copy for deletion.

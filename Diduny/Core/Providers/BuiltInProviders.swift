@@ -88,31 +88,8 @@ struct LocalWhisperProvider: STTProviderModule {
     )
 }
 
-/// Maps a job's provider selection onto the engine the existing flows run.
-/// A Diduny Cloud selection (the default, also for unset settings) keeps the legacy
-/// Cloud/Local setting, including its signed-out → Local fallback, so default behaviour is unchanged.
+/// BYOK plans for a job's selection. Which engine a mode runs is `RunTimeRouting` (WP-17).
 enum ProviderEngineRouting {
-    static func engine(
-        for job: STTJob,
-        selection: JobProviderSelection,
-        legacy: TranscriptionProvider,
-        registry: ProviderRegistry = .shared,
-        context: RoutingContext
-    ) -> TranscriptionProvider {
-        guard selection.providerID == STTProviderID.localWhisper,
-              let module = registry.module(id: selection.providerID),
-              let model = module.models.first(where: { $0.id == selection.modelID }) ?? module.models.first,
-              case .plan = JobRouter.plan(
-                  JobRequest(job: job),
-                  providerID: module.id,
-                  requiresKey: module.requiresKey,
-                  model: model,
-                  context: context
-              )
-        else { return legacy }
-        return .local
-    }
-
     /// Plan for a BYOK selection of `providerID`, or nil when another provider is selected or the router refuses it.
     static func byokPlan(
         for job: STTJob,

@@ -21,14 +21,8 @@ final class ProviderDefaultsTests: XCTestCase {
         }
     }
 
-    func testBYOKSelectionWithoutKeyKeepsLegacyEngineAndHasNoPlan() {
+    func testBYOKSelectionWithoutKeyHasNoPlan() {
         for job in STTJob.allCases {
-            for legacy in [TranscriptionProvider.cloud, .local] {
-                XCTAssertEqual(
-                    ProviderEngineRouting.engine(for: job, selection: elevenLive, legacy: legacy, context: noKey),
-                    legacy
-                )
-            }
             XCTAssertNil(ProviderEngineRouting.byokPlan(
                 for: job, providerID: STTProviderID.elevenLabs, selection: elevenLive, context: noKey
             ))

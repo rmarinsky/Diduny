@@ -224,7 +224,6 @@ struct EdgeCommandHomeTests {
         #expect(captions(home)[3] == "Live · EN ↔ UK")
         #expect(home.consumeStart(.translate, caps: Self.caps).targetLanguage == "pl")
         #expect(home.consumeStart(.translateMeeting, caps: Self.caps).pair == Self.enUK)
-        #expect(CommandHome.translatePair(target: "pl", pair: Self.enUK, yourLanguages: ["en"]).languageB == "pl")
     }
 
     @Test("T2-TI-03 Translate into is kept after a start")

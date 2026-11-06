@@ -98,10 +98,7 @@ actor RealtimeVoiceAccumulator {
 extension AppDelegate {
     private var voiceTranscriptionProvider: TranscriptionProvider {
         OnboardingManager.shared.dictationProvider(
-            configuredProvider: routedProvider(
-                for: .dictation,
-                legacy: SettingsStorage.shared.effectiveTranscriptionProvider
-            ),
+            configuredProvider: routedProvider(for: .dictation),
             isAuthenticated: AuthService.shared.isLoggedIn
         )
     }
@@ -408,7 +405,7 @@ extension AppDelegate {
             // Set up realtime callback BEFORE starting recorder (AudioRecorderService
             // snapshots onRealtimeAudioData at start time). WebSocket connects in background.
             setupVoiceRealtimeTranscriptionIfNeeded()
-            startDictationSilenceMonitor(pushToTalk: pushToTalkService) { [weak self] in
+            startDictationSilenceMonitor(job: .dictation, pushToTalk: pushToTalkService) { [weak self] in
                 await self?.stopRecordingIfRecording()
             }
 
@@ -1203,7 +1200,7 @@ extension AppDelegate {
             : []
         let listensForVoiceCommands = !options.isEmpty
             && SettingsStorage.shared.voiceTranslationCommandsEnabled
-            && SettingsStorage.shared.effectiveTranslationProvider == .cloud
+            && routedTranslationProvider == .cloud
         DictationOverlayController.shared.configureOutput(
             native: native,
             options: options,

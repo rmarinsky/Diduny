@@ -61,11 +61,6 @@ struct MeetingPromptDefaults: Equatable {
 struct MeetingPromptStart: Equatable {
     let segment: MeetingSegment
     let engine: EngineID
-
-    /// Today's start path only knows Cloud or Local; Record only records on this Mac.
-    var legacyProvider: TranscriptionProvider {
-        segment == .cloud ? .cloud : .local
-    }
 }
 
 struct MeetingSuggestion: Equatable {

@@ -4,15 +4,17 @@ import Foundation
 
 extension AppDelegate {
     /// Call before the audio recorder starts: it snapshots `onAnalysisAudioData` at start.
+    /// `job`: `.dictation` or `.dictationTranslation`, each with its own "Stop after silence" (05 Q5).
     func startDictationSilenceMonitor(
+        job: STTJob,
         pushToTalk: PushToTalkService,
         stop: @escaping @MainActor () async -> Void
     ) {
         stopDictationSilenceMonitor()
-        let settings = SettingsStorage.shared
-        guard settings.dictationSilenceAutoStopEnabled else { return }
+        let silence = SettingsStorage.shared.silenceAutoStop(for: job)
+        guard silence.enabled else { return }
 
-        let monitor = SilenceAutoStopMonitor(timeout: settings.dictationSilenceAutoStopSeconds) { [weak pushToTalk] decision in
+        let monitor = SilenceAutoStopMonitor(timeout: silence.seconds) { [weak pushToTalk] decision in
             // A held hold-to-record key means the person is still in control.
             let isHeld = pushToTalk?.isHoldingToRecord == true
             Self.applySilenceDecision(isHeld ? .keepRecording : decision) {
@@ -34,12 +36,13 @@ extension AppDelegate {
         DictationOverlayController.shared.updateSilenceCountdown(nil)
     }
 
-    func startMeetingSilenceMonitor(stop: @escaping @MainActor () async -> Void) {
+    /// `job`: `.meeting` or `.meetingTranslation`.
+    func startMeetingSilenceMonitor(job: STTJob, stop: @escaping @MainActor () async -> Void) {
         stopMeetingSilenceMonitor()
-        let settings = SettingsStorage.shared
-        guard settings.meetingSilenceAutoStopEnabled else { return }
+        let silence = SettingsStorage.shared.silenceAutoStop(for: job)
+        guard silence.enabled else { return }
 
-        let monitor = SilenceAutoStopMonitor(timeout: settings.meetingSilenceAutoStopSeconds) { decision in
+        let monitor = SilenceAutoStopMonitor(timeout: silence.seconds) { decision in
             Self.applySilenceDecision(decision, stop: stop)
         }
         meetingSilenceMonitor = monitor

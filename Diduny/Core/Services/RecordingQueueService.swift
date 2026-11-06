@@ -598,7 +598,7 @@ final class RecordingQueueService {
         case .translation: .dictationTranslation
         case .voice: .dictation
         }
-        let id = SettingsStorage.shared.providerDefaults.selection(for: job).providerID
+        let id = SettingsStorage.shared.modeDefaults.engine(for: job).rawValue
         return STTProviderID.onDeviceEngines.contains(id) ? id : nil
     }
 
@@ -606,7 +606,7 @@ final class RecordingQueueService {
     private func onDeviceTranslationEngineID(for item: QueueItem, recording: Recording) -> String? {
         guard item.providerOverride != .cloud else { return nil }
         let job: STTJob = recording.type == .meeting || recording.type == .meetingTranslation ? .meetingTranslation : .dictationTranslation
-        let id = SettingsStorage.shared.providerDefaults.selection(for: job).providerID
+        let id = SettingsStorage.shared.modeDefaults.engine(for: job).rawValue
         return STTProviderID.onDeviceEngines.contains(id) ? id : nil
     }
 
@@ -622,12 +622,10 @@ final class RecordingQueueService {
             return override
         }
 
-        switch item.action {
-        case .transcribe, .transcribeDiarize:
-            return SettingsStorage.shared.transcriptionProvider
-        case .translate:
-            return SettingsStorage.shared.translationProvider
-        }
+        // Inventory F8: no override reads the Dictation (or Translation) engine from Settings > Modes,
+        // the mode whose legacy Cloud/Local key this used to read. Whisper is Local, any other engine Cloud.
+        let job: STTJob = item.action == .translate ? .dictationTranslation : .dictation
+        return SettingsStorage.shared.modeDefaults.engine(for: job) == .whisper ? .local : .cloud
     }
 
     private func preflightError(for item: QueueItem) -> String? {

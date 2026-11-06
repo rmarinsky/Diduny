@@ -406,7 +406,9 @@ final class DictationOverlayController {
         case .meetingTranslation: .meetingTranslation
         case .fileTranscription: nil
         }
-        store.sessionEngine = job.flatMap { LiveSessionEngine.fromSettings(job: $0) }
+        store.sessionEngine = job.flatMap { job in
+            AppDelegate.current.flatMap { LiveSessionEngine.running($0.modeRoute(for: job).selection) }
+        }
     }
 
     private func beginSurfaceSession() {

@@ -8,7 +8,7 @@ final class LocalWhisperStreamingServiceTests: XCTestCase {
         let delegate = AppDelegate()
         EdgeCommandPanelController.shared.configure(appDelegate: delegate)
 
-        let store = await delegate.setupMeetingLiveTranscription(cloudModeEnabled: false)
+        let store = await delegate.setupMeetingLiveTranscription(cloudModeEnabled: false, localPreview: true)
 
         XCTAssertTrue(store.isActive)
         XCTAssertEqual(store.connectionStatus, .connected)

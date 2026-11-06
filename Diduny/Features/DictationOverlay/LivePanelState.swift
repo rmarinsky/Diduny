@@ -45,11 +45,10 @@ struct LiveSessionEngine: Equatable {
         ))
     }
 
-    /// The engine Settings route this job to, as the session starts with it (the engine is fixed at
-    /// start until WP-64). ElevenLabs follows its selected model: no realtime capability means after Stop.
+    /// The engine the session runs (`RunTimeRoute`, fixed at start until WP-64). ElevenLabs follows its
+    /// model: no realtime capability means after Stop.
     @MainActor
-    static func fromSettings(job: STTJob, storage: SettingsStorage = .shared) -> LiveSessionEngine? {
-        let selection = storage.providerDefaults.selection(for: job)
+    static func running(_ selection: JobProviderSelection) -> LiveSessionEngine? {
         let id = EngineID(rawValue: selection.providerID) ?? .didunyCloud
         guard id == .elevenLabs, let module = ProviderRegistry.shared.module(id: id.rawValue) else { return make(id) }
         let model = module.models.first { $0.id == selection.modelID } ?? module.models.first

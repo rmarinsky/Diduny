@@ -212,16 +212,4 @@ enum CommandHome {
     static func validTarget(_ code: String) -> String {
         targetLanguages.contains { $0.code == code } ? code : fallbackTarget
     }
-
-    /// The Translate tile's pair: from the saved pair's other language, else the first of Your languages.
-    static func translatePair(
-        target: String,
-        pair: TranslationLanguagePair,
-        yourLanguages: [String]
-    ) -> TranslationLanguagePair {
-        let source = pair.codes.first { $0 != target }
-            ?? yourLanguages.first { $0 != target }
-            ?? (target == fallbackTarget ? "uk" : fallbackTarget)
-        return TranslationLanguagePair(languageA: source, languageB: target)
-    }
 }
