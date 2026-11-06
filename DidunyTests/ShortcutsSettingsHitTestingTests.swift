@@ -43,6 +43,7 @@ struct ShortcutsSettingsHitTestingTests {
         override var canBecomeKey: Bool { true }
     }
 
+    @MainActor
     private final class Harness {
         let window: NSWindow
 
@@ -60,7 +61,19 @@ struct ShortcutsSettingsHitTestingTests {
             window.contentView = hostingView
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
-            settle()
+            // The page lays out in several passes: SwiftUI sizes each hosted recorder field, and the
+            // field then sizes its `RecorderCocoa`, which until that pass is still 130×24 at the
+            // field's left edge. A click before it lands is cancelled by the recorder on mouse-up.
+            // Key status also arrives late, and right after the previous test's window closes AppKit
+            // can leave the new panel not key, so it is asked again until it is. Locally this takes
+            // ~200 ms; the old fixed 0.15 s spin let a busy CI runner click before either was done.
+            let settled = waitUntil {
+                if !window.isKeyWindow { window.makeKey() }
+                return isSettled
+            }
+            if !settled {
+                Issue.record("window not ready: key=\(window.isKeyWindow), visible=\(window.isVisible)")
+            }
         }
 
         deinit {
@@ -72,8 +85,29 @@ struct ShortcutsSettingsHitTestingTests {
             }
         }
 
-        func settle() {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        /// Spins the main run loop until `condition` holds or `timeout` passes.
+        @discardableResult
+        func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) -> Bool {
+            let deadline = Date().addingTimeInterval(timeout)
+            while !condition() {
+                guard Date() < deadline else { return false }
+                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+            }
+            return true
+        }
+
+        /// Key and on screen, no view waiting for layout, and every shortcut recorder fills its field.
+        private var isSettled: Bool {
+            guard window.isKeyWindow, window.isVisible, let content = window.contentView else { return false }
+            let views = Self.allViews(in: content)
+            let recorders = views.compactMap { $0 as? NSSearchField }
+            return !views.contains(where: \.needsLayout)
+                && !recorders.isEmpty
+                && recorders.allSatisfy { $0.frame == $0.superview?.bounds }
+        }
+
+        private static func allViews(in view: NSView) -> [NSView] {
+            [view] + view.subviews.flatMap(allViews)
         }
 
         func click(_ topLeft: NSPoint) {
@@ -104,7 +138,6 @@ struct ShortcutsSettingsHitTestingTests {
                 }
                 NSApp.sendEvent(queued)
             }
-            settle()
         }
 
         var isShortcutRecorderFocused: Bool {
@@ -121,8 +154,10 @@ struct ShortcutsSettingsHitTestingTests {
         defer { SettingsStorage.shared.recordingHotkeyPressCount = original }
         SettingsStorage.shared.recordingHotkeyPressCount = 1
 
-        Harness().click(Point.dictation2xGlyph)
+        let harness = Harness()
+        harness.click(Point.dictation2xGlyph)
 
+        harness.waitUntil { SettingsStorage.shared.recordingHotkeyPressCount == 2 }
         #expect(SettingsStorage.shared.recordingHotkeyPressCount == 2)
     }
 
@@ -132,8 +167,10 @@ struct ShortcutsSettingsHitTestingTests {
         defer { SettingsStorage.shared.recordingHotkeyPressCount = original }
         SettingsStorage.shared.recordingHotkeyPressCount = 1
 
-        Harness().click(Point.dictation2xPadding)
+        let harness = Harness()
+        harness.click(Point.dictation2xPadding)
 
+        harness.waitUntil { SettingsStorage.shared.recordingHotkeyPressCount == 2 }
         #expect(SettingsStorage.shared.recordingHotkeyPressCount == 2)
     }
 
@@ -150,8 +187,10 @@ struct ShortcutsSettingsHitTestingTests {
         SettingsStorage.shared.pushToTalkKey = .rightShift
         SettingsStorage.shared.pushToTalkToggleEnabled = true
 
-        Harness().click(Point.dictationOffGlyph)
+        let harness = Harness()
+        harness.click(Point.dictationOffGlyph)
 
+        harness.waitUntil { SettingsStorage.shared.pushToTalkToggleEnabled == false }
         #expect(SettingsStorage.shared.pushToTalkToggleEnabled == false)
     }
 
@@ -166,8 +205,10 @@ struct ShortcutsSettingsHitTestingTests {
         SettingsStorage.shared.pushToTalkKey = .rightShift
         SettingsStorage.shared.pushToTalkToggleEnabled = true
 
-        Harness().click(Point.dictationOffPadding)
+        let harness = Harness()
+        harness.click(Point.dictationOffPadding)
 
+        harness.waitUntil { SettingsStorage.shared.pushToTalkToggleEnabled == false }
         #expect(SettingsStorage.shared.pushToTalkToggleEnabled == false)
     }
 
@@ -180,6 +221,7 @@ struct ShortcutsSettingsHitTestingTests {
 
         harness.click(Point.dictationEditLabel)
 
+        harness.waitUntil { harness.isShortcutRecorderFocused }
         #expect(harness.isShortcutRecorderFocused, "first responder: \(String(describing: harness.window.firstResponder))")
     }
 
@@ -190,6 +232,7 @@ struct ShortcutsSettingsHitTestingTests {
 
         harness.click(Point.dictationRecorderCenter)
 
+        harness.waitUntil { harness.isShortcutRecorderFocused }
         #expect(harness.isShortcutRecorderFocused, "first responder: \(String(describing: harness.window.firstResponder))")
     }
 
@@ -200,6 +243,7 @@ struct ShortcutsSettingsHitTestingTests {
 
         harness.click(Point.dictationFieldBody)
 
+        harness.waitUntil { harness.isShortcutRecorderFocused }
         #expect(harness.isShortcutRecorderFocused, "first responder: \(String(describing: harness.window.firstResponder))")
     }
 }
