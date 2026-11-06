@@ -55,21 +55,37 @@ final class ParakeetModelController: ParakeetModelStoring {
 
     /// Stops the download; the partial files are removed, the cell returns to "Download".
     func cancel() {
-        guard let activeDownload else { return }
-        activeDownload.task.cancel()
-        self.activeDownload = nil
-        state = .notDownloaded
-        pendingWork = Task { [remove] in try? await remove() }
+        cancelDownload(thenRemove: true)
     }
 
     func delete() {
-        cancel()
+        // One removal, after any running download has stopped writing.
+        let running = cancelDownload(thenRemove: false)
         state = .notDownloaded
         pendingWork = Task { [weak self, remove] in
+            _ = await running?.value
             try? await remove()
             guard let self else { return }
             state = isDownloaded() ? .downloaded : .notDownloaded
         }
+    }
+
+    /// Cancels the running download; removal waits until the download task has ended,
+    /// so it cannot race files the cancelled download is still writing.
+    @discardableResult
+    private func cancelDownload(thenRemove: Bool) -> Task<Void, Never>? {
+        guard let activeDownload else { return nil }
+        let task = activeDownload.task
+        task.cancel()
+        self.activeDownload = nil
+        state = .notDownloaded
+        if thenRemove {
+            pendingWork = Task { [remove] in
+                _ = await task.value
+                try? await remove()
+            }
+        }
+        return task
     }
 
     /// Re-reads the disk: the Benchmark tab can download Parakeet through `ParakeetModelStore` directly.

@@ -55,6 +55,44 @@ private final class ControlledLoad {
     }
 }
 
+/// A download that ignores cancellation and keeps writing until the test lets it end.
+@MainActor
+private final class StubbornLoad {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private(set) var removeCount = 0
+    private(set) var removedWhileWriting = false
+    private var writing = false
+
+    func controller() -> ParakeetModelController {
+        ParakeetModelController(
+            isSupportedHardware: true,
+            isDownloaded: { false },
+            load: { [unowned self] _ in await run() },
+            remove: { [unowned self] in
+                removeCount += 1
+                if writing { removedWhileWriting = true }
+            }
+        )
+    }
+
+    private func run() async {
+        writing = true
+        await withCheckedContinuation { continuation = $0; startWaiters.forEach { $0.resume() }; startWaiters = [] }
+        writing = false
+    }
+
+    func started() async {
+        if continuation != nil { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func end() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 private struct LoadFailure: LocalizedError {
     var errorDescription: String? { "No network" }
 }
@@ -124,5 +162,34 @@ struct ParakeetModelStoreTests {
         let controller = ControlledLoad().controller(supported: false)
         controller.download()
         #expect(controller.state == .notDownloaded)
+    }
+
+    @Test("Cancel removes files only after the cancelled download has stopped writing")
+    func cancelWaitsForDownload() async {
+        let load = StubbornLoad()
+        let controller = load.controller()
+        controller.download()
+        await load.started()
+        controller.cancel()
+        #expect(controller.state == .notDownloaded)
+        await Task.yield()
+        #expect(load.removeCount == 0)
+        load.end()
+        await controller.pendingWork?.value
+        #expect(load.removeCount == 1)
+        #expect(!load.removedWhileWriting)
+    }
+
+    @Test("Delete during a download removes once, after the download ends")
+    func deleteDuringDownload() async {
+        let load = StubbornLoad()
+        let controller = load.controller()
+        controller.download()
+        await load.started()
+        controller.delete()
+        load.end()
+        await controller.pendingWork?.value
+        #expect(load.removeCount == 1)
+        #expect(!load.removedWhileWriting)
     }
 }
