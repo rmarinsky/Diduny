@@ -45,6 +45,8 @@ struct ModelTableModelTests {
         #expect(model.action(for: r) == .active)
         model.askToDelete(r)
         #expect(model.action(for: r) == .askingDelete(size: "1.5 GB"))
+        // Option A: the cell keeps showing Active beside the delete popover.
+        #expect(model.settledAction(for: r) == .active)
         model.keep()
         #expect(model.action(for: r) == .active)
         model.askToDelete(r)

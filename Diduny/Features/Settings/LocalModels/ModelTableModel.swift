@@ -268,6 +268,13 @@ final class LocalModelsModel {
     }
 
     func action(for row: LocalModelRow) -> ModelActionState {
+        let settled = settledAction(for: row)
+        if settled.showsTrash, askingDeleteID == row.id { return .askingDelete(size: row.sizeText) }
+        return settled
+    }
+
+    /// The cell without the delete question: what stays visible beside the popover (option A).
+    func settledAction(for row: LocalModelRow) -> ModelActionState {
         if case .appleSpeech = row.kind { return isAppleSpeechAvailable ? .builtIn : .notOnThisMac }
         let state = downloadState(row)
         switch state {
@@ -275,7 +282,6 @@ final class LocalModelsModel {
         case let .downloading(fraction): return .downloading(percent: Int((fraction * 100).rounded(.down)))
         case let .failed(message): return .failed(message: message)
         case .downloaded:
-            if askingDeleteID == row.id { return .askingDelete(size: row.sizeText) }
             if case let .whisper(model) = row.kind { return whisper.selectedModelName == model.name ? .active : .use }
             return .ready
         }

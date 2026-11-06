@@ -11,11 +11,14 @@ struct ModelActionsCell: View {
     private func id(_ action: String) -> String { "models.action.\(row.id).\(action)" }
 
     var body: some View {
+        let shown = isAskingDelete ? model.settledAction(for: row) : state
         HStack(spacing: 6) {
-            content
-            if state.showsTrash {
+            content(shown)
+            if shown.showsTrash {
                 TrashButton(accessibilityLabel: "Delete \(row.name)") { model.askToDelete(row) }
                     .accessibilityIdentifier(id("delete"))
+                    // Option A: the question opens on the trash button, not in a reserved column.
+                    .popover(isPresented: deleteQuestion, arrowEdge: .bottom) { deletePopover }
             }
         }
         .lineLimit(1)
@@ -26,7 +29,30 @@ struct ModelActionsCell: View {
         }
     }
 
-    @ViewBuilder private var content: some View {
+    private var isAskingDelete: Bool {
+        if case .askingDelete = state { true } else { false }
+    }
+
+    private var deleteQuestion: Binding<Bool> {
+        Binding(get: { isAskingDelete }, set: { if !$0, isAskingDelete { model.keep() } })
+    }
+
+    @ViewBuilder private var deletePopover: some View {
+        if case let .askingDelete(size) = state {
+            HStack(spacing: 6) {
+                Button(role: .destructive) { model.confirmDelete(row) } label: {
+                    Text("Delete \(size)").font(DS.Font.calloutStrong).foregroundStyle(DS.Palette.no)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier(id("confirmDelete"))
+                button("Keep", id: "keep") { model.keep() }
+                    .focused($keepFocused)
+            }
+            .padding(DS.Space.sm)
+        }
+    }
+
+    @ViewBuilder private func content(_ state: ModelActionState) -> some View {
         switch state {
         case .download:
             button("Download", id: "download") { model.download(row) }
@@ -46,20 +72,16 @@ struct ModelActionsCell: View {
         case .builtIn:
             secondary("Built in", id: "builtIn")
         case .notOnThisMac:
+            // Same id as Built in on purpose: test-plan 2.1 lists only `.builtIn` for the Apple row's status.
             secondary("Not on this Mac", id: "builtIn")
         case let .failed(message):
             status("Failed", color: DS.Palette.no, id: "failed")
                 .help(message)
             button("Retry", id: "retry") { model.download(row) }
                 .help(message)
-        case let .askingDelete(size):
-            Button(role: .destructive) { model.confirmDelete(row) } label: {
-                Text("Delete \(size)").font(DS.Font.calloutStrong).foregroundStyle(DS.Palette.no)
-            }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier(id("confirmDelete"))
-            button("Keep", id: "keep") { model.keep() }
-                .focused($keepFocused)
+        case .askingDelete:
+            // Shown in `deletePopover`; the cell keeps the settled state.
+            EmptyView()
         }
     }
 

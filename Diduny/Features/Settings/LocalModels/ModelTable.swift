@@ -1,17 +1,18 @@
 import SwiftUI
 
 extension DS {
-    /// Local models table (design-spec 3.6, D12): fixed widths from the delete-confirm render, so a
-    /// row never reflows when its actions cell changes. Translation is the flexible column.
+    /// Local models table, option A (Roman 2026-11-07, replaces D12): columns sized by their content in
+    /// the 713.5 column (build-vs-prototype/options.html). The delete question opens in a popover on the
+    /// trash button, so Actions only fits "Download". Translation is the flexible column.
     enum ModelTable {
-        static let model: CGFloat = 105
-        static let live: CGFloat = 48
-        static let translation: CGFloat = 139
-        static let languages: CGFloat = 76
+        static let model: CGFloat = 126
+        static let live: CGFloat = 62
+        static let translation: CGFloat = 180
+        static let languages: CGFloat = 76.5
         static let speed: CGFloat = 53
         static let accuracy: CGFloat = 67
-        static let size: CGFloat = 57
-        static let actions: CGFloat = 166
+        static let size: CGFloat = 56.5
+        static let actions: CGFloat = 90.5
         static let cellPaddingV: CGFloat = 7
         static let cellPaddingH: CGFloat = 6
         static let font = SwiftUI.Font.system(size: 12)
@@ -41,6 +42,7 @@ struct ModelTable: View {
     private var filterRow: some View {
         HStack(spacing: 10) {
             Text("Show models that can").font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+                .lineLimit(1).fixedSize() // one line; the pop-ups give way (build-vs-prototype)
             Picker("Show models that can", selection: $model.modeFilter) {
                 ForEach(LocalModelModeFilter.allCases) { Text(verbatim: $0.title).tag($0) }
             }
@@ -228,7 +230,7 @@ private struct ModelLanguagesLink: View {
 
     private func link(_ title: String) -> some View {
         InlineLink(title: LocalizedStringKey(title), showsChevron: true) { isShown = true }
-            .accessibilityLabel(Text(verbatim: "\(row.name) languages"))
+            .accessibilityLabel(Text(String(format: String(localized: "%@ languages"), row.name)))
             .accessibilityValue(Text(verbatim: title))
             .accessibilityIdentifier(identifier)
     }

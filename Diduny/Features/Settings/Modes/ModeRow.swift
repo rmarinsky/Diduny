@@ -104,6 +104,8 @@ struct ModeRow<Second: View>: View {
         } else if let shortcut {
             HStack(spacing: 6) {
                 ModeShortcutRecorder(name: shortcut, rowLabel: title)
+                    // The keys take their full width; the 162 column fits the widest cell (build-vs-prototype).
+                    .fixedSize(horizontal: true, vertical: false)
                     .accessibilityIdentifier("\(id).shortcut")
                 ShortcutPressCountPicker(selection: Binding(
                     get: { model.pressCount(for: job) },

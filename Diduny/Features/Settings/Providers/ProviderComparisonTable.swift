@@ -100,7 +100,8 @@ struct ProviderComparisonTable: View {
 
     private var headerRow: some View {
         GridRow {
-            labelCell(String(localized: "In Diduny"))
+            // Bottom-aligned with the engine names (prototype).
+            labelCell(String(localized: "In Diduny"), alignment: .bottomLeading)
             ForEach(model.columns, id: \.id) { column in
                 cell(column, roundedTop: true) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -199,13 +200,15 @@ struct ProviderComparisonTable: View {
 
     // MARK: Pieces
 
-    private func labelCell(_ text: String) -> some View {
+    /// One line (prototype 135.7): the label column takes the widest label.
+    private func labelCell(_ text: String, alignment: Alignment = .topLeading) -> some View {
         Text(verbatim: text)
             .font(DS.Font.callout)
             .foregroundStyle(DS.Palette.text)
-            .fixedSize(horizontal: false, vertical: true)
+            .lineLimit(1)
+            .fixedSize()
             .padding(Self.cellPadding)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
     }
 
     private func cell(
