@@ -15,6 +15,7 @@ final class InplaceTranslationHotkeyMonitor {
     private var gesture = InplaceTranslationGesture()
     private var keyChordCounter = PressCounter()
     private var isKeyChordRegistered = false
+    private var captureEndObserver: NSObjectProtocol?
     private(set) var shortcut: InplaceTranslationShortcut = .default
     private(set) var pressCount = 2
 
@@ -36,6 +37,15 @@ final class InplaceTranslationHotkeyMonitor {
         self.registrar = registrar
         self.clock = clock
         self.captureSession = captureSession
+        captureEndObserver = captureSession.observeEnd { [weak self] in
+            self?.reassertKeyChord()
+        }
+    }
+
+    deinit {
+        if let captureEndObserver {
+            captureSession.notifications.removeObserver(captureEndObserver)
+        }
     }
 
     /// Sets the stored kind and count; a running monitor switches paths at once.
@@ -62,8 +72,8 @@ final class InplaceTranslationHotkeyMonitor {
             registrar.onKeyDown(for: .inplaceTranslation) { [weak self] in
                 self?.handleKeyChordPress()
             }
-            registrar.enable(.inplaceTranslation)
             isKeyChordRegistered = true
+            reassertKeyChord()
         }
         Log.app.info("Instant translation monitor started")
     }
@@ -79,6 +89,15 @@ final class InplaceTranslationHotkeyMonitor {
         gesture.reset()
         keyChordCounter.reset()
         if wasRunning { Log.app.info("Instant translation monitor stopped") }
+    }
+
+    /// The key chord is live only while this path runs and no shortcut is being captured.
+    private func reassertKeyChord() {
+        if isKeyChordRegistered, !captureSession.isActive {
+            registrar.enable(.inplaceTranslation)
+        } else {
+            registrar.disable(.inplaceTranslation)
+        }
     }
 
     private func handle(_ event: KeyEvent) {

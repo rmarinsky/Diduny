@@ -245,6 +245,7 @@
 		D4D38BC3F79E5DA75D18CFBA /* CalendarReminderController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAD1A010B075E448CAD04850 /* CalendarReminderController.swift */; };
 		D52AFEB3B25B529860D14116 /* AudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118CE8BCA0160E31FD916B10 /* AudioDevice.swift */; };
 		D57324A9CA820B5DAFE265A7 /* ShortcutCaptureField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23817C14EEF281B536DD90D9 /* ShortcutCaptureField.swift */; };
+		D5F4EE412EC50C169EC27A45 /* LiveDictationOverlayStoreHintTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86A81306AC231B879B236509 /* LiveDictationOverlayStoreHintTests.swift */; };
 		D6203B3BADF3AA7E40186F11 /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491E26240E167BDB5DCACEE /* HotkeyService.swift */; };
 		D6937717EE280CA3B8339D53 /* BatchTranscriptionProgressViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 808FCBFBB94E4D0B49112534 /* BatchTranscriptionProgressViews.swift */; };
 		D6E656CD3B04F30BF83DC5E1 /* KeyEventSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E78EF9D2731FF35B09A0372F /* KeyEventSource.swift */; };
@@ -493,6 +494,7 @@
 		8525EF6E0AFA546564852F32 /* OnboardingManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingManagerTests.swift; sourceTree = "<group>"; };
 		865E86F8079EAE7A9BFB178E /* RecordingsLibraryStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingsLibraryStorage.swift; sourceTree = "<group>"; };
 		8692609782CA33A8AB55BB5A /* EdgeCommandPanelModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeCommandPanelModel.swift; sourceTree = "<group>"; };
+		86A81306AC231B879B236509 /* LiveDictationOverlayStoreHintTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDictationOverlayStoreHintTests.swift; sourceTree = "<group>"; };
 		86F4203EEA094B3353F01444 /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
 		886FB4745EDA152427396913 /* BillingSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillingSettingsSection.swift; sourceTree = "<group>"; };
 		88B57C86436FAB030BE4C906 /* EdgeCommandPanelController+Actions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EdgeCommandPanelController+Actions.swift"; sourceTree = "<group>"; };
@@ -1180,6 +1182,7 @@
 				0240B3AB3A0F84B5A42A9D8E /* InplaceTranslationTests.swift */,
 				22ECCCBC345EE579CFE2AD5F /* InProgressRecordingStoreTests.swift */,
 				955BE78738C29B1EDC2E13B4 /* JobRouterTests.swift */,
+				86A81306AC231B879B236509 /* LiveDictationOverlayStoreHintTests.swift */,
 				BF436ACD38BA065B33601DBE /* LiveTranscriptStorePerformanceTests.swift */,
 				8E921388F63C10D0DBA17335 /* LocalizationParityTests.swift */,
 				0C6F0ACF93EFE09C0E36A170 /* LocalSpeakerDiarizerIntegrationTests.swift */,
@@ -1723,6 +1726,7 @@
 				45F7A5C71CE4990E10BCFCA0 /* InProgressRecordingStoreTests.swift in Sources */,
 				3FD9FF59D0380664FF3793A3 /* InplaceTranslationTests.swift in Sources */,
 				25559FF2941DE3BB30983AC7 /* JobRouterTests.swift in Sources */,
+				D5F4EE412EC50C169EC27A45 /* LiveDictationOverlayStoreHintTests.swift in Sources */,
 				8D4D2E64E0D98B0052939BEF /* LiveTranscriptStorePerformanceTests.swift in Sources */,
 				31C4025A4B96EED4A02D4925 /* LocalSpeakerDiarizerIntegrationTests.swift in Sources */,
 				0E8BEFC3F87AA11BE81CEC1F /* LocalWhisperStreamingServiceTests.swift in Sources */,

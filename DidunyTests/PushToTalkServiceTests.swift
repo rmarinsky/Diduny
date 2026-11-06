@@ -11,6 +11,7 @@ final class PushToTalkServiceTests {
     private let box = IsolatedSettings("PushToTalkServiceTests")
     private let source = FakeKeySource()
     private let scheduler = ManualScheduler()
+    private let session = ShortcutCaptureSession(registrar: FakeHotkeyRegistrar(), notifications: NotificationCenter())
 
     private func makeService(
         key: PushToTalkKey = .rightShift,
@@ -20,7 +21,7 @@ final class PushToTalkServiceTests {
         delay: TimeInterval = 0.5,
         source: FakeKeySource? = nil
     ) -> PushToTalkService {
-        let sut = PushToTalkService(source: source ?? self.source, scheduler: scheduler)
+        let sut = PushToTalkService(source: source ?? self.source, scheduler: scheduler, captureSession: session)
         sut.selectedKey = key
         sut.holdModeEnabled = hold
         sut.toggleModeEnabled = toggle
@@ -496,6 +497,30 @@ final class PushToTalkServiceTests {
         }
         #expect(translationToggles == 1)
         #expect(dictationToggles == 0)
+    }
+
+    @Test("Taps are ignored while a shortcut with the push-to-talk key is being recorded")
+    func ignoredDuringCapture() {
+        let sut = makeService(hold: true, toggle: true, delay: 0.5)
+        var toggles = 0
+        var starts = 0
+        sut.onToggle = { toggles += 1 }
+        sut.onKeyDown = { starts += 1 }
+        startReady(sut)
+
+        session.begin()
+        tap(sut, at: 1.0)
+        tap(sut, at: 1.1)
+        source.send(rightShift(down: true, at: 1.5))
+        scheduler.advance(by: 1)
+        #expect(toggles == 0)
+        #expect(starts == 0)
+
+        session.end()
+        source.send(rightShift(down: false, at: 2.6))
+        tap(sut, at: 3.0)
+        tap(sut, at: 3.1)
+        #expect(toggles == 1)
     }
 
     @Test("T5-PT-19 reserved keys follow push-to-talk")

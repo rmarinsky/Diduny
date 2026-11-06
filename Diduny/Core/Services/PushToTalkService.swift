@@ -9,6 +9,7 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
     private let source: KeyEventSource
     private let scheduler: DelayScheduler
+    private let captureSession: ShortcutCaptureSession
     private var isKeyPressed = false
     private var isReady = false
     private var readyWork: (any ScheduledWork)?
@@ -44,10 +45,12 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
     init(
         source: KeyEventSource = NSEventKeySource(.flagsChanged),
-        scheduler: DelayScheduler = TaskDelayScheduler()
+        scheduler: DelayScheduler = TaskDelayScheduler(),
+        captureSession: ShortcutCaptureSession = .shared
     ) {
         self.source = source
         self.scheduler = scheduler
+        self.captureSession = captureSession
     }
 
     func start() {
@@ -106,8 +109,8 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
     private func handle(_ event: KeyEvent) {
         guard case let .flagsChanged(keyCode, flagsRawValue, eventTime) = event else { return }
-        // Ignore events during cooldown period
-        guard isReady else { return }
+        // Ignore events during cooldown period, and while a chord with this key is being recorded.
+        guard isReady, !captureSession.isActive else { return }
 
         let flags = NSEvent.ModifierFlags(rawValue: flagsRawValue)
 

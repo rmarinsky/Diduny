@@ -1324,10 +1324,10 @@ extension AppDelegate {
         }
 
         // On second shortcut press (confirmed cancel): cancel recording
-        escapeService.onCancel = { [weak self] in
+        escapeService.onCancel = { [weak self] keepAudio in
             Task { @MainActor in
                 guard let self else { return }
-                let shouldSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
+                let shouldSaveAudio = keepAudio
                 await self.cancelRecording()
                 let message = shouldSaveAudio ? "Recording cancelled and saved" : "Recording cancelled"
                 self.showRecordingFeedbackInfo(message: message, mode: .voice)

@@ -11,7 +11,7 @@ final class EscapeCancelServiceTests {
     private let box = IsolatedSettings("EscapeCancelServiceTests")
     private let source = FakeKeySource()
     private let scheduler = ManualScheduler()
-    private let session = ShortcutCaptureSession(registrar: FakeHotkeyRegistrar())
+    private let session = ShortcutCaptureSession(registrar: FakeHotkeyRegistrar(), notifications: NotificationCenter())
     private lazy var sut = EscapeCancelService(
         settings: box.settings,
         source: source,
@@ -39,7 +39,7 @@ final class EscapeCancelServiceTests {
     @Test("Two presses within threshold triggers cancel")
     func doublePressTriggersCancel() {
         var cancelled = false
-        sut.onCancel = { cancelled = true }
+        sut.onCancel = { _ in cancelled = true }
 
         let t0: TimeInterval = 100
         sut.processEscapePress(at: t0)
@@ -52,7 +52,7 @@ final class EscapeCancelServiceTests {
     @Test("Two presses outside threshold does not cancel")
     func pressesOutsideThresholdDoNotCancel() {
         var cancelled = false
-        sut.onCancel = { cancelled = true }
+        sut.onCancel = { _ in cancelled = true }
 
         let t0: TimeInterval = 100
         sut.processEscapePress(at: t0)
@@ -66,7 +66,7 @@ final class EscapeCancelServiceTests {
         settings.escapeCancelPressCount = 3
 
         var cancelled = false
-        sut.onCancel = { cancelled = true }
+        sut.onCancel = { _ in cancelled = true }
 
         let t0: TimeInterval = 100
         sut.processEscapePress(at: t0)
@@ -104,7 +104,7 @@ final class EscapeCancelServiceTests {
         var progressCount = 0
         var cancelled = false
         sut.onProgressEscape = { _, _ in progressCount += 1 }
-        sut.onCancel = { cancelled = true }
+        sut.onCancel = { _ in cancelled = true }
 
         let t0: TimeInterval = 100
         sut.processEscapePress(at: t0)
@@ -117,7 +117,7 @@ final class EscapeCancelServiceTests {
     @Test("Press at exactly 1.5s still counts (<=)")
     func thresholdBoundaryInclusive() {
         var cancelled = false
-        sut.onCancel = { cancelled = true }
+        sut.onCancel = { _ in cancelled = true }
 
         sut.processEscapePress(at: 0)
         sut.processEscapePress(at: 1.5)
@@ -128,7 +128,7 @@ final class EscapeCancelServiceTests {
     @Test("Press at 1.501s resets count")
     func thresholdBoundaryExclusive() {
         var cancelled = false
-        sut.onCancel = { cancelled = true }
+        sut.onCancel = { _ in cancelled = true }
 
         sut.processEscapePress(at: 0)
         sut.processEscapePress(at: 1.501)
@@ -140,7 +140,7 @@ final class EscapeCancelServiceTests {
     func countResetsAfterGap() {
         settings.escapeCancelPressCount = 3
         var cancelled = false
-        sut.onCancel = { cancelled = true }
+        sut.onCancel = { _ in cancelled = true }
 
         let t0: TimeInterval = 100
         sut.processEscapePress(at: t0)
@@ -155,7 +155,7 @@ final class EscapeCancelServiceTests {
     @Test("An existing user's Esc keeps cancelling: nothing stored reads as Esc")
     func unsetShortcutIsEsc() {
         var cancels = 0
-        sut.onCancel = { cancels += 1 }
+        sut.onCancel = { _ in cancels += 1 }
         sut.activate()
 
         source.send(.key(KeyCode.escape))
@@ -169,7 +169,7 @@ final class EscapeCancelServiceTests {
         settings.escapeCancelPressCount = 1
         var cancels = 0
         var progress = 0
-        sut.onCancel = { cancels += 1 }
+        sut.onCancel = { _ in cancels += 1 }
         sut.onProgressEscape = { _, _ in progress += 1 }
         sut.activate()
 
@@ -182,7 +182,7 @@ final class EscapeCancelServiceTests {
     func anyStoredKey() {
         settings.escapeCancelShortcut = controlX
         var cancels = 0
-        sut.onCancel = { cancels += 1 }
+        sut.onCancel = { _ in cancels += 1 }
         sut.activate()
 
         source.send(.key(KeyCode.escape))
@@ -203,7 +203,7 @@ final class EscapeCancelServiceTests {
         )
         settings.escapeCancelPressCount = 1
         var cancels = 0
-        sut.onCancel = { cancels += 1 }
+        sut.onCancel = { _ in cancels += 1 }
         sut.activate()
 
         source.send(.key(KeyCode.escape))
@@ -216,7 +216,7 @@ final class EscapeCancelServiceTests {
     func switchOff() {
         settings.escapeCancelEnabled = false
         var cancels = 0
-        sut.onCancel = { cancels += 1 }
+        sut.onCancel = { _ in cancels += 1 }
         sut.activate()
 
         source.send(.key(KeyCode.escape))
@@ -232,7 +232,7 @@ final class EscapeCancelServiceTests {
     func timeoutResets() {
         settings.escapeCancelPressCount = 3
         var cancels = 0
-        sut.onCancel = { cancels += 1 }
+        sut.onCancel = { _ in cancels += 1 }
         sut.activate()
 
         source.send(.key(KeyCode.escape))
@@ -258,10 +258,23 @@ final class EscapeCancelServiceTests {
         #expect(settings.escapeCancelRepeatHint(afterPressCount: 1).contains("Esc"))
     }
 
+    @Test("T5-CA-07 the keep-audio flag reaches the cancel")
+    func keepAudioReachesCancel() {
+        settings.escapeCancelPressCount = 1
+        var received: [Bool] = []
+        sut.onCancel = { received.append($0) }
+        sut.activate()
+
+        source.send(.key(KeyCode.escape))
+        settings.escapeCancelSaveAudio = false
+        source.send(.key(KeyCode.escape))
+        #expect(received == [true, false], "Unset reads keep; the value is read at the cancel")
+    }
+
     @Test("T5-CA-08 only while recording")
     func onlyWhileActivated() {
         var cancels = 0
-        sut.onCancel = { cancels += 1 }
+        sut.onCancel = { _ in cancels += 1 }
         source.send(.key(KeyCode.escape))
         source.send(.key(KeyCode.escape))
         #expect(cancels == 0)
@@ -289,7 +302,7 @@ final class EscapeCancelServiceTests {
     func ignoredDuringCapture() {
         settings.escapeCancelPressCount = 1
         var cancels = 0
-        sut.onCancel = { cancels += 1 }
+        sut.onCancel = { _ in cancels += 1 }
         sut.activate()
 
         session.begin()

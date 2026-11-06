@@ -28,15 +28,23 @@ final class ForceSubmitService {
     private let settings: SettingsStorage
     private let registrar: HotkeyRegistrar
     private let clock: MonotonicClock
+    private let captureSession: ShortcutCaptureSession
+    /// Kept for the service's lifetime; the block holds `self` weakly.
+    private var captureEndObserver: NSObjectProtocol?
 
     init(
         settings: SettingsStorage = .shared,
         registrar: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared,
-        clock: MonotonicClock = SystemClock()
+        clock: MonotonicClock = SystemClock(),
+        captureSession: ShortcutCaptureSession = .shared
     ) {
         self.settings = settings
         self.registrar = registrar
         self.clock = clock
+        self.captureSession = captureSession
+        captureEndObserver = captureSession.observeEnd { [weak self] in
+            MainActor.assumeIsolated { self?.reassertRegistration() }
+        }
     }
 
     func activate(onTrigger: @escaping () -> Void) {
@@ -54,7 +62,16 @@ final class ForceSubmitService {
         registrar.onKeyDown(for: .forceSubmit) { [weak self] in
             MainActor.assumeIsolated { self?.trigger() }
         }
-        registrar.enable(.forceSubmit)
+        reassertRegistration()
+    }
+
+    /// Live only while a recording is active and no shortcut is being captured.
+    private func reassertRegistration() {
+        if isActive, !captureSession.isActive {
+            registrar.enable(.forceSubmit)
+        } else {
+            registrar.disable(.forceSubmit)
+        }
     }
 
     /// Unregisters the hotkey. Keeps the armed flag so the stop pipeline can still submit after paste.
@@ -77,7 +94,7 @@ final class ForceSubmitService {
     }
 
     private func trigger() {
-        guard isActive, !isArmed else { return }
+        guard isActive, !isArmed, !captureSession.isActive else { return }
         guard counter.register(at: clock.now, required: settings.forceSubmitPressCount) else { return }
         isArmed = true
         onTrigger?()

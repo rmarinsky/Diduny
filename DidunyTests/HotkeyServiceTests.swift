@@ -10,10 +10,12 @@ final class HotkeyServiceTests {
     private let registrar = FakeHotkeyRegistrar()
     private let clock = ManualClock(100)
     private let center = NotificationCenter()
+    private lazy var session = ShortcutCaptureSession(registrar: registrar, notifications: center)
     private lazy var sut = HotkeyService(
         settings: box.settings,
         registrar: registrar,
         clock: clock,
+        captureSession: session,
         shortcutChanges: center
     )
 
@@ -139,6 +141,64 @@ final class HotkeyServiceTests {
             userInfo: ["name": KeyboardShortcuts.Name.toggleHistoryPalette]
         )
         #expect(!registrar.isEnabled(.toggleHistoryPalette))
+    }
+
+    @Test("The copied notification name still matches KeyboardShortcuts (pinned 2.4.0)")
+    func packageNotificationNameMatches() {
+        // A probe name with no default and an unlikely chord; removed again at the end.
+        let probe = KeyboardShortcuts.Name("wp15NotificationProbe.\(UUID().uuidString)")
+        var received: [KeyboardShortcuts.Name] = []
+        let token = NotificationCenter.default.addObserver(
+            forName: HotkeyService.packageShortcutDidChange, object: nil, queue: nil
+        ) { notification in
+            if let name = notification.userInfo?["name"] as? KeyboardShortcuts.Name, name == probe {
+                received.append(name)
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        KeyboardShortcuts.setShortcut(.init(.f19, modifiers: [.control, .option, .command]), for: probe)
+        KeyboardShortcuts.setShortcut(nil, for: probe)
+        #expect(received == [probe, probe], "If this fails, the package renamed shortcutByNameDidChange")
+    }
+
+    // MARK: - Capture session
+
+    @Test("A name unregistered during capture stays off after the capture ends")
+    func unregisteredDuringCaptureStaysOff() {
+        sut.registerChapterHotkey {}
+        sut.registerRecordingHotkey {}
+        session.begin()
+        #expect(!registrar.isEnabled(.addMeetingChapter))
+
+        sut.unregisterChapterHotkey()
+        session.end()
+        #expect(!registrar.isEnabled(.addMeetingChapter), "The meeting stopped during capture")
+        #expect(registrar.isEnabled(.toggleRecording), "A name still registered comes back")
+    }
+
+    @Test("A name registered during capture goes live only when the capture ends")
+    func registeredDuringCaptureWaits() {
+        var chapters = 0
+        session.begin()
+        sut.registerChapterHotkey { chapters += 1 }
+        #expect(!registrar.isEnabled(.addMeetingChapter))
+        registrar.fire(.addMeetingChapter)
+        #expect(chapters == 0)
+
+        session.end()
+        #expect(registrar.isEnabled(.addMeetingChapter))
+        registrar.fire(.addMeetingChapter)
+        #expect(chapters == 1)
+    }
+
+    @Test("A switched-off name stays off after a capture")
+    func switchedOffStaysOffAfterCapture() {
+        settings.translateSelectedTextHotkeyEnabled = false
+        sut.registerTranslateSelectedTextHotkey {}
+        session.begin()
+        session.end()
+        #expect(!registrar.isEnabled(.translateSelectedText))
     }
 
     // MARK: - Chapter

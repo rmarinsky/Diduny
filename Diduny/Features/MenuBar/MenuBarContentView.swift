@@ -118,6 +118,8 @@ private struct StatusItemLabel: View {
     var processingMode = MenuBarProcessingModeSelection()
     /// Recording items made earlier; their titles and availability are refreshed instead of recreated.
     var reusedRecordingItems: [NSMenuItem]?
+    /// Where the recording items' shortcuts are read; tests inject a fake (test-plan T5-HK-40).
+    var hotkeys: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared
 
     func items() -> [NSMenuItem] {
         var items = calendarItems()
@@ -281,6 +283,7 @@ private struct StatusItemLabel: View {
         }
         for (index, item) in items.enumerated() where index < specs.count {
             item.title = specs[index].title
+            item.setShortcut(hotkeys.getShortcut(for: specs[index].shortcut))
             var others = states
             others.remove(at: index)
             item.isEnabled = !isBlocked(states[index], by: others)

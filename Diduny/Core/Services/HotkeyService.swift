@@ -24,7 +24,10 @@ extension KeyboardShortcuts.Name {
 /// Carbon hotkeys through `HotkeyRegistrar`, with one `PressCounter` per name (plan 3.5).
 /// Counts and switches are read at press time; a switch change calls `refreshSwitches()`.
 final class HotkeyService: HotkeyServiceProtocol {
-    /// Posted by `KeyboardShortcuts` 2.4.0 when a name's keys change (internal name in the package).
+    /// Posted by `KeyboardShortcuts` when a name's keys change, with `userInfo["name"]`.
+    /// The package declares it `internal` (`Notification.Name.shortcutByNameDidChange`), so the raw
+    /// string is copied here. Pinned to KeyboardShortcuts 2.4.0 (`project.yml` `exactVersion`); when the
+    /// package is bumped, `HotkeyServiceTests.packageNotificationNameMatches` fails if it drifted.
     static let packageShortcutDidChange = Notification.Name("KeyboardShortcuts_shortcutByNameDidChange")
 
     private struct Binding {
@@ -43,34 +46,45 @@ final class HotkeyService: HotkeyServiceProtocol {
     private let settings: SettingsStorage
     private let registrar: HotkeyRegistrar
     private let clock: MonotonicClock
+    private let captureSession: ShortcutCaptureSession
     private var bindings: [KeyboardShortcuts.Name: Binding] = [:]
     private let shortcutChanges: NotificationCenter?
-    private var shortcutChangeObserver: NSObjectProtocol?
+    private var observers: [(NotificationCenter, NSObjectProtocol)] = []
 
     init(
         settings: SettingsStorage = .shared,
         registrar: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared,
         clock: MonotonicClock = SystemClock(),
+        captureSession: ShortcutCaptureSession = .shared,
         shortcutChanges: NotificationCenter? = .default
     ) {
         self.settings = settings
         self.registrar = registrar
         self.clock = clock
+        self.captureSession = captureSession
         self.shortcutChanges = shortcutChanges
         // Recording new keys registers them at once, also for a name that is off: turn it off again.
-        shortcutChangeObserver = shortcutChanges?.addObserver(
-            forName: Self.packageShortcutDidChange,
-            object: nil,
-            queue: nil
-        ) { [weak self] notification in
-            guard let name = notification.userInfo?["name"] as? KeyboardShortcuts.Name else { return }
-            self?.reapply(name)
+        if let shortcutChanges {
+            let token = shortcutChanges.addObserver(
+                forName: Self.packageShortcutDidChange,
+                object: nil,
+                queue: nil
+            ) { [weak self] notification in
+                guard let name = notification.userInfo?["name"] as? KeyboardShortcuts.Name else { return }
+                self?.reapply(name)
+            }
+            observers.append((shortcutChanges, token))
         }
+        // A capture turned every name off; put back exactly what this service wants now.
+        let endToken = captureSession.observeEnd { [weak self] in
+            self?.refreshSwitches()
+        }
+        observers.append((captureSession.notifications, endToken))
     }
 
     deinit {
-        if let shortcutChangeObserver {
-            shortcutChanges?.removeObserver(shortcutChangeObserver)
+        for (center, token) in observers {
+            center.removeObserver(token)
         }
     }
 
@@ -200,7 +214,7 @@ final class HotkeyService: HotkeyServiceProtocol {
             return
         }
         bindings[name]?.counter.reset()
-        if binding.isOn() {
+        if binding.isOn(), !captureSession.isActive {
             registrar.enable(name)
         } else {
             registrar.disable(name)
@@ -208,7 +222,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     }
 
     private func handlePress(_ name: KeyboardShortcuts.Name) {
-        guard let binding = bindings[name], binding.isOn() else { return }
+        guard let binding = bindings[name], binding.isOn(), !captureSession.isActive else { return }
         let didTrigger = bindings[name]?.counter.register(at: clock.now, required: binding.pressCount()) ?? false
         if didTrigger {
             binding.handler()

@@ -140,9 +140,16 @@ struct ShortcutCaptureMachine {
 
 /// While a special row captures, Diduny's own hotkeys are off: a Carbon hotkey takes its keystroke
 /// before any local monitor, so ⌥⌘T would run Translate selected text instead of being recorded.
-/// `InplaceTranslationHotkeyMonitor` and `EscapeCancelService` ignore events while `isActive`.
+///
+/// `begin()` disables every registered name. `end()` does not replay that list: it posts
+/// `didEndNotification`, and each owner (`HotkeyService`, `ForceSubmitService`,
+/// `InplaceTranslationHotkeyMonitor`) re-asserts its own current state. So a name its owner
+/// unregistered during capture (recording stopped) stays off, and a name registered during capture
+/// goes live only at the end. Owners never enable a name while `isActive`; `PushToTalkService`,
+/// `InplaceTranslationHotkeyMonitor` and `EscapeCancelService` ignore key events meanwhile.
 final class ShortcutCaptureSession {
     static let shared = ShortcutCaptureSession()
+    static let didEndNotification = Notification.Name("shortcutCaptureSessionDidEnd")
 
     /// Every `KeyboardShortcuts.Name` Diduny registers.
     static let managedNames: [KeyboardShortcuts.Name] = [
@@ -151,26 +158,31 @@ final class ShortcutCaptureSession {
     ]
 
     private let registrar: HotkeyRegistrar
-    private var disabledByCapture: [KeyboardShortcuts.Name] = []
+    let notifications: NotificationCenter
     private(set) var isActive = false
 
-    init(registrar: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared) {
+    init(
+        registrar: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared,
+        notifications: NotificationCenter = .default
+    ) {
         self.registrar = registrar
+        self.notifications = notifications
     }
 
     func begin() {
         guard !isActive else { return }
         isActive = true
-        disabledByCapture = Self.managedNames.filter { registrar.isEnabled($0) }
-        disabledByCapture.forEach { registrar.disable($0) }
+        Self.managedNames.filter { registrar.isEnabled($0) }.forEach { registrar.disable($0) }
     }
 
-    /// Re-enables exactly the names `begin()` turned off, so an idle Force submit or chapter
-    /// hotkey is not registered by a capture.
     func end() {
         guard isActive else { return }
         isActive = false
-        disabledByCapture.forEach { registrar.enable($0) }
-        disabledByCapture = []
+        notifications.post(name: Self.didEndNotification, object: self)
+    }
+
+    /// Calls `handler` on the main thread after every `end()` of this session.
+    func observeEnd(_ handler: @escaping () -> Void) -> NSObjectProtocol {
+        notifications.addObserver(forName: Self.didEndNotification, object: self, queue: nil) { _ in handler() }
     }
 }

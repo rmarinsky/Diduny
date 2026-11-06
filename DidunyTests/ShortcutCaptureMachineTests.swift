@@ -132,14 +132,24 @@ struct ShortcutCaptureMachineTests {
     }
 }
 
-/// The session that silences Diduny's own hotkeys while a special row captures.
+/// The session that silences Diduny's own hotkeys while a special row captures. `end()` does not
+/// replay what `begin()` turned off; each owner re-asserts its own state.
+@MainActor
 struct ShortcutCaptureSessionTests {
-    @Test("Begin disables every enabled hotkey; end re-enables exactly those")
+    @Test("Begin disables every enabled hotkey; after end each owner turns back on what it wants")
     func beginAndEnd() {
         let registrar = FakeHotkeyRegistrar()
-        let enabled: [KeyboardShortcuts.Name] = [.toggleRecording, .translateSelectedText, .toggleHistoryPalette]
-        enabled.forEach(registrar.enable)
-        let session = ShortcutCaptureSession(registrar: registrar)
+        let center = NotificationCenter()
+        let session = ShortcutCaptureSession(registrar: registrar, notifications: center)
+        let box = IsolatedSettings("ShortcutCaptureSessionTests")
+        let hotkeys = HotkeyService(
+            settings: box.settings, registrar: registrar, clock: ManualClock(),
+            captureSession: session, shortcutChanges: nil
+        )
+        let forceSubmit = ForceSubmitService(settings: box.settings, registrar: registrar, captureSession: session)
+        hotkeys.registerRecordingHotkey {}
+        hotkeys.registerTranslateSelectedTextHotkey {}
+        hotkeys.registerHistoryPaletteHotkey {}
 
         session.begin()
         #expect(session.isActive)
@@ -149,11 +159,12 @@ struct ShortcutCaptureSessionTests {
 
         session.end()
         #expect(!session.isActive)
-        for name in enabled {
+        for name in [KeyboardShortcuts.Name.toggleRecording, .translateSelectedText, .toggleHistoryPalette] {
             #expect(registrar.isEnabled(name), "\(name.rawValue) is re-enabled")
         }
         #expect(!registrar.isEnabled(.forceSubmit), "Force submit was off while idle and stays off")
         #expect(!registrar.isEnabled(.addMeetingChapter))
+        #expect(!forceSubmit.isActive)
     }
 
     @Test("The in-place key chord is part of the managed names")
@@ -162,17 +173,20 @@ struct ShortcutCaptureSessionTests {
         #expect(ShortcutCaptureSession.managedNames.count == 9)
     }
 
-    @Test("End without begin, and a second begin, change nothing")
-    func idempotent() {
-        let registrar = FakeHotkeyRegistrar()
-        registrar.enable(.toggleRecording)
-        let session = ShortcutCaptureSession(registrar: registrar)
-        session.end()
-        #expect(registrar.isEnabled(.toggleRecording))
+    @Test("End posts once per capture; end without begin and a second begin change nothing")
+    func endPostsOnce() {
+        let center = NotificationCenter()
+        let session = ShortcutCaptureSession(registrar: FakeHotkeyRegistrar(), notifications: center)
+        var ends = 0
+        let token = session.observeEnd { ends += 1 }
+        defer { center.removeObserver(token) }
 
+        session.end()
+        #expect(ends == 0)
         session.begin()
         session.begin()
         session.end()
-        #expect(registrar.isEnabled(.toggleRecording))
+        session.end()
+        #expect(ends == 1)
     }
 }

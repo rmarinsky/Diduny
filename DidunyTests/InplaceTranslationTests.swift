@@ -276,7 +276,7 @@ final class InplaceTranslationMonitorTests {
     private let source = FakeKeySource()
     private let registrar = FakeHotkeyRegistrar()
     private let clock = ManualClock(50)
-    private let session = ShortcutCaptureSession(registrar: FakeHotkeyRegistrar())
+    private lazy var session = ShortcutCaptureSession(registrar: registrar, notifications: NotificationCenter())
     private lazy var sut = InplaceTranslationHotkeyMonitor(
         source: source,
         registrar: registrar,
@@ -366,6 +366,34 @@ final class InplaceTranslationMonitorTests {
         #expect(sut.isRunning)
         #expect(source.isActive)
         #expect(!registrar.isEnabled(.inplaceTranslation))
+    }
+
+    @Test("A key chord is off during capture and back after it")
+    func keyChordAcrossCapture() {
+        registrar.setShortcut(.init(.i, modifiers: [.control, .option]), for: .inplaceTranslation)
+        sut.configure(shortcut: .keyChord, pressCount: 1)
+        sut.start()
+        session.begin()
+        #expect(!registrar.isEnabled(.inplaceTranslation))
+        session.end()
+        #expect(registrar.isEnabled(.inplaceTranslation))
+    }
+
+    @Test("A key chord stopped during capture stays off; one started during capture waits")
+    func keyChordChangedDuringCapture() {
+        registrar.setShortcut(.init(.i, modifiers: [.control, .option]), for: .inplaceTranslation)
+        sut.configure(shortcut: .keyChord, pressCount: 1)
+        sut.start()
+        session.begin()
+        sut.stop()
+        session.end()
+        #expect(!registrar.isEnabled(.inplaceTranslation))
+
+        session.begin()
+        sut.start()
+        #expect(!registrar.isEnabled(.inplaceTranslation))
+        session.end()
+        #expect(registrar.isEnabled(.inplaceTranslation))
     }
 
     @Test("Taps are ignored while a shortcut is being captured")

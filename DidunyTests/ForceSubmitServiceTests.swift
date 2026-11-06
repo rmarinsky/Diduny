@@ -8,7 +8,13 @@ final class ForceSubmitServiceTests {
     private let box = IsolatedSettings("ForceSubmitServiceTests")
     private let registrar = FakeHotkeyRegistrar()
     private let clock = ManualClock(10)
-    private lazy var sut = ForceSubmitService(settings: box.settings, registrar: registrar, clock: clock)
+    private lazy var session = ShortcutCaptureSession(registrar: registrar, notifications: NotificationCenter())
+    private lazy var sut = ForceSubmitService(
+        settings: box.settings,
+        registrar: registrar,
+        clock: clock,
+        captureSession: session
+    )
 
     @Test("T5-FS-02 registered only while dictation records")
     func registeredOnlyWhileRecording() {
@@ -69,5 +75,29 @@ final class ForceSubmitServiceTests {
         clock.advance(by: 0.4)
         registrar.fire(.forceSubmit)
         #expect(!sut.isArmed)
+    }
+
+    @Test("Recording stops during capture: ⌘↩ stays unregistered after it")
+    func deactivatedDuringCaptureStaysOff() {
+        sut.activate {}
+        session.begin()
+        #expect(!registrar.isEnabled(.forceSubmit))
+        sut.deactivate()
+        session.end()
+        #expect(!registrar.isEnabled(.forceSubmit))
+    }
+
+    @Test("Recording starts during capture: ⌘↩ goes live only when the capture ends")
+    func activatedDuringCaptureWaits() {
+        session.begin()
+        sut.activate {}
+        #expect(!registrar.isEnabled(.forceSubmit))
+        registrar.fire(.forceSubmit)
+        #expect(!sut.isArmed)
+
+        session.end()
+        #expect(registrar.isEnabled(.forceSubmit))
+        registrar.fire(.forceSubmit)
+        #expect(sut.isArmed)
     }
 }

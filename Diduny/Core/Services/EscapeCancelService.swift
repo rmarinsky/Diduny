@@ -21,8 +21,9 @@ final class EscapeCancelService: ObservableObject {
     private let captureSession: ShortcutCaptureSession
     private let playsSound: Bool
 
-    /// Called when recording should be cancelled (after required press count confirmed)
-    var onCancel: (() -> Void)?
+    /// Called when recording should be cancelled (after required press count confirmed), with
+    /// "Keep the audio when cancelled" (`escapeCancelSaveAudio`) read at that moment.
+    var onCancel: ((_ keepAudio: Bool) -> Void)?
 
     /// Called on intermediate presses so UI can explain how many are left.
     var onProgressEscape: ((Int, Int) -> Void)?
@@ -93,7 +94,7 @@ final class EscapeCancelService: ObservableObject {
         if consecutivePressCount >= requiredPressCount {
             Log.app.info("\(requiredPressCount)x cancel key detected - cancelling recording")
             resetPressState()
-            onCancel?()
+            onCancel?(settings.escapeCancelSaveAudio)
         } else {
             Log.app.debug("Cancel key press \(self.consecutivePressCount)/\(requiredPressCount) - waiting for confirmation")
             if playsSound { tinkSound?.play() }
