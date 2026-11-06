@@ -1802,7 +1802,6 @@
 "Sign in to record." = "Sign in to record.";
 
 /* Panels redesign WP-32 */
-"Recording · no live text" = "Recording · no live text";
 "Live · both directions · speaker labels" = "Live · both directions · speaker labels";
 "After Stop · everything into %@ · no speaker labels" = "After Stop · everything into %@ · no speaker labels";
 "No live text with %@. It transcribes on this Mac after Stop, then Diduny translates all of it into %@. Both directions need Diduny Cloud." = "No live text with %@. It transcribes on this Mac after Stop, then Diduny translates all of it into %@. Both directions need Diduny Cloud.";
@@ -1824,9 +1823,7 @@
 "Providers..." = "Providers...";
 "Compare engines, add a key" = "Compare engines, add a key";
 "Translate into" = "Translate into";
-"Sign in to record." = "Sign in to record.";
 "Voice → %@" = "Voice → %@";
-"Live · %@" = "Live · %@";
 "After Stop · %@" = "After Stop · %@";
 "Not on this Mac" = "Not on this Mac";
 
@@ -1844,7 +1841,6 @@
 
 /* Panels redesign WP-43 */
 "Record it?" = "Record it?";
-"Transcript after Stop" = "Transcript after Stop";
 "Keep suggesting when a meeting starts" = "Keep suggesting when a meeting starts";
 
 /* Panels redesign WP-50 */
@@ -1853,7 +1849,6 @@
 "Audio" = "Audio";
 
 /* Panels redesign WP-51 */
-"Modes" = "Modes";
 "What runs each mode by default, and how you start it." = "What runs each mode by default, and how you start it.";
 "You are signed out. Recording and translation by Diduny need an account." = "You are signed out. Recording and translation by Diduny need an account.";
 "Use one engine for everything" = "Use one engine for everything";
@@ -1862,7 +1857,6 @@
 "Files and URLs" = "Files and URLs";
 "Into" = "Into";
 "Starts in" = "Starts in";
-"Between" = "Between";
 "%@ options" = "%@ options";
 "1×, 2×, 3× is how many times you press the shortcut." = "1×, 2×, 3× is how many times you press the shortcut.";
 "Compare engines in Providers" = "Compare engines in Providers";
@@ -1880,14 +1874,7 @@
 "Calendar meetings" = "Calendar meetings";
 "Start the same way" = "Start the same way";
 "A meeting started from the calendar uses \"Starts in\" and these engines." = "A meeting started from the calendar uses \"Starts in\" and these engines.";
-"Show original text" = "Show original text";
 "Only with an engine that returns both texts." = "Only with an engine that returns both texts.";
-"On this Mac, recommended" = "On this Mac, recommended";
-"Both directions, between your languages" = "Both directions, between your languages";
-"Other languages..." = "Other languages...";
-"Add them to Your languages in Settings" = "Add them to Your languages in Settings";
-"Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript." = "Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript.";
-"Download %@" = "Download %@";
 
 /* Panels redesign WP-52 */
 "How the app behaves, whatever the mode." = "How the app behaves, whatever the mode.";
@@ -1912,7 +1899,6 @@
 "You said no to Screen Recording earlier. Meetings need it to record the other side." = "You said no to Screen Recording earlier. Meetings need it to record the other side.";
 
 /* Panels redesign WP-53 */
-"Languages" = "Languages";
 "The languages you speak and the ones you translate into." = "The languages you speak and the ones you translate into.";
 "Languages you speak" = "Languages you speak";
 "Detect the language" = "Detect the language";
@@ -1934,7 +1920,6 @@
 "Add a second language to Your languages" = "Add a second language to Your languages";
 
 /* Panels redesign WP-54 */
-"Audio" = "Audio";
 "Devices and levels." = "Devices and levels.";
 "Test the microphone" = "Test the microphone";
 "Input level" = "Input level";
@@ -1954,7 +1939,6 @@
 
 /* Panels redesign WP-55 */
 "Each one has its keys, how many times you press them, and a switch. Shortcuts that start a mode are in Modes." = "Each one has its keys, how many times you press them, and a switch. Shortcuts that start a mode are in Modes.";
-"While recording" = "While recording";
 "Keep the audio when cancelled" = "Keep the audio when cancelled";
 "Stop, paste and send" = "Stop, paste and send";
 "Stops, pastes, then presses ⌘↩." = "Stops, pastes, then presses ⌘↩.";
@@ -1976,9 +1960,6 @@
 "Dictation, after Stop" = "Dictation, after Stop";
 "Meeting, live transcript" = "Meeting, live transcript";
 "Meeting speaker labels" = "Meeting speaker labels";
-"Translate selected text" = "Translate selected text";
-"Files and URLs" = "Files and URLs";
-"Languages" = "Languages";
 "Needs" = "Needs";
 "In macOS" = "In macOS";
 "Itself: only into English" = "Itself: only into English";
@@ -2036,7 +2017,6 @@
 "in" = "in";
 "any language" = "any language";
 "Model" = "Model";
-"Languages" = "Languages";
 "Size" = "Size";
 "Recommended" = "Recommended";
 "Itself: English only" = "Itself: English only";
@@ -2044,11 +2024,9 @@
 "macOS" = "macOS";
 "Fastest" = "Fastest";
 "about %@" = "about %@";
-"Not on this Mac" = "Not on this Mac";
 "Use" = "Use";
 "Active" = "Active";
 "Delete %@" = "Delete %@";
-"Keep" = "Keep";
 "No local model does this. Diduny Cloud translates between 60 languages, live." = "No local model does this. Diduny Cloud translates between 60 languages, live.";
 "No local model labels speakers. Diduny labels them on this Mac after Stop; see Audio." = "No local model labels speakers. Diduny labels them on this Mac after Stop; see Audio.";
 "Whisper options" = "Whisper options";
@@ -2063,11 +2041,4 @@
 "Keep loaded" = "Keep loaded";
 "Frees memory when you are not recording." = "Frees memory when you are not recording.";
 "%1$@. Memory: %2$@" = "%1$@. Memory: %2$@";
-"Set in macOS" = "Set in macOS";
-"Your languages are in crimson. " = "Your languages are in crimson. ";
-"Accuracy differs a lot between languages. English-only models do English alone. Cantonese needs a Large v3 model." = "Accuracy differs a lot between languages. English-only models do English alone. Cantonese needs a Large v3 model.";
-"European languages. Transcription only." = "European languages. Transcription only.";
-"Apple Speech uses the dictation languages installed in macOS System Settings, so the list depends on this Mac." = "Apple Speech uses the dictation languages installed in macOS System Settings, so the list depends on this Mac.";
-"The engine does it" = "The engine does it";
-"By Diduny: the engine makes the text, Diduny translates it into any of 60 languages. Needs a Diduny account and uses its quota" = "By Diduny: the engine makes the text, Diduny translates it into any of 60 languages. Needs a Diduny account and uses its quota";
 "Sort" = "Sort";

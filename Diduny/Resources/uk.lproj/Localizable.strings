@@ -1802,7 +1802,6 @@
 "Sign in to record." = "Увійдіть, щоб записувати.";
 
 /* Panels redesign WP-32 */
-"Recording · no live text" = "Запис · без живого тексту";
 "Live · both directions · speaker labels" = "Наживо · в обидва боки · мітки мовців";
 "After Stop · everything into %@ · no speaker labels" = "Після зупинки · усе мовою: %@ · без міток мовців";
 "No live text with %@. It transcribes on this Mac after Stop, then Diduny translates all of it into %@. Both directions need Diduny Cloud." = "%@ не дає живого тексту. Він розпізнає на цьому Mac після зупинки, а потім Diduny перекладає все мовою: %@. Для обох напрямків потрібен Diduny Cloud.";
@@ -1824,9 +1823,7 @@
 "Providers..." = "Провайдери...";
 "Compare engines, add a key" = "Порівняти рушії, додати ключ";
 "Translate into" = "Перекласти на";
-"Sign in to record." = "Увійдіть, щоб записувати.";
 "Voice → %@" = "Голос → %@";
-"Live · %@" = "Наживо · %@";
 "After Stop · %@" = "Після Stop · %@";
 "Not on this Mac" = "Недоступно на цьому Mac";
 
@@ -1844,7 +1841,6 @@
 
 /* Panels redesign WP-43 */
 "Record it?" = "Записати її?";
-"Transcript after Stop" = "Транскрипт після зупинки";
 "Keep suggesting when a meeting starts" = "Пропонувати запис, коли починається зустріч";
 
 /* Panels redesign WP-50 */
@@ -1853,7 +1849,6 @@
 "Audio" = "Аудіо";
 
 /* Panels redesign WP-51 */
-"Modes" = "Режими";
 "What runs each mode by default, and how you start it." = "Що працює в кожному режимі за замовчуванням і як його запустити.";
 "You are signed out. Recording and translation by Diduny need an account." = "Ви не ввійшли. Для запису й перекладу від Diduny потрібен обліковий запис.";
 "Use one engine for everything" = "Один рушій для всього";
@@ -1862,7 +1857,6 @@
 "Files and URLs" = "Файли й посилання";
 "Into" = "Мовою";
 "Starts in" = "Починати в";
-"Between" = "Між";
 "%@ options" = "Параметри: %@";
 "1×, 2×, 3× is how many times you press the shortcut." = "1×, 2×, 3× — скільки разів натиснути комбінацію.";
 "Compare engines in Providers" = "Порівняти рушії в Провайдерах";
@@ -1880,14 +1874,7 @@
 "Calendar meetings" = "Зустрічі з календаря";
 "Start the same way" = "Починаються так само";
 "A meeting started from the calendar uses \"Starts in\" and these engines." = "Зустріч, запущена з календаря, використовує «Починати в» і ці рушії.";
-"Show original text" = "Показувати оригінал";
 "Only with an engine that returns both texts." = "Лише з рушієм, що повертає обидва тексти.";
-"On this Mac, recommended" = "На цьому Mac, рекомендовано";
-"Both directions, between your languages" = "Обидва напрями, між вашими мовами";
-"Other languages..." = "Інші мови...";
-"Add them to Your languages in Settings" = "Додайте їх до «Ваших мов» у Налаштуваннях";
-"Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript." = "Parakeet V3 не завантажено. Доки його немає, транскрипт робить Whisper Large v3 Turbo.";
-"Download %@" = "Завантажити %@";
 
 /* Panels redesign WP-52 */
 "How the app behaves, whatever the mode." = "Як поводиться застосунок у будь-якому режимі.";
@@ -1912,7 +1899,6 @@
 "You said no to Screen Recording earlier. Meetings need it to record the other side." = "Раніше ви відмовили в записі екрана. Він потрібен, щоб записувати співрозмовників на зустрічах.";
 
 /* Panels redesign WP-53 */
-"Languages" = "Мови";
 "The languages you speak and the ones you translate into." = "Мови, якими ви говорите, і мови, на які перекладаєте.";
 "Languages you speak" = "Мови, якими ви говорите";
 "Detect the language" = "Визначати мову";
@@ -1934,7 +1920,6 @@
 "Add a second language to Your languages" = "Додайте другу мову до «Ваших мов»";
 
 /* Panels redesign WP-54 */
-"Audio" = "Аудіо";
 "Devices and levels." = "Пристрої та рівні.";
 "Test the microphone" = "Перевірити мікрофон";
 "Input level" = "Рівень входу";
@@ -1954,7 +1939,6 @@
 
 /* Panels redesign WP-55 */
 "Each one has its keys, how many times you press them, and a switch. Shortcuts that start a mode are in Modes." = "У кожного є клавіші, кількість натискань і перемикач. Скорочення, що запускають режим, — у «Режимах».";
-"While recording" = "Під час запису";
 "Keep the audio when cancelled" = "Зберігати аудіо після скасування";
 "Stop, paste and send" = "Зупинити, вставити й надіслати";
 "Stops, pastes, then presses ⌘↩." = "Зупиняє, вставляє, потім натискає ⌘↩.";
@@ -1976,9 +1960,6 @@
 "Dictation, after Stop" = "Диктування, після зупинки";
 "Meeting, live transcript" = "Зустріч, живий транскрипт";
 "Meeting speaker labels" = "Мітки мовців на зустрічі";
-"Translate selected text" = "Переклад виділеного тексту";
-"Files and URLs" = "Файли та URL";
-"Languages" = "Мови";
 "Needs" = "Потрібно";
 "In macOS" = "У macOS";
 "Itself: only into English" = "Сам: лише англійською";
@@ -2036,7 +2017,6 @@
 "in" = "мовою";
 "any language" = "будь-якою";
 "Model" = "Модель";
-"Languages" = "Мови";
 "Size" = "Розмір";
 "Recommended" = "Рекомендовано";
 "Itself: English only" = "Сама: лише англійською";
@@ -2044,11 +2024,9 @@
 "macOS" = "macOS";
 "Fastest" = "Найшвидша";
 "about %@" = "близько %@";
-"Not on this Mac" = "Немає на цьому Mac";
 "Use" = "Вибрати";
 "Active" = "Активна";
 "Delete %@" = "Видалити %@";
-"Keep" = "Залишити";
 "No local model does this. Diduny Cloud translates between 60 languages, live." = "Жодна локальна модель цього не вміє. Diduny Cloud перекладає між 60 мовами наживо.";
 "No local model labels speakers. Diduny labels them on this Mac after Stop; see Audio." = "Жодна локальна модель не розрізняє мовців. Diduny позначає їх на цьому Mac після зупинки; див. Аудіо.";
 "Whisper options" = "Параметри Whisper";
@@ -2063,11 +2041,4 @@
 "Keep loaded" = "Не вивантажувати";
 "Frees memory when you are not recording." = "Звільняє пам'ять, коли ви не записуєте.";
 "%1$@. Memory: %2$@" = "%1$@. Пам'ять: %2$@";
-"Set in macOS" = "Задаються в macOS";
-"Your languages are in crimson. " = "Ваші мови виділено малиновим. ";
-"Accuracy differs a lot between languages. English-only models do English alone. Cantonese needs a Large v3 model." = "Точність дуже різниться між мовами. Англійські моделі розпізнають лише англійську. Для кантонської потрібна модель Large v3.";
-"European languages. Transcription only." = "Європейські мови. Лише розпізнавання.";
-"Apple Speech uses the dictation languages installed in macOS System Settings, so the list depends on this Mac." = "Apple Speech використовує мови диктування, встановлені в Системних параметрах macOS, тож список залежить від цього Mac.";
-"The engine does it" = "Рушій уміє це сам";
-"By Diduny: the engine makes the text, Diduny translates it into any of 60 languages. Needs a Diduny account and uses its quota" = "Від Diduny: рушій створює текст, Diduny перекладає його будь-якою з 60 мов. Потрібен обліковий запис Diduny, витрачає його квоту";
 "Sort" = "Сортування";
