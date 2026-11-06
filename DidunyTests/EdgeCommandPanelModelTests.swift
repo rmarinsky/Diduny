@@ -414,7 +414,11 @@ struct EdgeCommandPanelLiveTextTests {
         store.phase = .recording
 
         #expect(store.stopShortcutHint == "⇧ ×2")
-        #expect(store.cancelShortcutHint == "Esc ×3")
+        #expect(store.cancelShortcutHint == "⌘A ×3", "The hint names the stored cancel key")
+
+        settings.escapeCancelShortcut = .defaultShortcut
+        settings.escapeCancelPressCount = 1
+        #expect(store.cancelShortcutHint == "Esc")
 
         settings.escapeCancelEnabled = false
         #expect(store.cancelShortcutHint == nil)
