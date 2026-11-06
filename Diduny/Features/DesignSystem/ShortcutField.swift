@@ -77,11 +77,15 @@ struct ShortcutField: View {
 struct ShortcutPressCountPicker: View {
     @Binding var selection: Int
     var isOff = false
+    /// Segments drawn at 0.5 and not selectable (in place with a modifier chord: 1×, ADR-0012 D8).
+    var disabledCounts: Set<Int> = []
 
     var body: some View {
         Picker("Press count", selection: $selection) {
             ForEach(1 ... 3, id: \.self) { count in
                 Text(verbatim: "\(count)×").tag(count)
+                    .disabled(disabledCounts.contains(count))
+                    .opacity(disabledCounts.contains(count) ? 0.5 : 1)
             }
         }
         .pickerStyle(.segmented)
