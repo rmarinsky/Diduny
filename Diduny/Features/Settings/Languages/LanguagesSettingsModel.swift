@@ -45,7 +45,9 @@ struct ChangeLanguagesRows: Equatable {
 
     init(chosen: [String], all: [String], query: String, name: (String) -> String) {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matches = { (code: String) in query.isEmpty || name(code).range(of: query, options: .caseInsensitive) != nil }
+        func matches(_ code: String) -> Bool {
+            query.isEmpty || name(code).range(of: query, options: .caseInsensitive) != nil
+        }
         let chosenSet = Set(chosen)
         self.chosen = chosen.filter(matches)
         rest = all.filter { !chosenSet.contains($0) && matches($0) }

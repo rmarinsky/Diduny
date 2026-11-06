@@ -15,7 +15,7 @@ final class ParakeetModelController: ParakeetModelStoring {
     @ObservationIgnored private let isDownloaded: () -> Bool
     @ObservationIgnored private let load: Load
     @ObservationIgnored private let remove: () async throws -> Void
-    @ObservationIgnored private var download: (id: UUID, task: Task<Void, Never>)?
+    @ObservationIgnored private var activeDownload: (id: UUID, task: Task<Void, Never>)?
     @ObservationIgnored private(set) var pendingWork: Task<Void, Never>?
 
     init(
@@ -32,7 +32,7 @@ final class ParakeetModelController: ParakeetModelStoring {
     }
 
     func download() {
-        guard isSupportedHardware, download == nil, state != .downloaded else { return }
+        guard isSupportedHardware, activeDownload == nil, state != .downloaded else { return }
         let id = UUID()
         state = .downloading(0)
         let task = Task { [weak self, load] in
@@ -49,15 +49,15 @@ final class ParakeetModelController: ParakeetModelStoring {
                 self?.finish(id: id, error: error)
             }
         }
-        download = (id, task)
+        activeDownload = (id, task)
         pendingWork = task
     }
 
     /// Stops the download; the partial files are removed, the cell returns to "Download".
     func cancel() {
-        guard let download else { return }
-        download.task.cancel()
-        self.download = nil
+        guard let activeDownload else { return }
+        activeDownload.task.cancel()
+        self.activeDownload = nil
         state = .notDownloaded
         pendingWork = Task { [remove] in try? await remove() }
     }
@@ -74,18 +74,18 @@ final class ParakeetModelController: ParakeetModelStoring {
 
     /// Re-reads the disk: the Benchmark tab can download Parakeet through `ParakeetModelStore` directly.
     func refresh() {
-        guard download == nil else { return }
+        guard activeDownload == nil else { return }
         if isDownloaded() { state = .downloaded } else if state == .downloaded { state = .notDownloaded }
     }
 
     private func progress(_ value: Double, id: UUID) {
-        guard download?.id == id else { return }
+        guard activeDownload?.id == id else { return }
         state = .downloading(min(max(value, 0), 1))
     }
 
     private func finish(id: UUID, error: Error?) {
-        guard download?.id == id else { return }
-        download = nil
+        guard activeDownload?.id == id else { return }
+        activeDownload = nil
         if let error, !(error is CancellationError) {
             state = .failed(error.localizedDescription)
         } else {
