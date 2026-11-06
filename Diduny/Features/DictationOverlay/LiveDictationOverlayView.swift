@@ -295,7 +295,7 @@ struct LiveDictationOverlayView: View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
-                    if let command = store.voiceCommand, command.position == .leading,
+                    if let command = store.voiceCommand, command.position != .trailing,
                        store.isShowingConvertedPreview
                     {
                         voiceCommandLine("Command:", command)

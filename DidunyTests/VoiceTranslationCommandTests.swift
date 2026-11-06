@@ -79,4 +79,48 @@ final class VoiceTranslationCommandTests: XCTestCase {
     func test_nativeLanguageName() {
         XCTAssertEqual(detect("Nos vemos mañana. Translate into español")?.targetLanguage, "es")
     }
+
+    // MARK: - WP-53 "Anywhere"
+
+    func test_T5LA06_anywhereFindsTheCommandInTheMiddleAndCutsIt() throws {
+        let command = try XCTUnwrap(detect("Hello team, translate into Polish, see you on Friday.", position: .anywhere))
+        XCTAssertEqual(command.targetLanguage, "pl")
+        XCTAssertEqual(command.commandText, "translate into Polish")
+        XCTAssertEqual(command.remainingText, "Hello team, see you on Friday.")
+        XCTAssertEqual(command.position, .middle)
+
+        let ukrainian = try XCTUnwrap(detect("Привіт, переклади на польську, побачимось у п'ятницю", position: .anywhere))
+        XCTAssertEqual(ukrainian.targetLanguage, "pl")
+        XCTAssertEqual(ukrainian.remainingText, "Привіт, побачимось у п'ятницю")
+    }
+
+    func test_T5LA06_anywhereStillCutsTheHeadCommand() throws {
+        let command = try XCTUnwrap(detect("please translate into Polish this text", position: .anywhere))
+        XCTAssertEqual(command.targetLanguage, "pl")
+        XCTAssertEqual(command.remainingText, "this text")
+    }
+
+    /// 05 §2.3 risk, pending Roman: "to translate into X" in a sentence stays content.
+    func test_T5LA06_anywhereIgnoresAnInfinitiveInASentence() {
+        XCTAssertNil(detect("we need to translate into Polish by Friday", position: .anywhere))
+    }
+
+    func test_T5LA06_anywhereNeedsAVerbInTheMiddle() {
+        XCTAssertNil(detect("Він сказав in English і пішов далі", position: .anywhere))
+        XCTAssertNil(detect("We talked about Polish грамматику today", position: .anywhere))
+    }
+
+    func test_T5LA07_endWinsOverTheMiddle() throws {
+        let command = try XCTUnwrap(
+            detect("Hi, translate into Polish, bye. Translate into German.", position: .anywhere)
+        )
+        XCTAssertEqual(command.targetLanguage, "de")
+        XCTAssertEqual(command.position, .trailing)
+    }
+
+    func test_T5LA07_existingPositionsIgnoreTheMiddle() {
+        let text = "Hello team, translate into Polish, see you on Friday."
+        XCTAssertNil(detect(text, position: .startAndEnd))
+        XCTAssertNil(detect(text, position: .endOnly))
+    }
 }
