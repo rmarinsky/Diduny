@@ -158,17 +158,9 @@ final class ModesViewModel {
 
     // MARK: Use one engine for everything (05 section 3)
 
-    /// The one engine every mode uses, or nil for "Different per mode". Files counts only when it offers the engine.
+    /// The one engine every mode uses, or nil for "Different per mode" (`ModeEngineRules`, 05 section 3).
     var uniformEngine: EngineID? {
-        let candidate = engine(for: .dictation)
-        guard let caps = caps(candidate),
-              engine(for: .dictationTranslation) == candidate,
-              engine(for: .meetingTranslation) == candidate,
-              startsIn == rules.segment(implyingEngine: caps),
-              engine(for: .meeting) == candidate
-        else { return nil }
-        let filesOffers = !rules.offeredEngines(job: .file, segment: nil, all: [caps]).isEmpty
-        return !filesOffers || engine(for: .file) == candidate ? candidate : nil
+        ModeEngineRules.displayedUniformEngine(engine: engine(for:), available: engines)
     }
 
     var uniformEngineValue: String {
@@ -193,20 +185,17 @@ final class ModesViewModel {
         )
     }
 
-    /// Dictation, Translation and Translate meeting always; Files only for an engine on this Mac; Meeting moves
-    /// "Starts in" to the engine's segment and sets that segment. Other segments, Into and the pair stay.
+    /// Applies `ModeEngineRules.useOneEngineForEverything` through the source.
     func pickUniformEngine(_ rowID: String) {
         guard let engine = EngineID(rawValue: rowID), let caps = caps(engine) else { return }
         write {
-            for job in [STTJob.dictation, .dictationTranslation, .meetingTranslation] {
-                source.setEngine(engine, for: job)
+            for change in ModeEngineRules.useOneEngineForEverything(caps) {
+                switch change {
+                case let .engine(job, _): source.setEngine(engine, for: job)
+                case let .segmentEngine(segment, _): source.setMeetingEngine(engine, for: segment)
+                case let .startsIn(segment): source.meetingStartsIn = segment
+                }
             }
-            if !rules.offeredEngines(job: .file, segment: nil, all: [caps]).isEmpty {
-                source.setEngine(engine, for: .file)
-            }
-            let segment = rules.segment(implyingEngine: caps)
-            source.setMeetingEngine(engine, for: segment)
-            source.meetingStartsIn = segment
         }
     }
 

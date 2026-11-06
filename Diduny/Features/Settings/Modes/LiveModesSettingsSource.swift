@@ -1,145 +1,51 @@
 import Foundation
 
-/// `ModesSettingsSource` over today's settings. Interim until WP-13 lands `ModeDefaults`:
-/// - the new keys use the ADR-0012 D4 names and formats, so WP-13 reads what this writes;
-/// - engine writes go through `EngineOptions.apply`, which also writes the legacy keys today's recording
-///   flows read, so a pick in Modes keeps working before WP-17 moves routing to the new keys.
+/// `ModesSettingsSource` over `ModeDefaults` (ADR-0012 D4) and the per-mode keys of `SettingsStorage`.
+/// Writes only the new keys; the run time reads them (WP-17), the legacy Cloud/Local keys are not written.
 @MainActor
 final class LiveModesSettingsSource: ModesSettingsSource {
-    private enum ModesKey: String {
-        case meetingTranscriptMode
-        case dictationTranslationTargetLanguage
-        case meetingTranslationShowOriginal
-    }
-
     private let storage: SettingsStorage
-    private let isAppleSilicon: Bool
     private let notifications: NotificationCenter
 
-    init(
-        storage: SettingsStorage = .shared,
-        isAppleSilicon: Bool = ParakeetModelStore.isSupportedHardware,
-        notifications: NotificationCenter = .default
-    ) {
+    init(storage: SettingsStorage = .shared, notifications: NotificationCenter = .default) {
         self.storage = storage
-        self.isAppleSilicon = isAppleSilicon
         self.notifications = notifications
     }
 
-    private var defaults: UserDefaults { storage.defaults }
-    private var providerDefaults: ProviderDefaultsStore { storage.providerDefaults }
-    private var localDefault: EngineID { isAppleSilicon ? .parakeet : .whisper }
+    private var modes: ModeDefaults { storage.modeDefaults }
 
     // MARK: Engines
 
     func engine(for job: STTJob) -> EngineID {
-        let stored = providerDefaults.selection(for: job)
-        let engine = EngineID(rawValue: stored.providerID) ?? .didunyCloud
-        switch job {
-        case .dictation:
-            return engine == .didunyCloud && storage.transcriptionProvider == .local ? .whisper : engine
-        case .dictationTranslation:
-            return engine == .didunyCloud && storage.translationProvider == .local ? .whisper : engine
-        case .file:
-            // Files runs on this Mac only (decision 4); unset reads Parakeet V3, a cloud value runs Whisper today (F2).
-            guard defaults.object(forKey: ProviderDefaultsStore.storageKey(for: .file)) != nil else { return localDefault }
-            return engine == .didunyCloud || engine == .elevenLabs ? .whisper : engine
-        case .meeting:
-            return meetingEngine(for: meetingStartsIn)
-        case .meetingTranslation:
-            return engine
-        }
+        let engine = modes.engine(for: job)
+        // Files run on this Mac only (decision 4): a stored cloud engine runs Whisper (F2).
+        guard job == .file, engine == .didunyCloud || engine == .elevenLabs else { return engine }
+        return .whisper
     }
 
     func setEngine(_ engine: EngineID, for job: STTJob) {
         guard job != .meeting else { return setMeetingEngine(engine, for: meetingStartsIn) }
-        if job == .file {
-            providerDefaults.setSelection(JobProviderSelection(providerID: engine.rawValue, modelID: nil), for: .file)
-            return
-        }
-        EngineOptions.apply(Self.optionID(engine, job: job, segment: nil), job: job) { [storage] isLocal in
-            switch job {
-            case .dictation: storage.transcriptionProvider = isLocal ? .local : .cloud
-            case .dictationTranslation: storage.translationProvider = isLocal ? .local : .cloud
-            default: break
-            }
-        }
+        modes.apply([.engine(job, ModeEngineRules.selection(engine: engine, job: job))])
     }
 
     var meetingStartsIn: MeetingSegment {
-        get {
-            if let raw = defaults.string(forKey: ModesKey.meetingTranscriptMode.rawValue),
-               let segment = MeetingSegment(rawValue: raw) { return segment }
-            if storage.meetingRealtimeTranscriptionEnabled { return .cloud }
-            return storage.meetingLocalLivePreviewEnabled ? .thisMac : .recordOnly
-        }
-        set {
-            defaults.set(newValue.rawValue, forKey: ModesKey.meetingTranscriptMode.rawValue)
-            mirrorLegacyMeeting()
-        }
+        get { modes.meetingStartsIn }
+        set { modes.apply([.startsIn(newValue)]) }
     }
 
     func meetingEngine(for segment: MeetingSegment) -> EngineID {
-        if let data = defaults.data(forKey: Self.segmentKey(segment)),
-           let selection = try? JSONDecoder().decode(JobProviderSelection.self, from: data),
-           let engine = EngineID(rawValue: selection.providerID) { return engine }
-        switch segment {
-        case .thisMac: return .whisper
-        case .cloud: return .didunyCloud
-        case .recordOnly: return localDefault
-        }
+        modes.engine(for: segment)
     }
 
     func setMeetingEngine(_ engine: EngineID, for segment: MeetingSegment) {
-        let selection = JobProviderSelection(providerID: engine.rawValue, modelID: Self.modelID(engine, job: .meeting, segment: segment))
-        if let data = try? JSONEncoder().encode(selection) { defaults.set(data, forKey: Self.segmentKey(segment)) }
-        if segment == meetingStartsIn { mirrorLegacyMeeting() }
-    }
-
-    /// Today's meeting flow reads `sttJobDefault.meeting`, `meetingRealtimeTranscriptionEnabled` and the live
-    /// preview switch. Write what makes it run the current segment, as the old Meeting picker did.
-    private func mirrorLegacyMeeting() {
-        let segment = meetingStartsIn
-        let engine = meetingEngine(for: segment)
-        let runsOnThisMac = ProviderRegistry.shared.module(id: engine.rawValue)?.traits.runsOn == .thisMac
-        if segment == .recordOnly, !runsOnThisMac {
-            // Record only with a cloud engine has no legacy form (WP-62 wires it): keep the audio local.
-            storage.meetingRealtimeTranscriptionEnabled = false
-            providerDefaults.setSelection(.didunyCloud, for: .meeting)
-        } else {
-            EngineOptions.apply(Self.optionID(engine, job: .meeting, segment: segment), job: .meeting) { [storage] isLocal in
-                storage.meetingRealtimeTranscriptionEnabled = !isLocal
-            }
-        }
-        storage.meetingLocalLivePreviewEnabled = segment == .thisMac
-    }
-
-    /// `EngineOptions.apply` id: the engine id, or "<provider>/<model>" for a key engine.
-    private static func optionID(_ engine: EngineID, job: STTJob, segment: MeetingSegment?) -> String {
-        guard let model = modelID(engine, job: job, segment: segment) else { return engine.rawValue }
-        return "\(engine.rawValue)/\(model)"
-    }
-
-    /// ADR-0012 D6: ElevenLabs stores the realtime model where it runs live, the batch model after Stop.
-    /// WP-13's `ModeEngineRules.modelID(engine:job:segment:)` replaces this.
-    private static func modelID(_ engine: EngineID, job: STTJob, segment: MeetingSegment?) -> String? {
-        guard engine == .elevenLabs else { return nil }
-        switch job {
-        case .dictation, .dictationTranslation: return ElevenLabsProvider.realtimeModelID
-        case .meeting: return segment == .cloud ? ElevenLabsProvider.realtimeModelID : ElevenLabsProvider.batchModelID
-        case .meetingTranslation, .file: return ElevenLabsProvider.batchModelID
-        }
-    }
-
-    private static func segmentKey(_ segment: MeetingSegment) -> String {
-        "\(ProviderDefaultsStore.storageKey(for: .meeting)).\(segment.rawValue)"
+        modes.apply([.segmentEngine(segment, ModeEngineRules.selection(engine: engine, job: .meeting, segment: segment))])
     }
 
     // MARK: Languages
 
     var dictationTranslationTarget: String {
-        get { defaults.string(forKey: ModesKey.dictationTranslationTargetLanguage.rawValue) ?? storage.defaultTranslationTargetLanguage }
-        set { defaults.set(newValue, forKey: ModesKey.dictationTranslationTargetLanguage.rawValue) }
+        get { storage.effectiveDictationTranslationTargetLanguage }
+        set { storage.dictationTranslationTargetLanguage = newValue }
     }
 
     var yourLanguages: [String] { storage.yourLanguages }
@@ -150,8 +56,8 @@ final class LiveModesSettingsSource: ModesSettingsSource {
     // MARK: Options
 
     var meetingTranslationShowOriginal: Bool {
-        get { defaults.bool(forKey: ModesKey.meetingTranslationShowOriginal.rawValue) }
-        set { defaults.set(newValue, forKey: ModesKey.meetingTranslationShowOriginal.rawValue) }
+        get { storage.meetingTranslationShowOriginal }
+        set { storage.meetingTranslationShowOriginal = newValue }
     }
 
     var meetingSuggestionsEnabled: Bool {
@@ -212,26 +118,26 @@ final class LiveModesSettingsSource: ModesSettingsSource {
         }
     }
 
-    /// One key pair per kind today: Translation shares Dictation's, Translate meeting shares Meeting's.
-    /// WP-13 splits them into four (05 Q5 default); then this reads its keys.
+    /// Four key pairs, one per mode (05 Q5 default; WP-13 migrates them).
     func silence(for job: STTJob) -> ModeSilence {
-        Self.isMeetingKind(job)
-            ? ModeSilence(enabled: storage.meetingSilenceAutoStopEnabled, seconds: storage.meetingSilenceAutoStopSeconds)
-            : ModeSilence(enabled: storage.dictationSilenceAutoStopEnabled, seconds: storage.dictationSilenceAutoStopSeconds)
+        storage.silenceAutoStop(for: job)
     }
 
     func setSilence(_ value: ModeSilence, for job: STTJob) {
-        if Self.isMeetingKind(job) {
-            storage.meetingSilenceAutoStopEnabled = value.enabled
-            storage.meetingSilenceAutoStopSeconds = value.seconds
-        } else {
+        switch job {
+        case .dictation, .file:
             storage.dictationSilenceAutoStopEnabled = value.enabled
             storage.dictationSilenceAutoStopSeconds = value.seconds
+        case .dictationTranslation:
+            storage.translationSilenceAutoStopEnabled = value.enabled
+            storage.translationSilenceAutoStopSeconds = value.seconds
+        case .meeting:
+            storage.meetingSilenceAutoStopEnabled = value.enabled
+            storage.meetingSilenceAutoStopSeconds = value.seconds
+        case .meetingTranslation:
+            storage.meetingTranslationSilenceAutoStopEnabled = value.enabled
+            storage.meetingTranslationSilenceAutoStopSeconds = value.seconds
         }
-    }
-
-    private static func isMeetingKind(_ job: STTJob) -> Bool {
-        job == .meeting || job == .meetingTranslation
     }
 
     func pressCount(for job: STTJob) -> Int {
@@ -252,18 +158,5 @@ final class LiveModesSettingsSource: ModesSettingsSource {
         case .meetingTranslation: storage.meetingTranslationHotkeyPressCount = count
         case .file: break
         }
-    }
-}
-
-/// Interim readiness for Modes until WP-17's `LiveEngineReadinessSource` (ADR-0012 D1).
-@MainActor
-struct ModesInterimReadiness: EngineReadinessSource {
-    func readiness(of engine: EngineID) -> EngineReadiness {
-        guard let module = ProviderRegistry.shared.module(id: engine.rawValue) else { return .unavailable }
-        if module.requiresKey, !ProviderKeyStore.shared.hasKey(for: module.id) { return .needsKey }
-        guard case let .download(bytes) = module.traits.obtainedBy,
-              module.traits.needs.contains(.appleSilicon) else { return .ready }
-        if !ParakeetModelStore.isSupportedHardware { return .unsupportedHardware }
-        return ParakeetModelStore.isDownloaded ? .ready : .notDownloaded(bytes: bytes)
     }
 }

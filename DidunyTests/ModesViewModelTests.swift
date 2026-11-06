@@ -299,7 +299,7 @@ struct LiveModesSettingsSourceTests {
     func newInstallDefaults() throws {
         let storage = try storage()
         storage.applyNewUserDefaultsIfMissing()
-        let source = LiveModesSettingsSource(storage: storage, isAppleSilicon: true, notifications: NotificationCenter())
+        let source = LiveModesSettingsSource(storage: storage, notifications: NotificationCenter())
         #expect(source.pushToTalk(for: .dictation) == ModePushToTalk(key: .rightShift, toggleEnabled: true, tapCount: 2, holdEnabled: false, holdDelaySeconds: 1.2))
         #expect(source.pushToTalk(for: .dictationTranslation) == ModePushToTalk(key: .rightOption, toggleEnabled: true, tapCount: 2, holdEnabled: false, holdDelaySeconds: 1.2))
         #expect(source.silence(for: .dictation) == ModeSilence(enabled: true, seconds: 5))
@@ -324,38 +324,48 @@ struct LiveModesSettingsSourceTests {
         #expect(storage.translationPushToTalkToggleEnabled && storage.translationPushToTalkToggleTapCount == 3)
     }
 
-    @Test("Meeting picks write the segment keys and keep today's meeting flow on the same engine")
-    func meetingMirrorsLegacy() throws {
+    @Test("Meeting picks write only the new keys (WP-17: the legacy Cloud/Local keys stop being written)")
+    func meetingWritesNewKeys() throws {
         let storage = try storage()
-        let source = LiveModesSettingsSource(storage: storage, isAppleSilicon: true, notifications: NotificationCenter())
+        let source = LiveModesSettingsSource(storage: storage, notifications: NotificationCenter())
         source.meetingStartsIn = .thisMac
         #expect(storage.defaults.string(forKey: "meetingTranscriptMode") == "thisMac")
-        #expect(!storage.meetingRealtimeTranscriptionEnabled)
-        #expect(storage.meetingLocalLivePreviewEnabled)
-
-        source.meetingStartsIn = .cloud
-        #expect(storage.meetingRealtimeTranscriptionEnabled)
-
         source.setMeetingEngine(.didunyCloud, for: .recordOnly)
         source.meetingStartsIn = .recordOnly
-        #expect(!storage.meetingRealtimeTranscriptionEnabled)
-        #expect(!storage.meetingLocalLivePreviewEnabled)
         #expect(source.meetingEngine(for: .recordOnly) == .didunyCloud)
         #expect(storage.defaults.data(forKey: "sttJobDefault.meeting.recordOnly") != nil)
+        source.setMeetingEngine(.elevenLabs, for: .cloud)
+        #expect(storage.modeDefaults.selection(for: .cloud).modelID == ElevenLabsProvider.realtimeModelID)
+        for key in ["meetingRealtimeTranscriptionEnabled", "meetingLocalLivePreviewEnabled", "sttJobDefault.meeting"] {
+            #expect(storage.defaults.object(forKey: key) == nil, "\(key)")
+        }
     }
 
-    @Test("Dictation Whisper keeps the legacy local flag; Files never reads a cloud engine")
+    @Test("Engine picks write ModeDefaults, not transcriptionProvider; Files never reads a cloud engine")
     func jobEngines() throws {
         let storage = try storage()
         let source = LiveModesSettingsSource(storage: storage, notifications: NotificationCenter())
         source.setEngine(.whisper, for: .dictation)
-        #expect(storage.transcriptionProvider == .local)
+        #expect(storage.defaults.object(forKey: "transcriptionProvider") == nil)
+        #expect(storage.modeDefaults.engine(for: .dictation) == .whisper)
         #expect(source.engine(for: .dictation) == .whisper)
-        source.setEngine(.didunyCloud, for: .dictation)
-        #expect(storage.transcriptionProvider == .cloud)
         source.setEngine(.appleSpeech, for: .file)
         #expect(source.engine(for: .file) == .appleSpeech)
         storage.providerDefaults.setSelection(.didunyCloud, for: .file)
         #expect(source.engine(for: .file) == .whisper)
+    }
+
+    @Test("Stop after silence: each mode has its own two keys (05 Q5)")
+    func silenceFourKeys() throws {
+        let storage = try storage()
+        let source = LiveModesSettingsSource(storage: storage, notifications: NotificationCenter())
+        source.setSilence(ModeSilence(enabled: false, seconds: 3), for: .dictationTranslation)
+        source.setSilence(ModeSilence(enabled: true, seconds: 120), for: .meetingTranslation)
+        #expect(!storage.translationSilenceAutoStopEnabled && storage.translationSilenceAutoStopSeconds == 3)
+        #expect(storage.meetingTranslationSilenceAutoStopEnabled && storage.meetingTranslationSilenceAutoStopSeconds == 120)
+        #expect(storage.defaults.object(forKey: "dictationSilenceAutoStopEnabled") == nil)
+        #expect(storage.defaults.object(forKey: "meetingSilenceAutoStopSeconds") == nil)
+        #expect(source.silence(for: .dictationTranslation) == storage.silenceAutoStop(for: .dictationTranslation))
+        #expect(storage.silenceAutoStop(for: .meetingTranslation) == ModeSilence(enabled: true, seconds: 120))
     }
 }

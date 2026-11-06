@@ -90,11 +90,15 @@ enum ModeEngineRules {
     /// 05 §3 item 3: Dictation's engine when every mode that can run it uses it, else nil ("Different per mode").
     /// Files skip a cloud engine; Meeting compares its current segment's engine.
     static func displayedUniformEngine(defaults: ModeDefaults, available: [EngineCapabilities]) -> EngineID? {
-        let engine = defaults.engine(for: .dictation)
-        guard let caps = available.first(where: { $0.id == engine }) else { return nil }
-        var engines = [defaults.engine(for: .dictationTranslation), defaults.engine(for: .meetingTranslation),
-                       defaults.engine(for: defaults.meetingStartsIn)]
-        if caps.traits.runsOn == .thisMac { engines.append(defaults.engine(for: .file)) }
-        return engines.allSatisfy { $0 == engine } ? engine : nil
+        displayedUniformEngine(engine: defaults.engine(for:), available: available)
+    }
+
+    /// The same rule over any source; `engine(.meeting)` is the "Starts in" segment's engine.
+    static func displayedUniformEngine(engine: (STTJob) -> EngineID, available: [EngineCapabilities]) -> EngineID? {
+        let dictation = engine(.dictation)
+        guard let caps = available.first(where: { $0.id == dictation }) else { return nil }
+        var jobs: [STTJob] = [.dictationTranslation, .meetingTranslation, .meeting]
+        if caps.traits.runsOn == .thisMac { jobs.append(.file) }
+        return jobs.allSatisfy { engine($0) == dictation } ? dictation : nil
     }
 }
