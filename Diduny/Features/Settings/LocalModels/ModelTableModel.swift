@@ -226,13 +226,14 @@ final class LocalModelsModel {
         catalogue = LocalModelCatalog.rows(includeParakeet: parakeet.isSupportedHardware)
     }
 
-    /// Filtered, then sorted: recommended first, then engines that are not Whisper, then by the value,
-    /// ties in catalogue order. Rows do not depend on download state, so they never move on a click.
+    /// Filtered, then sorted: recommended first (by the value among themselves, T4-SORT-02), then engines
+    /// that are not Whisper, then by the value, ties in catalogue order. Rows do not depend on download
+    /// state, so they never move on a click.
     var rows: [LocalModelRow] {
         let key: (LocalModelRow) -> Double = sort == .speed ? { $0.speed } : { $0.accuracy }
         return catalogue.filter(passes).sorted { a, b in
             if a.isRecommended != b.isRecommended { return a.isRecommended }
-            if a.isWhisper != b.isWhisper { return !a.isWhisper }
+            if !a.isRecommended, a.isWhisper != b.isWhisper { return !a.isWhisper }
             if key(a) != key(b) { return key(a) > key(b) }
             return a.catalogueIndex < b.catalogueIndex
         }

@@ -43,7 +43,7 @@ struct AudioSettingsTextTests {
     @Test("Level bar fill is clamped to 0...1")
     func levelFraction() {
         #expect(AudioSettingsText.levelFraction(-0.2) == 0)
-        #expect(AudioSettingsText.levelFraction(0.4) == 0.4)
+        #expect(abs(AudioSettingsText.levelFraction(0.4) - 0.4) < 1e-6) // Float input
         #expect(AudioSettingsText.levelFraction(1.7) == 1)
     }
 }

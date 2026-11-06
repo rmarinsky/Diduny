@@ -20,6 +20,13 @@ final class YourLanguagesTests {
         SettingsStorage(defaults: defaults)
     }
 
+    /// Since WP-13, `SettingsStorage.init` runs the migration for existing installs. Read-time cases
+    /// mark the schema current first, so they read the stored keys without the migration writing.
+    private func readTimeStorage() -> SettingsStorage {
+        defaults.set(SettingsMigration.currentSchemaVersion, forKey: SettingsMigration.schemaVersionKey)
+        return SettingsStorage(defaults: defaults)
+    }
+
     private func storePairs(_ pairs: [TranslationLanguagePair], defaultID: String? = nil) throws {
         defaults.set(try JSONEncoder().encode(pairs), forKey: "translationLanguagePairs")
         if let defaultID { defaults.set(defaultID, forKey: "defaultTranslationLanguagePairID") }
@@ -186,7 +193,7 @@ final class YourLanguagesTests {
     @Test("A stored pair keeps its direction and id in the offered list")
     func storedPairDirectionKept() throws {
         try storePairs([pair("uk", "en"), pair("de", "en")], defaultID: "de-en")
-        let store = storage()
+        let store = readTimeStorage()
         #expect(store.offeredTranslationPairs.map(\.id) == ["uk-en", "uk-de", "de-en"])
         #expect(store.translationPair?.id == "de-en")
         #expect(store.defaultTranslationTargetLanguage == "uk")
@@ -207,7 +214,7 @@ final class YourLanguagesTests {
     @Test("Your languages and the pair read the same before and after the migration; the target becomes Language B")
     func readTimeEqualsMigration() throws {
         try storePairs([pair("en", "uk"), pair("uk", "pl"), pair("de", "en")], defaultID: "uk-pl")
-        let before = storage()
+        let before = readTimeStorage()
         let languages = before.yourLanguages
         let target = before.defaultTranslationTargetLanguage
         let pairID = before.translationPair?.id
