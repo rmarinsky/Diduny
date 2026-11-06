@@ -1,0 +1,196 @@
+import AppKit
+
+enum EdgeCommandPanelDockEdge: String, Equatable {
+    case left
+    case right
+    case top
+    case bottom
+}
+
+struct EdgeCommandPanelDock: Equatable {
+    let edge: EdgeCommandPanelDockEdge
+    let offset: CGFloat
+
+    init(edge: EdgeCommandPanelDockEdge, offset: CGFloat) {
+        self.edge = edge
+        self.offset = offset
+    }
+
+    /// Restores a dock persisted as raw values; nil when either value is
+    /// missing or the edge name is unknown. A stale offset from a
+    /// disconnected screen is safe — placement clamps it to the visible frame.
+    init?(rawEdge: String?, offset: Double?) {
+        guard let rawEdge, let edge = EdgeCommandPanelDockEdge(rawValue: rawEdge), let offset else {
+            return nil
+        }
+        self.init(edge: edge, offset: CGFloat(offset))
+    }
+}
+
+enum EdgeCommandPanelPlacement {
+    static let expandedCornerRadius: CGFloat = 15
+    static let liveControlHitTargetHeight: CGFloat = 44
+    static let meetingSuggestionControlHitTargetHeight: CGFloat = 44
+
+    static func nearestDock(to proposedFrame: NSRect, in visibleFrame: NSRect) -> EdgeCommandPanelDock {
+        let distances: [(EdgeCommandPanelDockEdge, CGFloat)] = [
+            (.left, abs(proposedFrame.minX - visibleFrame.minX)),
+            (.right, abs(visibleFrame.maxX - proposedFrame.maxX)),
+            (.bottom, abs(proposedFrame.minY - visibleFrame.minY)),
+            (.top, abs(visibleFrame.maxY - proposedFrame.maxY))
+        ]
+        let edge = distances.min(by: { $0.1 < $1.1 })?.0 ?? .right
+        let offset = edge == .left || edge == .right ? proposedFrame.midY : proposedFrame.midX
+        return EdgeCommandPanelDock(edge: edge, offset: offset)
+    }
+
+    static func frame(
+        in visibleFrame: NSRect,
+        dock: EdgeCommandPanelDock,
+        presentation: EdgeCommandPanelPresentation
+    ) -> NSRect {
+        let size = size(for: presentation, edge: dock.edge)
+        let origin = switch dock.edge {
+        case .left:
+            NSPoint(
+                x: visibleFrame.minX,
+                y: clampedOrigin(
+                    dock.offset,
+                    length: size.height,
+                    minimum: visibleFrame.minY,
+                    maximum: visibleFrame.maxY
+                )
+            )
+        case .right:
+            NSPoint(
+                x: visibleFrame.maxX - size.width,
+                y: clampedOrigin(
+                    dock.offset,
+                    length: size.height,
+                    minimum: visibleFrame.minY,
+                    maximum: visibleFrame.maxY
+                )
+            )
+        case .top:
+            NSPoint(
+                x: clampedOrigin(
+                    dock.offset,
+                    length: size.width,
+                    minimum: visibleFrame.minX,
+                    maximum: visibleFrame.maxX
+                ),
+                y: visibleFrame.maxY - size.height
+            )
+        case .bottom:
+            NSPoint(
+                x: clampedOrigin(
+                    dock.offset,
+                    length: size.width,
+                    minimum: visibleFrame.minX,
+                    maximum: visibleFrame.maxX
+                ),
+                y: visibleFrame.minY
+            )
+        }
+
+        return NSRect(origin: origin, size: size)
+    }
+
+    static func frame(in visibleFrame: NSRect, dock: EdgeCommandPanelDock, expanded: Bool) -> NSRect {
+        frame(
+            in: visibleFrame,
+            dock: dock,
+            presentation: expanded ? .commands(isCloud: true) : .collapsed
+        )
+    }
+
+    static func size(
+        for presentation: EdgeCommandPanelPresentation,
+        edge: EdgeCommandPanelDockEdge
+    ) -> NSSize {
+        switch presentation {
+        case .collapsed:
+            collapsedSize(for: edge)
+        case let .commands(isCloud):
+            NSSize(width: 286, height: isCloud ? 326 : 250)
+        case let .live(mode):
+            mode.isMeeting ? NSSize(width: 360, height: 420) : NSSize(width: 310, height: 310)
+        case .meetingSuggestion:
+            NSSize(width: 390, height: 350)
+        }
+    }
+
+    static let expandedSize = NSSize(width: 286, height: 326)
+
+    private static func collapsedSize(for edge: EdgeCommandPanelDockEdge) -> NSSize {
+        switch edge {
+        case .left, .right: NSSize(width: 14, height: 64)
+        case .top, .bottom: NSSize(width: 64, height: 14)
+        }
+    }
+
+    private static func clampedOrigin(_ offset: CGFloat, length: CGFloat, minimum: CGFloat,
+                                      maximum: CGFloat) -> CGFloat
+    {
+        min(max(offset - length / 2, minimum), maximum - length)
+    }
+
+    /// Whether a pointer location counts as touching the given screen edge —
+    /// the reveal gesture for an auto-hidden tab (same idea as the Dock).
+    static func edgeHotZoneContains(
+        _ location: NSPoint,
+        screenFrame: NSRect,
+        edge: EdgeCommandPanelDockEdge,
+        threshold: CGFloat = 2
+    ) -> Bool {
+        guard NSMouseInRect(location, screenFrame, false) else { return false }
+        return switch edge {
+        case .left: location.x <= screenFrame.minX + threshold
+        case .right: location.x >= screenFrame.maxX - threshold
+        case .top: location.y >= screenFrame.maxY - threshold
+        case .bottom: location.y <= screenFrame.minY + threshold
+        }
+    }
+}
+
+enum EdgeCommandPanelHoverPolicy {
+    static func shouldCollapse(pointer: NSPoint, panelFrame: NSRect, isDragging: Bool) -> Bool {
+        !isDragging && !panelFrame.contains(pointer)
+    }
+}
+
+/// The collapsed edge tab auto-hides after a few idle seconds (it annoys
+/// people when it sits on the screen edge permanently). It must never hide
+/// under the pointer, mid-drag, or while the expanded live modal is open.
+/// A minimized live-recording tab (red dot) does auto-hide, then reappears
+/// on edge hover until the user clicks to restore the modal.
+enum EdgeCommandPanelAutoHidePolicy {
+    static let delay: TimeInterval = 3
+
+    static func shouldHide(
+        pointer: NSPoint,
+        panelFrame: NSRect,
+        isDragging: Bool,
+        isExpanded: Bool,
+        isShowingLiveFeedback: Bool,
+        isLiveFeedbackMinimized: Bool = false
+    ) -> Bool {
+        let liveModalExpanded = isShowingLiveFeedback && !isLiveFeedbackMinimized
+        return !isDragging
+            && !isExpanded
+            && !liveModalExpanded
+            && !panelFrame.contains(pointer)
+    }
+
+    /// Auto-hide may run for idle tabs and for minimized live tabs.
+    static func shouldSchedule(isLiveFeedbackMinimized _: Bool) -> Bool {
+        true
+    }
+}
+
+enum EdgeCommandPanelMinimizedLivePolicy {
+    /// Hover may open the command menu only when live recording is not minimized.
+    static func shouldAllowHoverExpand(isLiveFeedbackMinimized: Bool) -> Bool {
+        !isLiveFeedbackMinimized
+    }
+}

@@ -194,6 +194,7 @@
 		BB39149383C71119B82FE3AD /* TranscriptCleanupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEA00E234538355F573DD94 /* TranscriptCleanupService.swift */; };
 		BBADC47A055725DC6323CDF5 /* InProgressRecordingManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = F94036B3B62E2E2464BB3750 /* InProgressRecordingManifest.swift */; };
 		BBD84868A6BBC0A395B259C6 /* SpeakerLabelsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C69BB56181B8CEBC6BCD931A /* SpeakerLabelsSection.swift */; };
+		BBE842361D77D0C278180C24 /* EdgeCommandPanelPlacement.swift in Sources */ = {isa = PBXBuildFile; fileRef = F22FB10788E840071A0FD654 /* EdgeCommandPanelPlacement.swift */; };
 		BCADE3B85C51062294C2DC3F /* AboutVersionParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02804C6D049EAE63C5BD1BBA /* AboutVersionParsingTests.swift */; };
 		BD02DFD78A33EC5DCD611727 /* TranscriptionBatchStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77238C47B6DDEAC2B07A129E /* TranscriptionBatchStorage.swift */; };
 		BF3538E2F19CF3EB9D232E7A /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = 22385D60DC75174064B0DF0F /* ObjCExceptionCatcher.m */; };
@@ -277,6 +278,7 @@
 		F9204E8BCBCCA977B096A3D2 /* AudioPlaybackControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C88AE153FCAA14A227A7E16 /* AudioPlaybackControlView.swift */; };
 		FAD6102BE0AB81E6AB55A6DF /* CalendarConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268D49F3DE850563CE2C0032 /* CalendarConnectionTests.swift */; };
 		FBFFD88DF4376532FD3365DD /* TranslationTimestampBackfill.swift in Sources */ = {isa = PBXBuildFile; fileRef = E96BFF44E56EF24BD6EC513A /* TranslationTimestampBackfill.swift */; };
+		FD10C3908D044E31770C10B0 /* EdgeCommandPanelModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8692609782CA33A8AB55BB5A /* EdgeCommandPanelModel.swift */; };
 		FEC8539201C80A914E88AAB2 /* VoiceProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22A436A9766F14D32C5BF6EB /* VoiceProfileStore.swift */; };
 		FFBC1497C42CFFB50037E3EA /* TypingSpeedMeasurementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6E3CC8287108DD5E1CCD081 /* TypingSpeedMeasurementTests.swift */; };
 /* End PBXBuildFile section */
@@ -452,6 +454,7 @@
 		808FCBFBB94E4D0B49112534 /* BatchTranscriptionProgressViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchTranscriptionProgressViews.swift; sourceTree = "<group>"; };
 		8525EF6E0AFA546564852F32 /* OnboardingManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingManagerTests.swift; sourceTree = "<group>"; };
 		865E86F8079EAE7A9BFB178E /* RecordingsLibraryStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingsLibraryStorage.swift; sourceTree = "<group>"; };
+		8692609782CA33A8AB55BB5A /* EdgeCommandPanelModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeCommandPanelModel.swift; sourceTree = "<group>"; };
 		86F4203EEA094B3353F01444 /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
 		886FB4745EDA152427396913 /* BillingSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillingSettingsSection.swift; sourceTree = "<group>"; };
 		893211B2A0981542B494E03B /* MeetingChunkStitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingChunkStitcher.swift; sourceTree = "<group>"; };
@@ -554,6 +557,7 @@
 		EED41A85ABE10582EF485F5D /* HistoryPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPaletteView.swift; sourceTree = "<group>"; };
 		F06909181E0B9AD3B70E57E3 /* WhisperError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperError.swift; sourceTree = "<group>"; };
 		F0D8B455676B571AEC778E72 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F22FB10788E840071A0FD654 /* EdgeCommandPanelPlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeCommandPanelPlacement.swift; sourceTree = "<group>"; };
 		F313562D170A7DF034E8823D /* BrowserReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserReader.swift; sourceTree = "<group>"; };
 		F4708FFCBA85750F57938D66 /* CalendarSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSettingsSection.swift; sourceTree = "<group>"; };
 		F4B5E1868B87ACD0818B6B5C /* ProviderKeyStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderKeyStoreTests.swift; sourceTree = "<group>"; };
@@ -1157,6 +1161,8 @@
 			isa = PBXGroup;
 			children = (
 				AC66CCD7F97B240D3513945A /* EdgeCommandPanelController.swift */,
+				8692609782CA33A8AB55BB5A /* EdgeCommandPanelModel.swift */,
+				F22FB10788E840071A0FD654 /* EdgeCommandPanelPlacement.swift */,
 			);
 			path = EdgeCommandPanel;
 			sourceTree = "<group>";
@@ -1442,6 +1448,8 @@
 				A16B6680BF413BDD639BAF88 /* DictationOverlayController.swift in Sources */,
 				37B4946599B2FDB08DEB48E7 /* DidunyApp.swift in Sources */,
 				F2E9C92074E2991B15DD6712 /* EdgeCommandPanelController.swift in Sources */,
+				FD10C3908D044E31770C10B0 /* EdgeCommandPanelModel.swift in Sources */,
+				BBE842361D77D0C278180C24 /* EdgeCommandPanelPlacement.swift in Sources */,
 				EAA36D8D3207CBC4931A1643 /* ElevenLabsAccount.swift in Sources */,
 				33231D0B71C20BBC6FF7E4D7 /* ElevenLabsBatchService.swift in Sources */,
 				78DA1622FDCE04BF1427C60C /* ElevenLabsErrors.swift in Sources */,
