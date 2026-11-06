@@ -29,7 +29,7 @@ final class MainWindowUITests: DidunyUITestCase {
             ("General", "general", { $0.staticTexts["Behavior"] }),
             ("Audio & dictation", "audioDictation", { $0.staticTexts["Test Recording"] }),
             ("Calendar & meetings", "meetings", { $0.staticTexts["Calendars"] }),
-            ("Local models", "models", { $0.staticTexts["Whisper Models"] }),
+            ("Local models", "models", { $0.descendants(matching: .any)["models.table"] }),
             ("Shortcuts", "shortcuts", { $0.staticTexts["Action hotkeys"] }),
             ("About", "about", { $0.staticTexts["Author"] }),
             ("Account", "account", { $0.textFields["account.email"] }),
