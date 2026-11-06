@@ -174,6 +174,8 @@ final class WhisperModelManager: NSObject {
     var downloadProgress: [String: Double] = [:]
     var isDownloading: [String: Bool] = [:]
     var downloadedModels: Set<String> = []
+    /// Last download error per model name; cleared when a download starts or the model is deleted.
+    var downloadErrors: [String: String] = [:]
 
     private var activeTasks: [String: URLSessionDownloadTask] = [:]
     private var progressObservations: [String: NSKeyValueObservation] = [:]
@@ -221,6 +223,7 @@ final class WhisperModelManager: NSObject {
         Log.whisper.info("Starting download: \(model.displayName)")
         isDownloading[model.name] = true
         downloadProgress[model.name] = 0
+        downloadErrors[model.name] = nil
 
         let task = URLSession.shared.downloadTask(with: model.downloadURL) { [weak self] tempURL, response, error in
             let statusCode = (response as? HTTPURLResponse)?.statusCode
@@ -256,6 +259,7 @@ final class WhisperModelManager: NSObject {
         let path = modelPath(for: model)
         try? FileManager.default.removeItem(atPath: path)
         downloadedModels.remove(model.name)
+        downloadErrors[model.name] = nil
 
         // If deleted model was selected, clear selection
         if SettingsStorage.shared.selectedWhisperModel == model.name {
@@ -283,6 +287,7 @@ final class WhisperModelManager: NSObject {
         if let error {
             if (error as NSError).code == NSURLErrorCancelled { return }
             Log.whisper.error("Download failed for \(model.displayName): \(error.localizedDescription)")
+            downloadErrors[model.name] = error.localizedDescription
             return
         }
 
@@ -306,6 +311,7 @@ final class WhisperModelManager: NSObject {
             Log.whisper.info("Download complete: \(model.displayName)")
         } catch {
             Log.whisper.error("Failed to save model \(model.displayName): \(error.localizedDescription)")
+            downloadErrors[model.name] = error.localizedDescription
         }
     }
 
