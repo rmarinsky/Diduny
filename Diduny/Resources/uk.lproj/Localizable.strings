@@ -1770,3 +1770,18 @@
 "Right Arrow" = "Стрілка вправо";
 "Up Arrow" = "Стрілка вгору";
 "Down Arrow" = "Стрілка вниз";
+
+/* Panels redesign WP-30 */
+"Dictating" = "Диктування";
+"Recording · no live text" = "Запис · без живого тексту";
+"No live text with %@. The text is pasted after Stop." = "%@ не показує текст наживо. Текст вставиться після «Стоп».";
+"Saving the recording..." = "Зберігаємо запис...";
+"Finishing the last words..." = "Дописуємо останні слова...";
+"Translate into: your languages" = "Перекласти: ваші мови";
+"Your words, no translation" = "Ваші слова, без перекладу";
+"Cancel: %@" = "Скасувати: %@";
+"%@ also stops" = "%@ теж зупиняє";
+"%@ cancels" = "%@ скасовує";
+"Set by voice ·" = "Задано голосом ·";
+"Audio level" = "Рівень звуку";
+"Output" = "Результат";

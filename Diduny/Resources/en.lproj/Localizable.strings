@@ -1770,3 +1770,18 @@
 "Right Arrow" = "Right Arrow";
 "Up Arrow" = "Up Arrow";
 "Down Arrow" = "Down Arrow";
+
+/* Panels redesign WP-30 */
+"Dictating" = "Dictating";
+"Recording · no live text" = "Recording · no live text";
+"No live text with %@. The text is pasted after Stop." = "No live text with %@. The text is pasted after Stop.";
+"Saving the recording..." = "Saving the recording...";
+"Finishing the last words..." = "Finishing the last words...";
+"Translate into: your languages" = "Translate into: your languages";
+"Your words, no translation" = "Your words, no translation";
+"Cancel: %@" = "Cancel: %@";
+"%@ also stops" = "%@ also stops";
+"%@ cancels" = "%@ cancels";
+"Set by voice ·" = "Set by voice ·";
+"Audio level" = "Audio level";
+"Output" = "Output";

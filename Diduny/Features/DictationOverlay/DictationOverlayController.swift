@@ -35,6 +35,7 @@ final class DictationOverlayController {
         beginSurfaceSession()
         cancelOutputPreview()
         store.reset(mode: mode)
+        configureSession(mode: mode)
         store.phase = .starting
         if usesNotch {
             NotchManager.shared.resumeRecording(mode: mode)
@@ -48,6 +49,7 @@ final class DictationOverlayController {
         beginSurfaceSession()
         if store.mode != mode {
             store.reset(mode: mode)
+            configureSession(mode: mode)
         }
         store.phase = .recording
         if usesNotch {
@@ -342,6 +344,19 @@ final class DictationOverlayController {
     func updateConnectionStatus(_ status: RealtimeConnectionStatus) {
         guard !usesNotch else { return }
         store.connectionStatus = status
+    }
+
+    /// The session's engine and the Output menu's languages, read once at start.
+    private func configureSession(mode: RecordingMode) {
+        store.yourLanguages = SettingsStorage.shared.yourLanguages
+        let job: STTJob? = switch mode {
+        case .voice: .dictation
+        case .translation: .dictationTranslation
+        case .meeting: .meeting
+        case .meetingTranslation: .meetingTranslation
+        case .fileTranscription: nil
+        }
+        store.sessionEngine = job.flatMap { LiveSessionEngine.fromSettings(job: $0) }
     }
 
     private func beginSurfaceSession() {
