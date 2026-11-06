@@ -320,7 +320,8 @@ final class EdgeCommandPanelController: NSObject {
                 isDragging: dragCursorOffset != nil,
                 isExpanded: model?.isExpanded == true,
                 isShowingLiveFeedback: model?.isShowingLiveFeedback == true,
-                isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true
+                isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true,
+                openSurfaceFrame: FloatingSurfacePresenter.shared.openSurfaceFrame
             ) else {
                 // Busy or hovered — try again after another idle interval.
                 scheduleTabAutoHide()
@@ -439,7 +440,8 @@ final class EdgeCommandPanelController: NSObject {
                 guard EdgeCommandPanelHoverPolicy.shouldCollapse(
                     pointer: NSEvent.mouseLocation,
                     panelFrame: panel.frame,
-                    isDragging: dragCursorOffset != nil
+                    isDragging: dragCursorOffset != nil,
+                    openSurfaceFrame: FloatingSurfacePresenter.shared.openSurfaceFrame
                 ) else { return }
                 showCollapsed()
             }
