@@ -59,6 +59,23 @@ final class BuiltInProviderRoutingTests: XCTestCase {
         XCTAssertNotNil(registry.module(id: STTProviderID.localWhisper))
         XCTAssertFalse(registry.module(id: STTProviderID.didunyCloud)!.requiresKey)
         XCTAssertFalse(registry.module(id: STTProviderID.localWhisper)!.requiresKey)
+        // ADR-0012 D1: five modules, one per engine; Parakeet V3 and Apple Speech need no key.
+        XCTAssertEqual(registry.modules.count, 5)
+        XCTAssertEqual(Set(registry.modules.map(\.id)), Set(EngineID.allCases.map(\.rawValue)))
+        XCTAssertFalse(try XCTUnwrap(registry.module(id: STTProviderID.parakeet)).requiresKey)
+        XCTAssertFalse(try XCTUnwrap(registry.module(id: STTProviderID.appleSpeech)).requiresKey)
+        XCTAssertEqual(registry.providerIDs, Set(EngineID.allCases.map(\.rawValue)))
+    }
+
+    /// WP-11 registers Parakeet V3 and Apple Speech; the run time must not route through them until WP-17.
+    func testOnDeviceModulesDoNotChangeLegacyRouting() {
+        for providerID in [STTProviderID.parakeet, STTProviderID.appleSpeech] {
+            let selection = JobProviderSelection(providerID: providerID, modelID: nil)
+            for job in STTJob.allCases {
+                XCTAssertEqual(engine(job, selection, legacy: .cloud), .cloud, "\(providerID) \(job)")
+                XCTAssertEqual(engine(job, selection, legacy: .local), .local, "\(providerID) \(job)")
+            }
+        }
     }
 
     func testCloudPlansMatchCurrentFlows() throws {

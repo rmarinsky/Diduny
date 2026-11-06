@@ -22,6 +22,7 @@ struct DidunyCloudProvider: STTProviderModule {
                 realtime: RealtimeCaps(
                     maxSessionSeconds: nil,
                     idleTimeoutSeconds: nil,
+                    liveQuality: .final,
                     diarization: true,
                     manualCommit: true,
                     translation: TranslationCaps(oneWay: true, twoWay: true)
@@ -33,6 +34,13 @@ struct DidunyCloudProvider: STTProviderModule {
             )
         )
     ]
+    let traits = EngineTraits(
+        runsOn: .cloud,
+        obtainedBy: .builtIn,
+        needs: [.account],
+        recommended: .none,
+        languages: EngineLanguages.didunyCloud
+    )
 }
 
 /// Local Whisper on this Mac: WhisperTranscriptionService after Stop / files,
@@ -58,6 +66,7 @@ struct LocalWhisperProvider: STTProviderModule {
                 realtime: RealtimeCaps(
                     maxSessionSeconds: nil,
                     idleTimeoutSeconds: nil,
+                    liveQuality: .preview,
                     diarization: false,
                     manualCommit: false,
                     translation: nil
@@ -69,6 +78,14 @@ struct LocalWhisperProvider: STTProviderModule {
             )
         )
     ]
+    /// Download size of the recommended model, from the catalog; models range 75 MB to 2.9 GB.
+    let traits = EngineTraits(
+        runsOn: .thisMac,
+        obtainedBy: .download(bytes: WhisperModelManager.availableModels.first(where: \.isRecommended)?.sizeBytes ?? 0),
+        needs: [.download],
+        recommended: .model(id: WhisperModelManager.WhisperModel.recommendedName),
+        languages: EngineLanguages.whisper
+    )
 }
 
 /// Maps a job's provider selection onto the engine the existing flows run.
