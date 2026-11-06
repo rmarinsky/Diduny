@@ -1554,6 +1554,8 @@
 "Voice commands need Cloud translation. Local Whisper translates to English only." = "Voice commands need Cloud translation. Local Whisper translates to English only.";
 "Start and end" = "Start and end";
 "End only" = "End only";
+"Anywhere" = "Anywhere";
+"%@ ↔ %@" = "%@ ↔ %@";
 "Any supported language" = "Any supported language";
 "Only my translation pairs" = "Only my translation pairs";
 "by voice" = "by voice";

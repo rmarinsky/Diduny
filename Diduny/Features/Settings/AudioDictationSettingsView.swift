@@ -323,7 +323,8 @@ struct AudioDictationSettingsView: View {
 
             Group {
                 Picker("Listen for commands", selection: $voiceCommandPosition) {
-                    ForEach(VoiceTranslationCommandPosition.allCases) { position in
+                    // "Anywhere" is offered with its parser (WP-53).
+                    ForEach([VoiceTranslationCommandPosition.startAndEnd, .endOnly]) { position in
                         Text(position.displayName).tag(position)
                     }
                 }

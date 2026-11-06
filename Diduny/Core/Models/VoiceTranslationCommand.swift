@@ -3,6 +3,8 @@ import Foundation
 enum VoiceTranslationCommandPosition: String, CaseIterable, Identifiable {
     case startAndEnd
     case endOnly
+    /// Stored value only; the parser and the Settings control come with WP-53.
+    case anywhere
 
     var id: String {
         rawValue
@@ -12,6 +14,7 @@ enum VoiceTranslationCommandPosition: String, CaseIterable, Identifiable {
         switch self {
         case .startAndEnd: String(localized: "Start and end")
         case .endOnly: String(localized: "End only")
+        case .anywhere: String(localized: "Anywhere")
         }
     }
 }
