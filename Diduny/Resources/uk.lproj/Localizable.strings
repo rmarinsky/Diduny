@@ -1706,3 +1706,7 @@
 "Language Diduny detected for this recording" = "Мова, яку Diduny розпізнав для цього запису";
 "Mostly different from Reference" = "Здебільшого відрізняється від еталона";
 "What’s new in this release, animated" = "Що нового в цьому релізі, анімація";
+
+/* WP-15: cancel repeat hint names the stored cancel key */
+"Press %@ 1 more time to cancel" = "Натисніть %@ ще 1 раз, щоб скасувати";
+"Press %@ %lld more times to cancel" = "Натисніть %@ ще %lld рази, щоб скасувати";

@@ -1706,3 +1706,7 @@
 "Language Diduny detected for this recording" = "Language Diduny detected for this recording";
 "Mostly different from Reference" = "Mostly different from Reference";
 "What’s new in this release, animated" = "What’s new in this release, animated";
+
+/* WP-15: cancel repeat hint names the stored cancel key */
+"Press %@ 1 more time to cancel" = "Press %@ 1 more time to cancel";
+"Press %@ %lld more times to cancel" = "Press %@ %lld more times to cancel";
