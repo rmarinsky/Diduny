@@ -222,7 +222,9 @@ private struct LiveProgressRow: View {
         TimelineView(.periodic(from: startedAt, by: 0.1)) { timeline in
             ProgressRow(
                 line: LocalizedStringKey(line),
-                fraction: min(timeline.date.timeIntervalSince(startedAt) / 1.4, 0.95),
+                fraction: min(StopProgressTiming.dictationFraction(
+                    elapsed: timeline.date.timeIntervalSince(startedAt), textArrived: false
+                ), 0.95),
                 idPrefix: "livePanel.progress"
             )
         }

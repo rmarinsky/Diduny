@@ -24,17 +24,32 @@ struct EdgeCommandExpandedView: View {
     let onCollapse: () -> Void
     let onDrag: () -> Void
     let onDragEnd: () -> Void
+    /// The outcome after Stop (WP-42, default 8); shown in place of the live view until ×,
+    /// New recording or the next recording.
+    var outcomeStore: EdgeCommandOutcomeStore = DictationOverlayController.shared.outcomeStore
+    var onCloseOutcome: () -> Void = {}
+    var onNewRecording: () -> Void = {}
+    var onOpenRecording: (UUID) -> Void = { _ in }
 
     /// Which content the panel shows; a change is an M1 swap, anything else redraws in place (M3).
     private enum ContentState: Equatable {
         case prompt
         case live
+        case outcome
         case home
     }
 
     private var contentState: ContentState {
         if model.meetingSuggestion != nil { return .prompt }
+        if visibleOutcome != nil { return .outcome }
         return model.isShowingLiveFeedback ? .live : .home
+    }
+
+    /// The outcome replaces the live view once the recording reached success.
+    private var visibleOutcome: EdgeCommandOutcome? {
+        EdgeCommandOutcomeVisibility.outcome(
+            outcomeStore.outcome, isShowingLiveFeedback: model.isShowingLiveFeedback, phase: liveStore.phase
+        )
     }
 
     var body: some View {
@@ -52,6 +67,21 @@ struct EdgeCommandExpandedView: View {
                     onDragEnd: onDragEnd
                 )
                 .accessibilityIdentifier("commandPanel.prompt")
+                .transition(swap?.transition ?? .identity)
+            } else if let outcome = visibleOutcome {
+                EdgeCommandOutcomeView(
+                    outcome: outcome,
+                    transcript: RecordingQueueService.shared.transcriptState(for: outcome.recordingID),
+                    isCopied: liveStore.copiedAt != nil,
+                    onClose: onCloseOutcome,
+                    onCopy: onCopy,
+                    onNewRecording: onNewRecording,
+                    onOpenRecording: { outcome.recordingID.map(onOpenRecording) }
+                )
+                .padding(DS.Panel.padding)
+                .background(DS.Palette.panel, in: panelShape)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("commandPanel.outcome")
                 .transition(swap?.transition ?? .identity)
             } else if model.isShowingLiveFeedback {
                 LivePanelView(

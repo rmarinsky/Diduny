@@ -145,6 +145,9 @@ struct LiveTranscriptContent: View {
 
 /// The caption line under a mode's row: 11.5 `secondary`.
 struct LivePanelCaption: View {
+    /// 11.5 pt at line height 16.7 (design-spec 7.2); one line has no leading of its own in SwiftUI.
+    static let lineHeight: CGFloat = 16.7
+
     let text: String
 
     var body: some View {
@@ -153,6 +156,7 @@ struct LivePanelCaption: View {
             .foregroundStyle(DS.Palette.secondary)
             .lineLimit(1)
             .truncationMode(.tail)
+            .frame(minHeight: Self.lineHeight)
             .help(text)
             .accessibilityIdentifier("livePanel.caption")
     }

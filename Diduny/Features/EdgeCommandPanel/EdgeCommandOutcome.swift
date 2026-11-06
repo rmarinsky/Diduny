@@ -129,3 +129,16 @@ final class EdgeCommandOutcomeStore {
         outcome = nil
     }
 }
+
+/// When the command panel shows the outcome instead of the live view (WP-42): the live
+/// presentation is up, the recording reached success, and an outcome is held.
+enum EdgeCommandOutcomeVisibility {
+    static func outcome(
+        _ outcome: EdgeCommandOutcome?,
+        isShowingLiveFeedback: Bool,
+        phase: LiveDictationOverlayPhase
+    ) -> EdgeCommandOutcome? {
+        guard isShowingLiveFeedback, phase == .pasted else { return nil }
+        return outcome
+    }
+}

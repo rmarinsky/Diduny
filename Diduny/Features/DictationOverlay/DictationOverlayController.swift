@@ -125,10 +125,15 @@ final class DictationOverlayController {
             endSurfaceSession()
             return
         }
+        // Floating surface: the outcome replaces the live view and stays until ×, New recording or
+        // the next recording (default 8, WP-42), so the old 0.8 s auto-hide after a paste is gone.
         showPanel()
-        if SettingsStorage.shared.autoPaste {
-            scheduleAutoHide(delay: 0.8)
-        }
+    }
+
+    /// Two-way Cloud translation names the pair (WP-41 "EN ↔ UK"). One-direction engines get no
+    /// suffix until the 12-addendum copy is settled (fix queue, Questions for Roman).
+    static func meetingTranslationFlow(engine: EngineID, pair: TranslationLanguagePair) -> EdgeCommandOutcome.Flow {
+        engine == .didunyCloud ? .meetingTranslation(pair: CommandHome.pairCodes(pair)) : .meeting
     }
 
     /// Builds the outcome for the stopped recording from the session (default 8, 02 Q11-Q12).
@@ -139,8 +144,7 @@ final class DictationOverlayController {
         case .meeting:
             .meeting
         case .meetingTranslation:
-            // The saved pair comes with WP-41 / WP-30; until then no pair suffix.
-            .meeting
+            Self.meetingTranslationFlow(engine: store.meetingTranslationEngine, pair: store.meetingTranslationPair)
         default:
             if store.selectedOutput.targetLanguage != nil {
                 .dictationTranslation(languageName: store.selectedOutput.label)
@@ -284,6 +288,7 @@ final class DictationOverlayController {
     }
 
     func dismiss() {
+        outcomeStore.clear()
         autoHideTask?.cancel()
         cancelOutputPreview()
         autoHideTask = nil

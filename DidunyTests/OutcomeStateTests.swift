@@ -74,4 +74,20 @@ struct OutcomeStateTests {
         #expect(StopProgressTiming.dictationFraction(elapsed: 3, textArrived: false) == 1)
         #expect(StopProgressTiming.dictationFraction(elapsed: 0.1, textArrived: true) == 1)
     }
+
+    // WP-42 fix: the outcome replaces the live view only after success, while the live view is up.
+    @MainActor @Test func outcomeShownOnlyAfterSuccess() {
+        let outcome = EdgeCommandOutcome(flow: .dictation, durationSeconds: 7)
+        #expect(EdgeCommandOutcomeVisibility.outcome(outcome, isShowingLiveFeedback: true, phase: .pasted) == outcome)
+        #expect(EdgeCommandOutcomeVisibility.outcome(outcome, isShowingLiveFeedback: true, phase: .processing) == nil)
+        #expect(EdgeCommandOutcomeVisibility.outcome(outcome, isShowingLiveFeedback: false, phase: .pasted) == nil)
+        #expect(EdgeCommandOutcomeVisibility.outcome(nil, isShowingLiveFeedback: true, phase: .pasted) == nil)
+    }
+
+    @MainActor @Test func translateMeetingOutcomeUsesThePair() {
+        let pair = TranslationLanguagePair(languageA: "en", languageB: "uk")
+        #expect(DictationOverlayController.meetingTranslationFlow(engine: .didunyCloud, pair: pair)
+            == .meetingTranslation(pair: "EN ↔ UK"))
+        #expect(DictationOverlayController.meetingTranslationFlow(engine: .whisper, pair: pair) == .meeting)
+    }
 }

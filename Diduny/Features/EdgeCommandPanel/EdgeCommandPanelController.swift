@@ -585,7 +585,16 @@ final class EdgeCommandPanelController: NSObject {
             },
             onCollapse: { [weak self] in self?.showCollapsed() },
             onDrag: { [weak self] in self?.dragPanel() },
-            onDragEnd: { [weak self] in self?.finishDraggingPanel() }
+            onDragEnd: { [weak self] in self?.finishDraggingPanel() },
+            onCloseOutcome: { DictationOverlayController.shared.dismiss() },
+            onNewRecording: { [weak self] in
+                DictationOverlayController.shared.dismiss()
+                self?.showExpanded()
+            },
+            onOpenRecording: { [weak self] id in
+                MainWindowController.shared.requestedRecordingID = id
+                self?.appDelegate?.openMainWindow(section: .recordings)
+            }
         )
     }
 
