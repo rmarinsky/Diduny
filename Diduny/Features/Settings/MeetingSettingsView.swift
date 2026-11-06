@@ -23,8 +23,6 @@ struct MeetingSettingsView: View {
 
 struct MeetingAudioSettingsView: View {
     @State private var meetingSuggestionsEnabled = SettingsStorage.shared.meetingSuggestionsEnabled
-    @State private var meetingCloudModeEnabled: Bool = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
-    @State private var localLivePreviewEnabled = SettingsStorage.shared.meetingLocalLivePreviewEnabled
     @State private var silenceAutoStopEnabled = SettingsStorage.shared.meetingSilenceAutoStopEnabled
     @State private var silenceAutoStopSeconds = SettingsStorage.shared.meetingSilenceAutoStopSeconds
     @State private var audioSource = SettingsStorage.shared.meetingAudioSource
@@ -58,40 +56,8 @@ struct MeetingAudioSettingsView: View {
             }
 
             Section("Meeting Provider") {
-                EnginePickerRow(
-                    label: "Engine",
-                    request: JobRequest(job: .meeting, speakerLabels: true),
-                    legacyIsLocal: { !meetingCloudModeEnabled },
-                    setLegacyLocal: { isLocal in
-                        meetingCloudModeEnabled = !isLocal
-                        SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = !isLocal
-                    }
-                )
+                // The engine and "Starts in" moved to Settings > Modes (WP-51).
                 DidunyTranslationGateNotice()
-
-                if meetingCloudModeEnabled {
-                    Text(
-                        "Cloud mode streams live transcription. If it is unavailable, Diduny transcribes in the cloud after stop."
-                    )
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                } else {
-                    Text(
-                        "Local mode transcribes on this Mac after stop when a model is ready. Without one, saved audio stays unprocessed in Recordings."
-                    )
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                    Toggle("Live preview during recording", isOn: $localLivePreviewEnabled)
-                        .onChange(of: localLivePreviewEnabled) { _, newValue in
-                            SettingsStorage.shared.meetingLocalLivePreviewEnabled = newValue
-                        }
-                    Text(
-                        "Runs Whisper every few seconds while you record. Turn off to save battery; transcription still runs after stop."
-                    )
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                }
             }
 
             SilenceAutoStopSection(
@@ -245,8 +211,6 @@ struct MeetingAudioSettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             meetingSuggestionsEnabled = SettingsStorage.shared.meetingSuggestionsEnabled
-            meetingCloudModeEnabled = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled
-            localLivePreviewEnabled = SettingsStorage.shared.meetingLocalLivePreviewEnabled
             audioSource = SettingsStorage.shared.meetingAudioSource
             micGain = SettingsStorage.shared.meetingMicGain
             systemGain = SettingsStorage.shared.meetingSystemGain
