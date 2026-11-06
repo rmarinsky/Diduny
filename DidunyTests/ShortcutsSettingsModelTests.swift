@@ -1,5 +1,6 @@
 @testable import Diduny
 import Foundation
+import KeyboardShortcuts
 import Testing
 
 /// WP-55: Settings > Shortcuts page rules (05 §2.5, design-spec 4.14, ADR-0012 D8), read through a
@@ -13,27 +14,27 @@ struct ShortcutsSettingsModelTests {
     func groupsAndRows() {
         #expect(ShortcutsSettingsModel.groups.map(\.id) == [.whileRecording, .text, .app])
         #expect(ShortcutsSettingsModel.groups.map(\.items) == [
-            [.shortcut(.escapeCancel), .keepAudioWhenCancelled, .shortcut(.forceSubmit), .shortcut(.addMeetingChapter)],
+            [.shortcut(.cancelRecording), .keepAudioWhenCancelled, .shortcut(.forceSubmit), .shortcut(.addMeetingChapter)],
             [.shortcut(.translateSelectedText), .shortcut(.inplaceTranslation), .inplacePair],
-            [.shortcut(.toggleHistoryPalette), .openSettings],
+            [.shortcut(.historyPalette), .openSettings],
         ])
     }
 
     @Test("Only the two special rows use the in-repo capture field (D8)")
     func captureKinds() {
-        #expect(ShortcutRow.escapeCancel.shortcutName == nil)
+        #expect(ShortcutRow.cancelRecording.shortcutName == nil)
         #expect(ShortcutRow.inplaceTranslation.shortcutName == nil)
         #expect(ShortcutRow.forceSubmit.shortcutName == .forceSubmit)
         #expect(ShortcutRow.addMeetingChapter.shortcutName == .addMeetingChapter)
         #expect(ShortcutRow.translateSelectedText.shortcutName == .translateSelectedText)
-        #expect(ShortcutRow.toggleHistoryPalette.shortcutName == .toggleHistoryPalette)
+        #expect(ShortcutRow.historyPalette.shortcutName == .toggleHistoryPalette)
     }
 
     @Test("Identifiers follow test-plan 2.1", arguments: ShortcutRow.allCases)
     func identifiers(row: ShortcutRow) {
-        #expect(row.keysIdentifier == "shortcuts.\(row.rawValue).keys")
-        #expect(row.pressCountIdentifier == "shortcuts.\(row.rawValue).pressCount")
-        #expect(row.enabledIdentifier == "shortcuts.\(row.rawValue).enabled")
+        #expect(row.keysIdentifier == "shortcuts.\(row.identifierName).keys")
+        #expect(row.pressCountIdentifier == "shortcuts.\(row.identifierName).pressCount")
+        #expect(row.enabledIdentifier == "shortcuts.\(row.identifierName).enabled")
     }
 
     @Test("A switch off disables keys and count and keeps the keys", arguments: ShortcutRow.allCases)
@@ -136,12 +137,12 @@ struct ShortcutsSettingsModelTests {
 @MainActor
 final class FakeShortcutsSettingsStore: ShortcutsSettingsStore {
     var keysByRow: [ShortcutRow: String] = [
-        .escapeCancel: "Esc", .forceSubmit: "⌘↩", .addMeetingChapter: "⌥⌘B",
-        .translateSelectedText: "⌥⌘T", .inplaceTranslation: "⌥⌘", .toggleHistoryPalette: "⌥⌘H",
+        .cancelRecording: "Esc", .forceSubmit: "⌘↩", .addMeetingChapter: "⌥⌘B",
+        .translateSelectedText: "⌥⌘T", .inplaceTranslation: "⌥⌘", .historyPalette: "⌥⌘H",
     ]
     var counts: [ShortcutRow: Int] = [
-        .escapeCancel: 2, .forceSubmit: 1, .addMeetingChapter: 1,
-        .translateSelectedText: 1, .inplaceTranslation: 2, .toggleHistoryPalette: 1,
+        .cancelRecording: 2, .forceSubmit: 1, .addMeetingChapter: 1,
+        .translateSelectedText: 1, .inplaceTranslation: 2, .historyPalette: 1,
     ]
     var enabled: [ShortcutRow: Bool] = Dictionary(uniqueKeysWithValues: ShortcutRow.allCases.map { ($0, true) })
     var changed: [ShortcutRow] = []
@@ -157,6 +158,9 @@ final class FakeShortcutsSettingsStore: ShortcutsSettingsStore {
     func isEnabled(_ row: ShortcutRow) -> Bool { enabled[row] ?? true }
     func setEnabled(_ isOn: Bool, for row: ShortcutRow) { enabled[row] = isOn }
     func shortcutDidChange(_ row: ShortcutRow) { changed.append(row) }
+    var captured: [(ShortcutRow, ShortcutCaptureMachine.Captured)] = []
+    func saveCaptured(_ value: ShortcutCaptureMachine.Captured, for row: ShortcutRow) { captured.append((row, value)) }
+    func takenShortcuts(excluding _: ShortcutRow) -> [KeyboardShortcuts.Name: KeyboardShortcuts.Shortcut] { [:] }
     func selectPair(_ pair: TranslationLanguagePair) { selectedPair = pair }
     var currentPair: TranslationLanguagePair? { selectedPair ?? offeredPairs.first }
 }

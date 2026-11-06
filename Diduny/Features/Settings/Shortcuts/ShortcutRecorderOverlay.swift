@@ -2,18 +2,30 @@ import AppKit
 import KeyboardShortcuts
 import SwiftUI
 
-/// Builds the capture field for the two rows the package recorder cannot take (ADR-0012 D8):
-/// Cancel (any key) and in place (modifier-only or key chord). WP-15's `ShortcutCaptureField`
-/// is plugged in here; the view lays the result over the styled `ShortcutField`.
-@MainActor
-protocol ShortcutCaptureFieldProviding {
-    func captureField(for row: ShortcutRow, isRecording: Binding<Bool>, onCommit: @escaping () -> Void) -> AnyView
-}
+/// WP-15's `ShortcutCaptureField` laid over the styled `ShortcutField` for the two rows the package
+/// recorder cannot take (ADR-0012 D8): Cancel (any key) and in place (modifier-only or key chord).
+struct ShortcutCaptureOverlay: NSViewRepresentable {
+    let mode: ShortcutCaptureMachine.Mode
+    let takenShortcuts: () -> [KeyboardShortcuts.Name: KeyboardShortcuts.Shortcut]
+    @Binding var isRecording: Bool
+    let onCommit: (ShortcutCaptureMachine.Captured) -> Void
 
-/// Until WP-15 lands: no capture, the two fields only show the stored value.
-struct NoShortcutCaptureField: ShortcutCaptureFieldProviding {
-    func captureField(for _: ShortcutRow, isRecording _: Binding<Bool>, onCommit _: @escaping () -> Void) -> AnyView {
-        AnyView(EmptyView())
+    func makeNSView(context _: Context) -> ShortcutCaptureField {
+        let field = ShortcutCaptureField(mode: mode, takenShortcuts: takenShortcuts)
+        configure(field)
+        return field
+    }
+
+    func updateNSView(_ field: ShortcutCaptureField, context _: Context) {
+        field.mode = mode
+        field.takenShortcuts = takenShortcuts
+        configure(field)
+    }
+
+    private func configure(_ field: ShortcutCaptureField) {
+        let binding = $isRecording
+        field.onCapturingChanged = { binding.wrappedValue = $0 }
+        field.onCommit = onCommit
     }
 }
 

@@ -1,3 +1,4 @@
+import KeyboardShortcuts
 import SwiftUI
 
 /// Settings > Shortcuts (design-spec 7.15, 05 §2.5, prototype.html:750-753). Mode shortcuts and
@@ -5,14 +6,11 @@ import SwiftUI
 struct ShortcutsSettingsView: View {
     @State private var model: ShortcutsSettingsModel
     @State private var recordingRow: ShortcutRow?
-    private let captureFields: ShortcutCaptureFieldProviding
 
-    /// - Parameters:
-    ///   - store: nil reads today's settings (`TodayShortcutsSettingsStore`).
-    ///   - captureFields: the Cancel and in-place capture field (WP-15).
-    init(store: ShortcutsSettingsStore? = nil, captureFields: ShortcutCaptureFieldProviding = NoShortcutCaptureField()) {
-        _model = State(initialValue: ShortcutsSettingsModel(store: store ?? TodayShortcutsSettingsStore()))
-        self.captureFields = captureFields
+    /// - Parameter store: nil reads the stored shortcuts (`SettingsShortcutsStore`).
+    @MainActor
+    init(store: ShortcutsSettingsStore? = nil) {
+        _model = State(initialValue: ShortcutsSettingsModel(store: store ?? SettingsShortcutsStore()))
     }
 
     var body: some View {
@@ -122,8 +120,12 @@ struct ShortcutsSettingsView: View {
                         model.shortcutDidChange(row)
                     }
                 } else {
-                    captureFields.captureField(for: row, isRecording: isRecording) {
-                        model.shortcutDidChange(row)
+                    ShortcutCaptureOverlay(
+                        mode: row == .cancelRecording ? .singleKey : .chordOrModifiers,
+                        takenShortcuts: { model.store.takenShortcuts(excluding: row) },
+                        isRecording: isRecording
+                    ) { captured in
+                        model.saveCaptured(captured, for: row)
                     }
                 }
             }
@@ -162,12 +164,12 @@ struct ShortcutsSettingsView: View {
 
     private static func titleResource(of row: ShortcutRow) -> LocalizedStringResource {
         switch row {
-        case .escapeCancel: "Cancel recording"
+        case .cancelRecording: "Cancel recording"
         case .forceSubmit: "Stop, paste and send"
         case .addMeetingChapter: "Add a meeting chapter"
         case .translateSelectedText: "Translate selected text"
         case .inplaceTranslation: "Translate the selection in place"
-        case .toggleHistoryPalette: "History palette"
+        case .historyPalette: "History palette"
         }
     }
 
@@ -180,7 +182,7 @@ struct ShortcutsSettingsView: View {
         case .forceSubmit: "Stops, pastes, then presses ⌘↩."
         case .translateSelectedText: "Opens the translation window with the selection."
         case .inplaceTranslation: "Replaces the selected text with its translation."
-        case .escapeCancel, .addMeetingChapter, .toggleHistoryPalette: nil
+        case .cancelRecording, .addMeetingChapter, .historyPalette: nil
         }
     }
 }
@@ -195,14 +197,16 @@ struct ShortcutsSettingsView: View {
 private final class FakePreviewShortcutsStore: ShortcutsSettingsStore {
     func keys(for row: ShortcutRow) -> String? {
         ["escapeCancel": "Esc", "forceSubmit": "⌘↩", "addMeetingChapter": "⌥⌘B", "translateSelectedText": "⌥⌘T",
-         "inplaceTranslation": "⌥⌘", "toggleHistoryPalette": "⌥⌘H"][row.rawValue]
+         "inplaceTranslation": "⌥⌘", "toggleHistoryPalette": "⌥⌘H"][row.identifierName]
     }
 
-    func pressCount(for row: ShortcutRow) -> Int { row == .escapeCancel || row == .inplaceTranslation ? 2 : 1 }
+    func pressCount(for row: ShortcutRow) -> Int { row == .cancelRecording || row == .inplaceTranslation ? 2 : 1 }
     func setPressCount(_: Int, for _: ShortcutRow) {}
     func isEnabled(_: ShortcutRow) -> Bool { true }
     func setEnabled(_: Bool, for _: ShortcutRow) {}
     func shortcutDidChange(_: ShortcutRow) {}
+    func saveCaptured(_: ShortcutCaptureMachine.Captured, for _: ShortcutRow) {}
+    func takenShortcuts(excluding _: ShortcutRow) -> [KeyboardShortcuts.Name: KeyboardShortcuts.Shortcut] { [:] }
     var keepsAudioWhenCancelled = true
     var inplaceUsesModifierChord: Bool { true }
     var inplaceBlockedByPushToTalk: Bool { false }

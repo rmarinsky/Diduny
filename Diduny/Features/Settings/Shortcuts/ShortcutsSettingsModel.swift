@@ -2,31 +2,32 @@ import Foundation
 import KeyboardShortcuts
 import Observation
 
-/// One editable Shortcuts row: keys, 1× 2× 3×, switch (05 §2.5). Raw values are the test-plan 2.1 ids.
-enum ShortcutRow: String, CaseIterable, Identifiable {
-    case escapeCancel, forceSubmit, addMeetingChapter, translateSelectedText, inplaceTranslation, toggleHistoryPalette
-
+/// Page view of WP-15's `ShortcutRow` (05 §2.5).
+extension ShortcutRow: Identifiable {
     var id: String { rawValue }
 
-    /// The package recorder's name for chord rows. Nil for the two rows that use the in-repo
-    /// capture field (ADR-0012 D8): Cancel (any key) and in place (modifier-only or key chord).
-    var shortcutName: KeyboardShortcuts.Name? {
+    /// The row's name in test-plan 2.1 identifiers.
+    var identifierName: String {
         switch self {
-        case .forceSubmit: .forceSubmit
-        case .addMeetingChapter: .addMeetingChapter
-        case .translateSelectedText: .translateSelectedText
-        case .toggleHistoryPalette: .toggleHistoryPalette
-        case .escapeCancel, .inplaceTranslation: nil
+        case .cancelRecording: "escapeCancel"
+        case .historyPalette: "toggleHistoryPalette"
+        default: rawValue
         }
     }
 
-    var keysIdentifier: String { "shortcuts.\(rawValue).keys" }
-    var pressCountIdentifier: String { "shortcuts.\(rawValue).pressCount" }
-    var enabledIdentifier: String { "shortcuts.\(rawValue).enabled" }
+    /// The package recorder's name for chord rows. Nil for the two rows that use
+    /// `ShortcutCaptureField` (ADR-0012 D8): Cancel (any key) and in place (modifier-only or key chord).
+    var shortcutName: KeyboardShortcuts.Name? {
+        self == .inplaceTranslation ? nil : hotkeyName
+    }
+
+    var keysIdentifier: String { "shortcuts.\(identifierName).keys" }
+    var pressCountIdentifier: String { "shortcuts.\(identifierName).pressCount" }
+    var enabledIdentifier: String { "shortcuts.\(identifierName).enabled" }
 }
 
-/// What the Shortcuts page reads and writes. WP-15's shortcuts model backs it once it lands;
-/// until then `TodayShortcutsSettingsStore` reads today's settings.
+/// What the Shortcuts page reads and writes. `SettingsShortcutsStore` backs it with WP-15's
+/// shortcuts model; tests use a fake.
 @MainActor
 protocol ShortcutsSettingsStore: AnyObject {
     /// Display string ("⌥⌘B"); nil when no shortcut is set.
@@ -38,6 +39,10 @@ protocol ShortcutsSettingsStore: AnyObject {
     func setEnabled(_ isOn: Bool, for row: ShortcutRow)
     /// A new shortcut was recorded for the row; re-register as needed.
     func shortcutDidChange(_ row: ShortcutRow)
+    /// Stores what `ShortcutCaptureField` captured for Cancel or in place (D8).
+    func saveCaptured(_ value: ShortcutCaptureMachine.Captured, for row: ShortcutRow)
+    /// Chords of the other Diduny shortcuts, so an in-place key chord does not take one.
+    func takenShortcuts(excluding row: ShortcutRow) -> [KeyboardShortcuts.Name: KeyboardShortcuts.Shortcut]
     var keepsAudioWhenCancelled: Bool { get set }
     /// The in-place row holds a modifier-only chord (D8), so 1× is not allowed.
     var inplaceUsesModifierChord: Bool { get }
@@ -64,7 +69,7 @@ final class ShortcutsSettingsModel {
 
         var id: String {
             switch self {
-            case let .shortcut(row): row.rawValue
+            case let .shortcut(row): row.identifierName
             case .keepAudioWhenCancelled: "escapeCancelSaveAudio"
             case .inplacePair: "inplaceTranslationPair"
             case .openSettings: "openSettings"
@@ -80,10 +85,10 @@ final class ShortcutsSettingsModel {
     /// `PAGES.shortcuts` (prototype.html:750-753).
     static let groups: [Group] = [
         Group(id: .whileRecording, items: [
-            .shortcut(.escapeCancel), .keepAudioWhenCancelled, .shortcut(.forceSubmit), .shortcut(.addMeetingChapter),
+            .shortcut(.cancelRecording), .keepAudioWhenCancelled, .shortcut(.forceSubmit), .shortcut(.addMeetingChapter),
         ]),
         Group(id: .text, items: [.shortcut(.translateSelectedText), .shortcut(.inplaceTranslation), .inplacePair]),
-        Group(id: .app, items: [.shortcut(.toggleHistoryPalette), .openSettings]),
+        Group(id: .app, items: [.shortcut(.historyPalette), .openSettings]),
     ]
 
     static let pressCounts = 1 ... 3
@@ -132,6 +137,11 @@ final class ShortcutsSettingsModel {
 
     func shortcutDidChange(_ row: ShortcutRow) {
         store.shortcutDidChange(row)
+        revision += 1
+    }
+
+    func saveCaptured(_ value: ShortcutCaptureMachine.Captured, for row: ShortcutRow) {
+        store.saveCaptured(value, for: row)
         revision += 1
     }
 
