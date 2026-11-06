@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>meetingLocalLivePreviewEnabled</key>
+	<true/>
+	<key>meetingRealtimeTranscriptionEnabled</key>
+	<false/>
+	<key>sttJobDefault.dictation</key>
+	<data>
+	eyJwcm92aWRlcklEIjogImRpZHVueS1jbG91ZCJ9
+	</data>
+	<key>sttJobDefault.file</key>
+	<data>
+	eyJwcm92aWRlcklEIjogImxvY2FsLXdoaXNwZXIifQ==
+	</data>
+	<key>transcriptionProvider</key>
+	<string>local</string>
+	<key>translationProvider</key>
+	<string>local</string>
+</dict>
+</plist>
