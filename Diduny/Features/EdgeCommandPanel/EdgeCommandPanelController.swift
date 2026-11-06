@@ -101,24 +101,23 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     private func refreshModel() {
-        let pairs = SettingsStorage.shared.translationLanguagePairs
-        let selected = SettingsStorage.shared.resolveTranslationLanguagePair()
+        let settings = SettingsStorage.shared
+        let pair = settings.translationPair ?? settings.resolveTranslationLanguagePair()
         let isSignedIn = AuthService.hasStoredSession
-        let provider: TranscriptionProvider = isSignedIn
-            && SettingsStorage.shared.effectiveTranscriptionProvider == .cloud
-            && SettingsStorage.shared.effectiveTranslationProvider == .cloud ? .cloud : .local
         if let model {
             model.refresh(
-                pairs: pairs,
-                selectedPair: selected,
-                provider: provider,
+                defaults: Self.currentDefaults(),
+                pair: pair,
+                yourLanguages: settings.yourLanguages,
                 isSignedIn: isSignedIn
             )
+            model.dropPickIfUnusable(Self.engineReadiness)
         } else {
             model = EdgeCommandPanelModel(
-                pairs: pairs,
-                selectedPair: selected,
-                provider: provider,
+                defaults: Self.currentDefaults(),
+                target: settings.defaultTranslationTargetLanguage,
+                pair: pair,
+                yourLanguages: settings.yourLanguages,
                 isSignedIn: isSignedIn
             )
         }
@@ -166,6 +165,8 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     func showLiveFeedback(mode: RecordingMode) {
+        // A tile start already consumed its pick; any other start (hotkey) clears a pending one (02 Q14).
+        model?.clearPick()
         // Phase updates keep calling this while recording. If the user hid the
         // live panel, leave it collapsed until they restore it intentionally.
         if model?.isLiveFeedbackMinimized == true {
@@ -493,17 +494,6 @@ final class EdgeCommandPanelController: NSObject {
         }
     }
 
-    private func selectProvider(_ provider: TranscriptionProvider) {
-        guard let model, model.selectProvider(provider) else {
-            openAccount()
-            return
-        }
-        SettingsStorage.shared.selectProcessingProvider(provider)
-        if let panel {
-            position(panel, presentation: commandPresentation)
-        }
-    }
-
     private func openAccount() {
         appDelegate?.openMainWindow(section: .account)
     }
@@ -558,7 +548,12 @@ final class EdgeCommandPanelController: NSObject {
             model: model!,
             liveStore: DictationOverlayController.shared.store,
             onAction: { [weak self] action in self?.perform(action) },
-            onProvider: { [weak self] provider in self?.selectProvider(provider) },
+            capabilities: Self.engineCapabilities,
+            readiness: Self.engineReadiness,
+            onEngineRow: { [weak self] row in self?.pickEngineRow(row) },
+            onTarget: { [weak self] code in self?.model?.pickTarget(code) },
+            onRecordings: { [weak self] in self?.appDelegate?.openMainWindow(section: .recordings) },
+            onSettings: { [weak self] in self?.appDelegate?.openMainWindow(section: CommandHome.settingsSection) },
             onSignIn: { [weak self] in self?.openAccount() },
             onCopy: { DictationOverlayController.shared.copyCurrentTranscript() },
             onStop: { DictationOverlayController.shared.requestStop() },
@@ -587,7 +582,8 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     private var commandPresentation: EdgeCommandPanelPresentation {
-        .commands(isCloud: model?.provider == .cloud)
+        // One layout now; WP-40 replaces the size.
+        .commands(isCloud: true)
     }
 
     var currentPresentation: EdgeCommandPanelPresentation {

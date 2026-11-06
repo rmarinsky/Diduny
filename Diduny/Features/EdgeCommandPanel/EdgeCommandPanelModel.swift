@@ -24,16 +24,12 @@ enum EdgeCommandAction: CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .transcribe: "waveform"
-        case .translate: "character.bubble"
-        case .meeting: "record.circle"
-        case .translateMeeting: "captions.bubble"
+        case .transcribe: "mic"
+        case .translate: "globe"
+        case .meeting: "person.2"
+        case .translateMeeting: "person.2"
         case .batch: "tray.full"
         }
-    }
-
-    var usesLanguagePair: Bool {
-        self == .translate || self == .translateMeeting
     }
 }
 
@@ -100,9 +96,15 @@ struct MeetingSuggestion: Equatable {
 @Observable
 @MainActor
 final class EdgeCommandPanelModel {
-    var pairs: [TranslationLanguagePair]
-    var selectedPairID: String
-    var provider: TranscriptionProvider
+    /// Engines the tiles use on "As in Settings" (an input, see `CommandHomeDefaults`).
+    var defaults: CommandHomeDefaults
+    /// The one-recording engine pick. Never stored; consumed by a tile start, cleared by any other start.
+    private(set) var pick: EngineID?
+    /// Translate into, for the Translate tile only. Kept after Stop; never written to Settings.
+    private(set) var target: String
+    /// The saved pair, for the Translate meeting tile.
+    var pair: TranslationLanguagePair
+    var yourLanguages: [String]
     var isSignedIn: Bool
     var isExpanded = false
     var isShowingLiveFeedback = false
@@ -113,59 +115,84 @@ final class EdgeCommandPanelModel {
     var dockEdge: EdgeCommandPanelDockEdge = .right
 
     init(
-        pairs: [TranslationLanguagePair],
-        selectedPair: TranslationLanguagePair,
-        provider: TranscriptionProvider = .local,
+        defaults: CommandHomeDefaults = .prototype,
+        target: String = CommandHome.fallbackTarget,
+        pair: TranslationLanguagePair = .defaultPair,
+        yourLanguages: [String] = [],
         isSignedIn: Bool = true
     ) {
-        let normalizedPairs = pairs.isEmpty ? [.defaultPair] : pairs
-        self.pairs = normalizedPairs
-        self.provider = provider
+        self.defaults = defaults
+        self.target = CommandHome.validTarget(target)
+        self.pair = pair
+        self.yourLanguages = yourLanguages
         self.isSignedIn = isSignedIn
-        selectedPairID = normalizedPairs.contains(selectedPair) ? selectedPair.id : normalizedPairs[0].id
     }
 
-    var availableActions: [EdgeCommandAction] {
-        if provider == .cloud {
-            return [.transcribe, .translate, .meeting, .translateMeeting]
-        }
-        return [.transcribe, .meeting]
+    var tilesEnabled: Bool {
+        isSignedIn
     }
 
-    var showsTranslationControls: Bool {
-        provider == .cloud
+    var engineFieldLabel: String {
+        pick == nil ? String(localized: "Engine") : String(localized: "Engine, next recording")
     }
 
-    var selectedPair: TranslationLanguagePair? {
-        pairs.first(where: { $0.id == selectedPairID }) ?? pairs.first
+    var engineFieldValue: String {
+        pick.map(CommandHome.engineName) ?? String(localized: "As in Settings")
     }
 
-    func select(_ pair: TranslationLanguagePair) {
-        guard pairs.contains(pair) else { return }
-        selectedPairID = pair.id
+    func engine(for action: EdgeCommandAction) -> EngineID {
+        CommandHome.engine(for: action, pick: pick, defaults: defaults)
     }
 
+    /// Picks from the Engine menu. "As in Settings" clears the pick. Returns false for a row that is not an engine.
     @discardableResult
-    func selectProvider(_ provider: TranscriptionProvider) -> Bool {
-        guard provider != .cloud || isSignedIn else { return false }
-        self.provider = provider
+    func pickEngine(rowID: String) -> Bool {
+        if rowID == CommandHome.asInSettingsRowID {
+            pick = nil
+            return true
+        }
+        guard let engine = EngineID(rawValue: rowID) else { return false }
+        pick = engine
         return true
     }
 
+    func pickTarget(_ code: String) {
+        target = CommandHome.validTarget(code)
+    }
+
+    /// A tile start: what to record with. Consumes the pick (it applies to one recording).
+    func consumeStart(
+        _ action: EdgeCommandAction,
+        caps: (EngineID) -> EngineCapabilities?
+    ) -> CommandTileStart {
+        defer { pick = nil }
+        return CommandHome.start(action, pick: pick, defaults: defaults, target: target, pair: pair, caps: caps)
+    }
+
+    /// Any recording start not from a tile (hotkey, menu bar) clears a pending pick (02 Q14 default).
+    func clearPick() {
+        pick = nil
+    }
+
+    /// The picked engine stopped being usable (key removed): back to "As in Settings" (P:411).
+    func dropPickIfUnusable(_ readiness: (EngineID) -> EngineReadiness) {
+        guard let pick else { return }
+        switch readiness(pick) {
+        case .needsKey, .unsupportedHardware, .noQuota, .unavailable: self.pick = nil
+        case .ready, .signedOut, .notDownloaded: break
+        }
+    }
+
     func refresh(
-        pairs: [TranslationLanguagePair],
-        selectedPair: TranslationLanguagePair,
-        provider: TranscriptionProvider? = nil,
-        isSignedIn: Bool? = nil
+        defaults: CommandHomeDefaults,
+        pair: TranslationLanguagePair,
+        yourLanguages: [String],
+        isSignedIn: Bool
     ) {
-        self.pairs = pairs.isEmpty ? [.defaultPair] : pairs
-        selectedPairID = self.pairs.contains(selectedPair) ? selectedPair.id : self.pairs[0].id
-        if let provider {
-            self.provider = provider
-        }
-        if let isSignedIn {
-            self.isSignedIn = isSignedIn
-        }
+        self.defaults = defaults
+        self.pair = pair
+        self.yourLanguages = yourLanguages
+        self.isSignedIn = isSignedIn
     }
 
     func presentMeetingSuggestion(_ suggestion: MeetingSuggestion) {
