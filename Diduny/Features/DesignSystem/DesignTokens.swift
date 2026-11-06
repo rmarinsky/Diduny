@@ -46,6 +46,8 @@ enum DS {
         static let previewDrawing: CGFloat = 6
         static let keyInput: CGFloat = 7
         static let sidebarFooter: CGFloat = 8
+        /// Settings > Audio microphone level bar (prototype `.lvl`).
+        static let levelBar: CGFloat = 3
     }
 
     /// Control sizes (design-spec 3.2). Native controls (Settings buttons, switches,

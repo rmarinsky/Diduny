@@ -1932,3 +1932,22 @@
 "Shown first everywhere you pick a language" = "Shown first everywhere you pick a language";
 "Chosen" = "Chosen";
 "Add a second language to Your languages" = "Add a second language to Your languages";
+
+/* Panels redesign WP-54 */
+"Audio" = "Audio";
+"Devices and levels." = "Devices and levels.";
+"Test the microphone" = "Test the microphone";
+"Input level" = "Input level";
+"System audio only" = "System audio only";
+"Microphone level" = "Microphone level";
+"System audio level" = "System audio level";
+"Test system audio" = "Test system audio";
+"Capture" = "Capture";
+"Speaker labels on this Mac" = "Speaker labels on this Mac";
+"Identify speakers" = "Identify speakers";
+"After Stop, Diduny tells the voices apart on this Mac when the engine cannot." = "After Stop, Diduny tells the voices apart on this Mac when the engine cannot.";
+"Ready to use." = "Ready to use.";
+"My voice profile" = "My voice profile";
+"Re-record" = "Re-record";
+"Labels your own voice as you." = "Labels your own voice as you.";
+"Set up" = "Set up";
