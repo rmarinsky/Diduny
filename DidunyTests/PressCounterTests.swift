@@ -45,13 +45,17 @@ struct PressCounterTests {
     @Test("T5-HK-10 changing the count mid-sequence triggers and resets")
     func changingCountMidSequence() {
         var counter = PressCounter()
-        #expect(!counter.register(at: 0, required: 3, window: 0.35))
-        #expect(!counter.register(at: 0.1, required: 3, window: 0.35))
-        #expect(counter.register(at: 0.2, required: 1, window: 0.35))
-        // The sequence was reset, so 3x needs three new presses.
-        #expect(!counter.register(at: 0.3, required: 3, window: 0.35))
-        #expect(!counter.register(at: 0.4, required: 3, window: 0.35))
-        #expect(counter.register(at: 0.5, required: 3, window: 0.35))
+        // `#expect` cannot wrap a mutating call, so each result is bound first.
+        let results = [
+            counter.register(at: 0, required: 3, window: 0.35),
+            counter.register(at: 0.1, required: 3, window: 0.35),
+            counter.register(at: 0.2, required: 1, window: 0.35),
+            // The sequence was reset, so 3x needs three new presses.
+            counter.register(at: 0.3, required: 3, window: 0.35),
+            counter.register(at: 0.4, required: 3, window: 0.35),
+            counter.register(at: 0.5, required: 3, window: 0.35)
+        ]
+        #expect(results == [false, false, true, false, false, true])
     }
 
     @Test("Reset starts a new sequence")
@@ -59,6 +63,7 @@ struct PressCounterTests {
         var counter = PressCounter()
         _ = counter.register(at: 0, required: 2, window: 0.35)
         counter.reset()
-        #expect(!counter.register(at: 0.1, required: 2, window: 0.35))
+        let triggered = counter.register(at: 0.1, required: 2, window: 0.35)
+        #expect(!triggered)
     }
 }
