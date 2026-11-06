@@ -111,9 +111,8 @@ final class YourLanguagesTests {
         let store = storage()
         store.manualSpeechLanguageHints = []
         #expect(store.manualSpeechLanguageHints.isEmpty)
-        // Today's fallback stays: with nothing chosen or detected, the hints are en, uk.
-        // "Sends no hint" belongs to WP-53.
-        #expect(store.effectiveSpeechLanguageHints(detectedCodes: []) == ["en", "uk"])
+        // WP-53: with nothing chosen or detected, no hint is sent.
+        #expect(store.effectiveSpeechLanguageHints(detectedCodes: []).isEmpty)
 
         store.manualSpeechLanguageHints = ["pl", "en"]
         #expect(store.manualSpeechLanguageHints == ["pl", "en"])

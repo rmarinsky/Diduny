@@ -1910,3 +1910,25 @@
 "Permission to record system audio" = "Дозвіл на запис системного звуку";
 "Ask again" = "Запитати знову";
 "You said no to Screen Recording earlier. Meetings need it to record the other side." = "Раніше ви відмовили в записі екрана. Він потрібен, щоб записувати співрозмовників на зустрічах.";
+
+/* Panels redesign WP-53 */
+"Languages" = "Мови";
+"The languages you speak and the ones you translate into." = "Мови, якими ви говорите, і мови, на які перекладаєте.";
+"Languages you speak" = "Мови, якими ви говорите";
+"Detect the language" = "Визначати мову";
+"Sent to the engine as a hint. Suggested from your keyboard layouts. With none chosen the engine detects the language." = "Передаються рушію як підказка. Запропоновано з ваших розкладок клавіатури. Якщо нічого не вибрано, рушій сам визначає мову.";
+"Shown first and in crimson in every Translate into menu and language list." = "Показуються першими й малиновим у кожному меню «Перекласти на» та списку мов.";
+"Translate into, by default" = "Перекладати на, типово";
+"For dictation and the translation window. One language." = "Для диктування й вікна перекладу. Одна мова.";
+"Pair for both directions" = "Пара для обох напрямків";
+"For Translate meeting and Translate in place: each language is translated into the other." = "Для перекладу зустрічі й перекладу на місці: кожна мова перекладається на іншу.";
+"Voice commands" = "Голосові команди";
+"Say \"translate into Polish\" while you dictate. Diduny Cloud only." = "Скажіть «переклади на польську» під час диктування. Лише Diduny Cloud.";
+"Listen for the command" = "Слухати команду";
+"At the start and end" = "На початку й у кінці";
+"At the end" = "У кінці";
+"Languages you can ask for" = "Мови, які можна назвати";
+"A hint for the engine. Choose none to detect" = "Підказка для рушія. Не вибирайте жодної, щоб визначати мову";
+"Shown first everywhere you pick a language" = "Показуються першими скрізь, де ви вибираєте мову";
+"Chosen" = "Вибрані";
+"Add a second language to Your languages" = "Додайте другу мову до «Ваших мов»";

@@ -1129,7 +1129,8 @@ final class SettingsStorage {
             enabledDetected + manualSpeechLanguageHints,
             fallback: []
         )
-        return combined.isEmpty ? Self.defaultSpeechLanguageHints : combined
+        // WP-53 (T5-LA-05): an empty "Languages you speak" sends no hint; the engine detects.
+        return combined
     }
 
     func setDetectedSpeechLanguage(_ code: String, enabled: Bool) {
