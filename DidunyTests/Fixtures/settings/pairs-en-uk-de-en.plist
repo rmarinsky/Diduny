@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>defaultTranslationLanguagePairID</key>
+	<string>en-uk</string>
+	<key>transcriptionProvider</key>
+	<string>cloud</string>
+	<key>translationLanguagePairs</key>
+	<data>
+	W3siaWQiOiAiZW4tdWsiLCAibGFuZ3VhZ2VBIjogImVuIiwgImxhbmd1YWdlQiI6ICJ1
+	ayJ9LCB7ImlkIjogImRlLWVuIiwgImxhbmd1YWdlQSI6ICJkZSIsICJsYW5ndWFnZUIi
+	OiAiZW4ifV0=
+	</data>
+</dict>
+</plist>

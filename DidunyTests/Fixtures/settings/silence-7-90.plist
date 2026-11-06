@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>dictationSilenceAutoStopEnabled</key>
+	<true/>
+	<key>dictationSilenceAutoStopSeconds</key>
+	<real>7.0</real>
+	<key>meetingSilenceAutoStopEnabled</key>
+	<false/>
+	<key>meetingSilenceAutoStopSeconds</key>
+	<real>90.0</real>
+	<key>transcriptionProvider</key>
+	<string>cloud</string>
+</dict>
+</plist>

@@ -16,4 +16,29 @@ enum SettingsMigration {
             )
         }
     }
+
+    static let schemaVersionKey = "settingsSchemaVersion"
+    static let currentSchemaVersion = 2
+
+    /// ADR-0012 D5: keys that only an earlier build writes before this migration runs.
+    private static let existingInstallKeys = [
+        "transcriptionProvider", "translationProvider", "pushToTalkKey", "autoPaste",
+        "meetingRealtimeTranscriptionEnabled", "meetingLocalLivePreviewEnabled", "translationLanguagePairs",
+        "onboarding.completed",
+    ] + STTJob.allCases.map(ProviderDefaultsStore.storageKey(for:))
+
+    static func isExistingInstall(_ defaults: UserDefaults) -> Bool {
+        existingInstallKeys.contains { defaults.object(forKey: $0) != nil }
+    }
+
+    /// Runs once per install. Existing installs get the new keys from what runs today; fresh installs
+    /// get nothing written (read-time defaults apply). Never deletes a legacy key.
+    static func runIfNeeded(defaults: UserDefaults, environment: Environment) {
+        guard defaults.integer(forKey: schemaVersionKey) < currentSchemaVersion else { return }
+        if isExistingInstall(defaults) {
+            migrateModeDefaults(defaults: defaults, environment: environment)
+            migrateLanguages(defaults: defaults)
+        }
+        defaults.set(currentSchemaVersion, forKey: schemaVersionKey)
+    }
 }

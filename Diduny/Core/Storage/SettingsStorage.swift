@@ -207,6 +207,7 @@ final class SettingsStorage {
         migratePreferredDeviceKeyIfNeeded()
         migrateTranscriptionProviderIfNeeded()
         migrateProxyURLIfNeeded()
+        SettingsMigration.runIfNeeded(defaults: defaults, environment: migrationEnvironment)
     }
 
     func applyNewUserDefaultsIfMissing() {

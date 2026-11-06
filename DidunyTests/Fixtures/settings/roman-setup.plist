@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>meetingRealtimeTranscriptionEnabled</key>
+	<true/>
+	<key>selectedWhisperModel</key>
+	<string>ggml-large-v3-turbo</string>
+	<key>sttJobDefault.meeting</key>
+	<data>
+	eyJwcm92aWRlcklEIjogImVsZXZlbmxhYnMiLCAibW9kZWxJRCI6ICJzY3JpYmVfdjJf
+	cmVhbHRpbWUifQ==
+	</data>
+	<key>transcriptionProvider</key>
+	<string>cloud</string>
+	<key>translationProvider</key>
+	<string>local</string>
+</dict>
+</plist>
