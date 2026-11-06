@@ -18,7 +18,21 @@ struct EdgeCommandExpandedView: View {
     let onDrag: () -> Void
     let onDragEnd: () -> Void
 
+    /// Which content the panel shows; a change is an M1 swap, anything else redraws in place (M3).
+    private enum ContentState: Equatable {
+        case prompt
+        case live
+        case home
+    }
+
+    private var contentState: ContentState {
+        if model.meetingSuggestion != nil { return .prompt }
+        return model.isShowingLiveFeedback ? .live : .home
+    }
+
     var body: some View {
+        // Slide from the docked edge (M1); with Reduce Motion a 120 ms fade.
+        let swap = MotionPolicy.contentSwap(.swap, edge: model.dockEdge, preference: .current)
         ZStack {
             if let suggestion = model.meetingSuggestion {
                 MeetingSuggestionView(
@@ -30,7 +44,8 @@ struct EdgeCommandExpandedView: View {
                     onDrag: onDrag,
                     onDragEnd: onDragEnd
                 )
-                .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
+                .accessibilityIdentifier("commandPanel.prompt")
+                .transition(swap?.transition ?? .identity)
             } else if model.isShowingLiveFeedback {
                 LivePanelView(
                     store: liveStore,
@@ -42,14 +57,15 @@ struct EdgeCommandExpandedView: View {
                     onDrag: onDrag,
                     onDragEnd: onDragEnd
                 )
-                .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
+                .accessibilityIdentifier("commandPanel.live")
+                .transition(swap?.transition ?? .identity)
             } else {
                 commandView
-                    .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
+                    .accessibilityIdentifier("commandPanel.home")
+                    .transition(swap?.transition ?? .identity)
             }
         }
-        .animation(.spring(response: 0.38, dampingFraction: 0.86), value: model.isShowingLiveFeedback)
-        .animation(.spring(response: 0.38, dampingFraction: 0.86), value: model.meetingSuggestion)
+        .animation(swap?.animation, value: contentState)
     }
 
     private var commandView: some View {

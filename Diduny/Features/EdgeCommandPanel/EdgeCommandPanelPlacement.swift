@@ -28,9 +28,11 @@ struct EdgeCommandPanelDock: Equatable {
 }
 
 enum EdgeCommandPanelPlacement {
-    static let expandedCornerRadius: CGFloat = 15
-    static let liveControlHitTargetHeight: CGFloat = 44
-    static let meetingSuggestionControlHitTargetHeight: CGFloat = 44
+    static let expandedCornerRadius: CGFloat = 12
+    static let liveControlHitTargetHeight: CGFloat = 38
+    static let meetingSuggestionControlHitTargetHeight: CGFloat = 38
+    /// Design-spec 3.3: one width in every expanded state.
+    static let panelWidth: CGFloat = 300
 
     static func nearestDock(to proposedFrame: NSRect, in visibleFrame: NSRect) -> EdgeCommandPanelDock {
         let distances: [(EdgeCommandPanelDockEdge, CGFloat)] = [
@@ -47,9 +49,10 @@ enum EdgeCommandPanelPlacement {
     static func frame(
         in visibleFrame: NSRect,
         dock: EdgeCommandPanelDock,
-        presentation: EdgeCommandPanelPresentation
+        presentation: EdgeCommandPanelPresentation,
+        contentHeight: CGFloat? = nil
     ) -> NSRect {
-        let size = size(for: presentation, edge: dock.edge)
+        let size = size(for: presentation, edge: dock.edge, contentHeight: contentHeight)
         let origin = switch dock.edge {
         case .left:
             NSPoint(
@@ -106,22 +109,24 @@ enum EdgeCommandPanelPlacement {
 
     static func size(
         for presentation: EdgeCommandPanelPresentation,
-        edge: EdgeCommandPanelDockEdge
+        edge: EdgeCommandPanelDockEdge,
+        contentHeight: CGFloat? = nil
     ) -> NSSize {
+        guard presentation != .collapsed else { return collapsedSize(for: edge) }
+        return NSSize(width: panelWidth, height: contentHeight ?? fallbackHeight(for: presentation))
+    }
+
+    /// Used until the content reports its fitting height (live panels fill the window today).
+    private static func fallbackHeight(for presentation: EdgeCommandPanelPresentation) -> CGFloat {
         switch presentation {
-        case .collapsed:
-            collapsedSize(for: edge)
-        case let .commands(isCloud):
-            NSSize(width: 286, height: isCloud ? 326 : 250)
-        case let .live(mode):
-            // Dictation: design-spec 7.2, 300 x 311.7 with a one-line caption. Meetings: WP-31 and WP-32.
-            mode.isMeeting ? NSSize(width: 360, height: 420) : NSSize(width: DS.Panel.width, height: 312)
-        case .meetingSuggestion:
-            NSSize(width: 390, height: 350)
+        case .collapsed: 0
+        case let .commands(isCloud): isCloud ? 326 : 250
+        case let .live(mode): mode.isMeeting ? 420 : 312 // dictation 311.7 (design-spec 7.2, WP-30)
+        case .meetingSuggestion: 350
         }
     }
 
-    static let expandedSize = NSSize(width: 286, height: 326)
+    static let expandedSize = NSSize(width: panelWidth, height: 326)
 
     private static func collapsedSize(for edge: EdgeCommandPanelDockEdge) -> NSSize {
         switch edge {
