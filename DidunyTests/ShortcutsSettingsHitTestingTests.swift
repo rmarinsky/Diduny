@@ -3,14 +3,9 @@ import AppKit
 import SwiftUI
 import Testing
 
-/// Reproduces the Shortcuts tab click bugs by sending real mouse events to the
-/// hosted view. Each bug test has a positive control that clicks the visible
-/// glyph and must pass, which proves the coordinates below hit the right
-/// control; the failing assertion is the click on the control's own padding.
-///
-/// Coordinates are top-left based, measured from a snapshot of ShortcutsSettingsView in a
-/// 760×1100 window (tall enough that nothing scrolls): PageScaffold, quiet rows of 57pt in
-/// "Action hotkeys", "Recording keys" rows of ~69pt. Update them if that layout changes.
+/// Clicks on the Shortcuts page (WP-55 layout, design-spec 7.15) sent as real mouse events to the
+/// hosted view. Controls are found by their test-plan 2.1 accessibility identifiers, so the tests
+/// follow the layout instead of fixed coordinates. The page reads a fake store, never `.shared`.
 /// Drives a real key window, so it runs only on CI (`DIDUNY_UI_TESTS=1`), never on a dev Mac.
 @MainActor
 // Serialized: every test makes its own window key and spins the run loop, so concurrent
@@ -21,19 +16,6 @@ import Testing
 )
 struct ShortcutsSettingsHitTestingTests {
     nonisolated private static let windowSize = NSSize(width: 760, height: 1100)
-
-    private enum Point {
-        // Dictation row of the "Action hotkeys" card (row centre y = 119).
-        static let dictation2xGlyph = NSPoint(x: 663, y: 119)
-        static let dictation2xPadding = NSPoint(x: 650, y: 119) // inside the 2x segment, left of its text
-        static let dictationEditLabel = NSPoint(x: 572, y: 119)
-        static let dictationFieldBody = NSPoint(x: 530, y: 119) // between keycaps and "edit"
-        static let dictationRecorderCenter = NSPoint(x: 500, y: 119)
-
-        // Dictation row of the "Recording keys" card (row centre y = 479).
-        static let dictationOffGlyph = NSPoint(x: 433, y: 479)
-        static let dictationOffPadding = NSPoint(x: 415, y: 479)
-    }
 
     /// A non-activating panel takes clicks without the test host being the active app. macOS
     /// may refuse to activate the host (cooperative activation, another app in front); in a
@@ -47,10 +29,14 @@ struct ShortcutsSettingsHitTestingTests {
     private final class Harness {
         let window: NSWindow
 
-        init() {
+        let store: FakeShortcutsSettingsStore
+
+        init(store: FakeShortcutsSettingsStore? = nil) {
+            let store = store ?? FakeShortcutsSettingsStore()
+            self.store = store
             // Drop events left from a previous test so the next dequeue is ours.
             while NSApp.nextEvent(matching: .any, until: nil, inMode: .default, dequeue: true) != nil {}
-            let hostingView = NSHostingView(rootView: ShortcutsSettingsView())
+            let hostingView = NSHostingView(rootView: ShortcutsSettingsView(store: store))
             window = TestPanel(
                 contentRect: NSRect(origin: .zero, size: ShortcutsSettingsHitTestingTests.windowSize),
                 styleMask: [.titled, .nonactivatingPanel],
@@ -110,8 +96,29 @@ struct ShortcutsSettingsHitTestingTests {
             [view] + view.subviews.flatMap(allViews)
         }
 
-        func click(_ topLeft: NSPoint) {
-            let point = NSPoint(x: topLeft.x, y: ShortcutsSettingsHitTestingTests.windowSize.height - topLeft.y)
+        /// Window-base frame of the accessibility element with this identifier.
+        func frame(of identifier: String) -> NSRect? {
+            func find(_ element: Any) -> NSAccessibilityElementProtocol? {
+                guard let element = element as? NSAccessibilityElementProtocol else { return nil }
+                if (element as? NSAccessibilityProtocol)?.accessibilityIdentifier() == identifier { return element }
+                let children = (element as? NSAccessibilityProtocol)?.accessibilityChildren() ?? []
+                for child in children { if let hit = find(child) { return hit } }
+                return nil
+            }
+            guard let content = window.contentView, let hit = find(content) else { return nil }
+            return window.convertFromScreen(hit.accessibilityFrame())
+        }
+
+        /// Clicks at a fraction of the identified control's width, centred vertically.
+        func click(_ identifier: String, atFraction fraction: CGFloat = 0.5) {
+            guard let frame = frame(of: identifier) else {
+                Issue.record("no element \(identifier)")
+                return
+            }
+            click(window: NSPoint(x: frame.minX + frame.width * fraction, y: frame.midY))
+        }
+
+        func click(window point: NSPoint) {
             for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
                 guard let event = NSEvent.mouseEvent(
                     with: type,
@@ -146,104 +153,63 @@ struct ShortcutsSettingsHitTestingTests {
         }
     }
 
-    // MARK: - Trigger after
+    // MARK: - Keys field
 
-    @Test("Trigger-after 2x: clicking the glyph selects it (control)")
-    func triggerAfterGlyphClick() {
-        let original = SettingsStorage.shared.recordingHotkeyPressCount
-        defer { SettingsStorage.shared.recordingHotkeyPressCount = original }
-        SettingsStorage.shared.recordingHotkeyPressCount = 1
-
-        let harness = Harness()
-        harness.click(Point.dictation2xGlyph)
-
-        harness.waitUntil { SettingsStorage.shared.recordingHotkeyPressCount == 2 }
-        #expect(SettingsStorage.shared.recordingHotkeyPressCount == 2)
-    }
-
-    @Test("Trigger-after 2x: clicking the segment outside its text selects it")
-    func triggerAfterPaddingClick() {
-        let original = SettingsStorage.shared.recordingHotkeyPressCount
-        defer { SettingsStorage.shared.recordingHotkeyPressCount = original }
-        SettingsStorage.shared.recordingHotkeyPressCount = 1
-
-        let harness = Harness()
-        harness.click(Point.dictation2xPadding)
-
-        harness.waitUntil { SettingsStorage.shared.recordingHotkeyPressCount == 2 }
-        #expect(SettingsStorage.shared.recordingHotkeyPressCount == 2)
-    }
-
-    // MARK: - Tap trigger
-
-    @Test("Tap trigger Off: clicking the glyph turns it off (control)")
-    func tapTriggerOffGlyphClick() {
-        let originalKey = SettingsStorage.shared.pushToTalkKey
-        let originalToggle = SettingsStorage.shared.pushToTalkToggleEnabled
-        defer {
-            SettingsStorage.shared.pushToTalkKey = originalKey
-            SettingsStorage.shared.pushToTalkToggleEnabled = originalToggle
-        }
-        SettingsStorage.shared.pushToTalkKey = .rightShift
-        SettingsStorage.shared.pushToTalkToggleEnabled = true
-
-        let harness = Harness()
-        harness.click(Point.dictationOffGlyph)
-
-        harness.waitUntil { SettingsStorage.shared.pushToTalkToggleEnabled == false }
-        #expect(SettingsStorage.shared.pushToTalkToggleEnabled == false)
-    }
-
-    @Test("Tap trigger Off: clicking the segment outside its text turns it off")
-    func tapTriggerOffPaddingClick() {
-        let originalKey = SettingsStorage.shared.pushToTalkKey
-        let originalToggle = SettingsStorage.shared.pushToTalkToggleEnabled
-        defer {
-            SettingsStorage.shared.pushToTalkKey = originalKey
-            SettingsStorage.shared.pushToTalkToggleEnabled = originalToggle
-        }
-        SettingsStorage.shared.pushToTalkKey = .rightShift
-        SettingsStorage.shared.pushToTalkToggleEnabled = true
-
-        let harness = Harness()
-        harness.click(Point.dictationOffPadding)
-
-        harness.waitUntil { SettingsStorage.shared.pushToTalkToggleEnabled == false }
-        #expect(SettingsStorage.shared.pushToTalkToggleEnabled == false)
-    }
-
-    // MARK: - Shortcut recorder
-
-    @Test("Clicking the shortcut field's 'edit' label starts recording")
-    func clickingEditStartsRecording() throws {
+    @Test("Clicking the keys field starts recording")
+    func clickingFieldStartsRecording() throws {
         let harness = Harness()
         try #require(harness.window.isKeyWindow, "test window must be key, or the first click only activates it")
 
-        harness.click(Point.dictationEditLabel)
+        harness.click(ShortcutRow.addMeetingChapter.keysIdentifier)
 
         harness.waitUntil { harness.isShortcutRecorderFocused }
         #expect(harness.isShortcutRecorderFocused, "first responder: \(String(describing: harness.window.firstResponder))")
     }
 
-    @Test("Clicking the middle of the recorder control itself starts recording (control)")
-    func clickingRecorderCenterStartsRecording() throws {
+    @Test("Clicking near the edge of the keys field starts recording")
+    func clickingFieldEdgeStartsRecording() throws {
         let harness = Harness()
         try #require(harness.window.isKeyWindow, "test window must be key, or the first click only activates it")
 
-        harness.click(Point.dictationRecorderCenter)
+        harness.click(ShortcutRow.addMeetingChapter.keysIdentifier, atFraction: 0.9)
 
         harness.waitUntil { harness.isShortcutRecorderFocused }
         #expect(harness.isShortcutRecorderFocused, "first responder: \(String(describing: harness.window.firstResponder))")
     }
 
-    @Test("Clicking the body of the shortcut field starts recording")
-    func clickingFieldBodyStartsRecording() throws {
-        let harness = Harness()
+    // MARK: - Press count
+
+    @Test("Each count segment selects its count", arguments: [(1, CGFloat(1) / 6), (2, 0.5), (3, CGFloat(5) / 6)])
+    func countSegmentsSelect(count: Int, fraction: CGFloat) {
+        let store = FakeShortcutsSettingsStore()
+        store.counts[.addMeetingChapter] = count == 1 ? 2 : 1
+        let harness = Harness(store: store)
+
+        harness.click(ShortcutRow.addMeetingChapter.pressCountIdentifier, atFraction: fraction)
+
+        harness.waitUntil { store.counts[.addMeetingChapter] == count }
+        #expect(store.counts[.addMeetingChapter] == count)
+    }
+
+    // MARK: - Switch
+
+    @Test("The switch turns the shortcut off; then the field and the count take no clicks")
+    func switchDisablesFieldAndCount() throws {
+        let store = FakeShortcutsSettingsStore()
+        store.counts[.addMeetingChapter] = 1
+        let harness = Harness(store: store)
         try #require(harness.window.isKeyWindow, "test window must be key, or the first click only activates it")
 
-        harness.click(Point.dictationFieldBody)
+        harness.click(ShortcutRow.addMeetingChapter.enabledIdentifier)
+        harness.waitUntil { store.enabled[.addMeetingChapter] == false }
+        #expect(store.enabled[.addMeetingChapter] == false)
 
-        harness.waitUntil { harness.isShortcutRecorderFocused }
-        #expect(harness.isShortcutRecorderFocused, "first responder: \(String(describing: harness.window.firstResponder))")
+        harness.click(ShortcutRow.addMeetingChapter.pressCountIdentifier, atFraction: 0.5)
+        harness.waitUntil(timeout: 0.5) { store.counts[.addMeetingChapter] == 2 }
+        #expect(store.counts[.addMeetingChapter] == 1)
+
+        harness.click(ShortcutRow.addMeetingChapter.keysIdentifier)
+        harness.waitUntil(timeout: 0.5) { harness.isShortcutRecorderFocused }
+        #expect(!harness.isShortcutRecorderFocused)
     }
 }
