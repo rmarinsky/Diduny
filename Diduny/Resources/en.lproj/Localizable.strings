@@ -1770,3 +1770,6 @@
 "Right Arrow" = "Right Arrow";
 "Up Arrow" = "Up Arrow";
 "Down Arrow" = "Down Arrow";
+/* WP-15: cancel repeat hint names the stored cancel key */
+"Press %@ 1 more time to cancel" = "Press %@ 1 more time to cancel";
+"Press %@ %lld more times to cancel" = "Press %@ %lld more times to cancel";

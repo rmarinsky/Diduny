@@ -15,6 +15,9 @@ enum LiveDictationOverlayPhase: Equatable {
 @Observable
 @MainActor
 final class LiveDictationOverlayStore {
+    /// Read by the Stop and cancel hints only; tests inject their own (test-plan T1-SH).
+    @ObservationIgnored var settings: SettingsStorage = .shared
+    @ObservationIgnored var hotkeys: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared
     var mode: RecordingMode = .voice
     /// False while the edge panel morphs out of its tab: a static skeleton shows
     /// instead of live content, so state updates never fight the entrance.
@@ -165,34 +168,34 @@ final class LiveDictationOverlayStore {
         switch mode {
         case .voice:
             if let modifierHint = modifierToggleHint(
-                key: SettingsStorage.shared.pushToTalkKey,
-                isEnabled: SettingsStorage.shared.pushToTalkToggleEnabled,
-                tapCount: SettingsStorage.shared.pushToTalkToggleTapCount
+                key: settings.pushToTalkKey,
+                isEnabled: settings.pushToTalkToggleEnabled,
+                tapCount: settings.pushToTalkToggleTapCount
             ) {
                 return modifierHint
             }
-            return actionShortcutHint(.toggleRecording, pressCount: SettingsStorage.shared.recordingHotkeyPressCount)
+            return actionShortcutHint(.toggleRecording, pressCount: settings.recordingHotkeyPressCount)
         case .translation:
             if let modifierHint = modifierToggleHint(
-                key: SettingsStorage.shared.translationPushToTalkKey,
-                isEnabled: SettingsStorage.shared.translationPushToTalkToggleEnabled,
-                tapCount: SettingsStorage.shared.translationPushToTalkToggleTapCount
+                key: settings.translationPushToTalkKey,
+                isEnabled: settings.translationPushToTalkToggleEnabled,
+                tapCount: settings.translationPushToTalkToggleTapCount
             ) {
                 return modifierHint
             }
             return actionShortcutHint(
                 .toggleTranslation,
-                pressCount: SettingsStorage.shared.translationHotkeyPressCount
+                pressCount: settings.translationHotkeyPressCount
             )
         case .meeting:
             return actionShortcutHint(
                 .toggleMeetingRecording,
-                pressCount: SettingsStorage.shared.meetingHotkeyPressCount
+                pressCount: settings.meetingHotkeyPressCount
             )
         case .meetingTranslation:
             return actionShortcutHint(
                 .toggleMeetingTranslation,
-                pressCount: SettingsStorage.shared.meetingTranslationHotkeyPressCount
+                pressCount: settings.meetingTranslationHotkeyPressCount
             )
         case .fileTranscription:
             return nil
@@ -200,10 +203,10 @@ final class LiveDictationOverlayStore {
     }
 
     var cancelShortcutHint: String? {
-        guard canStop, SettingsStorage.shared.escapeCancelEnabled else { return nil }
+        guard canStop, settings.escapeCancelEnabled else { return nil }
         return repeatedShortcutHint(
-            "Esc",
-            pressCount: SettingsStorage.shared.escapeCancelPressCount
+            settings.escapeCancelShortcut.displayName,
+            pressCount: settings.escapeCancelPressCount
         )
     }
 
@@ -369,7 +372,7 @@ final class LiveDictationOverlayStore {
     }
 
     private func actionShortcutHint(_ name: KeyboardShortcuts.Name, pressCount: Int) -> String? {
-        guard let shortcut = KeyboardShortcuts.getShortcut(for: name) else { return nil }
+        guard let shortcut = hotkeys.getShortcut(for: name) else { return nil }
         return repeatedShortcutHint(String(describing: shortcut), pressCount: pressCount)
     }
 

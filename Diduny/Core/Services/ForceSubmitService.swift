@@ -23,21 +23,54 @@ final class ForceSubmitService {
     private(set) var isActive = false
     private(set) var isArmed = false
     private var onTrigger: (() -> Void)?
+    private var counter = PressCounter()
 
-    private init() {}
+    private let settings: SettingsStorage
+    private let registrar: HotkeyRegistrar
+    private let clock: MonotonicClock
+    private let captureSession: ShortcutCaptureSession
+    /// Kept for the service's lifetime; the block holds `self` weakly.
+    private var captureEndObserver: NSObjectProtocol?
+
+    init(
+        settings: SettingsStorage = .shared,
+        registrar: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared,
+        clock: MonotonicClock = SystemClock(),
+        captureSession: ShortcutCaptureSession = .shared
+    ) {
+        self.settings = settings
+        self.registrar = registrar
+        self.clock = clock
+        self.captureSession = captureSession
+        captureEndObserver = captureSession.observeEnd { [weak self] in
+            MainActor.assumeIsolated { self?.reassertRegistration() }
+        }
+    }
 
     func activate(onTrigger: @escaping () -> Void) {
-        guard SettingsStorage.shared.forceSubmitEnabled else {
+        guard settings.forceSubmitEnabled else {
             deactivate()
             return
         }
         isArmed = false
+        counter.reset()
         self.onTrigger = onTrigger
         guard !isActive else { return }
         isActive = true
-        KeyboardShortcuts.removeHandler(for: .forceSubmit)
-        KeyboardShortcuts.onKeyDown(for: .forceSubmit) { [weak self] in
-            Task { @MainActor in self?.trigger() }
+        registrar.removeHandler(for: .forceSubmit)
+        // Carbon delivers hotkeys on the main thread.
+        registrar.onKeyDown(for: .forceSubmit) { [weak self] in
+            MainActor.assumeIsolated { self?.trigger() }
+        }
+        reassertRegistration()
+    }
+
+    /// Live only while a recording is active and no shortcut is being captured.
+    private func reassertRegistration() {
+        if isActive, !captureSession.isActive {
+            registrar.enable(.forceSubmit)
+        } else {
+            registrar.disable(.forceSubmit)
         }
     }
 
@@ -45,8 +78,9 @@ final class ForceSubmitService {
     func deactivate() {
         isActive = false
         onTrigger = nil
-        KeyboardShortcuts.removeHandler(for: .forceSubmit)
-        KeyboardShortcuts.disable(.forceSubmit)
+        counter.reset()
+        registrar.removeHandler(for: .forceSubmit)
+        registrar.disable(.forceSubmit)
     }
 
     func disarm() {
@@ -60,7 +94,8 @@ final class ForceSubmitService {
     }
 
     private func trigger() {
-        guard isActive, !isArmed else { return }
+        guard isActive, !isArmed, !captureSession.isActive else { return }
+        guard counter.register(at: clock.now, required: settings.forceSubmitPressCount) else { return }
         isArmed = true
         onTrigger?()
     }
