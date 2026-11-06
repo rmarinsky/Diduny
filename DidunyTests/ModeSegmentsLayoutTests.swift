@@ -23,14 +23,18 @@ struct ModeSegmentsLayoutTests {
     @Test("Widths and gaps fill the available width exactly")
     func fillsAvailableWidth() {
         let widths = ModeSegmentsLayout.widths(ideal: [61.1, 43.3, 77.6], available: 222, spacing: 2)
-        #expect(abs(widths.reduce(0, +) + 4 - 222) < 0.001)
+        let total: Double = widths.reduce(0.0) { $0 + Double($1) }
+        let error: Double = abs(total + 4.0 - 222.0)
+        #expect(error < 0.001)
     }
 
     @Test("Differences between segments stay the label differences")
     func keepsDifferences() {
         let widths = ModeSegmentsLayout.widths(ideal: [61.1, 43.3, 77.6], available: 222, spacing: 2)
-        #expect(abs((widths[0] - widths[1]) - 17.8) < 0.001)
-        #expect(abs((widths[2] - widths[0]) - 16.5) < 0.001)
+        let firstToSecond: Double = Double(widths[0] - widths[1])
+        let thirdToFirst: Double = Double(widths[2] - widths[0])
+        #expect(abs(firstToSecond - 17.8) < 0.001)
+        #expect(abs(thirdToFirst - 16.5) < 0.001)
     }
 
     @Test("Without a proposed width each segment takes its ideal width")
