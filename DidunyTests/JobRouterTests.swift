@@ -267,6 +267,22 @@ final class JobRouterTests: XCTestCase {
         XCTAssertEqual(routeEngine(whisper, turbo), .plan(ExecutionPlan(mode: .afterStop, translation: .didunyStep)))
     }
 
+    // Bug 9, with the real catalog ids: Turbo never translates; multilingual non-Turbo only into English.
+    func test_whisperTranslationUsable_isDerivedPerModel() {
+        let turbo = WhisperModelManager.WhisperModel.recommendedName
+        XCTAssertEqual(turbo, "ggml-large-v3-turbo")
+        XCTAssertFalse(JobRequest.whisperTranslationUsable(model: turbo, target: "en"))
+        XCTAssertFalse(JobRequest.whisperTranslationUsable(model: "ggml-large-v3-turbo-q5_0", target: "en"))
+        XCTAssertFalse(JobRequest.whisperTranslationUsable(model: "ggml-base.en", target: "en"))
+        XCTAssertTrue(JobRequest.whisperTranslationUsable(model: "ggml-large-v3", target: "en"))
+        XCTAssertFalse(JobRequest.whisperTranslationUsable(model: "ggml-large-v3", target: "uk"))
+        XCTAssertFalse(JobRequest.whisperTranslationUsable(model: nil, target: "en"))
+
+        var request = JobRequest(job: .dictationTranslation, afterStop: true)
+        request.ownBatchTranslationUsable = JobRequest.whisperTranslationUsable(model: turbo, target: "en")
+        XCTAssertEqual(routeEngine(LocalWhisperProvider(), request), .plan(ExecutionPlan(mode: .afterStop, translation: .didunyStep)))
+    }
+
     func test_dictation_afterStopUsesBatch() {
         XCTAssertEqual(route(JobRequest(job: .dictation, afterStop: true), nativeTranslating), .plan(ExecutionPlan(mode: .afterStop)))
     }

@@ -18,6 +18,16 @@ struct JobRequest: Equatable, Sendable {
     var fileBytes: Int64?
 }
 
+extension JobRequest {
+    /// Bug 9: Whisper's own translation per model. Only multilingual non-Turbo models translate, and only
+    /// into English; `model` is the catalog name (`ggml-large-v3-turbo`). Unknown or nil models do not.
+    static func whisperTranslationUsable(model: String?, target: String) -> Bool {
+        guard target == "en",
+              let entry = WhisperModelManager.availableModels.first(where: { $0.name == model }) else { return false }
+        return entry.translatesToEnglish
+    }
+}
+
 struct RoutingContext: Equatable, Sendable {
     var providersWithKey: Set<String>
     /// Signed in to Diduny with translation quota left (the Diduny translation step is usable).
