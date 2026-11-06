@@ -121,8 +121,14 @@ enum EdgeCommandPanelPlacement {
         switch presentation {
         case .collapsed: 0
         case let .commands(isCloud): isCloud ? 326 : 250
-        case let .live(mode): mode.isMeeting ? 420 : 312 // dictation 311.7 (design-spec 7.2, WP-30)
-        case .meetingSuggestion: 350
+        // Design-spec 10.3: dictation 311.7, meeting 406, Translate meeting 362, meeting prompt 229.
+        case let .live(mode):
+            switch mode {
+            case .meetingTranslation: 362
+            case _ where mode.isMeeting: 406
+            default: 312
+            }
+        case .meetingSuggestion: 229
         }
     }
 

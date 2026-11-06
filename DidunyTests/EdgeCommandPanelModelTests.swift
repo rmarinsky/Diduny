@@ -75,8 +75,8 @@ struct EdgeCommandPanelModelTests {
             presentation: .live(.meeting)
         )
 
-        #expect(dictation == NSRect(x: 1140, y: 295, width: 300, height: 310))
-        #expect(meeting == NSRect(x: 1140, y: 240, width: 300, height: 420))
+        #expect(dictation == NSRect(x: 1140, y: 294, width: 300, height: 312))
+        #expect(meeting == NSRect(x: 1140, y: 247, width: 300, height: 406))
     }
 
     @Test("Every expanded state is 300 wide and takes the content's fitting height")
@@ -453,7 +453,8 @@ struct EdgeCommandPanelLiveTextTests {
         store.phase = .recording
 
         #expect(store.stopShortcutHint == "⇧ ×2")
-        #expect(store.cancelShortcutHint == "Esc ×3")
+        // WP-15: the hint names the configured Cancel shortcut, no longer a fixed "Esc".
+        #expect(store.cancelShortcutHint == "⌘A ×3")
 
         settings.escapeCancelEnabled = false
         #expect(store.cancelShortcutHint == nil)
