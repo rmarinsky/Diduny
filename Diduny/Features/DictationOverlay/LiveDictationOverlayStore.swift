@@ -37,6 +37,9 @@ final class LiveDictationOverlayStore {
     var copiedAt: Date?
     /// Set while a meeting records audio only; turns on the cloud live transcript.
     var onTurnOnLiveTranscript: (() -> Void)?
+    /// Meeting panel segment and engine per segment (WP-31). Seeded from Settings > Modes once WP-13 lands.
+    var meetingSegment: MeetingSegment = .cloud
+    var meetingEngines: [MeetingSegment: EngineID] = MeetingPanelState.defaultEngines
     /// What the live STT stream produces for this session.
     private(set) var nativeOutput: DictationOutput = .original
     /// Output of the session or picked in the panel, before any spoken command.
