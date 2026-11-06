@@ -152,7 +152,7 @@ struct EdgeCommandPanelModelTests {
 
         for surface in [RecordingFeedbackSurface.notch, .compactPanel] {
             SettingsStorage.shared.recordingFeedbackSurface = surface
-            let controller = EdgeCommandPanelController(meetingRecordingStarter: { _ in })
+            let controller = EdgeCommandPanelController(meetingPromptDefaults: { .standard }, meetingRecordingStarter: { _ in })
             let meeting = DetectedMeeting(id: UUID(), client: .zoom)
 
             controller.showMeetingSuggestion(meeting)
@@ -165,35 +165,111 @@ struct EdgeCommandPanelModelTests {
 
     @Test("Meeting suggestion controller starts recording only once")
     func meetingSuggestionControllerStartsOnce() {
-        var startedProviders: [TranscriptionProvider] = []
-        let controller = EdgeCommandPanelController { provider in
-            startedProviders.append(provider)
+        var starts: [MeetingPromptStart] = []
+        let controller = EdgeCommandPanelController(meetingPromptDefaults: { .standard }) { start in
+            starts.append(start)
         }
         let meeting = DetectedMeeting(id: UUID(), client: .zoom)
 
         controller.showMeetingSuggestion(meeting)
-        controller.selectMeetingSuggestionProvider(.local)
+        controller.selectMeetingSuggestionSegment(.thisMac)
         controller.startMeetingRecording(fromSuggestionID: meeting.id)
         controller.startMeetingRecording(fromSuggestionID: meeting.id)
 
-        #expect(startedProviders == [.local])
+        #expect(starts == [MeetingPromptStart(segment: .thisMac, engine: .whisper)])
     }
 
-    @Test("Meeting suggestion falls back to Local when Cloud is unavailable")
-    func unavailableCloudFallsBackToLocal() {
-        let model = EdgeCommandPanelModel(pairs: [.defaultPair], selectedPair: .defaultPair)
+    @Test("T2-PR-01: the prompt is preset from Modes Starts in", arguments: [
+        (MeetingSegment.thisMac, EngineID.whisper, "Whisper", false),
+        (.cloud, .didunyCloud, "Diduny Cloud", false),
+        (.recordOnly, .parakeet, "Parakeet V3", true),
+    ])
+    func promptPresetFromModes(segment: MeetingSegment, engine: EngineID, name: String, afterStop: Bool) {
+        var defaults = MeetingPromptDefaults.standard
+        defaults.startsIn = segment
         let suggestion = MeetingSuggestion.resolve(
-            meeting: DetectedMeeting(id: UUID(), client: .googleMeet),
-            preferredProvider: .cloud,
-            cloudAvailable: false,
-            hasLocalModel: true
+            meeting: DetectedMeeting(id: UUID(), client: .zoom),
+            defaults: defaults,
+            cloudAvailable: true
         )
 
-        model.presentMeetingSuggestion(suggestion)
+        #expect(suggestion.selectedSegment == segment)
+        #expect(suggestion.engine == engine)
+        #expect(suggestion.isEngineAfterStop == afterStop)
+        #expect(suggestion.engineName == name)
+    }
 
-        #expect(model.meetingSuggestion?.selectedProvider == .local)
-        #expect(model.meetingSuggestion?.processingMode == .local)
-        #expect(!model.selectMeetingSuggestionProvider(.cloud))
+    @Test("T2-PR-02: a segment click applies to this meeting only")
+    func promptSegmentClickScope() {
+        let model = EdgeCommandPanelModel(pairs: [.defaultPair], selectedPair: .defaultPair)
+        var defaults = MeetingPromptDefaults.standard
+        defaults.startsIn = .cloud
+        model.presentMeetingSuggestion(.resolve(
+            meeting: DetectedMeeting(id: UUID(), client: .zoom),
+            defaults: defaults,
+            cloudAvailable: true
+        ))
+
+        #expect(model.selectMeetingSuggestionSegment(.recordOnly))
+
+        #expect(model.meetingSuggestion?.selectedSegment == .recordOnly)
+        #expect(model.meetingSuggestion?.engine == .parakeet)
+        #expect(model.meetingSuggestion?.defaults.startsIn == .cloud)
+    }
+
+    @Test("T2-PR-03: Keep suggesting is the Settings value and posts one change")
+    func keepSuggestingIsTheSameSetting() {
+        let key = "meetingSuggestionsEnabled"
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let saved { UserDefaults.standard.set(saved, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        SettingsStorage.shared.meetingSuggestionsEnabled = true
+        var posts = 0
+        let token = NotificationCenter.default.addObserver(
+            forName: .meetingSuggestionsEnabledChanged, object: nil, queue: nil
+        ) { _ in posts += 1 }
+        defer { NotificationCenter.default.removeObserver(token) }
+        let controller = EdgeCommandPanelController(meetingPromptDefaults: { .standard }) { _ in }
+
+        controller.setMeetingSuggestionsEnabled(false)
+
+        #expect(!SettingsStorage.shared.meetingSuggestionsEnabled)
+        #expect(posts == 1)
+    }
+
+    @Test("T2-PR-04: Start uses the prompt's segment and its default engine")
+    func startUsesPromptSegmentAndEngine() {
+        var starts: [MeetingPromptStart] = []
+        let controller = EdgeCommandPanelController(meetingPromptDefaults: { .standard }) { starts.append($0) }
+        let meeting = DetectedMeeting(id: UUID(), client: .teams)
+
+        controller.showMeetingSuggestion(meeting)
+        controller.selectMeetingSuggestionSegment(.recordOnly)
+        controller.startMeetingRecording(fromSuggestionID: meeting.id)
+
+        #expect(starts == [MeetingPromptStart(segment: .recordOnly, engine: .parakeet)])
+    }
+
+    @Test("Cloud unavailable: the prompt opens on This Mac and Cloud cannot be chosen")
+    func unavailableCloudOpensOnThisMac() {
+        let model = EdgeCommandPanelModel(pairs: [.defaultPair], selectedPair: .defaultPair)
+        model.presentMeetingSuggestion(.resolve(
+            meeting: DetectedMeeting(id: UUID(), client: .googleMeet),
+            defaults: .standard,
+            cloudAvailable: false
+        ))
+
+        #expect(model.meetingSuggestion?.selectedSegment == .thisMac)
+        #expect(!model.selectMeetingSuggestionSegment(.cloud))
+        #expect(model.selectMeetingSuggestionSegment(.recordOnly))
+    }
+
+    @Test("Today's start path maps a segment to Cloud or Local")
+    func legacyProviderMapping() {
+        #expect(MeetingPromptStart(segment: .cloud, engine: .didunyCloud).legacyProvider == .cloud)
+        #expect(MeetingPromptStart(segment: .thisMac, engine: .whisper).legacyProvider == .local)
+        #expect(MeetingPromptStart(segment: .recordOnly, engine: .parakeet).legacyProvider == .local)
     }
 
     @Test("Paid Pro access works without a whitelist and without remaining free hours")
@@ -245,11 +321,10 @@ struct EdgeCommandPanelModelTests {
     @Test("Disabling future suggestions keeps the current meeting suggestion open")
     func disablingTrackingDoesNotDismissCurrentSuggestion() {
         let model = EdgeCommandPanelModel(pairs: [.defaultPair], selectedPair: .defaultPair)
-        let suggestion = MeetingSuggestion(
+        let suggestion = MeetingSuggestion.resolve(
             meeting: DetectedMeeting(id: UUID(), client: .teams),
-            selectedProvider: .cloud,
-            isCloudAvailable: true,
-            hasLocalModel: true
+            defaults: .standard,
+            cloudAvailable: true
         )
 
         model.presentMeetingSuggestion(suggestion)
@@ -261,16 +336,6 @@ struct EdgeCommandPanelModelTests {
     @Test("Meeting suggestion controls meet the minimum pointer target")
     func meetingSuggestionControlsMeetMinimumTarget() {
         #expect(EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight >= 44)
-    }
-
-    @Test("Meeting suggestion describes the actual processing path")
-    func meetingSuggestionProcessingModeMatchesRuntimeReadiness() {
-        #expect(MeetingSuggestionProcessingMode.resolve(cloudEnabled: true, hasLocalModel: false) == .cloud)
-        #expect(MeetingSuggestionProcessingMode.resolve(cloudEnabled: false, hasLocalModel: true) == .local)
-        #expect(
-            MeetingSuggestionProcessingMode.resolve(cloudEnabled: false, hasLocalModel: false)
-                == .recordingOnly
-        )
     }
 
     @Test("Auto-hide only collapses after the pointer leaves the panel")

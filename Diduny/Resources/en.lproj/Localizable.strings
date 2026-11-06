@@ -1770,3 +1770,8 @@
 "Right Arrow" = "Right Arrow";
 "Up Arrow" = "Up Arrow";
 "Down Arrow" = "Down Arrow";
+
+/* Panels redesign WP-43 */
+"Record it?" = "Record it?";
+"Transcript after Stop" = "Transcript after Stop";
+"Keep suggesting when a meeting starts" = "Keep suggesting when a meeting starts";

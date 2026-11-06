@@ -12,7 +12,9 @@ final class EdgeCommandPanelController: NSObject {
     private var panel: EdgeCommandPanel?
     var panelContentView: EdgeCommandPanelContentView?
     var model: EdgeCommandPanelModel?
-    private let meetingRecordingStarter: ((TranscriptionProvider) -> Void)?
+    private let meetingRecordingStarter: ((MeetingPromptStart) -> Void)?
+    /// Settings > Modes > Meeting for the prompt (WP-43). WP-13 replaces the default reader.
+    private let meetingPromptDefaults: () -> MeetingPromptDefaults
     private var collapseTask: Task<Void, Never>?
     var dock: EdgeCommandPanelDock?
     var dragCursorOffset: NSPoint?
@@ -29,7 +31,11 @@ final class EdgeCommandPanelController: NSObject {
     private var liveFeedbackRestoredByUser = false
     private var surfaceCloseObserver: NSObjectProtocol?
 
-    init(meetingRecordingStarter: ((TranscriptionProvider) -> Void)? = nil) {
+    init(
+        meetingPromptDefaults: @escaping () -> MeetingPromptDefaults = EdgeCommandPanelController.todaysMeetingPromptDefaults,
+        meetingRecordingStarter: ((MeetingPromptStart) -> Void)? = nil
+    ) {
+        self.meetingPromptDefaults = meetingPromptDefaults
         self.meetingRecordingStarter = meetingRecordingStarter
         super.init()
         surfaceCloseObserver = NotificationCenter.default.addObserver(
@@ -246,9 +252,8 @@ final class EdgeCommandPanelController: NSObject {
         )
         let suggestion = MeetingSuggestion.resolve(
             meeting: meeting,
-            preferredProvider: SettingsStorage.shared.meetingRealtimeTranscriptionEnabled ? .cloud : .local,
-            cloudAvailable: cloudAvailable,
-            hasLocalModel: WhisperModelManager.shared.selectedModel() != nil
+            defaults: meetingPromptDefaults(),
+            cloudAvailable: cloudAvailable
         )
         model?.presentMeetingSuggestion(suggestion)
         model?.isShowingLiveFeedback = false
@@ -263,8 +268,15 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     @discardableResult
-    func selectMeetingSuggestionProvider(_ provider: TranscriptionProvider) -> Bool {
-        model?.selectMeetingSuggestionProvider(provider) ?? false
+    func selectMeetingSuggestionSegment(_ segment: MeetingSegment) -> Bool {
+        model?.selectMeetingSuggestionSegment(segment) ?? false
+    }
+
+    /// Today's settings until WP-13: Cloud when live meeting transcription is on, else This Mac.
+    static func todaysMeetingPromptDefaults() -> MeetingPromptDefaults {
+        var defaults = MeetingPromptDefaults.standard
+        defaults.startsIn = SettingsStorage.shared.meetingRealtimeTranscriptionEnabled ? .cloud : .thisMac
+        return defaults
     }
 
     func dismissMeetingSuggestion(id: UUID) {
@@ -277,17 +289,17 @@ final class EdgeCommandPanelController: NSObject {
         guard let suggestion = model?.consumeMeetingSuggestionStart(id: id) else { return }
         restoreConfiguredSurface()
         if let meetingRecordingStarter {
-            meetingRecordingStarter(suggestion.selectedProvider)
+            meetingRecordingStarter(suggestion.start)
             return
         }
         guard let appDelegate,
               !appDelegate.hasAnyRecordingInProgress,
               appDelegate.canStartRecording(kind: .meeting)
         else { return }
-        appDelegate.toggleMeetingRecording(provider: suggestion.selectedProvider)
+        appDelegate.toggleMeetingRecording(provider: suggestion.start.legacyProvider)
     }
 
-    private func setMeetingSuggestionsEnabled(_ enabled: Bool) {
+    func setMeetingSuggestionsEnabled(_ enabled: Bool) {
         model?.meetingSuggestionsEnabled = enabled
         SettingsStorage.shared.meetingSuggestionsEnabled = enabled
     }
