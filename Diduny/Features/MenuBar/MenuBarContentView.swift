@@ -12,11 +12,6 @@ struct MenuBarProcessingModeSelection {
             && settings.effectiveTranslationProvider == .cloud ? .cloud : .local
     }
 
-    mutating func refresh() {
-        provider = settings.effectiveTranscriptionProvider == .cloud
-            && settings.effectiveTranslationProvider == .cloud ? .cloud : .local
-    }
-
     mutating func select(_ provider: TranscriptionProvider) {
         settings.selectProcessingProvider(provider)
         self.provider = provider

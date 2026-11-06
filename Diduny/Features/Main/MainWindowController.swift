@@ -69,10 +69,6 @@ final class MainWindowController {
         appDelegate?.toggleRecording()
     }
 
-    func toggleMeetingRecording() {
-        appDelegate?.toggleMeetingRecording()
-    }
-
     static let defaultContentSize = NSSize(width: 1000, height: 680)
     static let recordingInspectorWidth: CGFloat = 480
 

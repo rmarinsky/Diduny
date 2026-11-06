@@ -1,6 +1,5 @@
 import CoreAudio
 import Foundation
-import LaunchAtLogin
 
 /// App-scoped native language preference. Bundle resolves it on the next launch.
 /// Removing this key restores the system language order, without changing macOS settings.
@@ -305,20 +304,6 @@ final class SettingsStorage {
         }
     }
 
-    var microphoneSelectionStrategy: MicrophoneSelectionStrategy {
-        get {
-            guard let rawValue = defaults.string(forKey: Key.microphoneSelectionStrategy.rawValue),
-                  let strategy = MicrophoneSelectionStrategy(rawValue: rawValue)
-            else {
-                return .auto
-            }
-            return strategy
-        }
-        set {
-            defaults.set(newValue.rawValue, forKey: Key.microphoneSelectionStrategy.rawValue)
-        }
-    }
-
     // MARK: - Behavior
 
     var messageFormattingMode: MessageFormattingMode {
@@ -390,11 +375,6 @@ final class SettingsStorage {
         set { defaults.set(newValue, forKey: Key.remoteMediaRightsAcknowledged.rawValue) }
     }
 
-    var launchAtLogin: Bool {
-        get { LaunchAtLogin.isEnabled }
-        set { LaunchAtLogin.isEnabled = newValue }
-    }
-
     var recordingFeedbackSurface: RecordingFeedbackSurface {
         get {
             guard let rawValue = defaults.string(forKey: Key.recordingFeedbackSurface.rawValue),
@@ -464,19 +444,6 @@ final class SettingsStorage {
         return policy
     }
 
-    var textCleanupEnabled: Bool {
-        get {
-            if defaults.object(forKey: Key.textCleanupEnabled.rawValue) == nil {
-                return true
-            }
-            return defaults.bool(forKey: Key.textCleanupEnabled.rawValue)
-        }
-        set {
-            defaults.set(newValue, forKey: Key.textCleanupEnabled.rawValue)
-            NotificationCenter.default.post(name: .textCleanupSettingsChanged, object: nil)
-        }
-    }
-
     var fillerWords: [String] {
         get {
             guard let stored = defaults.stringArray(forKey: Key.fillerWords.rawValue) else {
@@ -488,52 +455,6 @@ final class SettingsStorage {
             defaults.set(Self.normalizedFillerWords(newValue), forKey: Key.fillerWords.rawValue)
             NotificationCenter.default.post(name: .textCleanupSettingsChanged, object: nil)
         }
-    }
-
-    @discardableResult
-    func addFillerWord(_ word: String) -> Bool {
-        addFillerWords([word]) > 0
-    }
-
-    @discardableResult
-    func addFillerWords(_ words: [String]) -> Int {
-        let candidates = Self.normalizedFillerWords(words)
-        guard !candidates.isEmpty else { return 0 }
-
-        var current = fillerWords
-        var currentKeys = Set(current.map { Self.foldedWordKey($0) })
-        var addedCount = 0
-
-        for candidate in candidates {
-            let candidateKey = Self.foldedWordKey(candidate)
-            guard currentKeys.insert(candidateKey).inserted else { continue }
-            current.append(candidate)
-            addedCount += 1
-        }
-
-        guard addedCount > 0 else { return 0 }
-        fillerWords = current
-        return addedCount
-    }
-
-    @discardableResult
-    func addEnglishFillerWordPreset() -> Int {
-        addFillerWords(Self.englishFillerWordPreset)
-    }
-
-    var englishFillerWordPreset: [String] {
-        Self.englishFillerWordPreset
-    }
-
-    func removeFillerWord(_ word: String) {
-        let targetKey = Self.foldedWordKey(word)
-        let filtered = fillerWords.filter { Self.foldedWordKey($0) != targetKey }
-        guard filtered.count != fillerWords.count else { return }
-        fillerWords = filtered
-    }
-
-    func resetFillerWordsToDefault() {
-        fillerWords = Self.defaultFillerWords
     }
 
     // MARK: - Push to Talk
@@ -725,17 +646,6 @@ final class SettingsStorage {
 
     // MARK: - Hands-Free Mode (Multi-Tap Toggle)
 
-    /// Legacy compatibility surface for the old mutually-exclusive modifier-key mode.
-    /// New code should use the per-flow hold/toggle flags above.
-    var handsFreeModeEnabled: Bool {
-        get { pushToTalkToggleEnabled }
-        set {
-            defaults.set(newValue, forKey: Key.handsFreeModeEnabled.rawValue)
-            pushToTalkToggleEnabled = newValue
-            pushToTalkHoldEnabled = !newValue
-        }
-    }
-
     // MARK: - Global Hotkey Press Counts
 
     var recordingHotkeyPressCount: Int {
@@ -888,29 +798,7 @@ final class SettingsStorage {
 
     // MARK: - Translation Realtime Socket
 
-    /// Enables cloud realtime translation over websocket during translation recording.
-    var translationRealtimeSocketEnabled: Bool {
-        get {
-            if defaults.object(forKey: Key.translationRealtimeSocketEnabled.rawValue) == nil {
-                return true
-            }
-            return defaults.bool(forKey: Key.translationRealtimeSocketEnabled.rawValue)
-        }
-        set { defaults.set(newValue, forKey: Key.translationRealtimeSocketEnabled.rawValue) }
-    }
-
     // MARK: - Transcription Realtime Socket
-
-    /// Enables cloud realtime transcription over websocket during voice dictation.
-    var transcriptionRealtimeSocketEnabled: Bool {
-        get {
-            if defaults.object(forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) == nil {
-                return true
-            }
-            return defaults.bool(forKey: Key.transcriptionRealtimeSocketEnabled.rawValue)
-        }
-        set { defaults.set(newValue, forKey: Key.transcriptionRealtimeSocketEnabled.rawValue) }
-    }
 
     // MARK: - Meeting Cloud Mode
 
@@ -1369,7 +1257,6 @@ final class SettingsStorage {
         }
     }
 
-
     /// ⌥/⌘ keys that dictation or translation push-to-talk listens to; the double-tap avoids them.
     /// Reservations apply only to a modifier chord (ADR-0012 D8); a key chord reserves nothing.
     var inplaceTranslationReservedKeys: Set<PushToTalkKey> {
@@ -1521,13 +1408,6 @@ final class SettingsStorage {
 
     // MARK: - Onboarding
 
-    /// When true, missing Screen Recording permission no longer re-triggers onboarding.
-    /// Set to true when the user taps "Skip" on ScreenRecordingStepView.
-    /// Clearable via Settings → "Re-enable Screen Recording prompt".
-    var userDeclinedScreenRecording: Bool {
-        get { defaults.bool(forKey: Key.userDeclinedScreenRecording.rawValue) }
-        set { defaults.set(newValue, forKey: Key.userDeclinedScreenRecording.rawValue) }
-    }
 }
 
 extension Notification.Name {

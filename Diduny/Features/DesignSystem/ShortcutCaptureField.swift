@@ -22,10 +22,6 @@ final class ShortcutCaptureField: NSView {
     private var monitor: Any?
     private var windowObservers: [NSObjectProtocol] = []
 
-    var isCapturing: Bool {
-        monitor != nil
-    }
-
     init(
         mode: ShortcutCaptureMachine.Mode,
         session: ShortcutCaptureSession = .shared,
@@ -70,11 +66,6 @@ final class ShortcutCaptureField: NSView {
             })
         }
         onCapturingChanged?(true)
-    }
-
-    /// Ends capture without a value; the old value stays.
-    func cancelCapture() {
-        endCapture(abort: true)
     }
 
     /// Returns whether the event is consumed: key events are, mouse events are not.
