@@ -1,6 +1,4 @@
 import AppKit
-import Observation
-import QuartzCore
 import SwiftUI
 
 @MainActor
@@ -10,14 +8,14 @@ final class EdgeCommandPanelController: NSObject {
         "ua.com.rmarinsky.diduny.edge-command-panel"
     )
 
-    private weak var appDelegate: AppDelegate?
+    weak var appDelegate: AppDelegate?
     private var panel: EdgeCommandPanel?
-    private var panelContentView: EdgeCommandPanelContentView?
-    private var model: EdgeCommandPanelModel?
+    var panelContentView: EdgeCommandPanelContentView?
+    var model: EdgeCommandPanelModel?
     private let meetingRecordingStarter: ((TranscriptionProvider) -> Void)?
     private var collapseTask: Task<Void, Never>?
-    private var dock: EdgeCommandPanelDock?
-    private var dragCursorOffset: NSPoint?
+    var dock: EdgeCommandPanelDock?
+    var dragCursorOffset: NSPoint?
 
     // Collapsed-tab auto-hide state (the tab annoys people when it sits on
     // the screen edge permanently).
@@ -120,7 +118,7 @@ final class EdgeCommandPanelController: NSObject {
         }
     }
 
-    private func showCollapsed() {
+    func showCollapsed() {
         // Minimized live owns the edge tab until click-restore or recording end.
         // Idle collapse must not wipe it into the ribbon command tab.
         if model?.isLiveFeedbackMinimized == true {
@@ -475,42 +473,6 @@ final class EdgeCommandPanelController: NSObject {
         }
     }
 
-    private func perform(_ action: EdgeCommandAction) {
-        guard let appDelegate else { return }
-        let pair = model?.selectedPair
-
-        switch action {
-        case .transcribe:
-            if appDelegate.appState.recordingState == .idle {
-                guard appDelegate.canStartRecording(kind: .voice) else { showCollapsed(); return }
-            }
-            appDelegate.toggleRecording()
-        case .translate:
-            if appDelegate.appState.translationRecordingState == .idle {
-                guard appDelegate.canStartRecording(kind: .translation), let pair else { showCollapsed(); return }
-                Task { await appDelegate.startTranslationRecording(languagePair: pair) }
-            } else {
-                appDelegate.toggleTranslationRecording()
-            }
-        case .meeting:
-            if appDelegate.appState.meetingRecordingState == .idle {
-                guard appDelegate.canStartRecording(kind: .meeting) else { showCollapsed(); return }
-            }
-            appDelegate.toggleMeetingRecording()
-        case .translateMeeting:
-            if appDelegate.appState.meetingTranslationRecordingState == .idle {
-                guard appDelegate.canStartRecording(kind: .meetingTranslation),
-                      let pair else { showCollapsed(); return }
-                Task { await appDelegate.startMeetingTranslationRecording(languagePair: pair) }
-            } else {
-                appDelegate.toggleMeetingTranslationRecording()
-            }
-        case .batch:
-            appDelegate.batchFilesAndURLs()
-            showCollapsed()
-        }
-    }
-
     private func selectProvider(_ provider: TranscriptionProvider) {
         guard let model, model.selectProvider(provider) else {
             openAccount()
@@ -604,90 +566,6 @@ final class EdgeCommandPanelController: NSObject {
         panelContentView?.updateTabView(makeTabView())
     }
 
-    private func position(
-        _ panel: NSPanel,
-        presentation: EdgeCommandPanelPresentation,
-        on explicitVisibleFrame: NSRect? = nil,
-        morphFromTab: Bool = false
-    ) {
-        // A live drag owns the frame; phase changes and toasts must not snap
-        // the panel back to its dock mid-drag. onDragEnd re-docks and calls
-        // position() again after clearing the drag offset.
-        guard dragCursorOffset == nil else { return }
-        let screen = dock == nil ? activeScreen() : panel.screen ?? activeScreen()
-        let visibleFrame = explicitVisibleFrame
-            ?? screen?.visibleFrame
-            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let resolvedDock = dock
-            ?? EdgeCommandPanelDock(
-                rawEdge: SettingsStorage.shared.edgePanelDockEdge,
-                offset: SettingsStorage.shared.edgePanelDockOffset
-            )
-            ?? EdgeCommandPanelDock(edge: .right, offset: visibleFrame.midY)
-        dock = resolvedDock
-        model?.dockEdge = resolvedDock.edge
-        let isExpanded = presentation != .collapsed
-        model?.isExpanded = isExpanded
-        panelContentView?.setExpanded(isExpanded, animated: morphFromTab || (panel.isVisible && panel.alphaValue > 0))
-        // Backstop clip: the SwiftUI material's shape mask can be lost by the
-        // window server; the layer clip keeps expanded corners rounded no
-        // matter what. The collapsed tab keeps its own edge-flush shape.
-        panelContentView?.applyCornerMask(
-            isExpanded ? EdgeCommandPanelPlacement.expandedCornerRadius : 0
-        )
-
-        let frame = EdgeCommandPanelPlacement.frame(
-            in: visibleFrame,
-            dock: resolvedDock,
-            presentation: presentation
-        )
-        if morphFromTab {
-            let tabFrame = EdgeCommandPanelPlacement.frame(
-                in: visibleFrame,
-                dock: resolvedDock,
-                presentation: .collapsed
-            )
-            morphPanel(panel, from: tabFrame, to: frame)
-        } else if panel.isVisible {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.24
-                context.timingFunction = isExpanded
-                    ? CAMediaTimingFunction(controlPoints: 0.25, 0.46, 0.45, 0.94)
-                    : CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
-                panel.animator().setFrame(frame, display: true)
-            }
-        } else {
-            panel.setFrame(frame, display: true)
-        }
-    }
-
-    /// Fresh appearance: the window grows out of the edge tab's frame while a
-    /// static skeleton fills it; live content cascades in once the morph lands.
-    private func morphPanel(_ panel: NSPanel, from tabFrame: NSRect, to frame: NSRect) {
-        let store = DictationOverlayController.shared.store
-        panel.ignoresMouseEvents = false
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
-            store.contentRevealed = true
-            panel.setFrame(frame, display: true)
-            NSAnimationContext.runAnimationGroup { $0.duration = 0.15; panel.animator().alphaValue = 1 }
-            return
-        }
-        store.contentRevealed = false
-        panel.setFrame(tabFrame, display: true)
-        panel.alphaValue = 1
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.34
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
-            panel.animator().setFrame(frame, display: true)
-        }, completionHandler: {
-            store.contentRevealed = true
-        })
-    }
-
-    private func activeScreen() -> NSScreen? {
-        NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
-    }
-
     private var commandPresentation: EdgeCommandPanelPresentation {
         .commands(isCloud: model?.provider == .cloud)
     }
@@ -705,144 +583,5 @@ final class EdgeCommandPanelController: NSObject {
             return .live(DictationOverlayController.shared.store.mode)
         }
         return model.isExpanded ? commandPresentation : .collapsed
-    }
-}
-
-private final class EdgeCommandPanel: NSPanel {
-    override var canBecomeKey: Bool {
-        true
-    }
-
-    override var canBecomeMain: Bool {
-        false
-    }
-}
-
-/// The panel is a non-activating panel of a usually-inactive app (the user is
-/// dictating into another app). Without accepting first mouse, the initial
-/// click is consumed by window-key handling and never reaches the SwiftUI
-/// drag gesture or buttons — dragging during recording required a second
-/// attempt and Stop/Copy needed a double click.
-private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
-    override func acceptsFirstMouse(for _: NSEvent?) -> Bool {
-        true
-    }
-
-    required init(rootView: Content) {
-        super.init(rootView: rootView)
-    }
-
-    @available(*, unavailable)
-    @MainActor @preconcurrency dynamic required init?(coder _: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-}
-
-private final class EdgeCommandPanelContentView: NSView {
-    private let tabHostingView: NSHostingView<EdgeCommandTabView>
-    private let expandedHostingView: NSHostingView<EdgeCommandExpandedView>
-    private let onHoverChange: (Bool) -> Void
-    private var hoverTrackingArea: NSTrackingArea?
-
-    init(
-        tabView: EdgeCommandTabView,
-        expandedView: EdgeCommandExpandedView,
-        onHoverChange: @escaping (Bool) -> Void
-    ) {
-        tabHostingView = FirstMouseHostingView(rootView: tabView)
-        expandedHostingView = FirstMouseHostingView(rootView: expandedView)
-        self.onHoverChange = onHoverChange
-        super.init(frame: .zero)
-
-        tabHostingView.sizingOptions = []
-        expandedHostingView.sizingOptions = []
-        for hostingView: NSView in [tabHostingView, expandedHostingView] {
-            hostingView.autoresizingMask = [.width, .height]
-            addSubview(hostingView)
-        }
-        setExpanded(false)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func acceptsFirstMouse(for _: NSEvent?) -> Bool {
-        true
-    }
-
-    override func layout() {
-        super.layout()
-        tabHostingView.frame = bounds
-        expandedHostingView.frame = bounds
-    }
-
-    func applyCornerMask(_ radius: CGFloat) {
-        wantsLayer = true
-        layer?.cornerRadius = radius
-        layer?.cornerCurve = .continuous
-        layer?.masksToBounds = radius > 0
-    }
-
-    /// Identity of the latest transition; a stale cross-fade completion must not hide the current view.
-    private var transitionID = 0
-
-    func setExpanded(_ expanded: Bool, animated: Bool = false) {
-        transitionID += 1
-        let currentTransition = transitionID
-        let incoming: NSView = expanded ? expandedHostingView : tabHostingView
-        let outgoing: NSView = expanded ? tabHostingView : expandedHostingView
-        guard animated, incoming.isHidden,
-              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        else {
-            incoming.alphaValue = 1
-            outgoing.alphaValue = 1
-            incoming.isHidden = false
-            outgoing.isHidden = true
-            return
-        }
-        // Tab ↔ panel morph: the window frame grows from the tab (see position()),
-        // while the two surfaces cross-fade so the tab appears to become the panel.
-        incoming.alphaValue = 0
-        incoming.isHidden = false
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.2
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
-            incoming.animator().alphaValue = 1
-            outgoing.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            guard let self, transitionID == currentTransition else { return }
-            outgoing.isHidden = true
-            outgoing.alphaValue = 1
-        })
-    }
-
-    func updateTabView(_ tabView: EdgeCommandTabView) {
-        tabHostingView.rootView = tabView
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let hoverTrackingArea {
-            removeTrackingArea(hoverTrackingArea)
-        }
-        let trackingArea = NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self
-        )
-        addTrackingArea(trackingArea)
-        hoverTrackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        onHoverChange(true)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        onHoverChange(false)
     }
 }
