@@ -110,7 +110,7 @@ enum OnboardingScreen: Int, CaseIterable {
     }
 }
 
-private enum OnboardingTheme {
+enum OnboardingTheme {
     static let accent = Color(red: 1, green: 0.36, blue: 0.49)
     static let card = Color(nsColor: .controlBackgroundColor)
     static let background = Color(nsColor: .windowBackgroundColor)
@@ -121,7 +121,7 @@ private struct OnboardingFlowView: View {
     let appDelegate: AppDelegate
     let onDismiss: () -> Void
 
-    @State private var screen: OnboardingScreen = .welcome
+    @State private var screen: OnboardingScreen = Self.initialScreen
     @State private var onboarding = OnboardingManager.shared
     @State private var auth = AuthService.shared
     @State private var billing = BillingService()
@@ -131,6 +131,14 @@ private struct OnboardingFlowView: View {
     @State private var screenRecordingGranted = false
     @State private var permissionInFlight: PermissionType?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// `--ui-testing-open=onboarding.ready` (Test build) opens the Ready screen.
+    private static var initialScreen: OnboardingScreen {
+        #if TEST_BUILD
+            if UITestHarness.openTarget == "onboarding.ready" { return .ready }
+        #endif
+        return .welcome
+    }
 
     private var allPermissionsGranted: Bool {
         microphoneGranted && accessibilityGranted && screenRecordingGranted
@@ -346,6 +354,7 @@ private struct OnboardingFlowView: View {
             )
             OnboardingShortcutBadge(keys: "⇧  ⇧", title: "Double Shift", subtitle: "Start dictation")
             OnboardingShortcutBadge(keys: "⌥  ⌥", title: "Double Option", subtitle: "Translate automatically")
+            OnboardingParakeetOffer()
         }
         .accessibilityElement(children: .contain)
     }

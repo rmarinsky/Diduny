@@ -2025,3 +2025,14 @@
 /* Panels redesign WP-60 */
 "The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Modes." = "The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Modes.";
 "No on-device engine is ready for files. Download Parakeet V3 or a Whisper model in Settings › Local models." = "No on-device engine is ready for files. Download Parakeet V3 or a Whisper model in Settings › Local models.";
+
+/* Panels redesign WP-81 */
+"Download Parakeet V3, the fastest local model" = "Download Parakeet V3, the fastest local model";
+"Runs on this Mac, so audio never leaves it. 25 European languages, including Ukrainian. Diduny uses it for files, links and meetings recorded without live text." = "Runs on this Mac, so audio never leaves it. 25 European languages, including Ukrainian. Diduny uses it for files, links and meetings recorded without live text.";
+"You can open Diduny now. The download continues in the background." = "You can open Diduny now. The download continues in the background.";
+"Download failed. Try again, or download it later in Settings > Local models." = "Download failed. Try again, or download it later in Settings > Local models.";
+"Parakeet V3 is ready" = "Parakeet V3 is ready";
+"It runs on this Mac. Choose where Diduny uses it in Settings > Modes." = "It runs on this Mac. Choose where Diduny uses it in Settings > Modes.";
+"Parakeet V3 is in Settings > Local models whenever you want it." = "Parakeet V3 is in Settings > Local models whenever you want it.";
+"Downloading Parakeet V3" = "Downloading Parakeet V3";
+"Parakeet V3 download failed" = "Parakeet V3 download failed";

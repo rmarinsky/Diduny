@@ -2025,3 +2025,14 @@
 /* Panels redesign WP-60 */
 "The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Modes." = "Вибраний локальний рушій не готовий на цьому Mac. Завантаж його в «Локальних моделях» або обери інший рушій у Налаштуваннях › Режими.";
 "No on-device engine is ready for files. Download Parakeet V3 or a Whisper model in Settings › Local models." = "Жоден локальний рушій не готовий для файлів. Завантаж Parakeet V3 або модель Whisper у Налаштуваннях › Локальні моделі.";
+
+/* Panels redesign WP-81 */
+"Download Parakeet V3, the fastest local model" = "Завантаж Parakeet V3, найшвидшу локальну модель";
+"Runs on this Mac, so audio never leaves it. 25 European languages, including Ukrainian. Diduny uses it for files, links and meetings recorded without live text." = "Працює на цьому Mac, тож аудіо нікуди не передається. 25 європейських мов, зокрема українська. Diduny використовує її для файлів, посилань і зустрічей, записаних без живого тексту.";
+"You can open Diduny now. The download continues in the background." = "Можеш уже відкрити Diduny. Завантаження триває у фоні.";
+"Download failed. Try again, or download it later in Settings > Local models." = "Не вдалося завантажити. Спробуй ще раз або завантаж пізніше в Налаштуваннях > Локальні моделі.";
+"Parakeet V3 is ready" = "Parakeet V3 готова";
+"It runs on this Mac. Choose where Diduny uses it in Settings > Modes." = "Вона працює на цьому Mac. Обери, де Diduny її використовує, у Налаштуваннях > Режими.";
+"Parakeet V3 is in Settings > Local models whenever you want it." = "Parakeet V3 чекає в Налаштуваннях > Локальні моделі, коли знадобиться.";
+"Downloading Parakeet V3" = "Завантаження Parakeet V3";
+"Parakeet V3 download failed" = "Не вдалося завантажити Parakeet V3";
