@@ -165,7 +165,10 @@ struct CalendarReminderView: View {
     /// Chosen on the reminder for this meeting only.
     @State var localOverride: Bool? = nil
 
-    private var local: Bool { localOverride ?? connection.configuration.localRecording }
+    /// Shows what runs: the pick, else Settings › Modes › Meeting "Starts in" (8A).
+    private var local: Bool {
+        localOverride ?? AppDelegate.current.map { RunTimeRouting.calendarShowsThisMac($0.meetingStartRoute()) } ?? false
+    }
 
     /// The latest version of each shown meeting; the shown copy when the calendar can't be read right now.
     private var current: [CalendarMeeting] {

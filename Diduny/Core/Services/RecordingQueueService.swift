@@ -25,6 +25,8 @@ final class RecordingQueueService {
         let whisperModelOverride: String?
         let targetLanguage: String?
         var localFallbackOnUsageLimit = false
+        /// The engine the meeting ran (Record only, Translate meeting); nil reads Settings › Modes.
+        var engineOverride: EngineID? = nil
     }
 
     private var processingTask: Task<Void, Never>?
@@ -64,7 +66,8 @@ final class RecordingQueueService {
         providerOverride: TranscriptionProvider? = nil,
         whisperModelOverride: String? = nil,
         targetLanguage: String? = nil,
-        localFallbackOnUsageLimit: Bool = false
+        localFallbackOnUsageLimit: Bool = false,
+        engineOverride: EngineID? = nil
     ) -> Bool {
         guard !ids.isEmpty else { return false }
 
@@ -75,7 +78,8 @@ final class RecordingQueueService {
                 providerOverride: providerOverride,
                 whisperModelOverride: whisperModelOverride,
                 targetLanguage: targetLanguage,
-                localFallbackOnUsageLimit: localFallbackOnUsageLimit
+                localFallbackOnUsageLimit: localFallbackOnUsageLimit,
+                engineOverride: engineOverride
             )
         }
         guard !newItems.isEmpty else { return false }
@@ -199,6 +203,8 @@ final class RecordingQueueService {
                 }
             }
 
+            let runner = makeEngineRunner(service: service, audioURL: audioURL, recording: recording, itemID: item.id)
+            let whisperModel = item.whisperModelOverride ?? SettingsStorage.shared.selectedWhisperModel
             var transcript: GeneratedTranscript
             let status: Recording.ProcessingStatus
             let translationTargetLanguageCode: String?
@@ -248,7 +254,10 @@ final class RecordingQueueService {
             case .translate:
                 let pair = SettingsStorage.shared.resolveTranslationLanguagePair()
                 let targetLanguage: String
-                if let onDevice {
+                if let engine = item.engineOverride {
+                    targetLanguage = item.targetLanguage ?? pair.languageB
+                    transcript = try await runner.translate(engine, target: targetLanguage, whisperModel: whisperModel)
+                } else if let onDevice {
                     // Transcribe on this Mac, then translate the final text once with Diduny (text only).
                     targetLanguage = item.targetLanguage ?? pair.languageB
                     let original = try await onDevice.transcribe(audioURL, language: pair.languageA).text
@@ -285,24 +294,10 @@ final class RecordingQueueService {
                         itemID: item.id
                     )
                 } else {
-                    let audioData = try await loadAudioData(from: audioURL)
-                    if let explicitTargetLanguage = item.targetLanguage {
-                        targetLanguage = explicitTargetLanguage
-                        transcript = try await GeneratedTranscript(
-                            text: service.translateAndTranscribe(
-                                audioData: audioData,
-                                targetLanguage: explicitTargetLanguage
-                            )
-                        )
-                    } else {
-                        targetLanguage = "en"
-                        transcript = try await GeneratedTranscript(
-                            text: service.translateAndTranscribe(
-                                audioData: audioData,
-                                languagePair: pair
-                            )
-                        )
-                    }
+                    // Whisper translates itself only into English on a model that can; else Diduny
+                    // translates its text into the target (bug 3). Never rewritten to English.
+                    targetLanguage = item.targetLanguage ?? pair.languageB
+                    transcript = try await runner.translate(.whisper, target: targetLanguage, whisperModel: whisperModel)
                 }
                 status = .translated
                 translationTargetLanguageCode = targetLanguage
@@ -382,6 +377,45 @@ final class RecordingQueueService {
         }
     }
 
+    /// The engines for one item; Whisper reports progress through `service`.
+    private func makeEngineRunner(
+        service: TranscriptionServiceProtocol, audioURL: URL, recording: Recording, itemID: UUID
+    ) -> QueueEngineRunner {
+        QueueEngineRunner(
+            cloud: { [unowned self] config in
+                try await transcribeViaJobs(audioFileURL: audioURL, config: config, source: recording.audioFileName,
+                                            sourceDurationSeconds: recording.effectiveDurationSeconds, itemID: itemID)
+            },
+            whisper: { [unowned self] in try await service.transcribeDetailed(audioData: loadAudioData(from: audioURL)) },
+            whisperTranslateToEnglish: { [unowned self] in
+                try await service.translateAndTranscribe(audioData: loadAudioData(from: audioURL), targetLanguage: "en")
+            },
+            onDevice: { id in
+                guard let engine = OnDeviceEngines.engine(id: id) else {
+                    throw TranscriptionError.apiError(OnDeviceEngines.notReadyMessage)
+                }
+                let language = SettingsStorage.shared.speechLanguageHints.first ?? BenchmarkRunner.defaultLanguage
+                return try await engine.transcribe(audioURL, language: language).text
+            },
+            elevenLabs: { diarize in try await Self.transcribeWithElevenLabs(audioURL: audioURL, diarize: diarize) },
+            translator: DidunyTextTranslationService()
+        )
+    }
+
+    /// ElevenLabs Scribe v2 batch with the user's key; the provider-side copy is queued for deletion.
+    private static func transcribeWithElevenLabs(audioURL: URL, diarize: Bool) async throws -> GeneratedTranscript {
+        let hints = SettingsStorage.shared.speechLanguageHints
+        let result = try await ElevenLabsBatchService().transcribe(
+            audioURL: audioURL, languageCode: hints.count == 1 ? hints[0] : nil, diarize: diarize)
+        if let id = result.transcriptionID {
+            Task {
+                await RemoteDeletionQueue.shared.enqueue(providerID: STTProviderID.elevenLabs, remoteID: id)
+                await RemoteDeletionQueue.shared.process()
+            }
+        }
+        return result.transcript
+    }
+
     private func createTranscriptionService(
         for provider: TranscriptionProvider,
         whisperModelOverride: String? = nil
@@ -397,8 +431,14 @@ final class RecordingQueueService {
     }
 
     private func buildCloudTranscriptionConfig(enableSpeakerDiarization: Bool) -> [String: Any] {
-        let hints = SettingsStorage.shared.speechLanguageHints
+        Self.buildCloudTranscriptionConfig(
+            hints: SettingsStorage.shared.speechLanguageHints,
+            enableSpeakerDiarization: enableSpeakerDiarization
+        )
+    }
 
+    /// Empty hints (no "Languages you speak") send no hint and no strict flag: the engine detects (T5-LA-23).
+    static func buildCloudTranscriptionConfig(hints: [String], enableSpeakerDiarization: Bool) -> [String: Any] {
         var config: [String: Any] = ["mode": "transcribe"]
         if enableSpeakerDiarization {
             config["enable_speaker_diarization"] = true
@@ -460,6 +500,17 @@ final class RecordingQueueService {
 
     func isQueued(_ id: UUID) -> Bool {
         pendingItems.contains { $0.id == id }
+    }
+
+    /// The transcript of one recording for the command panel outcome; another recording's
+    /// progress never shows (WP-42).
+    func transcriptState(for id: UUID?) -> OutcomeTranscriptState {
+        OutcomeTranscriptState.make(
+            recordingID: id,
+            isQueued: id.map(isQueued) ?? false,
+            currentRecordingID: currentRecordingId,
+            currentProgress: currentProgress
+        )
     }
 
     private func handleCloudJobStatus(_ status: JobStatus, totalSeconds: TimeInterval, itemID: UUID) {
@@ -548,7 +599,8 @@ final class RecordingQueueService {
         providerOverride: TranscriptionProvider?,
         whisperModelOverride: String?,
         targetLanguage: String?,
-        localFallbackOnUsageLimit: Bool
+        localFallbackOnUsageLimit: Bool,
+        engineOverride: EngineID?
     ) -> QueueItem? {
         guard currentItem?.id != id else {
             Log.app.info("Queue skipped duplicate active recording \(id)")
@@ -566,13 +618,15 @@ final class RecordingQueueService {
             providerOverride: providerOverride,
             whisperModelOverride: whisperModelOverride,
             targetLanguage: targetLanguage,
-            localFallbackOnUsageLimit: localFallbackOnUsageLimit
+            localFallbackOnUsageLimit: localFallbackOnUsageLimit,
+            engineOverride: engineOverride
         )
     }
 
     /// Parakeet / Apple chosen for this recording's mode. An explicit Diduny Cloud override and
     /// translations keep their own path.
     private func onDeviceEngineID(for item: QueueItem, recording: Recording) -> String? {
+        if let engine = item.engineOverride { return Self.onDeviceID(engine) }
         guard item.providerOverride != .cloud, item.action != .translate else { return nil }
         let job: STTJob = switch recording.type {
         case .meeting: .meeting
@@ -581,19 +635,27 @@ final class RecordingQueueService {
         case .translation: .dictationTranslation
         case .voice: .dictation
         }
-        let id = SettingsStorage.shared.providerDefaults.selection(for: job).providerID
+        let id = SettingsStorage.shared.modeDefaults.engine(for: job).rawValue
         return STTProviderID.onDeviceEngines.contains(id) ? id : nil
     }
 
     /// Parakeet / Apple chosen for this recording's translation mode (meetings → meeting translation).
     private func onDeviceTranslationEngineID(for item: QueueItem, recording: Recording) -> String? {
+        if let engine = item.engineOverride { return Self.onDeviceID(engine) }
         guard item.providerOverride != .cloud else { return nil }
         let job: STTJob = recording.type == .meeting || recording.type == .meetingTranslation ? .meetingTranslation : .dictationTranslation
-        let id = SettingsStorage.shared.providerDefaults.selection(for: job).providerID
+        let id = SettingsStorage.shared.modeDefaults.engine(for: job).rawValue
         return STTProviderID.onDeviceEngines.contains(id) ? id : nil
     }
 
+    private static func onDeviceID(_ engine: EngineID) -> String? {
+        STTProviderID.onDeviceEngines.contains(engine.rawValue) ? engine.rawValue : nil
+    }
+
     private func configuredProvider(for item: QueueItem) -> TranscriptionProvider {
+        if let engine = item.engineOverride {
+            return engine == .didunyCloud || engine == .elevenLabs ? .cloud : .local
+        }
         if item.action == .transcribe,
            storage.recordings
            .first(where: { $0.id == item.id })?
@@ -605,12 +667,11 @@ final class RecordingQueueService {
             return override
         }
 
-        switch item.action {
-        case .transcribe, .transcribeDiarize:
-            return SettingsStorage.shared.transcriptionProvider
-        case .translate:
-            return SettingsStorage.shared.translationProvider
-        }
+        // Inventory F8: no override reads the Dictation (or Translation) engine from Settings > Modes,
+        // the mode whose legacy Cloud/Local key this used to read, with the run-time Cloud/Local rule.
+        let job: STTJob = item.action == .translate ? .dictationTranslation : .dictation
+        return RunTimeRouting.baseProvider(for: SettingsStorage.shared.modeDefaults.engine(for: job),
+                                           signedIn: AuthService.hasStoredSession)
     }
 
     private func preflightError(for item: QueueItem) -> String? {
@@ -627,22 +688,21 @@ final class RecordingQueueService {
     }
 
     private func preflightError(for item: QueueItem, provider: TranscriptionProvider) -> String? {
+        if item.engineOverride == .elevenLabs {
+            // The user's key transcribes; only the Diduny text step needs sign-in.
+            guard ProviderKeyStore.shared.hasKey(for: STTProviderID.elevenLabs) else {
+                return String(localized: "The selected engine isn't available. Check Settings › Providers.")
+            }
+            guard item.action != .translate || hasCloudCredentials else {
+                return String(localized: "Translation uses Diduny. Sign in to enable it. Transcription with your own provider still works.")
+            }
+            return nil
+        }
         guard hasCloudCredentials else { return String(localized: "Sign in to use Diduny transcription.") }
         switch provider {
         case .cloud:
             return nil
         case .local:
-            if item.action == .translate {
-                let targetLanguage = item.targetLanguage
-                    ?? SettingsStorage.shared.defaultTranslationLanguagePair.languageB
-                if targetLanguage != "en",
-                   item.targetLanguage != nil || !SettingsStorage.shared.defaultTranslationLanguagePair.contains("en")
-                {
-                    return String(
-                        localized: "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English."
-                    )
-                }
-            }
             let modelName = item.whisperModelOverride ?? SettingsStorage.shared.selectedWhisperModel
             guard localModelIsAvailable(modelName) else {
                 return String(localized: "Download a local Whisper model in Settings.")

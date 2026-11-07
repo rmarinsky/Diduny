@@ -10,6 +10,8 @@ struct PageScaffold<Trailing: View, Content: View>: View {
     @ViewBuilder var trailing: () -> Trailing
     @ViewBuilder var content: () -> Content
 
+    static var titleTopPadding: CGFloat { 48 }
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
     @State private var scrolled = false
@@ -57,12 +59,13 @@ struct PageScaffold<Trailing: View, Content: View>: View {
         HStack(alignment: .center, spacing: DS.Space.lg) {
             VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text(title)
-                    .font(DS.Font.pageTitle)
+                    .font(DS.Font.settingsTitle)
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
                 if let subtitle {
                     Text(subtitle)
-                        .font(DS.Font.callout)
+                        .font(DS.Font.body)
+                        .lineSpacing(DS.Font.LineSpacing.lead)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -71,8 +74,11 @@ struct PageScaffold<Trailing: View, Content: View>: View {
             trailing()
         }
         .padding(.horizontal, DS.Layout.pagePadding)
-        .padding(.top, DS.Layout.pagePadding)
-        .padding(.bottom, DS.Space.lg)
+        // The window draws under its 34 pt title bar (full-size content), so the title starts at 50
+        // (design-spec 3.5): 48 of padding plus the title font's ~2 pt leading.
+        .padding(.top, Self.titleTopPadding)
+        // Lead to first block 14 (design-spec 3.5).
+        .padding(.bottom, 14)
         .frame(maxWidth: DS.Layout.outerColumnMaxWidth, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
     }

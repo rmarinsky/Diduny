@@ -40,9 +40,3 @@ struct Banner<Actions: View>: View {
         .accessibilityAddTraits(.isStaticText)
     }
 }
-
-extension Banner where Actions == EmptyView {
-    init(headline: LocalizedStringKey? = nil, message: Text) {
-        self.init(headline: headline, message: message, actions: { EmptyView() })
-    }
-}

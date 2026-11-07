@@ -49,7 +49,7 @@ struct AboutSettingsView: View {
                     .font(DS.Font.headline)
                     .foregroundStyle(currentProduct.accentDeep)
                 Text(currentProduct.name)
-                    .font(DS.Font.pageTitle)
+                    .font(DS.Font.settingsTitle)
                 Text(currentProduct.description)
                     .font(DS.Font.callout)
                     .foregroundStyle(.secondary)

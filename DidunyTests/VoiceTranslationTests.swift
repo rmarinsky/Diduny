@@ -158,6 +158,15 @@ final class VoiceTranslationTests: XCTestCase {
             .translation(targetLanguage: "de"),
             .translation(targetLanguage: "pl")
         ])
+
+        // T1-DI-01: the panel's Output menu is Original, then Your languages in order, then the other
+        // Diduny languages alphabetically, each once.
+        let yours = ["en", "uk", "pl", "de"]
+        let outputs = DictationOutputMenu.outputs(yourLanguages: yours)
+        let others = SupportedLanguage.cloudLanguages.filter { !yours.contains($0.code) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        XCTAssertEqual(outputs, [.original] + (yours + others.map(\.code)).map { .translation(targetLanguage: $0) })
+        XCTAssertEqual(Set(outputs).count, outputs.count)
     }
 
     @MainActor
@@ -183,7 +192,7 @@ final class VoiceTranslationTests: XCTestCase {
         XCTAssertEqual(store.displayText, "Привіт")
 
         store.pickOutput(.original)
-        XCTAssertEqual(store.title, "Transcribing")
+        XCTAssertEqual(store.title, "Dictating")
         XCTAssertEqual(store.displayText, "Привіт")
     }
 
@@ -336,15 +345,15 @@ final class VoiceTranslationTests: XCTestCase {
             XCTAssertEqual(store.displayText, state.expectedText, state.name)
 
             for (appearanceName, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
-                let panel = LiveDictationOverlayView(
+                let panel = LivePanelView(
                     store: store, onCopy: {}, onStop: {}, onDismiss: {}, onMinimize: {},
                     onSelectOutput: { _ in }, onDrag: {}, onDragEnd: {}
                 )
-                .frame(width: 310, height: 310)
+                .frame(width: 300, height: 312)
                 .background(Color(nsColor: .windowBackgroundColor))
                 let host = NSHostingView(rootView: panel)
                 host.appearance = NSAppearance(named: appearance)
-                host.frame = CGRect(x: 0, y: 0, width: 310, height: 310)
+                host.frame = CGRect(x: 0, y: 0, width: 300, height: 312)
                 host.layoutSubtreeIfNeeded()
                 let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
                 host.cacheDisplay(in: host.bounds, to: bitmap)

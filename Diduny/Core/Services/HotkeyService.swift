@@ -15,164 +15,165 @@ extension KeyboardShortcuts.Name {
     static let toggleHistoryPalette = Self("toggleHistoryPalette", default: .init(.h, modifiers: [.command, .option]))
     static let forceSubmit = Self("forceSubmit", default: .init(.return, modifiers: [.command]))
     static let translateSelectedText = Self("translateSelectedText", default: .init(.t, modifiers: [.command, .option]))
+    /// Translate in place as a key chord (ADR-0012 D8). No default: unset until the user records one.
+    static let inplaceTranslation = Self("inplaceTranslation")
 }
 
 // MARK: - Hotkey Service
 
-final class HotkeyService: HotkeyServiceProtocol {
-    private struct PressTracker {
-        var lastPressAt: TimeInterval?
-        var count = 0
+/// Carbon hotkeys through `HotkeyRegistrar`, with one `PressCounter` per name (plan 3.5).
+/// Counts and switches are read at press time; a switch change calls `refreshSwitches()`.
+final class HotkeyService {
+    /// Posted by `KeyboardShortcuts` when a name's keys change, with `userInfo["name"]`.
+    /// The package declares it `internal` (`Notification.Name.shortcutByNameDidChange`), so the raw
+    /// string is copied here. Pinned to KeyboardShortcuts 2.4.0 (`project.yml` `exactVersion`); when the
+    /// package is bumped, `HotkeyServiceTests.packageNotificationNameMatches` fails if it drifted.
+    static let packageShortcutDidChange = Notification.Name("KeyboardShortcuts_shortcutByNameDidChange")
 
-        mutating func registerPress(at eventTime: TimeInterval, requiredPressCount: Int, threshold: TimeInterval) -> Bool {
-            guard requiredPressCount > 1 else {
-                reset()
-                return true
+    private struct Binding {
+        let handler: () -> Void
+        let pressCount: () -> Int
+        let isOn: () -> Bool
+        var counter = PressCounter()
+    }
+
+    /// Raw values of the names this service registers; their keys may change while some are switched
+    /// off or idle. Plain strings on purpose: on a fresh install `Name(_:default:)` stores its default
+    /// and posts `packageShortcutDidChange` from inside the name's static initializer, so building this
+    /// set from the `Name` statics re-entered its own one-time initializer and trapped at launch.
+    static let ownedNameValues: Set<String> = [
+        "toggleRecording", "toggleTranslation", "toggleMeetingRecording", "toggleMeetingTranslation",
+        "addMeetingChapter", "toggleHistoryPalette", "translateSelectedText"
+    ]
+
+    private let settings: SettingsStorage
+    private let registrar: HotkeyRegistrar
+    private let clock: MonotonicClock
+    private let captureSession: ShortcutCaptureSession
+    private var bindings: [KeyboardShortcuts.Name: Binding] = [:]
+    private let shortcutChanges: NotificationCenter?
+    private var observers: [(NotificationCenter, NSObjectProtocol)] = []
+
+    init(
+        settings: SettingsStorage = .shared,
+        registrar: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared,
+        clock: MonotonicClock = SystemClock(),
+        captureSession: ShortcutCaptureSession = .shared,
+        shortcutChanges: NotificationCenter? = .default
+    ) {
+        self.settings = settings
+        self.registrar = registrar
+        self.clock = clock
+        self.captureSession = captureSession
+        self.shortcutChanges = shortcutChanges
+        // Recording new keys registers them at once, also for a name that is off: turn it off again.
+        if let shortcutChanges {
+            let token = shortcutChanges.addObserver(
+                forName: Self.packageShortcutDidChange,
+                object: nil,
+                queue: nil
+            ) { [weak self] notification in
+                guard let name = notification.userInfo?["name"] as? KeyboardShortcuts.Name else { return }
+                self?.reapply(name)
             }
-
-            if let lastPressAt, eventTime - lastPressAt < threshold {
-                count += 1
-            } else {
-                count = 1
-            }
-            self.lastPressAt = eventTime
-
-            guard count >= requiredPressCount else { return false }
-            reset()
-            return true
+            observers.append((shortcutChanges, token))
         }
+        // A capture turned every name off; put back exactly what this service wants now.
+        let endToken = captureSession.observeEnd { [weak self] in
+            self?.refreshSwitches()
+        }
+        observers.append((captureSession.notifications, endToken))
+    }
 
-        mutating func reset() {
-            lastPressAt = nil
-            count = 0
+    deinit {
+        for (center, token) in observers {
+            center.removeObserver(token)
         }
     }
 
-    private enum MultiPressHotkey {
-        case recording
-        case translation
-        case meeting
-        case meetingTranslation
-        case translateSelectedText
-    }
-
-    private let multiPressThreshold: TimeInterval = 0.35
-
-    private var recordingHandler: (() -> Void)?
-    private var meetingHandler: (() -> Void)?
-    private var meetingTranslationHandler: (() -> Void)?
-    private var translationHandler: (() -> Void)?
-    private var chapterHandler: (() -> Void)?
-    private var historyPaletteHandler: (() -> Void)?
-    private var translateSelectedTextHandler: (() -> Void)?
-
-    private var recordingPressTracker = PressTracker()
-    private var translationPressTracker = PressTracker()
-    private var meetingPressTracker = PressTracker()
-    private var meetingTranslationPressTracker = PressTracker()
-    private var translateSelectedTextPressTracker = PressTracker()
-
-    // MARK: - Recording Hotkey
+    // MARK: - Mode hotkeys
 
     func registerRecordingHotkey(handler: @escaping () -> Void) {
-        recordingHandler = handler
-        KeyboardShortcuts.onKeyDown(for: .toggleRecording) { [weak self] in
-            self?.handleMultiPress(.recording)
-        }
+        register(.toggleRecording, pressCount: { [settings] in settings.recordingHotkeyPressCount }, handler: handler)
     }
 
     func unregisterRecordingHotkey() {
-        KeyboardShortcuts.disable(.toggleRecording)
-        recordingPressTracker.reset()
-        recordingHandler = nil
+        unregister(.toggleRecording)
     }
 
-    // MARK: - Meeting Hotkey
-
     func registerMeetingHotkey(handler: @escaping () -> Void) {
-        meetingHandler = handler
-        KeyboardShortcuts.onKeyDown(for: .toggleMeetingRecording) { [weak self] in
-            self?.handleMultiPress(.meeting)
-        }
+        register(.toggleMeetingRecording, pressCount: { [settings] in settings.meetingHotkeyPressCount }, handler: handler)
     }
 
     func unregisterMeetingHotkey() {
-        KeyboardShortcuts.disable(.toggleMeetingRecording)
-        meetingPressTracker.reset()
-        meetingHandler = nil
+        unregister(.toggleMeetingRecording)
     }
 
-    // MARK: - Meeting Translation Hotkey
-
     func registerMeetingTranslationHotkey(handler: @escaping () -> Void) {
-        meetingTranslationHandler = handler
-        KeyboardShortcuts.onKeyDown(for: .toggleMeetingTranslation) { [weak self] in
-            self?.handleMultiPress(.meetingTranslation)
-        }
+        register(
+            .toggleMeetingTranslation,
+            pressCount: { [settings] in settings.meetingTranslationHotkeyPressCount },
+            handler: handler
+        )
     }
 
     func unregisterMeetingTranslationHotkey() {
-        KeyboardShortcuts.disable(.toggleMeetingTranslation)
-        meetingTranslationPressTracker.reset()
-        meetingTranslationHandler = nil
+        unregister(.toggleMeetingTranslation)
     }
 
-    // MARK: - Translation Hotkey
-
     func registerTranslationHotkey(handler: @escaping () -> Void) {
-        translationHandler = handler
-        KeyboardShortcuts.onKeyDown(for: .toggleTranslation) { [weak self] in
-            self?.handleMultiPress(.translation)
-        }
+        register(.toggleTranslation, pressCount: { [settings] in settings.translationHotkeyPressCount }, handler: handler)
     }
 
     func unregisterTranslationHotkey() {
-        KeyboardShortcuts.disable(.toggleTranslation)
-        translationPressTracker.reset()
-        translationHandler = nil
+        unregister(.toggleTranslation)
     }
 
-    // MARK: - Chapter Bookmark Hotkey
+    // MARK: - Shortcuts rows with a switch
 
+    /// Registered while a meeting records.
     func registerChapterHotkey(handler: @escaping () -> Void) {
-        chapterHandler = handler
-        KeyboardShortcuts.onKeyDown(for: .addMeetingChapter) { [weak self] in
-            self?.chapterHandler?()
-        }
+        register(
+            .addMeetingChapter,
+            pressCount: { [settings] in settings.addMeetingChapterPressCount },
+            isOn: { [settings] in settings.addMeetingChapterHotkeyEnabled },
+            handler: handler
+        )
     }
 
     func unregisterChapterHotkey() {
-        KeyboardShortcuts.disable(.addMeetingChapter)
-        chapterHandler = nil
+        unregister(.addMeetingChapter)
     }
 
-    // MARK: - History Palette Hotkey
-
     func registerHistoryPaletteHotkey(handler: @escaping () -> Void) {
-        historyPaletteHandler = handler
-        KeyboardShortcuts.onKeyDown(for: .toggleHistoryPalette) { [weak self] in
-            self?.historyPaletteHandler?()
-        }
+        register(
+            .toggleHistoryPalette,
+            pressCount: { [settings] in settings.historyPalettePressCount },
+            isOn: { [settings] in settings.historyPaletteHotkeyEnabled },
+            handler: handler
+        )
     }
 
     func unregisterHistoryPaletteHotkey() {
-        KeyboardShortcuts.disable(.toggleHistoryPalette)
-        historyPaletteHandler = nil
+        unregister(.toggleHistoryPalette)
     }
 
-    // MARK: - Translate Selected Text Hotkey
-
     func registerTranslateSelectedTextHotkey(handler: @escaping () -> Void) {
-        translateSelectedTextHandler = handler
-        KeyboardShortcuts.onKeyDown(for: .translateSelectedText) { [weak self] in
-            self?.handleMultiPress(.translateSelectedText)
-        }
+        register(
+            .translateSelectedText,
+            pressCount: { [settings] in settings.translateSelectedTextHotkeyPressCount },
+            isOn: { [settings] in settings.translateSelectedTextHotkeyEnabled },
+            handler: handler
+        )
     }
 
     func unregisterTranslateSelectedTextHotkey() {
-        KeyboardShortcuts.disable(.translateSelectedText)
-        translateSelectedTextPressTracker.reset()
-        translateSelectedTextHandler = nil
+        unregister(.translateSelectedText)
+    }
+
+    /// Re-applies every switch: off disables the name and keeps its keys; on enables it again.
+    func refreshSwitches() {
+        bindings.keys.forEach(reapply)
     }
 
     // MARK: - Convenience Methods
@@ -187,74 +188,47 @@ final class HotkeyService: HotkeyServiceProtocol {
         unregisterTranslateSelectedTextHotkey()
     }
 
-    // MARK: - Multi-Press
+    // MARK: - Registration
 
-    private func handleMultiPress(_ hotkey: MultiPressHotkey) {
-        let eventTime = Date().timeIntervalSinceReferenceDate
-        let requiredPressCount = requiredPressCount(for: hotkey)
-        let didTrigger: Bool
+    /// One handler per name: registering again replaces it instead of adding a second one.
+    func register(
+        _ name: KeyboardShortcuts.Name,
+        pressCount: @escaping () -> Int,
+        isOn: @escaping () -> Bool = { true },
+        handler: @escaping () -> Void
+    ) {
+        bindings[name] = Binding(handler: handler, pressCount: pressCount, isOn: isOn)
+        registrar.removeHandler(for: name)
+        registrar.onKeyDown(for: name) { [weak self] in
+            self?.handlePress(name)
+        }
+        reapply(name)
+    }
 
-        switch hotkey {
-        case .recording:
-            didTrigger = recordingPressTracker.registerPress(
-                at: eventTime,
-                requiredPressCount: requiredPressCount,
-                threshold: multiPressThreshold
-            )
-            if didTrigger {
-                recordingHandler?()
-            }
-        case .translation:
-            didTrigger = translationPressTracker.registerPress(
-                at: eventTime,
-                requiredPressCount: requiredPressCount,
-                threshold: multiPressThreshold
-            )
-            if didTrigger {
-                translationHandler?()
-            }
-        case .meeting:
-            didTrigger = meetingPressTracker.registerPress(
-                at: eventTime,
-                requiredPressCount: requiredPressCount,
-                threshold: multiPressThreshold
-            )
-            if didTrigger {
-                meetingHandler?()
-            }
-        case .meetingTranslation:
-            didTrigger = meetingTranslationPressTracker.registerPress(
-                at: eventTime,
-                requiredPressCount: requiredPressCount,
-                threshold: multiPressThreshold
-            )
-            if didTrigger {
-                meetingTranslationHandler?()
-            }
-        case .translateSelectedText:
-            didTrigger = translateSelectedTextPressTracker.registerPress(
-                at: eventTime,
-                requiredPressCount: requiredPressCount,
-                threshold: multiPressThreshold
-            )
-            if didTrigger {
-                translateSelectedTextHandler?()
-            }
+    func unregister(_ name: KeyboardShortcuts.Name) {
+        registrar.disable(name)
+        registrar.removeHandler(for: name)
+        bindings[name] = nil
+    }
+
+    private func reapply(_ name: KeyboardShortcuts.Name) {
+        guard let binding = bindings[name] else {
+            if Self.ownedNameValues.contains(name.rawValue) { registrar.disable(name) }
+            return
+        }
+        bindings[name]?.counter.reset()
+        if binding.isOn(), !captureSession.isActive {
+            registrar.enable(name)
+        } else {
+            registrar.disable(name)
         }
     }
 
-    private func requiredPressCount(for hotkey: MultiPressHotkey) -> Int {
-        switch hotkey {
-        case .recording:
-            SettingsStorage.shared.recordingHotkeyPressCount
-        case .translation:
-            SettingsStorage.shared.translationHotkeyPressCount
-        case .meeting:
-            SettingsStorage.shared.meetingHotkeyPressCount
-        case .meetingTranslation:
-            SettingsStorage.shared.meetingTranslationHotkeyPressCount
-        case .translateSelectedText:
-            SettingsStorage.shared.translateSelectedTextHotkeyPressCount
+    private func handlePress(_ name: KeyboardShortcuts.Name) {
+        guard let binding = bindings[name], binding.isOn(), !captureSession.isActive else { return }
+        let didTrigger = bindings[name]?.counter.register(at: clock.now, required: binding.pressCount()) ?? false
+        if didTrigger {
+            binding.handler()
         }
     }
 }

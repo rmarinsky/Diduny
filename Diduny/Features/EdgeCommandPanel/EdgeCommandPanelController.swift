@@ -1,413 +1,23 @@
 import AppKit
-import Observation
-import QuartzCore
 import SwiftUI
-
-enum EdgeCommandAction: CaseIterable, Identifiable {
-    case transcribe
-    case translate
-    case meeting
-    case translateMeeting
-    case batch
-
-    var id: Self {
-        self
-    }
-
-    var title: String {
-        switch self {
-        case .transcribe: String(localized: "Transcribe")
-        case .translate: String(localized: "Translate")
-        case .meeting: String(localized: "Record meeting")
-        case .translateMeeting: String(localized: "Translate meeting")
-        case .batch: String(localized: "Batch files")
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .transcribe: "waveform"
-        case .translate: "character.bubble"
-        case .meeting: "record.circle"
-        case .translateMeeting: "captions.bubble"
-        case .batch: "tray.full"
-        }
-    }
-
-    var usesLanguagePair: Bool {
-        self == .translate || self == .translateMeeting
-    }
-}
-
-enum EdgeCommandPanelDockEdge: String, Equatable {
-    case left
-    case right
-    case top
-    case bottom
-}
-
-struct EdgeCommandPanelDock: Equatable {
-    let edge: EdgeCommandPanelDockEdge
-    let offset: CGFloat
-
-    init(edge: EdgeCommandPanelDockEdge, offset: CGFloat) {
-        self.edge = edge
-        self.offset = offset
-    }
-
-    /// Restores a dock persisted as raw values; nil when either value is
-    /// missing or the edge name is unknown. A stale offset from a
-    /// disconnected screen is safe — placement clamps it to the visible frame.
-    init?(rawEdge: String?, offset: Double?) {
-        guard let rawEdge, let edge = EdgeCommandPanelDockEdge(rawValue: rawEdge), let offset else {
-            return nil
-        }
-        self.init(edge: edge, offset: CGFloat(offset))
-    }
-}
-
-enum EdgeCommandPanelPresentation: Equatable {
-    case collapsed
-    case commands(isCloud: Bool)
-    case live(RecordingMode)
-    case meetingSuggestion
-}
-
-enum MeetingSuggestionProcessingMode: Equatable {
-    case cloud
-    case local
-    case recordingOnly
-
-    static func resolve(cloudEnabled: Bool, hasLocalModel: Bool) -> Self {
-        if cloudEnabled { return .cloud }
-        return hasLocalModel ? .local : .recordingOnly
-    }
-
-    var label: String {
-        switch self {
-        case .cloud: String(localized: "Cloud - live transcription")
-        case .local: String(localized: "Local - transcription on this Mac")
-        case .recordingOnly:
-            String(localized: "Recording only - download a local model for transcription")
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .cloud: "cloud"
-        case .local: "desktopcomputer"
-        case .recordingOnly: "exclamationmark.triangle"
-        }
-    }
-}
-
-struct MeetingSuggestion: Equatable {
-    let meeting: DetectedMeeting
-    var selectedProvider: TranscriptionProvider
-    var isCloudAvailable: Bool
-    let hasLocalModel: Bool
-
-    var processingMode: MeetingSuggestionProcessingMode {
-        .resolve(cloudEnabled: selectedProvider == .cloud, hasLocalModel: hasLocalModel)
-    }
-
-    static func resolve(
-        meeting: DetectedMeeting,
-        preferredProvider: TranscriptionProvider,
-        cloudAvailable: Bool,
-        hasLocalModel: Bool
-    ) -> Self {
-        Self(
-            meeting: meeting,
-            selectedProvider: preferredProvider == .cloud && cloudAvailable ? .cloud : .local,
-            isCloudAvailable: cloudAvailable,
-            hasLocalModel: hasLocalModel
-        )
-    }
-}
-
-enum EdgeCommandPanelPlacement {
-    static let expandedCornerRadius: CGFloat = 15
-    static let liveControlHitTargetHeight: CGFloat = 44
-    static let meetingSuggestionControlHitTargetHeight: CGFloat = 44
-
-    static func nearestDock(to proposedFrame: NSRect, in visibleFrame: NSRect) -> EdgeCommandPanelDock {
-        let distances: [(EdgeCommandPanelDockEdge, CGFloat)] = [
-            (.left, abs(proposedFrame.minX - visibleFrame.minX)),
-            (.right, abs(visibleFrame.maxX - proposedFrame.maxX)),
-            (.bottom, abs(proposedFrame.minY - visibleFrame.minY)),
-            (.top, abs(visibleFrame.maxY - proposedFrame.maxY))
-        ]
-        let edge = distances.min(by: { $0.1 < $1.1 })?.0 ?? .right
-        let offset = edge == .left || edge == .right ? proposedFrame.midY : proposedFrame.midX
-        return EdgeCommandPanelDock(edge: edge, offset: offset)
-    }
-
-    static func frame(
-        in visibleFrame: NSRect,
-        dock: EdgeCommandPanelDock,
-        presentation: EdgeCommandPanelPresentation
-    ) -> NSRect {
-        let size = size(for: presentation, edge: dock.edge)
-        let origin = switch dock.edge {
-        case .left:
-            NSPoint(
-                x: visibleFrame.minX,
-                y: clampedOrigin(
-                    dock.offset,
-                    length: size.height,
-                    minimum: visibleFrame.minY,
-                    maximum: visibleFrame.maxY
-                )
-            )
-        case .right:
-            NSPoint(
-                x: visibleFrame.maxX - size.width,
-                y: clampedOrigin(
-                    dock.offset,
-                    length: size.height,
-                    minimum: visibleFrame.minY,
-                    maximum: visibleFrame.maxY
-                )
-            )
-        case .top:
-            NSPoint(
-                x: clampedOrigin(
-                    dock.offset,
-                    length: size.width,
-                    minimum: visibleFrame.minX,
-                    maximum: visibleFrame.maxX
-                ),
-                y: visibleFrame.maxY - size.height
-            )
-        case .bottom:
-            NSPoint(
-                x: clampedOrigin(
-                    dock.offset,
-                    length: size.width,
-                    minimum: visibleFrame.minX,
-                    maximum: visibleFrame.maxX
-                ),
-                y: visibleFrame.minY
-            )
-        }
-
-        return NSRect(origin: origin, size: size)
-    }
-
-    static func frame(in visibleFrame: NSRect, dock: EdgeCommandPanelDock, expanded: Bool) -> NSRect {
-        frame(
-            in: visibleFrame,
-            dock: dock,
-            presentation: expanded ? .commands(isCloud: true) : .collapsed
-        )
-    }
-
-    static func size(
-        for presentation: EdgeCommandPanelPresentation,
-        edge: EdgeCommandPanelDockEdge
-    ) -> NSSize {
-        switch presentation {
-        case .collapsed:
-            collapsedSize(for: edge)
-        case let .commands(isCloud):
-            NSSize(width: 286, height: isCloud ? 326 : 250)
-        case let .live(mode):
-            mode.isMeeting ? NSSize(width: 360, height: 420) : NSSize(width: 310, height: 310)
-        case .meetingSuggestion:
-            NSSize(width: 390, height: 350)
-        }
-    }
-
-    static let expandedSize = NSSize(width: 286, height: 326)
-
-    private static func collapsedSize(for edge: EdgeCommandPanelDockEdge) -> NSSize {
-        switch edge {
-        case .left, .right: NSSize(width: 14, height: 64)
-        case .top, .bottom: NSSize(width: 64, height: 14)
-        }
-    }
-
-    private static func clampedOrigin(_ offset: CGFloat, length: CGFloat, minimum: CGFloat,
-                                      maximum: CGFloat) -> CGFloat
-    {
-        min(max(offset - length / 2, minimum), maximum - length)
-    }
-
-    /// Whether a pointer location counts as touching the given screen edge —
-    /// the reveal gesture for an auto-hidden tab (same idea as the Dock).
-    static func edgeHotZoneContains(
-        _ location: NSPoint,
-        screenFrame: NSRect,
-        edge: EdgeCommandPanelDockEdge,
-        threshold: CGFloat = 2
-    ) -> Bool {
-        guard NSMouseInRect(location, screenFrame, false) else { return false }
-        return switch edge {
-        case .left: location.x <= screenFrame.minX + threshold
-        case .right: location.x >= screenFrame.maxX - threshold
-        case .top: location.y >= screenFrame.maxY - threshold
-        case .bottom: location.y <= screenFrame.minY + threshold
-        }
-    }
-}
-
-enum EdgeCommandPanelHoverPolicy {
-    static func shouldCollapse(pointer: NSPoint, panelFrame: NSRect, isDragging: Bool) -> Bool {
-        !isDragging && !panelFrame.contains(pointer)
-    }
-}
-
-/// The collapsed edge tab auto-hides after a few idle seconds (it annoys
-/// people when it sits on the screen edge permanently). It must never hide
-/// under the pointer, mid-drag, or while the expanded live modal is open.
-/// A minimized live-recording tab (red dot) does auto-hide, then reappears
-/// on edge hover until the user clicks to restore the modal.
-enum EdgeCommandPanelAutoHidePolicy {
-    static let delay: TimeInterval = 3
-
-    static func shouldHide(
-        pointer: NSPoint,
-        panelFrame: NSRect,
-        isDragging: Bool,
-        isExpanded: Bool,
-        isShowingLiveFeedback: Bool,
-        isLiveFeedbackMinimized: Bool = false
-    ) -> Bool {
-        let liveModalExpanded = isShowingLiveFeedback && !isLiveFeedbackMinimized
-        return !isDragging
-            && !isExpanded
-            && !liveModalExpanded
-            && !panelFrame.contains(pointer)
-    }
-
-    /// Auto-hide may run for idle tabs and for minimized live tabs.
-    static func shouldSchedule(isLiveFeedbackMinimized _: Bool) -> Bool {
-        true
-    }
-}
-
-enum EdgeCommandPanelMinimizedLivePolicy {
-    /// Hover may open the command menu only when live recording is not minimized.
-    static func shouldAllowHoverExpand(isLiveFeedbackMinimized: Bool) -> Bool {
-        !isLiveFeedbackMinimized
-    }
-}
-
-@Observable
-@MainActor
-final class EdgeCommandPanelModel {
-    var pairs: [TranslationLanguagePair]
-    var selectedPairID: String
-    var provider: TranscriptionProvider
-    var isSignedIn: Bool
-    var isExpanded = false
-    var isShowingLiveFeedback = false
-    /// Live recording is active but the user collapsed the panel to the edge tab.
-    var isLiveFeedbackMinimized = false
-    var meetingSuggestion: MeetingSuggestion?
-    var meetingSuggestionsEnabled = SettingsStorage.shared.meetingSuggestionsEnabled
-    var dockEdge: EdgeCommandPanelDockEdge = .right
-
-    init(
-        pairs: [TranslationLanguagePair],
-        selectedPair: TranslationLanguagePair,
-        provider: TranscriptionProvider = .local,
-        isSignedIn: Bool = true
-    ) {
-        let normalizedPairs = pairs.isEmpty ? [.defaultPair] : pairs
-        self.pairs = normalizedPairs
-        self.provider = provider
-        self.isSignedIn = isSignedIn
-        selectedPairID = normalizedPairs.contains(selectedPair) ? selectedPair.id : normalizedPairs[0].id
-    }
-
-    var availableActions: [EdgeCommandAction] {
-        if provider == .cloud {
-            return [.transcribe, .translate, .meeting, .translateMeeting]
-        }
-        return [.transcribe, .meeting]
-    }
-
-    var showsTranslationControls: Bool {
-        provider == .cloud
-    }
-
-    var selectedPair: TranslationLanguagePair? {
-        pairs.first(where: { $0.id == selectedPairID }) ?? pairs.first
-    }
-
-    func select(_ pair: TranslationLanguagePair) {
-        guard pairs.contains(pair) else { return }
-        selectedPairID = pair.id
-    }
-
-    @discardableResult
-    func selectProvider(_ provider: TranscriptionProvider) -> Bool {
-        guard provider != .cloud || isSignedIn else { return false }
-        self.provider = provider
-        return true
-    }
-
-    func refresh(
-        pairs: [TranslationLanguagePair],
-        selectedPair: TranslationLanguagePair,
-        provider: TranscriptionProvider? = nil,
-        isSignedIn: Bool? = nil
-    ) {
-        self.pairs = pairs.isEmpty ? [.defaultPair] : pairs
-        selectedPairID = self.pairs.contains(selectedPair) ? selectedPair.id : self.pairs[0].id
-        if let provider {
-            self.provider = provider
-        }
-        if let isSignedIn {
-            self.isSignedIn = isSignedIn
-        }
-    }
-
-    func presentMeetingSuggestion(_ suggestion: MeetingSuggestion) {
-        meetingSuggestion = suggestion
-        meetingSuggestionsEnabled = SettingsStorage.shared.meetingSuggestionsEnabled
-    }
-
-    @discardableResult
-    func selectMeetingSuggestionProvider(_ provider: TranscriptionProvider) -> Bool {
-        guard var suggestion = meetingSuggestion,
-              provider != .cloud || suggestion.isCloudAvailable
-        else { return false }
-        suggestion.selectedProvider = provider
-        meetingSuggestion = suggestion
-        return true
-    }
-
-    @discardableResult
-    func consumeMeetingSuggestionStart(id: UUID) -> MeetingSuggestion? {
-        guard meetingSuggestion?.meeting.id == id else { return nil }
-        defer { meetingSuggestion = nil }
-        return meetingSuggestion
-    }
-
-    func dismissMeetingSuggestion(id: UUID) {
-        guard meetingSuggestion?.meeting.id == id else { return }
-        meetingSuggestion = nil
-    }
-}
 
 @MainActor
 final class EdgeCommandPanelController: NSObject {
     static let shared = EdgeCommandPanelController()
     static let panelIdentifier = NSUserInterfaceItemIdentifier(
-        "ua.com.rmarinsky.diduny.edge-command-panel"
+        "commandPanel"
     )
 
-    private weak var appDelegate: AppDelegate?
+    weak var appDelegate: AppDelegate?
     private var panel: EdgeCommandPanel?
-    private var panelContentView: EdgeCommandPanelContentView?
-    private var model: EdgeCommandPanelModel?
-    private let meetingRecordingStarter: ((TranscriptionProvider) -> Void)?
+    var panelContentView: EdgeCommandPanelContentView?
+    var model: EdgeCommandPanelModel?
+    private let meetingRecordingStarter: ((MeetingPromptStart) -> Void)?
+    /// Settings > Modes > Meeting for the prompt (WP-43). WP-13 replaces the default reader.
+    private let meetingPromptDefaults: () -> MeetingPromptDefaults
     private var collapseTask: Task<Void, Never>?
-    private var dock: EdgeCommandPanelDock?
-    private var dragCursorOffset: NSPoint?
+    var dock: EdgeCommandPanelDock?
+    var dragCursorOffset: NSPoint?
 
     // Collapsed-tab auto-hide state (the tab annoys people when it sits on
     // the screen edge permanently).
@@ -419,10 +29,20 @@ final class EdgeCommandPanelController: NSObject {
     /// After the user click-restores a minimized live panel, keep it open for
     /// the rest of the session even if "show modal on start" is off.
     private var liveFeedbackRestoredByUser = false
+    private var surfaceCloseObserver: NSObjectProtocol?
 
-    init(meetingRecordingStarter: ((TranscriptionProvider) -> Void)? = nil) {
+    init(
+        meetingPromptDefaults: @escaping () -> MeetingPromptDefaults = EdgeCommandPanelController.todaysMeetingPromptDefaults,
+        meetingRecordingStarter: ((MeetingPromptStart) -> Void)? = nil
+    ) {
+        self.meetingPromptDefaults = meetingPromptDefaults
         self.meetingRecordingStarter = meetingRecordingStarter
         super.init()
+        surfaceCloseObserver = NotificationCenter.default.addObserver(
+            forName: FloatingSurfacePresenter.didCloseNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.floatingSurfaceDidClose() }
+        }
     }
 
     func configure(appDelegate: AppDelegate) {
@@ -487,30 +107,29 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     private func refreshModel() {
-        let pairs = SettingsStorage.shared.translationLanguagePairs
-        let selected = SettingsStorage.shared.resolveTranslationLanguagePair()
+        let settings = SettingsStorage.shared
+        let pair = settings.translationPair ?? settings.resolveTranslationLanguagePair()
         let isSignedIn = AuthService.hasStoredSession
-        let provider: TranscriptionProvider = isSignedIn
-            && SettingsStorage.shared.effectiveTranscriptionProvider == .cloud
-            && SettingsStorage.shared.effectiveTranslationProvider == .cloud ? .cloud : .local
         if let model {
             model.refresh(
-                pairs: pairs,
-                selectedPair: selected,
-                provider: provider,
+                defaults: Self.currentDefaults(),
+                pair: pair,
+                yourLanguages: settings.yourLanguages,
                 isSignedIn: isSignedIn
             )
+            model.dropPickIfUnusable(Self.engineReadiness)
         } else {
             model = EdgeCommandPanelModel(
-                pairs: pairs,
-                selectedPair: selected,
-                provider: provider,
+                defaults: Self.currentDefaults(),
+                target: settings.defaultTranslationTargetLanguage,
+                pair: pair,
+                yourLanguages: settings.yourLanguages,
                 isSignedIn: isSignedIn
             )
         }
     }
 
-    private func showCollapsed() {
+    func showCollapsed() {
         // Minimized live owns the edge tab until click-restore or recording end.
         // Idle collapse must not wipe it into the ribbon command tab.
         if model?.isLiveFeedbackMinimized == true {
@@ -552,6 +171,8 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     func showLiveFeedback(mode: RecordingMode) {
+        // A tile start already consumed its pick; any other start (hotkey) clears a pending one (02 Q14).
+        model?.clearPick()
         // Phase updates keep calling this while recording. If the user hid the
         // live panel, leave it collapsed until they restore it intentionally.
         if model?.isLiveFeedbackMinimized == true {
@@ -632,9 +253,8 @@ final class EdgeCommandPanelController: NSObject {
         )
         let suggestion = MeetingSuggestion.resolve(
             meeting: meeting,
-            preferredProvider: SettingsStorage.shared.meetingRealtimeTranscriptionEnabled ? .cloud : .local,
-            cloudAvailable: cloudAvailable,
-            hasLocalModel: WhisperModelManager.shared.selectedModel() != nil
+            defaults: meetingPromptDefaults(),
+            cloudAvailable: cloudAvailable
         )
         model?.presentMeetingSuggestion(suggestion)
         model?.isShowingLiveFeedback = false
@@ -649,8 +269,17 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     @discardableResult
-    func selectMeetingSuggestionProvider(_ provider: TranscriptionProvider) -> Bool {
-        model?.selectMeetingSuggestionProvider(provider) ?? false
+    func selectMeetingSuggestionSegment(_ segment: MeetingSegment) -> Bool {
+        model?.selectMeetingSuggestionSegment(segment) ?? false
+    }
+
+    /// Settings > Modes (WP-13): "Starts in" and each segment's engine.
+    static func todaysMeetingPromptDefaults() -> MeetingPromptDefaults {
+        let modeDefaults = SettingsStorage.shared.modeDefaults
+        return MeetingPromptDefaults(
+            startsIn: modeDefaults.meetingStartsIn,
+            engines: Dictionary(uniqueKeysWithValues: MeetingSegment.allCases.map { ($0, modeDefaults.engine(for: $0)) })
+        )
     }
 
     func dismissMeetingSuggestion(id: UUID) {
@@ -663,17 +292,17 @@ final class EdgeCommandPanelController: NSObject {
         guard let suggestion = model?.consumeMeetingSuggestionStart(id: id) else { return }
         restoreConfiguredSurface()
         if let meetingRecordingStarter {
-            meetingRecordingStarter(suggestion.selectedProvider)
+            meetingRecordingStarter(suggestion.start)
             return
         }
         guard let appDelegate,
               !appDelegate.hasAnyRecordingInProgress,
               appDelegate.canStartRecording(kind: .meeting)
         else { return }
-        appDelegate.toggleMeetingRecording(provider: suggestion.selectedProvider)
+        appDelegate.startMeetingRecording(from: suggestion.start)
     }
 
-    private func setMeetingSuggestionsEnabled(_ enabled: Bool) {
+    func setMeetingSuggestionsEnabled(_ enabled: Bool) {
         model?.meetingSuggestionsEnabled = enabled
         SettingsStorage.shared.meetingSuggestionsEnabled = enabled
     }
@@ -695,6 +324,10 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     private func scheduleTabAutoHide() {
+        #if TEST_BUILD
+            // `--ui-testing-command-panel-pinned`: the tab stays on screen (test-plan 2.2).
+            guard !UITestHarness.isCommandPanelPinned else { return }
+        #endif
         guard EdgeCommandPanelAutoHidePolicy.shouldSchedule(
             isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true
         ) else { return }
@@ -712,7 +345,8 @@ final class EdgeCommandPanelController: NSObject {
                 isDragging: dragCursorOffset != nil,
                 isExpanded: model?.isExpanded == true,
                 isShowingLiveFeedback: model?.isShowingLiveFeedback == true,
-                isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true
+                isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true,
+                openSurfaceFrame: FloatingSurfacePresenter.shared.openSurfaceFrame
             ) else {
                 // Busy or hovered — try again after another idle interval.
                 scheduleTabAutoHide()
@@ -806,6 +440,13 @@ final class EdgeCommandPanelController: NSObject {
 
     private var dismissTask: Task<Void, Never>?
 
+    #if TEST_BUILD
+        /// `--ui-testing-open=commandPanel.home`: the home, as a hover on the tab opens it.
+        func expandForUITesting() {
+            showExpanded()
+        }
+    #endif
+
     /// True while a live recording is hidden to the red-dot edge tab.
     var isLiveFeedbackMinimized: Bool {
         model?.isLiveFeedbackMinimized == true
@@ -831,11 +472,24 @@ final class EdgeCommandPanelController: NSObject {
                 guard EdgeCommandPanelHoverPolicy.shouldCollapse(
                     pointer: NSEvent.mouseLocation,
                     panelFrame: panel.frame,
-                    isDragging: dragCursorOffset != nil
+                    isDragging: dragCursorOffset != nil,
+                    openSurfaceFrame: FloatingSurfacePresenter.shared.openSurfaceFrame
                 ) else { return }
                 showCollapsed()
             }
         }
+    }
+
+    /// The panel stayed expanded while a menu or popup was open (`openSurfaceFrame`); collapse it now if the
+    /// pointer is already outside, since no hover-exit event will come.
+    private func floatingSurfaceDidClose() {
+        guard let panel, EdgeCommandPanelHoverPolicy.shouldCollapseAfterSurfaceClose(
+            pointer: NSEvent.mouseLocation,
+            panelFrame: panel.frame,
+            isExpanded: model?.isExpanded == true,
+            isDragging: dragCursorOffset != nil
+        ) else { return }
+        setHovering(false)
     }
 
     private func dragPanel() {
@@ -865,53 +519,6 @@ final class EdgeCommandPanelController: NSObject {
         }
     }
 
-    private func perform(_ action: EdgeCommandAction) {
-        guard let appDelegate else { return }
-        let pair = model?.selectedPair
-
-        switch action {
-        case .transcribe:
-            if appDelegate.appState.recordingState == .idle {
-                guard appDelegate.canStartRecording(kind: .voice) else { showCollapsed(); return }
-            }
-            appDelegate.toggleRecording()
-        case .translate:
-            if appDelegate.appState.translationRecordingState == .idle {
-                guard appDelegate.canStartRecording(kind: .translation), let pair else { showCollapsed(); return }
-                Task { await appDelegate.startTranslationRecording(languagePair: pair) }
-            } else {
-                appDelegate.toggleTranslationRecording()
-            }
-        case .meeting:
-            if appDelegate.appState.meetingRecordingState == .idle {
-                guard appDelegate.canStartRecording(kind: .meeting) else { showCollapsed(); return }
-            }
-            appDelegate.toggleMeetingRecording()
-        case .translateMeeting:
-            if appDelegate.appState.meetingTranslationRecordingState == .idle {
-                guard appDelegate.canStartRecording(kind: .meetingTranslation),
-                      let pair else { showCollapsed(); return }
-                Task { await appDelegate.startMeetingTranslationRecording(languagePair: pair) }
-            } else {
-                appDelegate.toggleMeetingTranslationRecording()
-            }
-        case .batch:
-            appDelegate.batchFilesAndURLs()
-            showCollapsed()
-        }
-    }
-
-    private func selectProvider(_ provider: TranscriptionProvider) {
-        guard let model, model.selectProvider(provider) else {
-            openAccount()
-            return
-        }
-        SettingsStorage.shared.selectProcessingProvider(provider)
-        if let panel {
-            position(panel, presentation: commandPresentation)
-        }
-    }
-
     private func openAccount() {
         appDelegate?.openMainWindow(section: .account)
     }
@@ -924,6 +531,8 @@ final class EdgeCommandPanelController: NSObject {
             defer: false
         )
         panel.identifier = Self.panelIdentifier
+        // The window identifier is not the accessibility one (test-plan 2.1 window `commandPanel`).
+        panel.setAccessibilityIdentifier(Self.panelIdentifier.rawValue)
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
@@ -938,7 +547,13 @@ final class EdgeCommandPanelController: NSObject {
         let contentView = EdgeCommandPanelContentView(
             tabView: makeTabView(),
             expandedView: makeExpandedView(),
-            onHoverChange: { [weak self] hovering in self?.setHovering(hovering) }
+            onHoverChange: { [weak self] hovering in
+                #if TEST_BUILD
+                    // Pinned: no 450 ms collapse on mouse exit. Closing a menu outside still collapses.
+                    if !hovering, UITestHarness.isCommandPanelPinned { return }
+                #endif
+                self?.setHovering(hovering)
+            }
         )
         panelContentView = contentView
         panel.contentView = contentView
@@ -966,7 +581,12 @@ final class EdgeCommandPanelController: NSObject {
             model: model!,
             liveStore: DictationOverlayController.shared.store,
             onAction: { [weak self] action in self?.perform(action) },
-            onProvider: { [weak self] provider in self?.selectProvider(provider) },
+            capabilities: Self.engineCapabilities,
+            readiness: Self.engineReadiness,
+            onEngineRow: { [weak self] row in self?.pickEngineRow(row) },
+            onTarget: { [weak self] code in self?.model?.pickTarget(code) },
+            onRecordings: { [weak self] in self?.appDelegate?.openMainWindow(section: .recordings) },
+            onSettings: { [weak self] in self?.appDelegate?.openMainWindow(section: CommandHome.settingsSection) },
             onSignIn: { [weak self] in self?.openAccount() },
             onCopy: { DictationOverlayController.shared.copyCurrentTranscript() },
             onStop: { DictationOverlayController.shared.requestStop() },
@@ -984,7 +604,16 @@ final class EdgeCommandPanelController: NSObject {
             },
             onCollapse: { [weak self] in self?.showCollapsed() },
             onDrag: { [weak self] in self?.dragPanel() },
-            onDragEnd: { [weak self] in self?.finishDraggingPanel() }
+            onDragEnd: { [weak self] in self?.finishDraggingPanel() },
+            onCloseOutcome: { DictationOverlayController.shared.dismiss() },
+            onNewRecording: { [weak self] in
+                DictationOverlayController.shared.dismiss()
+                self?.showExpanded()
+            },
+            onOpenRecording: { [weak self] id in
+                MainWindowController.shared.requestedRecordingID = id
+                self?.appDelegate?.openMainWindow(section: .recordings)
+            }
         )
     }
 
@@ -994,92 +623,9 @@ final class EdgeCommandPanelController: NSObject {
         panelContentView?.updateTabView(makeTabView())
     }
 
-    private func position(
-        _ panel: NSPanel,
-        presentation: EdgeCommandPanelPresentation,
-        on explicitVisibleFrame: NSRect? = nil,
-        morphFromTab: Bool = false
-    ) {
-        // A live drag owns the frame; phase changes and toasts must not snap
-        // the panel back to its dock mid-drag. onDragEnd re-docks and calls
-        // position() again after clearing the drag offset.
-        guard dragCursorOffset == nil else { return }
-        let screen = dock == nil ? activeScreen() : panel.screen ?? activeScreen()
-        let visibleFrame = explicitVisibleFrame
-            ?? screen?.visibleFrame
-            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let resolvedDock = dock
-            ?? EdgeCommandPanelDock(
-                rawEdge: SettingsStorage.shared.edgePanelDockEdge,
-                offset: SettingsStorage.shared.edgePanelDockOffset
-            )
-            ?? EdgeCommandPanelDock(edge: .right, offset: visibleFrame.midY)
-        dock = resolvedDock
-        model?.dockEdge = resolvedDock.edge
-        let isExpanded = presentation != .collapsed
-        model?.isExpanded = isExpanded
-        panelContentView?.setExpanded(isExpanded, animated: morphFromTab || (panel.isVisible && panel.alphaValue > 0))
-        // Backstop clip: the SwiftUI material's shape mask can be lost by the
-        // window server; the layer clip keeps expanded corners rounded no
-        // matter what. The collapsed tab keeps its own edge-flush shape.
-        panelContentView?.applyCornerMask(
-            isExpanded ? EdgeCommandPanelPlacement.expandedCornerRadius : 0
-        )
-
-        let frame = EdgeCommandPanelPlacement.frame(
-            in: visibleFrame,
-            dock: resolvedDock,
-            presentation: presentation
-        )
-        if morphFromTab {
-            let tabFrame = EdgeCommandPanelPlacement.frame(
-                in: visibleFrame,
-                dock: resolvedDock,
-                presentation: .collapsed
-            )
-            morphPanel(panel, from: tabFrame, to: frame)
-        } else if panel.isVisible {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.24
-                context.timingFunction = isExpanded
-                    ? CAMediaTimingFunction(controlPoints: 0.25, 0.46, 0.45, 0.94)
-                    : CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
-                panel.animator().setFrame(frame, display: true)
-            }
-        } else {
-            panel.setFrame(frame, display: true)
-        }
-    }
-
-    /// Fresh appearance: the window grows out of the edge tab's frame while a
-    /// static skeleton fills it; live content cascades in once the morph lands.
-    private func morphPanel(_ panel: NSPanel, from tabFrame: NSRect, to frame: NSRect) {
-        let store = DictationOverlayController.shared.store
-        panel.ignoresMouseEvents = false
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
-            store.contentRevealed = true
-            panel.setFrame(frame, display: true)
-            NSAnimationContext.runAnimationGroup { $0.duration = 0.15; panel.animator().alphaValue = 1 }
-            return
-        }
-        store.contentRevealed = false
-        panel.setFrame(tabFrame, display: true)
-        panel.alphaValue = 1
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.34
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
-            panel.animator().setFrame(frame, display: true)
-        }, completionHandler: {
-            store.contentRevealed = true
-        })
-    }
-
-    private func activeScreen() -> NSScreen? {
-        NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
-    }
-
     private var commandPresentation: EdgeCommandPanelPresentation {
-        .commands(isCloud: model?.provider == .cloud)
+        // One layout now; WP-40 replaces the size.
+        .commands(isCloud: true)
     }
 
     var currentPresentation: EdgeCommandPanelPresentation {
@@ -1095,661 +641,5 @@ final class EdgeCommandPanelController: NSObject {
             return .live(DictationOverlayController.shared.store.mode)
         }
         return model.isExpanded ? commandPresentation : .collapsed
-    }
-}
-
-private final class EdgeCommandPanel: NSPanel {
-    override var canBecomeKey: Bool {
-        true
-    }
-
-    override var canBecomeMain: Bool {
-        false
-    }
-}
-
-/// The panel is a non-activating panel of a usually-inactive app (the user is
-/// dictating into another app). Without accepting first mouse, the initial
-/// click is consumed by window-key handling and never reaches the SwiftUI
-/// drag gesture or buttons — dragging during recording required a second
-/// attempt and Stop/Copy needed a double click.
-private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
-    override func acceptsFirstMouse(for _: NSEvent?) -> Bool {
-        true
-    }
-
-    required init(rootView: Content) {
-        super.init(rootView: rootView)
-    }
-
-    @available(*, unavailable)
-    @MainActor @preconcurrency dynamic required init?(coder _: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-}
-
-private final class EdgeCommandPanelContentView: NSView {
-    private let tabHostingView: NSHostingView<EdgeCommandTabView>
-    private let expandedHostingView: NSHostingView<EdgeCommandExpandedView>
-    private let onHoverChange: (Bool) -> Void
-    private var hoverTrackingArea: NSTrackingArea?
-
-    init(
-        tabView: EdgeCommandTabView,
-        expandedView: EdgeCommandExpandedView,
-        onHoverChange: @escaping (Bool) -> Void
-    ) {
-        tabHostingView = FirstMouseHostingView(rootView: tabView)
-        expandedHostingView = FirstMouseHostingView(rootView: expandedView)
-        self.onHoverChange = onHoverChange
-        super.init(frame: .zero)
-
-        tabHostingView.sizingOptions = []
-        expandedHostingView.sizingOptions = []
-        for hostingView: NSView in [tabHostingView, expandedHostingView] {
-            hostingView.autoresizingMask = [.width, .height]
-            addSubview(hostingView)
-        }
-        setExpanded(false)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func acceptsFirstMouse(for _: NSEvent?) -> Bool {
-        true
-    }
-
-    override func layout() {
-        super.layout()
-        tabHostingView.frame = bounds
-        expandedHostingView.frame = bounds
-    }
-
-    func applyCornerMask(_ radius: CGFloat) {
-        wantsLayer = true
-        layer?.cornerRadius = radius
-        layer?.cornerCurve = .continuous
-        layer?.masksToBounds = radius > 0
-    }
-
-    /// Identity of the latest transition; a stale cross-fade completion must not hide the current view.
-    private var transitionID = 0
-
-    func setExpanded(_ expanded: Bool, animated: Bool = false) {
-        transitionID += 1
-        let currentTransition = transitionID
-        let incoming: NSView = expanded ? expandedHostingView : tabHostingView
-        let outgoing: NSView = expanded ? tabHostingView : expandedHostingView
-        guard animated, incoming.isHidden,
-              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        else {
-            incoming.alphaValue = 1
-            outgoing.alphaValue = 1
-            incoming.isHidden = false
-            outgoing.isHidden = true
-            return
-        }
-        // Tab ↔ panel morph: the window frame grows from the tab (see position()),
-        // while the two surfaces cross-fade so the tab appears to become the panel.
-        incoming.alphaValue = 0
-        incoming.isHidden = false
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.2
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
-            incoming.animator().alphaValue = 1
-            outgoing.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            guard let self, transitionID == currentTransition else { return }
-            outgoing.isHidden = true
-            outgoing.alphaValue = 1
-        })
-    }
-
-    func updateTabView(_ tabView: EdgeCommandTabView) {
-        tabHostingView.rootView = tabView
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let hoverTrackingArea {
-            removeTrackingArea(hoverTrackingArea)
-        }
-        let trackingArea = NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self
-        )
-        addTrackingArea(trackingArea)
-        hoverTrackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        onHoverChange(true)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        onHoverChange(false)
-    }
-}
-
-private struct EdgeCommandTabView: View {
-    let model: EdgeCommandPanelModel
-    let onExpand: () -> Void
-    let onDrag: () -> Void
-    let onDragEnd: () -> Void
-
-    var body: some View {
-        let edge = model.dockEdge
-        Button(action: onExpand) {
-            ZStack {
-                tabShape
-                    .fill(.regularMaterial)
-                if model.isLiveFeedbackMinimized {
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 8, height: 8)
-                        .shadow(color: .red.opacity(0.45), radius: 4)
-                        .accessibilityHidden(true)
-                } else {
-                    Capsule()
-                        .fill(LinearGradient(
-                            colors: [Color("BrandAccentDeep"), Color.pink],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .frame(
-                            width: edge == .left || edge == .right ? 3 : 24,
-                            height: edge == .left || edge == .right ? 24 : 3
-                        )
-                        .shadow(color: Color("BrandAccentDeep").opacity(0.45), radius: 5)
-                }
-            }
-            .overlay(tabShape.stroke(Color("BrandTintBorder"), lineWidth: 0.5))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .gesture(dragGesture)
-        .accessibilityLabel(
-            model.isLiveFeedbackMinimized
-                ? "Show live recording panel"
-                : "Open Diduny quick actions"
-        )
-        .help(
-            model.isLiveFeedbackMinimized
-                ? "Click to restore live transcript"
-                : "Open Diduny quick actions"
-        )
-    }
-
-    private var tabShape: UnevenRoundedRectangle {
-        switch model.dockEdge {
-        case .left:
-            UnevenRoundedRectangle(
-                topLeadingRadius: 0,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: 10,
-                topTrailingRadius: 10
-            )
-        case .right:
-            UnevenRoundedRectangle(
-                topLeadingRadius: 10,
-                bottomLeadingRadius: 10,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: 0
-            )
-        case .top:
-            UnevenRoundedRectangle(
-                topLeadingRadius: 0,
-                bottomLeadingRadius: 10,
-                bottomTrailingRadius: 10,
-                topTrailingRadius: 0
-            )
-        case .bottom:
-            UnevenRoundedRectangle(
-                topLeadingRadius: 10,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: 10
-            )
-        }
-    }
-
-    private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 2)
-            .onChanged { _ in onDrag() }
-            .onEnded { _ in onDragEnd() }
-    }
-}
-
-struct EdgeCommandExpandedView: View {
-    let model: EdgeCommandPanelModel
-    let liveStore: LiveDictationOverlayStore
-    let onAction: (EdgeCommandAction) -> Void
-    let onProvider: (TranscriptionProvider) -> Void
-    let onSignIn: () -> Void
-    let onCopy: () -> Void
-    let onStop: () -> Void
-    let onDismissLive: () -> Void
-    let onMinimizeLive: () -> Void
-    let onSelectOutput: (DictationOutput) -> Void
-    let onStartMeetingSuggestion: (UUID) -> Void
-    let onDismissMeetingSuggestion: (UUID) -> Void
-    let onMeetingSuggestionsEnabled: (Bool) -> Void
-    let onCollapse: () -> Void
-    let onDrag: () -> Void
-    let onDragEnd: () -> Void
-
-    var body: some View {
-        ZStack {
-            if let suggestion = model.meetingSuggestion {
-                MeetingSuggestionView(
-                    model: model,
-                    suggestion: suggestion,
-                    onStart: { onStartMeetingSuggestion(suggestion.meeting.id) },
-                    onDismiss: { onDismissMeetingSuggestion(suggestion.meeting.id) },
-                    onTrackingChanged: onMeetingSuggestionsEnabled,
-                    onDrag: onDrag,
-                    onDragEnd: onDragEnd
-                )
-                .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
-            } else if model.isShowingLiveFeedback {
-                LiveDictationOverlayView(
-                    store: liveStore,
-                    onCopy: onCopy,
-                    onStop: onStop,
-                    onDismiss: onDismissLive,
-                    onMinimize: onMinimizeLive,
-                    onSelectOutput: onSelectOutput,
-                    onDrag: onDrag,
-                    onDragEnd: onDragEnd
-                )
-                .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
-            } else {
-                commandView
-                    .transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity))
-            }
-        }
-        .animation(.spring(response: 0.38, dampingFraction: 0.86), value: model.isShowingLiveFeedback)
-        .animation(.spring(response: 0.38, dampingFraction: 0.86), value: model.meetingSuggestion)
-    }
-
-    private var commandView: some View {
-        @Bindable var model = model
-        return VStack(alignment: .leading, spacing: 10) {
-            header
-
-            providerControl
-
-            if model.showsTranslationControls {
-                translationTargetControl(model: model)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 7) {
-                ForEach(model.availableActions) { action in
-                    EdgeCommandActionButton(
-                        action: action,
-                        meta: actionMeta(action),
-                        onAction: { onAction(action) }
-                    )
-                }
-            }
-
-            Button { onAction(.batch) } label: {
-                Label("Batch files & URLs", systemImage: EdgeCommandAction.batch.icon)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 26)
-            }
-            .buttonStyle(.plain)
-            .help("Process multiple files and URLs")
-        }
-        .padding(14)
-        .background(.regularMaterial, in: panelShape)
-        .overlay(panelShape.stroke(Color.primary.opacity(0.10), lineWidth: 0.5))
-        .animation(.spring(response: 0.32, dampingFraction: 0.9), value: model.provider)
-    }
-
-    private var providerControl: some View {
-        HStack(spacing: 7) {
-            Text("Provider")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 2) {
-                providerButton(.local, title: "Local", icon: "desktopcomputer")
-                providerButton(.cloud, title: "Cloud", icon: model.isSignedIn ? "cloud" : "lock.fill")
-            }
-            .padding(3)
-            .background(Color.black.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            if !model.isSignedIn {
-                Button("Sign in", action: onSignIn)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color("BrandAccentDeep"))
-                    .padding(.horizontal, 7)
-                    .frame(height: 26)
-                    .background(Color("BrandTintSoft"), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            }
-        }
-        .frame(height: 30)
-    }
-
-    private func providerButton(
-        _ provider: TranscriptionProvider,
-        title: String,
-        icon: String
-    ) -> some View {
-        let selected = model.provider == provider
-        return Button { onProvider(provider) } label: {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 9, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 10.5, weight: .semibold))
-            }
-            .foregroundStyle(selected ? Color.primary : Color.secondary)
-            .frame(maxWidth: .infinity, minHeight: 24)
-            .padding(.horizontal, 6)
-            .background(
-                selected ? Color.primary.opacity(0.08) : .clear,
-                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    private func translationTargetControl(model: EdgeCommandPanelModel) -> some View {
-        @Bindable var model = model
-        return HStack(spacing: 8) {
-            Text("Translate to")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 4)
-            Picker("Translate to", selection: $model.selectedPairID) {
-                ForEach(model.pairs) { pair in
-                    Text(languageName(pair.languageB)).tag(pair.id)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .fixedSize()
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 9) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(LinearGradient(
-                    colors: [Color.pink, Color("BrandAccentDeep")],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-                .frame(width: 28, height: 28)
-                .overlay {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .shadow(color: Color("BrandAccentDeep").opacity(0.28), radius: 6, y: 3)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Diduny")
-                    .font(.system(size: 13, weight: .bold))
-                Text("What do you want to capture?")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 4)
-            Button(action: onCollapse) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 26, height: 26)
-                    .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .help("Hide quick actions")
-        }
-        .contentShape(Rectangle())
-        .gesture(dragGesture)
-        .help("Drag to attach to another screen edge")
-    }
-
-    private var panelShape: RoundedRectangle {
-        RoundedRectangle(
-            cornerRadius: EdgeCommandPanelPlacement.expandedCornerRadius,
-            style: .continuous
-        )
-    }
-
-    private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 2)
-            .onChanged { _ in onDrag() }
-            .onEnded { _ in onDragEnd() }
-    }
-
-    private func actionMeta(_ action: EdgeCommandAction) -> String {
-        switch action {
-        case .transcribe: String(localized: "Voice → text")
-        case .translate: "Voice → \(targetCode)"
-        case .meeting: String(localized: "System + mic")
-        case .translateMeeting: "Live → \(targetCode)"
-        case .batch: ""
-        }
-    }
-
-    private var targetCode: String {
-        model.selectedPair?.languageB.uppercased() ?? "EN"
-    }
-
-    private func languageName(_ code: String) -> String {
-        SupportedLanguage.language(for: code)?.name ?? code.uppercased()
-    }
-}
-
-private struct MeetingSuggestionView: View {
-    let model: EdgeCommandPanelModel
-    let suggestion: MeetingSuggestion
-    let onStart: () -> Void
-    let onDismiss: () -> Void
-    let onTrackingChanged: (Bool) -> Void
-    let onDrag: () -> Void
-    let onDragEnd: () -> Void
-
-    var body: some View {
-        @Bindable var model = model
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "record.circle")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Color("BrandAccentDeep"))
-                    .frame(
-                        width: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight,
-                        height: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight
-                    )
-                    .background(Color("BrandTintSoft"), in: RoundedRectangle(cornerRadius: 11))
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Looks like a meeting started")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text(message)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(
-                            width: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight,
-                            height: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight
-                        )
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close meeting recording suggestion")
-            }
-            .contentShape(Rectangle())
-            .gesture(dragGesture)
-
-            Picker(
-                "Meeting transcription provider",
-                selection: Binding(
-                    get: { model.meetingSuggestion?.selectedProvider ?? suggestion.selectedProvider },
-                    set: { model.selectMeetingSuggestionProvider($0) }
-                )
-            ) {
-                Text("Cloud").tag(TranscriptionProvider.cloud)
-                Text("Local").tag(TranscriptionProvider.local)
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .disabled(!suggestion.isCloudAvailable)
-            .frame(minHeight: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight)
-            .accessibilityLabel("Meeting transcription provider")
-            .accessibilityHint(
-                suggestion.isCloudAvailable
-                    ? "Choose Cloud or Local transcription"
-                    : "Cloud is unavailable. Local transcription will be used."
-            )
-
-            Label(suggestion.processingMode.label, systemImage: suggestion.processingMode.icon)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .frame(minHeight: 32)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-
-            Toggle(
-                "Continue tracking meetings and suggesting recordings",
-                isOn: $model.meetingSuggestionsEnabled
-            )
-            .toggleStyle(.checkbox)
-            .font(.system(size: 11.5))
-            .frame(
-                minHeight: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight,
-                alignment: .leading
-            )
-            .onChange(of: model.meetingSuggestionsEnabled) { _, enabled in
-                onTrackingChanged(enabled)
-            }
-            .accessibilityLabel("Continue tracking meetings and suggesting recordings")
-
-            HStack(spacing: 8) {
-                Button(action: onDismiss) {
-                    Text("Not now")
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight
-                        )
-                }
-                .buttonStyle(.bordered)
-                .keyboardShortcut(.cancelAction)
-                .accessibilityLabel("Not now")
-
-                Button(action: onStart) {
-                    Text("Start recording")
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight
-                        )
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-                .accessibilityLabel("Start recording and transcription")
-            }
-        }
-        .padding(16)
-        .background(.regularMaterial, in: panelShape)
-        .overlay(panelShape.stroke(Color.primary.opacity(0.10), lineWidth: 0.5))
-        .onExitCommand(perform: onDismiss)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Meeting recording suggestion")
-    }
-
-    private var message: String {
-        String(
-            format: String(
-                localized: "Start recording and transcription in %@ so you can return to the materials after the meeting?"
-            ),
-            suggestion.meeting.client.displayName
-        )
-    }
-
-    private var panelShape: RoundedRectangle {
-        RoundedRectangle(
-            cornerRadius: EdgeCommandPanelPlacement.expandedCornerRadius,
-            style: .continuous
-        )
-    }
-
-    private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 2)
-            .onChanged { _ in onDrag() }
-            .onEnded { _ in onDragEnd() }
-    }
-}
-
-private struct EdgeCommandActionButton: View {
-    let action: EdgeCommandAction
-    let meta: String
-    let onAction: () -> Void
-
-    @State private var isHovered = false
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        let highlighted = isHovered || isFocused
-        Button(action: onAction) {
-            VStack(alignment: .leading, spacing: 7) {
-                Image(systemName: action.icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color("BrandAccentDeep"))
-                    .frame(width: 24, height: 24)
-                    .background(Color("BrandTintSoft"), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                Text(action.title)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .lineLimit(1)
-                Text(meta)
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(8)
-            .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .focused($isFocused)
-        .background(
-            highlighted ? Color("BrandAccentDeep").opacity(0.11) : Color.primary.opacity(0.045),
-            in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(highlighted ? Color("BrandTintBorder") : Color.primary.opacity(0.08), lineWidth: 0.5)
-        }
-        .offset(y: highlighted ? -1 : 0)
-        .shadow(color: highlighted ? Color("BrandAccentDeep").opacity(0.14) : .clear, radius: 8, y: 4)
-        .animation(.easeOut(duration: 0.15), value: highlighted)
-        .onHover { isHovered = $0 }
-        .help(action.usesLanguagePair ? String(localized: "Uses the selected translation language") : action.title)
     }
 }

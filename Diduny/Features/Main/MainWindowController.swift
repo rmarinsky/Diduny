@@ -11,7 +11,8 @@ final class MainWindowController {
     var requestedSection: MainSection?
     var requestedRecordingID: UUID?
     var requestedBatchComposer = false
-    var showsMeetingAudioSettings = false
+    /// Modes opens with this expander open (Calendar & meetings link, WP-51).
+    var requestedModesExpander: STTJob?
 
     private var window: NSWindow?
     private var windowDelegate: MainWindowDelegate?
@@ -66,10 +67,6 @@ final class MainWindowController {
 
     func toggleRecording() {
         appDelegate?.toggleRecording()
-    }
-
-    func toggleMeetingRecording() {
-        appDelegate?.toggleMeetingRecording()
     }
 
     static let defaultContentSize = NSSize(width: 1000, height: 680)

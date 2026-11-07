@@ -1,29 +1,50 @@
 import AppKit
 import Foundation
 
-/// Service to handle double-press cancellation shortcut during recording.
-/// Press Escape 2x or 3x within threshold to cancel active recording.
+/// Cancels an active recording when the stored cancel key (`escapeCancelShortcut`, unset = Esc) is
+/// pressed 1x, 2x or 3x within the threshold. It only observes keys: the front app still gets them,
+/// which is why the key must be Esc, a bare F key, or a key with ⌘ ⌥ ⌃ (05 2.5).
 @MainActor
 final class EscapeCancelService: ObservableObject {
     static let shared = EscapeCancelService()
 
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
-    private var lastPressTime: Date?
+    private var lastPressTime: TimeInterval?
     private var consecutivePressCount = 0
     private let pressThreshold: TimeInterval = 1.5
-    private var timeoutTask: Task<Void, Never>?
+    private var timeoutWork: (any ScheduledWork)?
     private var isActive = false
 
-    /// Called when recording should be cancelled (after required press count confirmed)
-    var onCancel: (() -> Void)?
+    private let settings: SettingsStorage
+    private let source: KeyEventSource
+    private let clock: MonotonicClock
+    private let scheduler: DelayScheduler
+    private let captureSession: ShortcutCaptureSession
+    private let playsSound: Bool
 
-    /// Called on intermediate Escape presses so UI can explain how many are left.
+    /// Called when recording should be cancelled (after required press count confirmed), with
+    /// "Keep the audio when cancelled" (`escapeCancelSaveAudio`) read at that moment.
+    var onCancel: ((_ keepAudio: Bool) -> Void)?
+
+    /// Called on intermediate presses so UI can explain how many are left.
     var onProgressEscape: ((Int, Int) -> Void)?
 
     private let tinkSound = NSSound(named: .init("Tink"))
 
-    private init() {}
+    init(
+        settings: SettingsStorage = .shared,
+        source: KeyEventSource = NSEventKeySource(.keyDown),
+        clock: MonotonicClock = SystemClock(),
+        scheduler: DelayScheduler = TaskDelayScheduler(),
+        captureSession: ShortcutCaptureSession = .shared,
+        playsSound: Bool = true
+    ) {
+        self.settings = settings
+        self.source = source
+        self.clock = clock
+        self.scheduler = scheduler
+        self.captureSession = captureSession
+        self.playsSound = playsSound
+    }
 
     /// Activate shortcut monitoring (call when recording starts)
     func activate() {
@@ -31,22 +52,9 @@ final class EscapeCancelService: ObservableObject {
         isActive = true
         resetPressState()
 
-        // Monitor keyDown events globally.
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53, !event.isARepeat else { return }
-            Task { @MainActor in
-                self?.handleKeyDown(event)
-            }
-        }
-
-        // Also monitor locally when app is active
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53, !event.isARepeat else { return event }
-            Task { @MainActor in
-                self?.handleKeyDown(event)
-            }
-            // Don't consume the event - let it propagate
-            return event
+        // NSEvent monitors call back on the main thread.
+        source.start { [weak self] event in
+            MainActor.assumeIsolated { self?.handle(event) }
         }
 
         Log.app.debug("Cancel shortcut handler activated")
@@ -55,16 +63,7 @@ final class EscapeCancelService: ObservableObject {
     /// Deactivate shortcut monitoring (call when recording stops)
     func deactivate() {
         isActive = false
-
-        if let monitor = globalMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalMonitor = nil
-        }
-        if let monitor = localMonitor {
-            NSEvent.removeMonitor(monitor)
-            localMonitor = nil
-        }
-
+        source.stop()
         resetPressState()
         onCancel = nil
         onProgressEscape = nil
@@ -72,39 +71,37 @@ final class EscapeCancelService: ObservableObject {
         Log.app.debug("Cancel shortcut handler deactivated")
     }
 
-    private func handleKeyDown(_ event: NSEvent) {
-        guard isActive else { return }
-        guard SettingsStorage.shared.escapeCancelEnabled else {
+    private func handle(_ event: KeyEvent) {
+        guard isActive, !captureSession.isActive else { return }
+        guard settings.escapeCancelEnabled else {
             resetPressState()
             return
         }
-        guard event.type == .keyDown, !event.isARepeat, event.keyCode == 53 else { return }
-        processEscapePress(at: Date())
+        guard settings.escapeCancelShortcut.matches(event) else { return }
+        processEscapePress(at: clock.now)
     }
 
-    func processEscapePress(at now: Date) {
-        let requiredPressCount = SettingsStorage.shared.escapeCancelPressCount
+    func processEscapePress(at now: TimeInterval) {
+        let requiredPressCount = settings.escapeCancelPressCount
 
-        if let lastPressTime, now.timeIntervalSince(lastPressTime) <= pressThreshold {
+        if let lastPressTime, now - lastPressTime <= pressThreshold {
             consecutivePressCount += 1
         } else {
             consecutivePressCount = 1
         }
-        self.lastPressTime = now
+        lastPressTime = now
 
         if consecutivePressCount >= requiredPressCount {
-            Log.app.info("\(requiredPressCount)x Escape detected - cancelling recording")
+            Log.app.info("\(requiredPressCount)x cancel key detected - cancelling recording")
             resetPressState()
-            onCancel?()
+            onCancel?(settings.escapeCancelSaveAudio)
         } else {
-            Log.app.debug("Escape press \(self.consecutivePressCount)/\(requiredPressCount) - waiting for confirmation")
-            tinkSound?.play()
-            onProgressEscape?(self.consecutivePressCount, requiredPressCount)
-            timeoutTask?.cancel()
-            timeoutTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(self?.pressThreshold ?? 1.5))
-                guard !Task.isCancelled else { return }
-                self?.resetPressState()
+            Log.app.debug("Cancel key press \(self.consecutivePressCount)/\(requiredPressCount) - waiting for confirmation")
+            if playsSound { tinkSound?.play() }
+            onProgressEscape?(consecutivePressCount, requiredPressCount)
+            timeoutWork?.cancel()
+            timeoutWork = scheduler.schedule(after: pressThreshold) { [weak self] in
+                MainActor.assumeIsolated { self?.resetPressState() }
             }
         }
     }
@@ -112,7 +109,7 @@ final class EscapeCancelService: ObservableObject {
     private func resetPressState() {
         lastPressTime = nil
         consecutivePressCount = 0
-        timeoutTask?.cancel()
-        timeoutTask = nil
+        timeoutWork?.cancel()
+        timeoutWork = nil
     }
 }

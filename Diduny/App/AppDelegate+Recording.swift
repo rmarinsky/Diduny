@@ -98,10 +98,7 @@ actor RealtimeVoiceAccumulator {
 extension AppDelegate {
     private var voiceTranscriptionProvider: TranscriptionProvider {
         OnboardingManager.shared.dictationProvider(
-            configuredProvider: routedProvider(
-                for: .dictation,
-                legacy: SettingsStorage.shared.effectiveTranscriptionProvider
-            ),
+            configuredProvider: routedProvider(for: .dictation),
             isAuthenticated: AuthService.shared.isLoggedIn
         )
     }
@@ -408,7 +405,7 @@ extension AppDelegate {
             // Set up realtime callback BEFORE starting recorder (AudioRecorderService
             // snapshots onRealtimeAudioData at start time). WebSocket connects in background.
             setupVoiceRealtimeTranscriptionIfNeeded()
-            startDictationSilenceMonitor(pushToTalk: pushToTalkService) { [weak self] in
+            startDictationSilenceMonitor(job: .dictation, pushToTalk: pushToTalkService) { [weak self] in
                 await self?.stopRecordingIfRecording()
             }
 
@@ -1198,12 +1195,14 @@ extension AppDelegate {
     /// Offers the output picker for cloud sessions only: switching a local
     /// session would send its text to the cloud translation endpoint.
     func configureRecordingFeedbackOutput(native: DictationOutput, provider: TranscriptionProvider) {
+        // 01 §4 item 3: Original, your languages, then all languages, whatever pairs are stored
+        // (a fresh install has none, which hid the menu).
         let options = provider == .cloud
-            ? DictationOutput.options(pairs: SettingsStorage.shared.translationLanguagePairs, native: native)
+            ? DictationOutputMenu.outputs(yourLanguages: SettingsStorage.shared.yourLanguages)
             : []
         let listensForVoiceCommands = !options.isEmpty
             && SettingsStorage.shared.voiceTranslationCommandsEnabled
-            && SettingsStorage.shared.effectiveTranslationProvider == .cloud
+            && routedTranslationProvider == .cloud
         DictationOverlayController.shared.configureOutput(
             native: native,
             options: options,
@@ -1324,10 +1323,10 @@ extension AppDelegate {
         }
 
         // On second shortcut press (confirmed cancel): cancel recording
-        escapeService.onCancel = { [weak self] in
+        escapeService.onCancel = { [weak self] keepAudio in
             Task { @MainActor in
                 guard let self else { return }
-                let shouldSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
+                let shouldSaveAudio = keepAudio
                 await self.cancelRecording()
                 let message = shouldSaveAudio ? "Recording cancelled and saved" : "Recording cancelled"
                 self.showRecordingFeedbackInfo(message: message, mode: .voice)

@@ -19,10 +19,6 @@ final class PermissionManager {
         var allGranted: Bool {
             microphone && accessibility && screenRecording
         }
-
-        var allCriticalGranted: Bool {
-            microphone && accessibility
-        }
     }
 
     private(set) var status = PermissionStatus()
@@ -69,11 +65,6 @@ final class PermissionManager {
         }
     }
 
-    /// Check if microphone permission needs to be requested (not yet determined)
-    func checkMicrophonePermissionStatus() -> AVAudioApplication.recordPermission {
-        AVAudioApplication.shared.recordPermission
-    }
-
     /// Request microphone permission - shows system dialog if not determined,
     /// or opens System Settings if denied
     func ensureMicrophonePermission(context: PermissionRequestContext = .general) async -> Bool {
@@ -112,12 +103,6 @@ final class PermissionManager {
     func requestAccessibilityPermission() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
-    }
-
-    func checkScreenRecordingPermission() async -> Bool {
-        let granted = await SystemAudioCaptureService.checkPermission()
-        status.screenRecording = granted
-        return granted
     }
 
     /// Truly passive screen-recording check. Does NOT trigger the system permission dialog

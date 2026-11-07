@@ -18,7 +18,7 @@ struct AudioTimeoutError: Error, LocalizedError {
 }
 
 @MainActor
-final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
+final class AudioRecorderService: ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var audioLevel: Float = 0
 
@@ -61,6 +61,14 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
             Log.audio.warning("startRecording: Already recording, returning")
             return
         }
+        #if TEST_BUILD
+            // Fake input (test-plan 2.2): no device, no permission, steady level 0.5.
+            if UITestHarness.usesFakeAudio {
+                isRecording = true
+                audioLevel = 0.5
+                return
+            }
+        #endif
 
         // Request microphone permission
         var permissionStatus = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -290,6 +298,13 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     }
 
     func stopRecording() async throws -> Data {
+        #if TEST_BUILD
+            if UITestHarness.usesFakeAudio, isRecording, audioEngine == nil {
+                isRecording = false
+                audioLevel = 0
+                return UITestHarness.silentWAV()
+            }
+        #endif
         let recordingInProgress = isRecording
         Log.audio.info("stopRecording: BEGIN, isRecording=\(recordingInProgress)")
         guard isRecording, let engine = audioEngine, let url = recordingURL else {
@@ -338,6 +353,13 @@ final class AudioRecorderService: ObservableObject, AudioRecorderProtocol {
     }
 
     func cancelRecording() {
+        #if TEST_BUILD
+            if UITestHarness.usesFakeAudio, audioEngine == nil {
+                isRecording = false
+                audioLevel = 0
+                return
+            }
+        #endif
         guard let engine = audioEngine else { return }
 
         engine.inputNode.removeTap(onBus: 0)

@@ -1097,4 +1097,30 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertEqual(cancelled.status, .unprocessed)
         XCTAssertTrue(storage.hasPlayableAudio(for: cancelled))
     }
+
+    /// WP-43: a Record only start from the prompt never streams live, even when Cloud is requested.
+    func test_recordOnlyStart_recordsOnThisMacWithoutLiveTranscript() async throws {
+        let delegate = AppDelegate()
+        delegate.appState.meetingRecordingState = .processing
+        await delegate.startMeetingRecording(
+            provider: .cloud,
+            recordOnly: true,
+            canStart: { true },
+            ensureScreenRecordingPermission: { true },
+            startRecorder: {}
+        )
+        XCTAssertEqual(delegate.activeMeetingTranscriptionProvider, .local)
+        XCTAssertNil(delegate.meetingRealtimeService)
+        // Record only keeps an empty, inactive store; nothing streams.
+        XCTAssertNil(delegate.localMeetingStreamingService)
+        XCTAssertEqual(delegate.appState.liveTranscriptStore?.isActive, false)
+
+        if let token = delegate.meetingActivityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            delegate.meetingActivityToken = nil
+        }
+        delegate.appState.meetingRecordingState = .idle
+        delegate.activeMeetingTranscriptionSessionID = nil
+        delegate.activeMeetingTranscriptionProvider = nil
+    }
 }

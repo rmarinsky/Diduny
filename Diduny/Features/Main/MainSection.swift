@@ -7,6 +7,9 @@ enum MainSection: String, CaseIterable, Hashable {
     case typingTest
 
     case general
+    case modes
+    case languages
+    /// Label "Audio"; the raw value stays so `section.audioDictation` is stable.
     case audioDictation
     case meetings
     case models
@@ -26,7 +29,9 @@ enum MainSection: String, CaseIterable, Hashable {
         case .typingTest: String(localized: "Typing test")
         case .meetings: String(localized: "Calendar & meetings")
         case .general: String(localized: "General")
-        case .audioDictation: String(localized: "Audio & dictation")
+        case .modes: String(localized: "Modes")
+        case .languages: String(localized: "Languages")
+        case .audioDictation: String(localized: "Audio")
         case .models: String(localized: "Local models")
         case .providers: String(localized: "Providers")
         case .shortcuts: String(localized: "Shortcuts")
@@ -43,6 +48,8 @@ enum MainSection: String, CaseIterable, Hashable {
         case .typingTest: "keyboard"
         case .meetings: "calendar"
         case .general: "gearshape"
+        case .modes: "slider.horizontal.3"
+        case .languages: "globe"
         case .audioDictation: "waveform.and.mic"
         case .models: "cpu"
         case .providers: "key.horizontal"
@@ -54,7 +61,7 @@ enum MainSection: String, CaseIterable, Hashable {
 
     var isSettingsItem: Bool {
         switch self {
-        case .meetings, .general, .audioDictation, .models, .providers, .shortcuts, .account, .about: true
+        case .meetings, .general, .modes, .languages, .audioDictation, .models, .providers, .shortcuts, .account, .about: true
         default: false
         }
     }

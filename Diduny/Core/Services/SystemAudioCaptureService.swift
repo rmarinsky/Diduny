@@ -536,24 +536,6 @@ final class SystemAudioCaptureService: NSObject {
         return capturedOutputURL
     }
 
-    private func cleanupFailedStart(removeOutputFile: Bool) async throws {
-        isStoppingCapture = true
-        cancelRecoveryTasks()
-        stopMicrophoneCapture()
-
-        if let stream {
-            try? await stream.stopCapture()
-        }
-
-        stream = nil
-        isCapturing = false
-        synchronizedTeardown(flushPendingAudio: false)
-
-        if removeOutputFile, let outputURL {
-            try? FileManager.default.removeItem(at: outputURL)
-        }
-    }
-
     private func synchronizedTeardown(flushPendingAudio: Bool) {
         mixerQueue.sync { [self] in
             fileWriteQueue.sync { [self] in

@@ -1,3 +1,4 @@
+import KeyboardShortcuts
 import SwiftUI
 
 struct SidebarView: View {
@@ -5,6 +6,7 @@ struct SidebarView: View {
     @Environment(AppState.self) var appState
 
     let topInset: CGFloat
+    @State private var dictationShortcut = KeyboardShortcuts.getShortcut(for: .toggleRecording)
 
     init(selectedSection: Binding<MainSection>, topInset: CGFloat = 34) {
         _selectedSection = selectedSection
@@ -81,8 +83,14 @@ struct SidebarView: View {
 
     // MARK: - Footer CTA
 
+    /// The footer's shortcut text (design-spec 4.21); nil when the shortcut is removed.
+    static func footerShortcutText(_ shortcut: KeyboardShortcuts.Shortcut?) -> String? {
+        shortcut.map { String(describing: $0) }
+    }
+
     private var footerCTA: some View {
-        Button {
+        let shortcutText = Self.footerShortcutText(dictationShortcut)
+        return Button {
             MainWindowController.shared.toggleRecording()
         } label: {
             HStack(spacing: 8) {
@@ -91,19 +99,26 @@ struct SidebarView: View {
                 Text("Start recording")
                     .font(DS.Font.headline)
                 Spacer()
-                Text("⌘⇧D")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .opacity(0.7)
+                if let shortcutText {
+                    Text(verbatim: shortcutText)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                }
             }
             .foregroundColor(.white)
-            .padding(.horizontal, DS.Space.md)
-            .padding(.vertical, 10)
-            .background(Color("BrandAccentDeep"), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(8)
+            .frame(height: 32)
+            .background(DS.Palette.accentFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(PressScaleButtonStyle())
         .help("Start recording")
         .accessibilityLabel(Text("Start recording"))
+        .accessibilityValue(Text(verbatim: shortcutText ?? ""))
         .accessibilityIdentifier("Start Recording")
+        // KeyboardShortcuts stores shortcuts in UserDefaults; re-read on any change.
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            let current = KeyboardShortcuts.getShortcut(for: .toggleRecording)
+            if current != dictationShortcut { dictationShortcut = current }
+        }
     }
 
     private func sidebarRow(for section: MainSection) -> some View {
@@ -144,7 +159,7 @@ private struct SidebarRow: View {
         .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
         .background(
             isSelected
-                ? Color("BrandAccentDeep")
+                ? DS.Palette.accentFill
                 : Color.clear,
             in: RoundedRectangle(cornerRadius: 6, style: .continuous)
         )

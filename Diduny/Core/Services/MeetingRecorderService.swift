@@ -3,7 +3,7 @@ import Foundation
 import os
 import ScreenCaptureKit
 
-final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
+final class MeetingRecorderService: NSObject {
     // MARK: - Properties
 
     private var systemAudioService: SystemAudioCaptureService?
@@ -20,10 +20,6 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
     var chunkDurationSeconds: TimeInterval = 300
 
     private(set) var isRecording = false
-
-    var systemAudioCaptureService: SystemAudioCaptureService? {
-        systemAudioService
-    }
 
     var currentRecordingPath: String? {
         outputURL?.path
@@ -431,11 +427,6 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
     static let tracksFilename = "tracks.wav"
 
     // MARK: - Get Recording Data
-
-    func getRecordingData() throws -> Data? {
-        guard let url = outputURL else { return nil }
-        return try Data(contentsOf: url)
-    }
 }
 
 // MARK: - Errors

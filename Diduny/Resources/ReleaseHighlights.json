@@ -1,19 +1,17 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Your stats no longer shrink when old history is cleaned up",
+    "headline": "A meeting panel no longer gets stuck on Finalizing",
     "highlights": [
-      "History retention now removes only the recordings themselves. Their minutes, words and time saved stay in Overview and the yearly chart.",
-      "Stats only, no text or audio: the kept numbers are stored on your Mac next to the library.",
-      "Recordings already removed before this update can't be brought back; from now on nothing is lost."
+      "If you minimized the panel while recording a meeting, it could stay on \"Finalizing\" after Stop. It now closes once the meeting is saved.",
+      "Your recording was never at risk: it was saved and transcribed as usual, only the panel didn't go away."
     ]
   },
   "uk": {
-    "headline": "Статистика більше не зменшується, коли чиститься стара історія",
+    "headline": "Панель зустрічі більше не зависає на «Finalizing»",
     "highlights": [
-      "Термін зберігання історії тепер видаляє лише самі записи. Їхні хвилини, слова й зекономлений час лишаються в «Огляді» та на річному графіку.",
-      "Лише цифри, без тексту й аудіо: збережені показники лежать на твоєму Mac поруч із бібліотекою.",
-      "Записи, видалені до цього оновлення, повернути не вийде; відтепер нічого не губиться."
+      "Якщо під час запису зустрічі ти згортав панель, після «Стоп» вона могла лишитися на «Finalizing». Тепер вона закривається, щойно зустріч збережено.",
+      "Запис при цьому не губився: він зберігався й транскрибувався як завжди, просто панель не зникала."
     ]
   }
 }

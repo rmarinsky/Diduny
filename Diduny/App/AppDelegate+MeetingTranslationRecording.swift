@@ -159,8 +159,10 @@ extension AppDelegate {
 
         // Meeting translation has its own engine setting; live two-way translation runs on Diduny Cloud,
         // whatever engine plain meetings use.
-        if onDeviceSelection(for: .meetingTranslation) != nil {
-            // Parakeet / Apple: record and transcribe on this Mac, then translate the final text once.
+        let translateRoute = modeRoute(for: .meetingTranslation)
+        if translateRoute.engine != .didunyCloud {
+            // Parakeet / Apple / Whisper / ElevenLabs (10A): record, transcribe after Stop, then Diduny
+            // translates the final text once, into the pair's Language B.
             if let message = onDeviceEngineStartError(for: .meetingTranslation) {
                 DictationOverlayController.shared.showInfo(message: message, duration: 4)
                 return
@@ -177,7 +179,8 @@ extension AppDelegate {
             }
             let pair = requestedPair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
             SettingsStorage.shared.markTranslationLanguagePairUsed(pair)
-            toggleMeetingRecording(provider: .local, translateTarget: pair.languageB)
+            toggleMeetingRecording(provider: .local, translateTarget: pair.languageB,
+                                   startRoute: RunTimeRouting.meetingTranslationAfterStop(translateRoute))
             return
         }
 
@@ -275,6 +278,8 @@ extension AppDelegate {
                 appState.meetingTranslationRecordingStartTime = Date()
                 appState.liveTranscriptStore = store
                 handleMeetingTranslationStateChange(.recording)
+                // Live two-way translation runs on Diduny Cloud (WP-32).
+                DictationOverlayController.shared.store.showRunningMeetingTranslation(engine: .didunyCloud)
             }
 
             if let recordingId = meetingRecorderService.currentRecordingId {
@@ -340,11 +345,15 @@ extension AppDelegate {
         rtService.onTokensReceived = { [weak self, weak store] tokens in
             guard let self else { return }
             let annotated = meetingTranslationTimestampBackfill.annotate(tokens)
+            // The saved transcript keeps translations only; the live panel also gets the originals
+            // (with speakers and languages) for "Show original text" and the direction labels.
             let translatedTokens = filterMeetingTranslatedTokens(annotated)
-            guard !translatedTokens.isEmpty else { return }
+            guard !annotated.isEmpty else { return }
             Task { @MainActor in
-                store?.processTokens(translatedTokens)
-                self.updateRecordingFeedbackTokens(translatedTokens, mode: .meetingTranslation)
+                if !translatedTokens.isEmpty {
+                    store?.processTokens(translatedTokens)
+                }
+                self.updateRecordingFeedbackTokens(annotated, mode: .meetingTranslation)
             }
         }
 
@@ -787,9 +796,9 @@ extension AppDelegate {
         }
 
         // On second shortcut press (confirmed cancel): cancel recording
-        escapeService.onCancel = { [weak self] in
+        escapeService.onCancel = { [weak self] keepAudio in
             Task { @MainActor in
-                let shouldSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
+                let shouldSaveAudio = keepAudio
                 await self?.cancelMeetingTranslationRecording()
                 let message = shouldSaveAudio ? "Recording cancelled and saved" : "Recording cancelled"
                 DictationOverlayController.shared.showInfo(message: message)

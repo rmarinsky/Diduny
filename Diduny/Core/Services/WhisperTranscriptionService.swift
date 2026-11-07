@@ -114,7 +114,8 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         guard let model = WhisperModelManager.shared.selectedModel() else {
             throw WhisperError.modelNotFound
         }
-        if model.isEnglishOnly {
+        // `.en` and Turbo models are not trained to translate (bug 1).
+        if !model.translatesToEnglish {
             throw WhisperError.modelDoesNotSupportTranslation
         }
     }

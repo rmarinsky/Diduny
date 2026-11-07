@@ -347,20 +347,34 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(SettingsStorage.shared.transcriptionProvider, .local)
     }
 
+    /// Decision 12 DEFAULT: Processing writes what "Use one engine for everything" writes; legacy keys stay.
     func test_menuBarProcessingModeSelection_updatesDisplayedAndStoredProviders() {
-        UserDefaults.standard.set(true, forKey: sessionPresentKey)
-        SettingsStorage.shared.transcriptionProvider = .local
-        SettingsStorage.shared.translationProvider = .local
-        SettingsStorage.shared.meetingRealtimeTranscriptionEnabled = false
-        var selection = MenuBarProcessingModeSelection()
+        let suite = "MenuBarProcessing.\(UUID().uuidString)"
+        let settings = SettingsStorage(defaults: UserDefaults(suiteName: suite)!)
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        settings.transcriptionProvider = .local
+        var selection = MenuBarProcessingModeSelection(settings: settings)
+
+        selection.select(.local)
+        XCTAssertEqual(selection.provider, .local)
+        for job in [STTJob.dictation, .dictationTranslation, .meetingTranslation, .file] {
+            XCTAssertEqual(settings.modeDefaults.engine(for: job), .whisper, "\(job)")
+        }
+        XCTAssertEqual(settings.modeDefaults.meetingStartsIn, .thisMac)
+        XCTAssertEqual(settings.modeDefaults.engine(for: .thisMac), .whisper)
 
         selection.select(.cloud)
-
         XCTAssertEqual(selection.provider, .cloud)
-        XCTAssertEqual(SettingsStorage.shared.transcriptionProvider, .cloud)
-        XCTAssertEqual(SettingsStorage.shared.translationProvider, .cloud)
-        XCTAssertTrue(SettingsStorage.shared.meetingRealtimeTranscriptionEnabled)
-        XCTAssertTrue(SettingsStorage.shared.effectiveMeetingRealtimeTranscriptionEnabled)
+        for job in [STTJob.dictation, .dictationTranslation, .meetingTranslation] {
+            XCTAssertEqual(settings.modeDefaults.engine(for: job), .didunyCloud, "\(job)")
+        }
+        XCTAssertEqual(settings.modeDefaults.engine(for: .file), .whisper, "Files keep an engine on this Mac")
+        XCTAssertEqual(settings.modeDefaults.meetingStartsIn, .cloud)
+        XCTAssertEqual(settings.modeDefaults.engine(for: .cloud), .didunyCloud)
+        XCTAssertEqual(settings.transcriptionProvider, .local, "legacy key is not written")
+
+        settings.modeDefaults.apply([.engine(.dictation, JobProviderSelection(providerID: "parakeet-v3"))])
+        XCTAssertNil(MenuBarProcessingModeSelection(settings: settings).provider, "different per mode shows no tick")
     }
 
     func test_defaultHistoryRetentionPolicies_areForever() {
@@ -437,14 +451,21 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(codes, ["en"])
     }
 
-    func test_translationTargets_defaultFromLegacyPairAndFavoriteLanguages() {
-        resetLanguageDefaults()
-        UserDefaults.standard.set("en", forKey: translationLanguageAKey)
-        UserDefaults.standard.set("uk", forKey: translationLanguageBKey)
-        UserDefaults.standard.set(["en", "fr", "es"], forKey: favoriteLanguagesKey)
+    func test_translationTargets_defaultFromLegacyPairAndFavoriteLanguages() throws {
+        let (defaults, storage) = try isolatedStorage()
+        defaults.set("en", forKey: translationLanguageAKey)
+        defaults.set("uk", forKey: translationLanguageBKey)
+        defaults.set(["en", "fr", "es"], forKey: favoriteLanguagesKey)
 
-        XCTAssertEqual(SettingsStorage.shared.translationTargetLanguages, ["en", "uk", "fr", "es"])
-        XCTAssertEqual(SettingsStorage.shared.voiceTranslationTargetLanguage, "uk")
+        XCTAssertEqual(storage.translationTargetLanguages, ["en", "uk", "fr", "es"])
+        XCTAssertEqual(storage.voiceTranslationTargetLanguage, "uk")
+        // Your languages come from the pair; favorites are only the fallback when no pair is stored.
+        XCTAssertEqual(storage.yourLanguages, ["en", "uk"])
+        XCTAssertEqual(storage.offeredTranslationPairs, [TranslationLanguagePair(languageA: "en", languageB: "uk")])
+        // Unset, the target is the first of Your languages; the migration keeps Language B for existing users.
+        XCTAssertEqual(storage.defaultTranslationTargetLanguage, "en")
+        SettingsMigration.migrateLanguages(defaults: defaults)
+        XCTAssertEqual(storage.defaultTranslationTargetLanguage, "uk")
     }
 
     func test_translationPairs_migrateFromLegacyPair() {
@@ -471,36 +492,41 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(hints, ["uk", "fr", "en"])
     }
 
-    func test_translationPairResolver_usesKeyboardDefaultLastUsedAndFallbacks() {
-        resetLanguageDefaults()
+    func test_translationPairResolver_usesKeyboardDefaultLastUsedAndFallbacks() throws {
+        let (_, storage) = try isolatedStorage()
         let englishUkrainian = TranslationLanguagePair(languageA: "en", languageB: "uk")
         let englishPolish = TranslationLanguagePair(languageA: "en", languageB: "pl")
         let germanFrench = TranslationLanguagePair(languageA: "de", languageB: "fr")
-        SettingsStorage.shared.translationLanguagePairs = [englishUkrainian, englishPolish, germanFrench]
+        storage.translationLanguagePairs = [englishUkrainian, englishPolish, germanFrench]
 
-        SettingsStorage.shared.defaultTranslationLanguagePairID = englishUkrainian.id
-        SettingsStorage.shared.lastUsedTranslationLanguagePairID = englishPolish.id
+        storage.defaultTranslationLanguagePairID = englishUkrainian.id
+        storage.lastUsedTranslationLanguagePairID = englishPolish.id
         XCTAssertEqual(
-            SettingsStorage.shared.resolveTranslationLanguagePair(currentKeyboardLanguage: "en-US"),
+            storage.resolveTranslationLanguagePair(currentKeyboardLanguage: "en-US"),
             englishUkrainian
         )
+        XCTAssertEqual(storage.translationPair, englishUkrainian)
 
-        SettingsStorage.shared.defaultTranslationLanguagePairID = germanFrench.id
+        storage.defaultTranslationLanguagePairID = germanFrench.id
         XCTAssertEqual(
-            SettingsStorage.shared.resolveTranslationLanguagePair(currentKeyboardLanguage: "en-US"),
+            storage.resolveTranslationLanguagePair(currentKeyboardLanguage: "en-US"),
             englishPolish
         )
+        // The one pair (plan 3.4) replaces the last-used tie-break: it is the default pair,
+        // whatever the keyboard or the last recording used.
+        XCTAssertEqual(storage.translationPair, germanFrench)
 
-        SettingsStorage.shared.lastUsedTranslationLanguagePairID = nil
+        storage.lastUsedTranslationLanguagePairID = nil
         XCTAssertEqual(
-            SettingsStorage.shared.resolveTranslationLanguagePair(currentKeyboardLanguage: "en-US"),
+            storage.resolveTranslationLanguagePair(currentKeyboardLanguage: "en-US"),
             englishUkrainian
         )
 
         XCTAssertEqual(
-            SettingsStorage.shared.resolveTranslationLanguagePair(currentKeyboardLanguage: "it-IT"),
+            storage.resolveTranslationLanguagePair(currentKeyboardLanguage: "it-IT"),
             germanFrench
         )
+        XCTAssertEqual(storage.translationPair, germanFrench)
     }
 
     func test_translationLanguageHints_includeSpeechHintsAndPairLanguages() {
@@ -583,14 +609,20 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(translation?["language_b"] as? String, "uk")
     }
 
-    func test_translationTargetSetterNormalizesAndAddsToShortlist() {
-        UserDefaults.standard.set(["uk"], forKey: translationTargetLanguagesKey)
-        UserDefaults.standard.removeObject(forKey: voiceTranslationTargetLanguageKey)
+    func test_translationTargetSetterNormalizesAndAddsToShortlist() throws {
+        let (defaults, storage) = try isolatedStorage()
+        defaults.set(["uk"], forKey: translationTargetLanguagesKey)
+        defaults.removeObject(forKey: voiceTranslationTargetLanguageKey)
 
-        SettingsStorage.shared.voiceTranslationTargetLanguage = " FR "
+        storage.voiceTranslationTargetLanguage = " FR "
 
-        XCTAssertEqual(SettingsStorage.shared.voiceTranslationTargetLanguage, "fr")
-        XCTAssertEqual(SettingsStorage.shared.translationTargetLanguages, ["uk", "fr"])
+        XCTAssertEqual(storage.voiceTranslationTargetLanguage, "fr")
+        XCTAssertEqual(storage.translationTargetLanguages, ["uk", "fr"])
+
+        // The one default target: normalized, and added to Your languages (the new shortlist).
+        storage.defaultTranslationTargetLanguage = " DE "
+        XCTAssertEqual(storage.defaultTranslationTargetLanguage, "de")
+        XCTAssertEqual(storage.yourLanguages, ["en", "uk", "de"])
     }
 
     func test_textTranslationSourceDefaultsToAutoAndAcceptsManualLanguage() {
@@ -629,6 +661,14 @@ final class SettingsStorageProviderTests: XCTestCase {
         } else {
             UserDefaults.standard.removeObject(forKey: key)
         }
+    }
+
+    /// A store over its own suite (test-plan 7.6), removed when the test ends.
+    private func isolatedStorage() throws -> (UserDefaults, SettingsStorage) {
+        let name = "SettingsStorageProviderTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        addTeardownBlock { defaults.removePersistentDomain(forName: name) }
+        return (defaults, SettingsStorage(defaults: defaults))
     }
 
     private func resetLanguageDefaults() {

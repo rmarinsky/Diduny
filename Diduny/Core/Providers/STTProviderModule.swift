@@ -37,6 +37,8 @@ struct RealtimeCaps: Equatable, Sendable {
     /// nil = unknown; the session reconnects with context when the provider closes it.
     var maxSessionSeconds: TimeInterval?
     var idleTimeoutSeconds: TimeInterval?
+    /// Final words while you speak, or a preview that is replaced after Stop (Whisper).
+    var liveQuality: LiveText
     var diarization: Bool
     var manualCommit: Bool
     var translation: TranslationCaps?
@@ -45,12 +47,14 @@ struct RealtimeCaps: Equatable, Sendable {
 enum LanguageSupport: Equatable, Sendable {
     case all
     case set(Set<String>)
+    /// Set in macOS (Apple Speech): the OS decides at run time, nothing is blocked up front.
+    case system
 
     func supports(_ code: String) -> Bool {
         let code = code.lowercased()
         if code == "auto" { return true }
         switch self {
-        case .all: return true
+        case .all, .system: return true
         case let .set(codes): return codes.contains(code)
         }
     }
@@ -88,11 +92,15 @@ protocol STTProviderModule: Sendable {
     /// true for bring-your-own-key providers; their models are offered only when a key is stored.
     var requiresKey: Bool { get }
     var models: [STTModel] { get }
+    /// Engine-level facts the model capabilities cannot express (ADR-0012 D1).
+    var traits: EngineTraits { get }
 }
 
 struct ProviderRegistry: Sendable {
     /// Provider modules are added here (one line per provider) as they are implemented.
-    static let shared = ProviderRegistry(modules: [DidunyCloudProvider(), LocalWhisperProvider(), ElevenLabsProvider()])
+    static let shared = ProviderRegistry(modules: [
+        DidunyCloudProvider(), LocalWhisperProvider(), ElevenLabsProvider(), ParakeetProvider(), AppleSpeechProvider()
+    ])
 
     let modules: [any STTProviderModule]
 

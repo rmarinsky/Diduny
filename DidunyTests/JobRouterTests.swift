@@ -7,6 +7,7 @@ final class JobRouterTests: XCTestCase {
         let displayName: String
         let requiresKey: Bool
         let models: [STTModel]
+        let traits = EngineTraits(runsOn: .cloud, obtainedBy: .ownKey, needs: [.ownKey], recommended: .none, languages: .system)
     }
 
     private let byok = "byok-fake"
@@ -31,7 +32,7 @@ final class JobRouterTests: XCTestCase {
 
     private var realtimeOnly: STTModel {
         STTModel(id: "rt", displayName: "RT", capabilities: caps(
-            realtime: RealtimeCaps(idleTimeoutSeconds: 15, diarization: false, manualCommit: true),
+            realtime: RealtimeCaps(idleTimeoutSeconds: 15, liveQuality: .final, diarization: false, manualCommit: true),
             languages: .set(["en", "uk"])
         ))
     }
@@ -40,7 +41,7 @@ final class JobRouterTests: XCTestCase {
         let translation = TranslationCaps(oneWay: true, twoWay: true)
         return STTModel(id: "native", displayName: "Native", capabilities: caps(
             batch: BatchCaps(diarization: true, translation: translation),
-            realtime: RealtimeCaps(diarization: true, manualCommit: true, translation: translation)
+            realtime: RealtimeCaps(liveQuality: .final, diarization: true, manualCommit: true, translation: translation)
         ))
     }
 
@@ -209,5 +210,80 @@ final class JobRouterTests: XCTestCase {
         XCTAssertEqual(dictation.first?.plan.mode, .afterStop)
         let noKey = RoutingContext(providersWithKey: [], didunyTranslationAvailable: true)
         XCTAssertTrue(JobRouter.pickerOptions(for: JobRequest(job: .dictation), registry: registry, context: noKey).isEmpty)
+    }
+
+    // MARK: After Stop (WP-12)
+
+    private let engines: RoutingContext = .init(providersWithKey: [STTProviderID.elevenLabs], didunyTranslationAvailable: true)
+
+    /// Plans the job for every model of the module; returns the first plan found.
+    private func routeEngine(_ module: any STTProviderModule, _ request: JobRequest, context: RoutingContext? = nil) -> RoutingResult {
+        let results = module.models.map {
+            JobRouter.plan(request, providerID: module.id, requiresKey: module.requiresKey, model: $0, context: context ?? engines)
+        }
+        return results.first { if case .plan = $0 { true } else { false } } ?? results[0]
+    }
+
+    // T3-CAP-04
+    func test_meeting_afterStopUsesBatchEvenForRealtimeModel() {
+        let request = JobRequest(job: .meeting, speakerLabels: true, afterStop: true)
+        XCTAssertEqual(route(request, nativeTranslating), .plan(ExecutionPlan(mode: .afterStop, speakerLabels: true)))
+        XCTAssertEqual(route(request, realtimeOnly), .unsupported(.noUsableMode))
+    }
+
+    func test_meeting_recordOnlyLabelsPerEngine() {
+        let request = JobRequest(job: .meeting, speakerLabels: true, afterStop: true)
+        let labelled = ExecutionPlan(mode: .afterStop, speakerLabels: true)
+        XCTAssertEqual(routeEngine(DidunyCloudProvider(), request), .plan(labelled))
+        XCTAssertEqual(routeEngine(ElevenLabsProvider(), request), .plan(labelled))
+        XCTAssertEqual(
+            routeEngine(LocalWhisperProvider(), request),
+            .plan(ExecutionPlan(mode: .afterStop, speakerLabels: false, noSpeakerLabelsNote: true))
+        )
+    }
+
+    // T3-CAP-05
+    func test_meetingTranslation_perEngine() {
+        let request = JobRequest(job: .meetingTranslation)
+        XCTAssertEqual(routeEngine(DidunyCloudProvider(), request), .plan(ExecutionPlan(mode: .live, translation: .native)))
+        let others: [any STTProviderModule] = [ElevenLabsProvider(), LocalWhisperProvider(), ParakeetProvider(), AppleSpeechProvider()]
+        for module in others {
+            XCTAssertEqual(routeEngine(module, request), .plan(ExecutionPlan(mode: .afterStop, translation: .didunyStep)), module.id)
+        }
+        let noDiduny = RoutingContext(providersWithKey: [STTProviderID.elevenLabs], didunyTranslationAvailable: false)
+        XCTAssertEqual(routeEngine(DidunyCloudProvider(), request, context: noDiduny), .plan(ExecutionPlan(mode: .live, translation: .native)))
+        for module in others {
+            XCTAssertEqual(routeEngine(module, request, context: noDiduny), .unsupported(.translationNeedsDiduny), module.id)
+        }
+    }
+
+    // Bug 9
+    func test_dictationTranslation_whisperAfterStopReadsBatchTranslationPerModel() {
+        let whisper = LocalWhisperProvider()
+        let translating = JobRequest(job: .dictationTranslation, afterStop: true)
+        XCTAssertEqual(routeEngine(whisper, translating), .plan(ExecutionPlan(mode: .afterStop, translation: .native)))
+        var turbo = translating
+        turbo.ownBatchTranslationUsable = false
+        XCTAssertEqual(routeEngine(whisper, turbo), .plan(ExecutionPlan(mode: .afterStop, translation: .didunyStep)))
+    }
+
+    // Bug 9, with the real catalog ids: Turbo never translates; multilingual non-Turbo only into English.
+    func test_whisperTranslationUsable_isDerivedPerModel() {
+        let turbo = WhisperModelManager.WhisperModel.recommendedName
+        XCTAssertEqual(turbo, "ggml-large-v3-turbo")
+        XCTAssertFalse(JobRequest.whisperTranslationUsable(model: turbo, target: "en"))
+        XCTAssertFalse(JobRequest.whisperTranslationUsable(model: "ggml-large-v3-turbo-q5_0", target: "en"))
+        XCTAssertFalse(JobRequest.whisperTranslationUsable(model: "ggml-base.en", target: "en"))
+        XCTAssertTrue(JobRequest.whisperTranslationUsable(model: "ggml-large-v3", target: "en"))
+        XCTAssertFalse(JobRequest.whisperTranslationUsable(model: "ggml-large-v3", target: "uk"))
+        XCTAssertFalse(JobRequest.whisperTranslationUsable(model: nil, target: "en"))
+
+        var request = JobRequest(job: .dictationTranslation, afterStop: true)
+        request.ownBatchTranslationUsable = JobRequest.whisperTranslationUsable(model: turbo, target: "en")
+        XCTAssertEqual(routeEngine(LocalWhisperProvider(), request), .plan(ExecutionPlan(mode: .afterStop, translation: .didunyStep)))
+    }
+
+    func test_dictation_afterStopUsesBatch() {
+        XCTAssertEqual(route(JobRequest(job: .dictation, afterStop: true), nativeTranslating), .plan(ExecutionPlan(mode: .afterStop)))
     }
 }
