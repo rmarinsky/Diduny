@@ -114,10 +114,12 @@ final class DictationOverlayController {
         showPanel()
     }
 
-    /// Two-way Cloud translation names the pair (WP-41 "EN ↔ UK"). One-direction engines get no
-    /// suffix until the 12-addendum copy is settled (fix queue, Questions for Roman).
+    /// Two-way Cloud translation names the pair (WP-41 "EN ↔ UK"). One-direction engines name the
+    /// target only, "→ UK" (decision 2A), as the tile caption does.
     static func meetingTranslationFlow(engine: EngineID, pair: TranslationLanguagePair) -> EdgeCommandOutcome.Flow {
-        engine == .didunyCloud ? .meetingTranslation(pair: CommandHome.pairCodes(pair)) : .meeting
+        engine == .didunyCloud
+            ? .meetingTranslation(pair: CommandHome.pairCodes(pair))
+            : .meetingTranslation(pair: "→ " + pair.languageB.uppercased())
     }
 
     /// Builds the outcome for the stopped recording from the session (default 8, 02 Q11-Q12).

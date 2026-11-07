@@ -25,6 +25,8 @@ struct OutcomeStateTests {
     @Test func translateMeetingNamesThePair() {
         let outcome = EdgeCommandOutcome(flow: .meetingTranslation(pair: "EN ↔ UK"), durationSeconds: 382)
         #expect(outcome.subtitle(transcript: .ready) == "6 min 22 s · transcript ready, translated EN ↔ UK")
+        let oneWay = EdgeCommandOutcome(flow: .meetingTranslation(pair: "→ UK"), durationSeconds: 382)
+        #expect(oneWay.subtitle(transcript: .ready) == "6 min 22 s · transcript ready, translated → UK")
     }
 
     @Test func shortMeetingDuration() {
@@ -88,6 +90,7 @@ struct OutcomeStateTests {
         let pair = TranslationLanguagePair(languageA: "en", languageB: "uk")
         #expect(DictationOverlayController.meetingTranslationFlow(engine: .didunyCloud, pair: pair)
             == .meetingTranslation(pair: "EN ↔ UK"))
-        #expect(DictationOverlayController.meetingTranslationFlow(engine: .whisper, pair: pair) == .meeting)
+        #expect(DictationOverlayController.meetingTranslationFlow(engine: .whisper, pair: pair)
+            == .meetingTranslation(pair: "→ UK"))
     }
 }
