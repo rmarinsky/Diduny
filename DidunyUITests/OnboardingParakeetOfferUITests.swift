@@ -4,6 +4,8 @@ import XCTest
 /// `--ui-testing-open=onboarding.ready`; the download is the Test build's fake, driven by the bridge. CI only.
 final class OnboardingParakeetOfferUITests: DidunyUITestCase {
     private let id = "onboarding.modelOffer.parakeet-v3"
+    // macOS does not expose the card group's accessibility value to XCUI, so each state is proven
+    // by the control only that state shows (download, cancel, retry, ready, the skipped line).
 
     private func element(_ suffix: String = "") -> XCUIElement {
         app.windows["Welcome to Diduny"].descendants(matching: .any)[suffix.isEmpty ? id : "\(id).\(suffix)"]
@@ -29,14 +31,14 @@ final class OnboardingParakeetOfferUITests: DidunyUITestCase {
 
     func test_downloadShowsPercentThenReady() {
         openReady(parakeet: "missing")
-        waitForElement(element(), toMatch: "value == 'notDownloaded'")
+        waitForElement(element("download"))
         XCTAssertEqual(element("download").label, "Download 480 MB")
         element("download").click()
-        waitForElement(element(), toMatch: "value == 'downloading'")
+        waitForElement(element("cancel"))
         bridge("download.advance", ["percent": 42])
         waitForElement(element("percent"), toMatch: "value == '42%' OR label == '42%'")
         bridge("download.advance", ["percent": 100])
-        waitForElement(element(), toMatch: "value == 'ready'")
+        waitForElement(element("ready"))
         waitForElement(element("ready"))
     }
 
@@ -44,28 +46,28 @@ final class OnboardingParakeetOfferUITests: DidunyUITestCase {
         openReady(parakeet: "missing")
         waitForElement(element("download")).click()
         waitForElement(element("cancel")).click()
-        waitForElement(element(), toMatch: "value == 'notDownloaded'")
+        waitForElement(element("download"))
     }
 
     func test_failureOffersRetryAndNotNowSkips() {
         openReady(parakeet: "missing")
         waitForElement(element("download")).click()
-        waitForElement(element(), toMatch: "value == 'downloading'")
+        waitForElement(element("cancel"))
         bridge("download.fail")
-        waitForElement(element(), toMatch: "value == 'failed'")
+        waitForElement(element("retry"))
         waitForElement(element("failed"))
         element("retry").click()
-        waitForElement(element(), toMatch: "value == 'downloading'")
+        waitForElement(element("cancel"))
         bridge("download.fail")
         waitForElement(element("notNow")).click()
-        waitForElement(element(), toMatch: "value == 'skipped'")
+        waitForElement(element(), toMatch: "label CONTAINS 'whenever you want it'")
         XCTAssertFalse(element("download").exists)
     }
 
     func test_openDidunyKeepsTheDownloadRunning() {
         openReady(parakeet: "missing")
         waitForElement(element("download")).click()
-        waitForElement(element(), toMatch: "value == 'downloading'")
+        waitForElement(element("cancel"))
         app.windows["Welcome to Diduny"].buttons["onboarding.primary"].click()
         waitForDisappearance(app.windows["Welcome to Diduny"])
         bridge("download.advance", ["percent": 30])
