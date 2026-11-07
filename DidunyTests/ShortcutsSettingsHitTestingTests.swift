@@ -157,8 +157,12 @@ struct ShortcutsSettingsHitTestingTests {
         }
 
         func click(window point: NSPoint) {
-            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-                guard let event = NSEvent.mouseEvent(
+            // Both events are queued before the down is delivered: a tracking control (the segmented
+            // count) runs its own loop on mouse-down and waits for the up, so posting the up afterwards
+            // deadlocks. Posted through the event queue, not window.sendEvent, so local event monitors
+            // (the recorder cancels on mouse-up outside itself) see them.
+            let events = [NSEvent.EventType.leftMouseDown, .leftMouseUp].compactMap { type in
+                NSEvent.mouseEvent(
                     with: type,
                     location: point,
                     modifierFlags: [],
@@ -168,20 +172,21 @@ struct ShortcutsSettingsHitTestingTests {
                     eventNumber: 0,
                     clickCount: 1,
                     pressure: 1
-                ) else { continue }
-                // Posted through the event queue, not window.sendEvent, so local event
-                // monitors (the recorder cancels on mouse-up outside itself) see it.
-                NSApp.postEvent(event, atStart: false)
-                // Deliver exactly the event we posted; nothing else may be dequeued here.
-                let mask: NSEvent.EventTypeMask = type == .leftMouseDown ? .leftMouseDown : .leftMouseUp
-                guard let queued = NSApp.nextEvent(matching: mask, until: Date().addingTimeInterval(1),
-                                                   inMode: .default, dequeue: true),
-                    queued.windowNumber == window.windowNumber
-                else {
-                    Issue.record("posted \(type) was not delivered")
-                    return
-                }
-                NSApp.sendEvent(queued)
+                )
+            }
+            events.forEach { NSApp.postEvent($0, atStart: false) }
+            // Deliver exactly the events we posted; nothing else may be dequeued here.
+            guard let down = NSApp.nextEvent(matching: .leftMouseDown, until: Date().addingTimeInterval(1),
+                                             inMode: .default, dequeue: true),
+                down.windowNumber == window.windowNumber
+            else {
+                Issue.record("posted mouse-down was not delivered")
+                return
+            }
+            NSApp.sendEvent(down)
+            // A tracking control has already taken the up; otherwise deliver it now.
+            if let up = NSApp.nextEvent(matching: .leftMouseUp, until: Date(), inMode: .default, dequeue: true) {
+                NSApp.sendEvent(up)
             }
         }
 
