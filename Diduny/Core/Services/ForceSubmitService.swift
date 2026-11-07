@@ -47,6 +47,10 @@ final class ForceSubmitService {
         }
     }
 
+    deinit {
+        if let captureEndObserver { captureSession.notifications.removeObserver(captureEndObserver) }
+    }
+
     func activate(onTrigger: @escaping () -> Void) {
         guard settings.forceSubmitEnabled else {
             deactivate()

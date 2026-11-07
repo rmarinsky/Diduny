@@ -109,14 +109,22 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
     private func handle(_ event: KeyEvent) {
         guard case let .flagsChanged(keyCode, flagsRawValue, eventTime) = event else { return }
-        // Ignore events during cooldown period, and while a chord with this key is being recorded.
-        guard isReady, !captureSession.isActive else { return }
+        // Ignore events during cooldown period.
+        guard isReady else { return }
 
         let flags = NSEvent.ModifierFlags(rawValue: flagsRawValue)
 
         guard isCorrectKeyCode(keyCode) else { return }
 
         let isPressed = isKeyCurrentlyPressed(keyCode: keyCode, flags: flags)
+
+        // While a chord with this key is being recorded, presses are ignored but a release still lands,
+        // so a key held when the capture began does not stay stuck down.
+        if captureSession.isActive {
+            guard !isPressed, selectedKey != .capsLock else { return }
+            processModifierKeyEvent(isPressed: false, eventTime: eventTime)
+            return
+        }
 
         // Special handling for Caps Lock (toggle key by nature)
         if selectedKey == .capsLock {
@@ -191,6 +199,7 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         pendingHoldStart = scheduler.schedule(after: delay) { [weak self] in
             guard let self,
                   isKeyPressed,
+                  !self.captureSession.isActive,
                   !self.hasStartedAfterHold,
                   self.holdModeEnabled,
                   !self.isHandsFreeMode

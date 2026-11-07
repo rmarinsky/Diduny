@@ -523,6 +523,25 @@ final class PushToTalkServiceTests {
         #expect(toggles == 1)
     }
 
+    @Test("A key held when a capture begins is released during it; the next press starts")
+    func releaseDuringCapture() {
+        let sut = makeService(hold: true, toggle: false, delay: 0.5)
+        var starts = 0
+        sut.onKeyDown = { starts += 1 }
+        startReady(sut)
+
+        source.send(rightShift(down: true, at: 1.0))
+        session.begin()
+        scheduler.advance(by: 1)
+        #expect(starts == 0)
+        source.send(rightShift(down: false, at: 2.0))
+        session.end()
+
+        source.send(rightShift(down: true, at: 3.0))
+        scheduler.advance(by: 0.5)
+        #expect(starts == 1)
+    }
+
     @Test("T5-PT-19 reserved keys follow push-to-talk")
     func reservedKeysFollowPushToTalk() {
         let settings = box.settings
