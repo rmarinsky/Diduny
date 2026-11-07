@@ -48,10 +48,12 @@ final class AudioUITests: DidunyUITestCase {
         click(source.radioButtons["System + microphone"])
         waitForElement(element("audio.meeting.micLevel")).adjust(toNormalizedSliderPosition: 0.75)
         waitForElement(element("audio.meeting.micLevel.value"), toMatch: "value == '150%'")
-        // 0.5 is today's value (100%); move away first so the drag to 0.5 is a real change.
-        waitForElement(element("audio.meeting.systemLevel")).adjust(toNormalizedSliderPosition: 0.25)
+        // 0.5 is today's value (100%); move away first so the drag to 0.5 is a real change. XCUI's drag
+        // lands about 2 pt short on this 129 pt slider (CI: 0.25 gave 45%, 0.5 gave 95%), so aim 1%
+        // past the stop; the 0.05 step snaps it to the stop.
+        waitForElement(element("audio.meeting.systemLevel")).adjust(toNormalizedSliderPosition: 0.26)
         waitForElement(element("audio.meeting.systemLevel.value"), toMatch: "value == '50%'")
-        element("audio.meeting.systemLevel").adjust(toNormalizedSliderPosition: 0.5)
+        element("audio.meeting.systemLevel").adjust(toNormalizedSliderPosition: 0.51)
         waitForElement(element("audio.meeting.systemLevel.value"), toMatch: "value == '100%'")
     }
 

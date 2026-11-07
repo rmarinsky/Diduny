@@ -130,11 +130,24 @@ class DidunyUITestCase: XCTestCase {
         waitForElement(element, toMatch: "isHittable == true", file: file, line: line)
     }
 
-    /// The static text with `identifier` showing `text`. SwiftUI on macOS exposes a Text's string
-    /// as the element's value, except a header (panel and group titles), which has it as the label.
+    /// The static text with `identifier` showing `text`. SwiftUI on macOS exposes
+    /// a Text's string as the element's value, not its label.
     func text(_ text: String, identifier: String, in container: XCUIElement) -> XCUIElement {
         container.staticTexts
-            .matching(NSPredicate(format: "identifier == %@ AND (value == %@ OR label == %@)", identifier, text, text))
+            .matching(NSPredicate(format: "identifier == %@ AND value == %@", identifier, text))
             .firstMatch
+    }
+
+    /// Waits until the element with `identifier` shows `text`. A header (panel title) carries its
+    /// string as the label, other SwiftUI text as the value.
+    func waitForText(
+        _ text: String,
+        identifier: String,
+        in container: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let element = container.descendants(matching: .any)[identifier]
+        waitForElement(element, toMatch: "label == '\(text)' OR value == '\(text)'", file: file, line: line)
     }
 }

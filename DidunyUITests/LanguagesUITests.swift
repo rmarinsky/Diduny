@@ -69,7 +69,7 @@ final class LanguagesUITests: DidunyUITestCase {
         search.typeText("zzz")
         waitForElement(element("popup.empty"))
         // Outside the popup: a group heading, which does nothing when clicked.
-        let heading = text("Voice commands", identifier: "", in: mainWindow)
+        let heading = mainWindow.staticTexts.matching(NSPredicate(format: "label == 'Voice commands' OR value == 'Voice commands'")).firstMatch
         waitForElement(heading, toMatch: "isHittable == true")
         heading.click()
         waitForDisappearance(popup)

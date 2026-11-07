@@ -10,14 +10,14 @@ final class MeetingLivePanelUITests: DidunyUITestCase {
     /// T1-MT-20
     func testOpensOnTheSettingsSegment() {
         let app = open("livePanel.meeting")
-        waitForElement(text("Recording meeting", identifier: "livePanel.title", in: app))
+        waitForText("Recording meeting", identifier: "livePanel.title", in: app)
         let cloud = waitForElement(app.buttons["livePanel.segment.cloudLive"])
         XCTAssertTrue(cloud.isSelected)
         let engine = app.descendants(matching: .any)["livePanel.engine"]
         waitForElement(engine)
         XCTAssertTrue("\(engine.label) \(engine.value as? String ?? "")".contains("Diduny Cloud"))
         XCTAssertFalse(engine.isEnabled)
-        waitForElement(text("Live text · speaker labels", identifier: "livePanel.caption", in: app))
+        waitForText("Live text · speaker labels", identifier: "livePanel.caption", in: app)
         let status = app.descendants(matching: .any)["livePanel.status"]
         waitForElement(status, toMatch: "label == 'Recording live'")
     }
