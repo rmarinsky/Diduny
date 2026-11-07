@@ -7,7 +7,12 @@ import Foundation
 final class ParakeetModelController: ParakeetModelStoring {
     typealias Load = (@escaping @Sendable (Double) -> Void) async throws -> Void
 
-    static let shared = ParakeetModelController()
+    static let shared: ParakeetModelController = {
+        #if TEST_BUILD
+            if let fake = UITestFakeParakeetDownload.makeController() { return fake }
+        #endif
+        return ParakeetModelController()
+    }()
 
     let isSupportedHardware: Bool
     private(set) var state: ModelDownloadState

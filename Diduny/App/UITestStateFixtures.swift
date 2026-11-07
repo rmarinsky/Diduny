@@ -89,6 +89,8 @@
                     // Launch already showed the tab; expand once its placement has landed, as a hover would.
                     DispatchQueue.main.async { EdgeCommandPanelController.shared.expandForUITesting() }
                 }
+            case "onboarding":
+                OnboardingWindowController.shared.showOnboarding()
             case "livePanel":
                 guard parts.count > 1 else { return }
                 let segment = parts.count > 2 ? segment(parts[2]) : nil

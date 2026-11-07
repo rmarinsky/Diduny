@@ -62,8 +62,12 @@
                 UITestScript.emit(count: Int(number("count")))
             case "selection.set":
                 UITestHarness.stubbedSelection.withLock { $0 = args["text"] as? String }
+            case "download.advance":
+                UITestFakeParakeetDownload.shared.advance(to: number("percent") / 100)
+            case "download.fail":
+                UITestFakeParakeetDownload.shared.fail()
             default:
-                // `download.*`, `auth.set`: not built yet (see role notes).
+                // `auth.set`: not built yet (see role notes).
                 return "unsupported.\(cmd)"
             }
             return cmd
