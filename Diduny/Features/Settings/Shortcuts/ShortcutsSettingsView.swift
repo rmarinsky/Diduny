@@ -112,11 +112,14 @@ struct ShortcutsSettingsView: View {
             isRecording: isRecording.wrappedValue,
             isOff: !isOn
         )
+        // The recorder lies under the styled field (test-plan 3.1): the field takes no clicks, so
+        // they reach the recorder, and the field stays the element at its own point (hittable).
+        .allowsHitTesting(false)
         .accessibilityIdentifier(row.keysIdentifier)
-        .overlay {
+        .background {
             Group {
                 if let name = row.shortcutName {
-                    ShortcutRecorderOverlay(name: name, fieldIdentifier: row.keysIdentifier, isRecording: isRecording) {
+                    ShortcutRecorderOverlay(name: name, isRecording: isRecording) {
                         model.shortcutDidChange(row)
                     }
                 } else {

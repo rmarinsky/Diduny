@@ -393,5 +393,15 @@ enum AuthError: LocalizedError {
             }
             return AuthService(tokenStore: store, migrateLegacySession: false)
         }
+
+        /// Writes the session flag at seed time: `hasStoredSession` is read at launch, long before
+        /// `shared` is first created.
+        nonisolated static func seedUITestingSessionFlag() {
+            if UITestHarness.has("--ui-testing-signed-in") {
+                UserDefaults.standard.set(true, forKey: Keys.sessionPresent)
+            } else if UITestHarness.has("--ui-testing-signed-out") {
+                UserDefaults.standard.set(false, forKey: Keys.sessionPresent)
+            }
+        }
     }
 #endif

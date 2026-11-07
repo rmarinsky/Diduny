@@ -55,6 +55,7 @@
         /// back (a `-key value` argument would outrank them).
         static func applySeed(defaults: UserDefaults = .standard, didReset: Bool) {
             let seed = mergedSeed()
+            AuthService.seedUITestingSessionFlag()
             if let legacy = seed["legacy"] as? [String: Any] {
                 legacy.forEach { defaults.set($0.value, forKey: $0.key) }
             } else if didReset {

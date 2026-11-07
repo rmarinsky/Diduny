@@ -37,6 +37,7 @@ struct EdgeCommandTabView: View {
         }
         .buttonStyle(.plain)
         .gesture(dragGesture)
+        .accessibilityIdentifier("commandPanel.tab")
         .accessibilityLabel(
             model.isLiveFeedbackMinimized
                 ? "Show live recording panel"
