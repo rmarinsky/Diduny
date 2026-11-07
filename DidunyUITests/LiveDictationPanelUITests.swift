@@ -21,10 +21,10 @@ final class LiveDictationPanelUITests: DidunyUITestCase {
     /// T1-DI-20
     func test_dictationPanelOpensWithSettingsDefaults() {
         let app = openLivePanel("dictation")
-        waitForElement(element(app, "livePanel.title"), toMatch: "value == 'Dictating'")
+        waitForElement(text("Dictating", identifier: "livePanel.title", in: app))
         XCTAssertEqual(element(app, "livePanel.output").value as? String, "Original")
         XCTAssertTrue(spoken(element(app, "livePanel.engine")).contains("Diduny Cloud"), spoken(element(app, "livePanel.engine")))
-        waitForElement(element(app, "livePanel.caption"), toMatch: "value == 'Text as you speak'")
+        waitForElement(text("Text as you speak", identifier: "livePanel.caption", in: app))
     }
 
     /// T1-DI-21
@@ -38,9 +38,9 @@ final class LiveDictationPanelUITests: DidunyUITestCase {
         let row = element(app, "pickerMenu.row.lang.uk")
         waitForElement(row, toMatch: "isHittable == true")
         row.click()
-        waitForElement(element(app, "livePanel.title"), toMatch: "value == 'Translating'")
+        waitForElement(text("Translating", identifier: "livePanel.title", in: app))
         XCTAssertEqual(element(app, "livePanel.output").value as? String, "Ukrainian")
-        waitForElement(element(app, "livePanel.caption"), toMatch: "value == 'Live translation'")
+        waitForElement(text("Live translation", identifier: "livePanel.caption", in: app))
     }
 
     /// T1-DI-24
@@ -71,7 +71,7 @@ final class LiveDictationPanelUITests: DidunyUITestCase {
 
     /// T1-SH-05
     func test_stopButtonInAllFourLivePanels() {
-        let keycaps = ["dictation": "⌥⌘D", "dictationTranslation": "⌥⌘/", "meeting": "⌥⌘M", "meetingTranslation": "⇧⌥⌘M"]
+        let keycaps = ["dictation": "⌥⌘D", "dictationTranslation": "⌥⌘/", "meeting": "⌥⌘M", "meetingTranslation": "⌥⇧⌘M"]
         for (job, keycap) in keycaps {
             let app = openLivePanel(job)
             let stop = element(app, "livePanel.stop")
