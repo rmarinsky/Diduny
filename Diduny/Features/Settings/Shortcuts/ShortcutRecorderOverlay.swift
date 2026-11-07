@@ -56,11 +56,8 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
         private let onRecordingChange: (Bool) -> Void
         private var endEditingObserver: NSObjectProtocol?
         private var startObserver: NSObjectProtocol?
-        /// SwiftUI detaches and re-attaches this host when the field redraws for `isRecording`; the
-        /// detach resigns the recorder, which is not the user ending the recording.
-        private var isDetaching = false
-
-        /// The row's `isRecording`: the recorder holds focus while it is set, also across a re-attach.
+        /// The row's `isRecording`: the recorder holds focus while it is set. Turning it on makes
+        /// SwiftUI build a new container for the row, whose recorder takes over the focus.
         var wantsRecording = false {
             didSet { focusRecorderIfWanted() }
         }
@@ -81,10 +78,14 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
                 queue: .main
             ) { [weak self] _ in
                 #if TEST_BUILD
-                    UITestCaptureTrace.note("endEditing detaching=\(self?.isDetaching ?? false)")
+                    UITestCaptureTrace.note("endEditing")
                 #endif
-                guard let self, !isDetaching else { return }
-                onRecordingChange(false)
+                // Focus moving to the row's new recorder ends this one's editing, not the recording.
+                let window = self?.window
+                DispatchQueue.main.async {
+                    guard let self, !self.anotherRecorderIsEditing(in: window) else { return }
+                    self.onRecordingChange(false)
+                }
             }
             startObserver = NotificationCenter.default.addObserver(
                 forName: ShortcutRecorderOverlay.startRecordingNotification,
@@ -106,37 +107,18 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
 
         override var mouseDownCanMoveWindow: Bool { false }
 
-        override func viewWillMove(toSuperview newSuperview: NSView?) {
-            #if TEST_BUILD
-                UITestCaptureTrace.note("willMoveSuperview nil=\(newSuperview == nil)")
-            #endif
-            if newSuperview == nil { isDetaching = true }
-            super.viewWillMove(toSuperview: newSuperview)
-        }
-
-        override func viewWillMove(toWindow newWindow: NSWindow?) {
-            #if TEST_BUILD
-                UITestCaptureTrace.note("willMoveWindow nil=\(newWindow == nil)")
-            #endif
-            if newWindow == nil { isDetaching = true }
-            super.viewWillMove(toWindow: newWindow)
-        }
-
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            #if TEST_BUILD
-                UITestCaptureTrace.note("didMoveWindow nil=\(window == nil) self=\(ObjectIdentifier(self).hashValue % 1000)")
-            #endif
-            guard window != nil else { return }
-            isDetaching = false
             focusRecorderIfWanted()
         }
 
+        private func anotherRecorderIsEditing(in window: NSWindow?) -> Bool {
+            guard let editing = (window?.firstResponder as? NSText)?.delegate as? KeyboardShortcuts.RecorderCocoa else { return false }
+            return editing !== recorder && editing.shortcutName == recorder.shortcutName
+        }
+
         private func focusRecorderIfWanted() {
-            #if TEST_BUILD
-                UITestCaptureTrace.note("focus? wants=\(wantsRecording) det=\(isDetaching) win=\(window != nil) ed=\(recorder.currentEditor() != nil)")
-            #endif
-            guard wantsRecording, !isDetaching, let window, recorder.currentEditor() == nil else { return }
+            guard wantsRecording, let window, recorder.currentEditor() == nil else { return }
             window.makeFirstResponder(recorder)
         }
 
@@ -153,12 +135,7 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
 
         private func startRecording() {
             onRecordingChange(true)
-            let made = window?.makeFirstResponder(recorder) ?? false
-            #if TEST_BUILD
-                UITestCaptureTrace.note("start key=\(window?.isKeyWindow ?? false) made=\(made)")
-            #else
-                _ = made
-            #endif
+            window?.makeFirstResponder(recorder)
         }
 
         override func layout() {
