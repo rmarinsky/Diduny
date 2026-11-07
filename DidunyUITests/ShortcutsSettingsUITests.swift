@@ -10,8 +10,8 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
         mainWindow.descendants(matching: .any)[id]
     }
 
-    private func openShortcuts() {
-        launchApp(freshInstall: true, onboardingCompleted: true)
+    private func openShortcuts(arguments: [String] = []) {
+        launchApp(freshInstall: true, onboardingCompleted: true, arguments: arguments)
         waitForElement(mainWindow, "Main window did not open")
         mainWindow.buttons["Sidebar Shortcuts"].click()
         waitForElement(element("shortcuts.forceSubmit.keys"), "Shortcuts page did not open")
@@ -85,7 +85,7 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
 
     /// Acceptance: Escape while recording restores the old value.
     func test_escapeWhileRecordingKeepsOldValue() {
-        openShortcuts()
+        openShortcuts(arguments: ["--ui-testing-probe"])
         let keys = element("shortcuts.addMeetingChapter.keys")
         keys.click()
         print("CAPTURE-PROBE escape:", probe()["capture"] ?? "none")
@@ -96,7 +96,7 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
 
     /// T5-SC-04 real-key twin with T5-HP-20: the new history shortcut opens the palette, the old one does not.
     func test_SC04_changeHistoryPaletteShortcut_realKeys() {
-        openShortcuts()
+        openShortcuts(arguments: ["--ui-testing-probe"])
         let keys = element("shortcuts.toggleHistoryPalette.keys")
         keys.click()
         print("CAPTURE-PROBE sc04:", probe()["capture"] ?? "none")
