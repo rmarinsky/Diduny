@@ -62,13 +62,14 @@ struct MeetingSuggestionView: View {
                     .foregroundStyle(DS.Palette.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                SettingsSwitch(title: "Keep suggesting when a meeting starts", isOn: $model.meetingSuggestionsEnabled)
+                // Only a user flip reports; a write-back from the controller does not loop through onChange.
+                SettingsSwitch(title: "Keep suggesting when a meeting starts", isOn: Binding(
+                    get: { model.meetingSuggestionsEnabled },
+                    set: { model.meetingSuggestionsEnabled = $0; onTrackingChanged($0) }
+                ))
                     .accessibilityIdentifier("prompt.keepSuggesting")
             }
             .frame(height: Self.switchRowHeight)
-            .onChange(of: model.meetingSuggestionsEnabled) { _, enabled in
-                onTrackingChanged(enabled)
-            }
 
             HStack(spacing: DS.Space.sm) {
                 PanelButton(title: "Not now", action: onDismiss)

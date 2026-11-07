@@ -66,7 +66,6 @@ struct EdgeCommandExpandedView: View {
                     onDrag: onDrag,
                     onDragEnd: onDragEnd
                 )
-                .accessibilityIdentifier("commandPanel.prompt")
                 .transition(swap?.transition ?? .identity)
             } else if let outcome = visibleOutcome {
                 EdgeCommandOutcomeView(
