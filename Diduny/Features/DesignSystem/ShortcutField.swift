@@ -39,6 +39,8 @@ struct ShortcutField: View {
         )
         .opacity(isOff ? 0.45 : isEnabled ? 1 : 0.6)
         .accessibilityElement()
+        // A plain element reads as a group, which exposes no value; a click on it records keys.
+        .accessibilityAddTraits(.isButton)
         .accessibilityLabel(Text("\(rowLabel) shortcut"))
         .accessibilityValue(isRecording ? Text("Press keys...") : Text(verbatim: Self.spokenName(shortcut ?? "", locale: locale)))
     }

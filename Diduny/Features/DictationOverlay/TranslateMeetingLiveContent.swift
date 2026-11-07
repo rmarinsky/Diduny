@@ -14,7 +14,8 @@ struct TranslateMeetingLiveContent: View {
                 showsOriginal: $store.meetingTranslationShowsOriginal,
                 onPickPair: store.pickMeetingTranslationPair,
                 onPickEngine: { if !store.meetingSwitchingLocked { store.meetingTranslationEngine = $0 } },
-                onOpenLanguages: { (NSApp.delegate as? AppDelegate)?.openSettings(tab: .languages) }
+                // SwiftUI's `NSApp.delegate` is an adaptor, not `AppDelegate`.
+                onOpenLanguages: { AppDelegate.current?.openSettings(tab: .languages) }
             ) {
                 LiveWaveformCircle(store: store)
             }

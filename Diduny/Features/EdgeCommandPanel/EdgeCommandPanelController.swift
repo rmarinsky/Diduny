@@ -531,6 +531,8 @@ final class EdgeCommandPanelController: NSObject {
             defer: false
         )
         panel.identifier = Self.panelIdentifier
+        // The window identifier is not the accessibility one (test-plan 2.1 window `commandPanel`).
+        panel.setAccessibilityIdentifier(Self.panelIdentifier.rawValue)
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]

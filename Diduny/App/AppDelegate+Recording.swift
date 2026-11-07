@@ -1195,8 +1195,10 @@ extension AppDelegate {
     /// Offers the output picker for cloud sessions only: switching a local
     /// session would send its text to the cloud translation endpoint.
     func configureRecordingFeedbackOutput(native: DictationOutput, provider: TranscriptionProvider) {
+        // 01 §4 item 3: Original, your languages, then all languages, whatever pairs are stored
+        // (a fresh install has none, which hid the menu).
         let options = provider == .cloud
-            ? DictationOutput.options(pairs: SettingsStorage.shared.translationLanguagePairs, native: native)
+            ? DictationOutputMenu.outputs(yourLanguages: SettingsStorage.shared.yourLanguages)
             : []
         let listensForVoiceCommands = !options.isEmpty
             && SettingsStorage.shared.voiceTranslationCommandsEnabled
