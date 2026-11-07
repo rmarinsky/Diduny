@@ -39,7 +39,7 @@ struct RecordOnlyRoutingTests {
         let modes = ModeDefaults(defaults: defaults)
         modes.apply([.startsIn(.recordOnly), .segmentEngine(.recordOnly, JobProviderSelection(providerID: "apple-speech"))])
 
-        let segment = RunTimeRouting.calendarSegment(localOverride: nil, startsIn: modes.meetingStartsIn)
+        let segment = RunTimeRouting.calendarSegment(localOverride: nil, startsIn: modes.meetingStartsIn, showsThisMac: true)
         let route = RunTimeRouting.route(job: .meeting, segment: segment, defaults: modes,
                                          readiness: FakeEngineReadinessSource(),
                                          whisper: .init(downloaded: [], selected: nil), signedIn: true)
@@ -48,14 +48,23 @@ struct RecordOnlyRoutingTests {
         #expect(start.engine == .appleSpeech)
     }
 
-    @Test("What the calendar picker and reminder show is what runs", arguments: MeetingSegment.allCases)
-    func shownIsWhatRuns(startsIn: MeetingSegment) {
-        let shown = RunTimeRouting.calendarShowsThisMac(startsIn: startsIn)
-        for pick in [nil, true, false] as [Bool?] {
-            let runs = RunTimeRouting.calendarSegment(localOverride: pick, startsIn: startsIn)
-            #expect((runs != .cloud) == (pick ?? shown), "pick \(String(describing: pick)) on \(startsIn)")
+    @Test("What the reminder shows is what runs: This Mac means the engine runs on the device",
+          arguments: [(MeetingSegment.thisMac, EngineID.whisper), (.cloud, .didunyCloud), (.cloud, .elevenLabs),
+                      (.recordOnly, .parakeet), (.recordOnly, .appleSpeech), (.recordOnly, .didunyCloud),
+                      (.recordOnly, .elevenLabs)])
+    func shownIsWhatRuns(segment: MeetingSegment, engine: EngineID) {
+        let routeFor: (MeetingSegment, EngineID) -> MeetingStartRoute = { segment, engine in
+            RunTimeRouting.meetingStart(segment: segment,
+                                        route: RunTimeRoute(engine: engine, modelID: nil, unavailable: nil, baseProvider: .local))
         }
-        // A pick matching what is shown keeps the exact segment and its engine.
-        #expect(RunTimeRouting.calendarSegment(localOverride: shown, startsIn: startsIn) == startsIn)
+        let start = routeFor(segment, engine)
+        let shown = RunTimeRouting.calendarShowsThisMac(start)
+        #expect(shown == [.whisper, .parakeet, .appleSpeech].contains(engine))
+        for pick in [nil, true, false] as [Bool?] {
+            let runs = RunTimeRouting.calendarSegment(localOverride: pick, startsIn: segment, showsThisMac: shown)
+            // The segment that runs keeps the shown engine, or switches to This Mac (Whisper) or Cloud.
+            let runsOnDevice = runs == segment ? shown : runs == .thisMac
+            #expect(runsOnDevice == (pick ?? shown), "pick \(String(describing: pick)) on \(segment) \(engine)")
+        }
     }
 }

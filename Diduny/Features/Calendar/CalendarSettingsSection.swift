@@ -4,7 +4,7 @@ import SwiftUI
 struct CalendarSettingsSection: View {
     @State private var connection: CalendarConnection
     @State private var showConsent = false
-    /// Re-renders the calendar picker when "Starts in" changes anywhere.
+    /// Re-renders the "Starts in" line when it changes anywhere.
     @AppStorage(ModeDefaults.meetingTranscriptModeKey) private var startsInRaw = ModeDefaults.newInstallStartsIn.rawValue
     @State private var approved = false
     @State private var showBrowser = false
@@ -125,11 +125,16 @@ struct CalendarSettingsSection: View {
                 }
                 Toggle("Open Zoom and Teams in their apps", isOn: preference(\.openInApps))
                 Toggle("Record when I choose Join", isOn: preference(\.recordOnJoin))
-                Picker("Transcribe calendar recordings", selection: calendarStartsOnThisMac) {
-                    Text("On this Mac, after the meeting").tag(true)
-                    Text("Live, in the cloud").tag(false)
+                // 8A: calendar meetings follow Settings › Modes › Meeting "Starts in"; shown, not edited, here.
+                LabeledContent("Transcribe calendar recordings") {
+                    HStack {
+                        Text(startsInTitle)
+                        Button("Open Modes") { AppDelegate.current?.openMainWindow(section: .modes) }
+                            .buttonStyle(.link)
+                            .accessibilityIdentifier("calendar.startsIn.openModes")
+                    }
                 }
-                Text("On this Mac, only audio is recorded during the call and the transcript is made in the background when you stop. You can turn on a live transcript during the meeting. Without a downloaded model the audio is saved; it is never uploaded silently. To keep reminders running after login, use Launch at Login in General.")
+                Text("Calendar meetings follow Settings › Modes › Meeting.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Menu bar") {
@@ -224,14 +229,12 @@ struct CalendarSettingsSection: View {
         .accessibilityLabel(Text("\(calendar.title), \(calendar.displaySource), \(calendar.detailLabel)"))
     }
 
-    /// The picker reads and writes Settings › Modes › Meeting "Starts in", which is what a calendar
-    /// meeting runs (8A); `localRecording` is no longer written.
-    private var calendarStartsOnThisMac: Binding<Bool> {
-        Binding(get: { RunTimeRouting.calendarShowsThisMac(startsIn: MeetingSegment(rawValue: startsInRaw) ?? .cloud) },
-                set: { value in
-                    let modes = SettingsStorage.shared.modeDefaults
-                    modes.apply([.startsIn(RunTimeRouting.calendarSegment(localOverride: value, startsIn: modes.meetingStartsIn))])
-                })
+    private var startsInTitle: String {
+        switch MeetingSegment(rawValue: startsInRaw) ?? ModeDefaults.newInstallStartsIn {
+        case .thisMac: String(localized: "This Mac")
+        case .cloud: String(localized: "Cloud")
+        case .recordOnly: String(localized: "Record only")
+        }
     }
 
     private func preference<T>(_ key: WritableKeyPath<CalendarConfiguration, T>) -> Binding<T> {

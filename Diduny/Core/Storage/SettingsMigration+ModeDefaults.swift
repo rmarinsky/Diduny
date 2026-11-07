@@ -62,7 +62,7 @@ extension SettingsMigration {
             .cloud: selection(.didunyCloud),
             .recordOnly: selection(environment.isAppleSilicon ? .parakeet : .whisper),
         ]
-        var startsIn: MeetingSegment
+        let startsIn: MeetingSegment
         switch stored.flatMap({ EngineID(rawValue: $0.providerID) }) {
         case .elevenLabs where environment.hasProviderKey(STTProviderID.elevenLabs)
             && stored?.modelID == ElevenLabsProvider.realtimeModelID:
@@ -92,10 +92,6 @@ extension SettingsMigration {
             }
         }
 
-        // 8A: calendar meetings now follow "Starts in". A calendar that recorded on this Mac moves a Cloud
-        // start to This Mac, so no meeting that ran on this Mac starts going to the cloud.
-        if startsIn == .cloud, calendarRecordedLocally(defaults) { startsIn = .thisMac }
-
         // The segments the row decides are written; the others only when unset.
         var decided: Set<MeetingSegment> = [startsIn]
         if case .appleSpeech? = stored.flatMap({ EngineID(rawValue: $0.providerID) }) { decided.insert(.recordOnly) }
@@ -107,12 +103,18 @@ extension SettingsMigration {
             store.setSelection(value, forKey: key)
         }
         ModeDefaults(defaults: defaults).apply([.startsIn(startsIn)])
+        migrateCalendarLocalRecording(defaults: defaults)
     }
 
-    /// Schema 3 for installs already at 2: the same calendar mapping, nothing else.
+    /// 8A: calendar meetings now follow "Starts in". A calendar that recorded on this Mac moves a start
+    /// that would upload (Cloud, or Record only on Diduny Cloud or ElevenLabs) to This Mac. Also schema 3
+    /// on its own for installs already at 2.
     static func migrateCalendarLocalRecording(defaults: UserDefaults) {
         let modes = ModeDefaults(defaults: defaults)
-        if modes.meetingStartsIn == .cloud, calendarRecordedLocally(defaults) { modes.apply([.startsIn(.thisMac)]) }
+        let startsIn = modes.meetingStartsIn
+        let uploads = startsIn == .cloud
+            || (startsIn == .recordOnly && [.didunyCloud, .elevenLabs].contains(modes.engine(for: .recordOnly)))
+        if uploads, calendarRecordedLocally(defaults) { modes.apply([.startsIn(.thisMac)]) }
     }
 
     /// The saved calendar connection with `localRecording` on (missing key: the old default, on).

@@ -1382,8 +1382,6 @@
 "A small window in the middle of the screen with the meeting's details." = "A small window in the middle of the screen with the meeting's details.";
 "Transcribe calendar recordings" = "Transcribe calendar recordings";
 "On this Mac, after the meeting" = "On this Mac, after the meeting";
-"Live, in the cloud" = "Live, in the cloud";
-"On this Mac, only audio is recorded during the call and the transcript is made in the background when you stop. You can turn on a live transcript during the meeting. Without a downloaded model the audio is saved; it is never uploaded silently. To keep reminders running after login, use Launch at Login in General." = "On this Mac, only audio is recorded during the call and the transcript is made in the background when you stop. You can turn on a live transcript during the meeting. Without a downloaded model the audio is saved; it is never uploaded silently. To keep reminders running after login, use Launch at Login in General.";
 "Records with a live transcript in the cloud" = "Records with a live transcript in the cloud";
 "Records on this Mac · transcribed after the meeting" = "Records on this Mac · transcribed after the meeting";
 "Records audio only · download a model to transcribe" = "Records audio only · download a model to transcribe";
@@ -2020,3 +2018,7 @@
 
 /* Panels redesign fix queue */
 "Choose the engine, audio sources and recording levels in Modes." = "Choose the engine, audio sources and recording levels in Modes.";
+
+/* Panels redesign WP-62 */
+"Open Modes" = "Open Modes";
+"Calendar meetings follow Settings › Modes › Meeting." = "Calendar meetings follow Settings › Modes › Meeting.";

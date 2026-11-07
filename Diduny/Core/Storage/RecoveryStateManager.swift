@@ -126,6 +126,23 @@ struct RecoveryRecordingProcessor {
         self.cleanupSource = cleanupSource
     }
 
+    /// Saves the recovered audio and hands it to the queue instead of transcribing here (a Translate
+    /// meeting takes the same after-Stop path as Stop, 7A). Returns the saved recording.
+    func handOff(state: RecoveryState, enqueue: (UUID) -> Void) async throws -> UUID {
+        let audioURL = URL(fileURLWithPath: state.tempFilePath)
+        _ = try InterruptedWAVRecovery.repairIfNeeded(at: audioURL)
+        let duration = try InterruptedWAVRecovery.durationSeconds(at: audioURL)
+        let audioData = try await Task.detached(priority: .userInitiated) {
+            try Data(contentsOf: audioURL)
+        }.value
+        guard let recordingID = save(audioData, state, duration) else {
+            throw RecoveryRecordingProcessorError.couldNotPersist
+        }
+        cleanupSource(state)
+        enqueue(recordingID)
+        return recordingID
+    }
+
     func process(
         state: RecoveryState,
         transcribe: (Data, RecoveryState.RecordingType) async throws -> String

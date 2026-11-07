@@ -1382,8 +1382,6 @@
 "A small window in the middle of the screen with the meeting's details." = "Невелике вікно посередині екрана з подробицями зустрічі.";
 "Transcribe calendar recordings" = "Транскрибувати календарні записи";
 "On this Mac, after the meeting" = "На цьому Mac, після зустрічі";
-"Live, in the cloud" = "Наживо, у хмарі";
-"On this Mac, only audio is recorded during the call and the transcript is made in the background when you stop. You can turn on a live transcript during the meeting. Without a downloaded model the audio is saved; it is never uploaded silently. To keep reminders running after login, use Launch at Login in General." = "На цьому Mac під час дзвінка записується лише аудіо, а транскрипція створюється у фоні після зупинки. Під час зустрічі можна увімкнути живу транскрипцію. Без завантаженої моделі аудіо зберігається й ніколи непомітно не вивантажується. Щоб нагадування працювали після входу в систему, увімкніть «Запускати під час входу в систему» в розділі «Загальні».";
 "Records with a live transcript in the cloud" = "Запис із живою транскрипцією у хмарі";
 "Records on this Mac · transcribed after the meeting" = "Запис на цьому Mac · транскрипція після зустрічі";
 "Records audio only · download a model to transcribe" = "Лише запис аудіо · завантажте модель для транскрипції";
@@ -2020,3 +2018,7 @@
 
 /* Panels redesign fix queue */
 "Choose the engine, audio sources and recording levels in Modes." = "Рушій, джерела звуку й рівні запису налаштовуються в розділі «Режими».";
+
+/* Panels redesign WP-62 */
+"Open Modes" = "Відкрити Режими";
+"Calendar meetings follow Settings › Modes › Meeting." = "Зустрічі з календаря йдуть за Налаштування › Режими › Зустріч.";

@@ -217,6 +217,39 @@ struct SettingsMigrationTests {
         #expect(after == before)
     }
 
+    @Test("A local calendar moves Record only on a cloud engine to This Mac, both paths",
+          arguments: [(EngineID.didunyCloud, true, MeetingSegment.thisMac), (.elevenLabs, true, .thisMac),
+                      (.parakeet, true, .recordOnly), (.didunyCloud, false, .recordOnly)])
+    func calendarRecordOnlyCloud(engine: EngineID, local: Bool, expected: MeetingSegment) throws {
+        for fromVersion in [0, 2] {
+            let (defaults, _) = try Self.load("cloud-default")
+            var calendar = CalendarConfiguration()
+            calendar.localRecording = local
+            defaults.set(try JSONEncoder().encode(calendar), forKey: "calendar.connection.v1")
+            if fromVersion == 2 {
+                defaults.set(2, forKey: SettingsMigration.schemaVersionKey)
+                ModeDefaults(defaults: defaults).apply([.startsIn(.recordOnly),
+                                                        .segmentEngine(.recordOnly, JobProviderSelection(providerID: engine.rawValue))])
+                Self.migrate(defaults, hasKey: true, appleSilicon: true)
+            } else {
+                // Legacy local without preview starts in Record only; its engine is then set as stored.
+                defaults.set(false, forKey: "meetingRealtimeTranscriptionEnabled")
+                defaults.set(false, forKey: "meetingLocalLivePreviewEnabled")
+                defaults.set(try JSONEncoder().encode(JobProviderSelection(providerID: engine.rawValue)),
+                             forKey: ModeDefaults.storageKey(for: .recordOnly))
+                Self.migrate(defaults, hasKey: true, appleSilicon: true)
+            }
+            let modes = ModeDefaults(defaults: defaults)
+            if fromVersion == 2 {
+                #expect(modes.meetingStartsIn == expected)
+            } else if local {
+                // The full migration never leaves a local calendar starting in Record only on a cloud engine.
+                #expect(!(modes.meetingStartsIn == .recordOnly
+                    && [.didunyCloud, .elevenLabs].contains(modes.engine(for: .recordOnly))))
+            }
+        }
+    }
+
     @Test("No saved calendar: Starts in is unchanged")
     func noCalendar() throws {
         let (defaults, _) = try Self.load("cloud-default")

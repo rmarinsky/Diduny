@@ -673,6 +673,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             )
 
+            if state.recordingType == .meetingTranslation {
+                // Same path as Stop: the mode engine after Stop, then Diduny translates (7A, WP-61).
+                let target = RunTimeRouting.meetingTranslationRecoveryTarget(
+                    saved: state.translationTargetLanguage, pair: SettingsStorage.shared.resolveTranslationLanguagePair())
+                let engine = self.modeRoute(for: .meetingTranslation).engine
+                do {
+                    let id = try await processor.handOff(state: state) { id in
+                        RecordingQueueService.shared.enqueue([id], action: .translate, targetLanguage: target,
+                                                             engineOverride: engine)
+                    }
+                    MainWindowController.shared.showRecording(id: id)
+                } catch {
+                    Log.app.error("Recovery hand-off failed: \(error.localizedDescription)")
+                    DictationOverlayController.shared.showInfo(
+                        message: "Recovery failed. The original audio was kept for another attempt.", duration: 5)
+                }
+                return
+            }
+
             do {
                 let result = try await processor.process(state: state) { audioData, recordingType in
                     Log.app.info("Recovered audio data: \(audioData.count) bytes")
@@ -703,13 +722,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             )
                         }
                     case .meetingTranslation:
-                        rawText = self.routedProvider(for: .meetingTranslation) == .local
-                            ? try await self.localWhisperTranslation(
-                                audioData: audioData,
-                                targetLanguage: RunTimeRouting.meetingTranslationRecoveryTarget(
-                                    saved: state.translationTargetLanguage,
-                                    pair: SettingsStorage.shared.resolveTranslationLanguagePair()))
-                            : try await self.transcriptionService.translateAndTranscribe(audioData: audioData)
+                        // Handed to the queue above.
+                        throw RecoveryRecordingProcessorError.couldNotPersist
                     }
 
                     let cleanedText = await TranscriptCleanupService.shared.clean(
