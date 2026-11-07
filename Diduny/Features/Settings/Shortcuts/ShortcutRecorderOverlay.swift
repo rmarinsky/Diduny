@@ -99,10 +99,6 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
 
         override var mouseDownCanMoveWindow: Bool { false }
 
-        /// The click that brings Settings forward also starts recording, instead of only activating
-        /// the window (as the command panel's hosting view does).
-        override func acceptsFirstMouse(for _: NSEvent?) -> Bool { true }
-
         override func hitTest(_ point: NSPoint) -> NSView? {
             !isHiddenOrHasHiddenAncestor && bounds.contains(convert(point, from: superview)) ? self : nil
         }
