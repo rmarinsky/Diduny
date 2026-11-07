@@ -108,10 +108,14 @@ enum RunTimeRouting {
         saved ?? pair.languageB
     }
 
-    /// A calendar meeting starts in "Starts in" (8A); the reminder's per-meeting pick, when made, wins.
-    /// `localRecording` no longer picks the segment.
+    /// What the calendar picker and the reminder show as "On this Mac" for a "Starts in" value (8A).
+    static func calendarShowsThisMac(startsIn: MeetingSegment) -> Bool { startsIn != .cloud }
+
+    /// A calendar meeting starts in "Starts in" (8A). A pick that matches what is shown keeps it; a
+    /// different pick goes to This Mac or Cloud. `localRecording` no longer picks the segment.
     static func calendarSegment(localOverride: Bool?, startsIn: MeetingSegment) -> MeetingSegment {
-        localOverride.map { $0 ? .thisMac : .cloud } ?? startsIn
+        guard let local = localOverride, local != calendarShowsThisMac(startsIn: startsIn) else { return startsIn }
+        return local ? .thisMac : .cloud
     }
 
     static func baseProvider(for engine: EngineID, signedIn: Bool) -> TranscriptionProvider {

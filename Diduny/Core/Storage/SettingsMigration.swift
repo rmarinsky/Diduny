@@ -18,7 +18,7 @@ enum SettingsMigration {
     }
 
     static let schemaVersionKey = "settingsSchemaVersion"
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     /// ADR-0012 D5: keys that only an earlier build writes before this migration runs.
     private static let existingInstallKeys = [
@@ -34,8 +34,12 @@ enum SettingsMigration {
     /// Runs once per install. Existing installs get the new keys from what runs today; fresh installs
     /// get nothing written (read-time defaults apply). Never deletes a legacy key.
     static func runIfNeeded(defaults: UserDefaults, environment: Environment) {
-        guard defaults.integer(forKey: schemaVersionKey) < currentSchemaVersion else { return }
-        if isExistingInstall(defaults) {
+        let version = defaults.integer(forKey: schemaVersionKey)
+        guard version < currentSchemaVersion else { return }
+        if version == 2 {
+            // Already ran the mode-defaults step before 8A: only the calendar mapping is new.
+            migrateCalendarLocalRecording(defaults: defaults)
+        } else if isExistingInstall(defaults) {
             migrateModeDefaults(defaults: defaults, environment: environment)
             migrateLanguages(defaults: defaults)
         }

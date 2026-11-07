@@ -65,7 +65,7 @@ struct SettingsMigrationTests {
         #expect(modes.engine(for: .meeting) == persona.segments[MeetingSegment.allCases.firstIndex(of: persona.startsIn)!])
         #expect(modes.engine(for: .meetingTranslation) == persona.meetingTranslation)
         #expect(modes.engine(for: .file) == persona.file)
-        #expect(defaults.integer(forKey: SettingsMigration.schemaVersionKey) == 2)
+        #expect(defaults.integer(forKey: SettingsMigration.schemaVersionKey) == SettingsMigration.currentSchemaVersion)
         Self.expectSeedUntouched(seed, in: defaults)
     }
 
@@ -86,7 +86,7 @@ struct SettingsMigrationTests {
     func freshInstall() throws {
         let (defaults, _) = try Self.load("fresh-install")
         Self.migrate(defaults, hasKey: false, appleSilicon: true)
-        #expect(Self.snapshot(defaults) == [SettingsMigration.schemaVersionKey: "2"])
+        #expect(Self.snapshot(defaults) == [SettingsMigration.schemaVersionKey: "\(SettingsMigration.currentSchemaVersion)"])
         let modes = ModeDefaults(defaults: defaults)
         #expect(modes.engine(for: .dictation) == .didunyCloud)
         #expect(modes.engine(for: .dictationTranslation) == .didunyCloud)
@@ -103,7 +103,7 @@ struct SettingsMigrationTests {
         let (defaults, _) = try Self.load("fresh-install")
         let storage = SettingsStorage(defaults: defaults, migrationEnvironment: Self.environment(hasKey: false, appleSilicon: true))
         storage.applyNewUserDefaultsIfMissing()
-        #expect(defaults.integer(forKey: SettingsMigration.schemaVersionKey) == 2)
+        #expect(defaults.integer(forKey: SettingsMigration.schemaVersionKey) == SettingsMigration.currentSchemaVersion)
         #expect(defaults.object(forKey: ProviderDefaultsStore.storageKey(for: .file)) == nil)
         #expect(storage.modeDefaults.engine(for: .file) == .parakeet)
     }
@@ -199,6 +199,22 @@ struct SettingsMigrationTests {
         Self.migrate(defaults, hasKey: false, appleSilicon: true)
         #expect(ModeDefaults(defaults: defaults).meetingStartsIn == expected)
         #expect(defaults.data(forKey: "calendar.connection.v1") == blob)
+    }
+
+    @Test("Schema 2 to 3 runs only the calendar mapping", arguments: [(true, MeetingSegment.thisMac), (false, .cloud)])
+    func schemaTwoToThree(local: Bool, expected: MeetingSegment) throws {
+        let (defaults, _) = try Self.load("cloud-default")
+        defaults.set(2, forKey: SettingsMigration.schemaVersionKey)
+        defaults.set(MeetingSegment.cloud.rawValue, forKey: ModeDefaults.meetingTranscriptModeKey)
+        var calendar = CalendarConfiguration()
+        calendar.localRecording = local
+        defaults.set(try JSONEncoder().encode(calendar), forKey: "calendar.connection.v1")
+        let before = Self.snapshot(defaults).filter { $0.key != ModeDefaults.meetingTranscriptModeKey && $0.key != SettingsMigration.schemaVersionKey }
+        Self.migrate(defaults, hasKey: false, appleSilicon: true)
+        #expect(ModeDefaults(defaults: defaults).meetingStartsIn == expected)
+        #expect(defaults.integer(forKey: SettingsMigration.schemaVersionKey) == 3)
+        let after = Self.snapshot(defaults).filter { $0.key != ModeDefaults.meetingTranscriptModeKey && $0.key != SettingsMigration.schemaVersionKey }
+        #expect(after == before)
     }
 
     @Test("No saved calendar: Starts in is unchanged")

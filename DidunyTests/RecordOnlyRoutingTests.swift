@@ -48,10 +48,14 @@ struct RecordOnlyRoutingTests {
         #expect(start.engine == .appleSpeech)
     }
 
-    @Test("The reminder's per-meeting pick still wins")
-    func reminderPick() {
-        #expect(RunTimeRouting.calendarSegment(localOverride: true, startsIn: .cloud) == .thisMac)
-        #expect(RunTimeRouting.calendarSegment(localOverride: false, startsIn: .recordOnly) == .cloud)
-        #expect(RunTimeRouting.calendarSegment(localOverride: nil, startsIn: .cloud) == .cloud)
+    @Test("What the calendar picker and reminder show is what runs", arguments: MeetingSegment.allCases)
+    func shownIsWhatRuns(startsIn: MeetingSegment) {
+        let shown = RunTimeRouting.calendarShowsThisMac(startsIn: startsIn)
+        for pick in [nil, true, false] as [Bool?] {
+            let runs = RunTimeRouting.calendarSegment(localOverride: pick, startsIn: startsIn)
+            #expect((runs != .cloud) == (pick ?? shown), "pick \(String(describing: pick)) on \(startsIn)")
+        }
+        // A pick matching what is shown keeps the exact segment and its engine.
+        #expect(RunTimeRouting.calendarSegment(localOverride: shown, startsIn: startsIn) == startsIn)
     }
 }

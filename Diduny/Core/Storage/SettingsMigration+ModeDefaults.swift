@@ -109,6 +109,12 @@ extension SettingsMigration {
         ModeDefaults(defaults: defaults).apply([.startsIn(startsIn)])
     }
 
+    /// Schema 3 for installs already at 2: the same calendar mapping, nothing else.
+    static func migrateCalendarLocalRecording(defaults: UserDefaults) {
+        let modes = ModeDefaults(defaults: defaults)
+        if modes.meetingStartsIn == .cloud, calendarRecordedLocally(defaults) { modes.apply([.startsIn(.thisMac)]) }
+    }
+
     /// The saved calendar connection with `localRecording` on (missing key: the old default, on).
     /// The field stays in the blob; it is only read here.
     private static func calendarRecordedLocally(_ defaults: UserDefaults) -> Bool {
