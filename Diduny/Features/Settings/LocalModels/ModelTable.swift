@@ -43,19 +43,36 @@ struct ModelTable: View {
         HStack(spacing: 10) {
             Text("Show models that can").font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
                 .lineLimit(1).fixedSize() // one line; the pop-ups give way (build-vs-prototype)
-            Picker("Show models that can", selection: $model.modeFilter) {
-                ForEach(LocalModelModeFilter.allCases) { Text(verbatim: $0.title).tag($0) }
+            // A menu button sized to its value, not a pop-up as wide as its longest item (build-vs-prototype).
+            Menu {
+                Picker("Show models that can", selection: $model.modeFilter) {
+                    ForEach(LocalModelModeFilter.allCases) { Text(verbatim: $0.title).tag($0) }
+                }
+                .pickerStyle(.inline).labelsHidden()
+            } label: {
+                Text(verbatim: model.modeFilter.title)
             }
-            .labelsHidden().fixedSize()
+            .menuStyle(.button).fixedSize()
+            .accessibilityLabel(Text("Show models that can"))
             .accessibilityIdentifier("models.filter.mode")
             Text("in").font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
-            Picker("in", selection: $model.languageFilter) {
-                Text("any language").tag(String?.none)
-                ForEach(model.languageOptions, id: \.self) { code in
-                    Text(verbatim: EngineLanguages.name(of: EngineLanguage(code))).tag(Optional(code))
+            Menu {
+                Picker("in", selection: $model.languageFilter) {
+                    Text("any language").tag(String?.none)
+                    ForEach(model.languageOptions, id: \.self) { code in
+                        Text(verbatim: EngineLanguages.name(of: EngineLanguage(code))).tag(Optional(code))
+                    }
+                }
+                .pickerStyle(.inline).labelsHidden()
+            } label: {
+                if let code = model.languageFilter {
+                    Text(verbatim: EngineLanguages.name(of: EngineLanguage(code)))
+                } else {
+                    Text("any language")
                 }
             }
-            .labelsHidden().fixedSize()
+            .menuStyle(.button).fixedSize()
+            .accessibilityLabel(Text("in"))
             .accessibilityIdentifier("models.filter.language")
             Spacer(minLength: 0)
             Picker("Sort", selection: $model.sort) {
