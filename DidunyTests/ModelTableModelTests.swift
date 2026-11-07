@@ -296,4 +296,14 @@ struct ModelTableModelTests {
             #expect(LocalModelSize.text(bytes: model.sizeBytes) == model.sizeDescription)
         }
     }
+
+    @Test("Parakeet size reads the same in the caption, the Needs row and the Size column, in Ukrainian too")
+    func sizeTextMatchesColumn() throws {
+        let caps = try EngineCapabilitiesTests.capabilities(.parakeet, whisper: nil)
+        let uk = Locale(identifier: "uk")
+        let size = LocalModelSize.text(bytes: ParakeetProvider.downloadBytes)
+        #expect(EngineCaptions.withNote("x", caps: caps, readiness: .notDownloaded(bytes: ParakeetProvider.downloadBytes), locale: uk)
+            .hasSuffix(size))
+        #expect(ProviderTableModel.needs(caps, locale: uk).contains(size))
+    }
 }

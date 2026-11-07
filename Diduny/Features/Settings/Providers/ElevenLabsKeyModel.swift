@@ -147,12 +147,20 @@ final class KeyPopupState {
         !replacement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Checks the new key as Add does; ElevenLabs rejecting it restores the old key and keeps the field open.
     func saveReplacement() async {
         guard canSaveReplacement else { return }
+        let previous = keyStore.key(for: providerID)
         do {
             try keyStore.save(replacement, for: providerID)
         } catch {
             replaceFailed = true
+            return
+        }
+        connection = .testing
+        if case .failed(.invalidKey) = await account.testConnection(apiKey: keyStore.key(for: providerID) ?? "") {
+            if let previous { try? keyStore.save(previous, for: providerID) }
+            connection = .failed(.invalidKey)
             return
         }
         cancelReplace()

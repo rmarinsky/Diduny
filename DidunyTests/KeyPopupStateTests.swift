@@ -104,6 +104,18 @@ final class KeyPopupStateTests {
         #expect(!state.isReplacing)
     }
 
+    @Test("Replace with a rejected key restores the old key and shows Invalid key")
+    func replaceInvalid() async throws {
+        let state = try popup(.invalid)
+        state.beginReplace()
+        state.replacement = "replacement-key-9z9z"
+        await state.saveReplacement()
+        #expect(keyStore.key(for: id) == ProviderUITesting.fakeKey)
+        #expect(state.maskedKey == "••••••••4f2a")
+        #expect(state.connection.text == "Invalid key")
+        #expect(state.isReplacing)
+    }
+
     @Test("Add: Save is disabled while empty; a working key is kept")
     func addWorks() async {
         let add = AddKeyState(keyStore: keyStore, account: StubElevenLabsAccount(mode: .works))

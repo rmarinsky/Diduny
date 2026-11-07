@@ -36,7 +36,7 @@ enum EngineCaptions {
         locale: Locale = EngineLanguages.appLocale
     ) -> String {
         if case let .notDownloaded(bytes) = readiness {
-            let size = bytes.formatted(.byteCount(style: .file).locale(locale))
+            let size = LocalModelSize.text(bytes: bytes) // the Size column format (POSIX), any app locale
             return String(localized: "Not downloaded, \(size)")
         }
         return note(caps).map { "\(text) · \($0)" } ?? text

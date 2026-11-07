@@ -24,6 +24,15 @@ struct ProviderComparisonTable: View {
         }
     }
 
+    /// The settings content column at the default 1000 pt window: 1000 - 238 sidebar - 0.5 rule - 2 x 24.
+    static let tableWidth: CGFloat = 713.5
+
+    /// The label column takes what the engine columns leave (prototype 135.7 without a key). A fixed width
+    /// keeps the table inside the column, so the page never pushes the sidebar out of the window.
+    static func labelWidth(columns: [EngineID], withKey: Bool) -> CGFloat {
+        tableWidth - columns.reduce(0) { $0 + width(of: $1, withKey: withKey) }
+    }
+
     private static let cellPadding: CGFloat = 8
     private static let groupRuleWidth: CGFloat = 2
     private static let groupPadding: CGFloat = 14
@@ -200,15 +209,15 @@ struct ProviderComparisonTable: View {
 
     // MARK: Pieces
 
-    /// One line (prototype 135.7): the label column takes the widest label.
+    /// One line without a key (prototype 135.7); with the ElevenLabs column the labels wrap.
     private func labelCell(_ text: String, alignment: Alignment = .topLeading) -> some View {
         Text(verbatim: text)
             .font(DS.Font.callout)
             .foregroundStyle(DS.Palette.text)
-            .lineLimit(1)
-            .fixedSize()
+            .fixedSize(horizontal: false, vertical: true)
             .padding(Self.cellPadding)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+            .frame(width: Self.labelWidth(columns: model.columns.map(\.id), withKey: model.hasKeyColumn), alignment: alignment)
+            .frame(maxHeight: .infinity, alignment: alignment)
     }
 
     private func cell(

@@ -89,4 +89,17 @@ struct ProviderTableModelTests {
         #expect(ProviderTableModel.accessibilityLabel(column: eleven.name, row: .meetLabels, value: labels)
             == "ElevenLabs, Meeting speaker labels: Yes, After Stop, up to 32")
     }
+
+    @Test("Table fills the 713.5 content column, with and without a key (label 135.7 without)")
+    @MainActor func tableWidth() throws {
+        for hasKey in [false, true] {
+            let model = try Self.model(hasKey: hasKey)
+            let ids = model.columns.map(\.id)
+            let label = ProviderComparisonTable.labelWidth(columns: ids, withKey: model.hasKeyColumn)
+            let total = ids.reduce(label) { $0 + ProviderComparisonTable.width(of: $1, withKey: model.hasKeyColumn) }
+            #expect(abs(total - 713.5) < 0.01)
+            #expect(label > 100)
+            if !hasKey { #expect(abs(label - 135.7) < 0.01) }
+        }
+    }
 }

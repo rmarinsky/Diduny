@@ -165,7 +165,7 @@ struct ProviderTableModel: Equatable, Sendable {
         if needs.contains(.ownKey) { return String(localized: "API key, ElevenLabs billing") }
         if needs.contains(.download) {
             if needs.contains(.appleSilicon), case let .download(bytes) = caps.traits.obtainedBy {
-                let size = bytes.formatted(.byteCount(style: .file).locale(locale))
+                let size = LocalModelSize.text(bytes: bytes) // the Size column format (POSIX), any app locale
                 return String(localized: "About \(size), Apple silicon")
             }
             let sizes = WhisperModelManager.availableModels.sorted { $0.sizeBytes < $1.sizeBytes }
