@@ -30,6 +30,13 @@ final class AudioDeviceManager {
     // MARK: - Public Methods
 
     func refreshDevices() {
+        #if TEST_BUILD
+            if let fake = UITestHarness.fakeInputDevices() {
+                availableDevices = fake
+                defaultDevice = fake.first
+                return
+            }
+        #endif
         availableDevices = getInputDevices()
         defaultDevice = availableDevices.first { $0.isDefault }
     }

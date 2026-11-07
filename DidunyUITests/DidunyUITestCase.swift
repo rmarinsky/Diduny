@@ -8,6 +8,8 @@ class DidunyUITestCase: XCTestCase {
     static let defaultTimeout: TimeInterval = 15
 
     private(set) var app: XCUIApplication!
+    /// Last bridge command number (`bridge(_:_:)`).
+    var bridgeSequence = 0
 
     override func setUpWithError() throws {
         // UI tests take over the screen, so they run only on CI (`DIDUNY_UI_TESTS=1`).
@@ -34,6 +36,8 @@ class DidunyUITestCase: XCTestCase {
         onboardingCompleted: Bool = false,
         proxyURL: String = DidunyUITestCase.unreachableProxyURL,
         appearance: String? = nil,
+        profile: LaunchProfile? = nil,
+        open target: String? = nil,
         arguments: [String] = [],
         environment: [String: String] = [:]
     ) -> XCUIApplication {
@@ -53,6 +57,13 @@ class DidunyUITestCase: XCTestCase {
         }
         if let appearance {
             app.launchArguments += ["-AppleInterfaceStyle", appearance]
+        }
+        if let profile {
+            app.launchArguments += profile.flags
+            app.launchEnvironment["DIDUNY_UI_TEST_SEED"] = profile.seedJSON
+        }
+        if let target {
+            app.launchArguments.append("--ui-testing-open=\(target)")
         }
         app.launchArguments += arguments
         app.launchEnvironment.merge(environment) { _, new in new }
@@ -103,6 +114,20 @@ class DidunyUITestCase: XCTestCase {
         line: UInt = #line
     ) {
         waitForElement(element, toMatch: "exists == false", timeout: timeout, file: file, line: line)
+    }
+
+    /// Scrolls the scroll view under `container` by the distance between their centres, then waits
+    /// until `element` is hittable. One computed scroll, no retry loop.
+    func scrollIntoView(
+        _ element: XCUIElement,
+        in container: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        waitForElement(element, file: file, line: line)
+        guard !element.isHittable else { return }
+        container.scroll(byDeltaX: 0, deltaY: container.frame.midY - element.frame.midY)
+        waitForElement(element, toMatch: "isHittable == true", file: file, line: line)
     }
 
     /// The static text with `identifier` showing `text`. SwiftUI on macOS exposes

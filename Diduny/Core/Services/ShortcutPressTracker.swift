@@ -9,7 +9,10 @@ protocol MonotonicClock {
 
 struct SystemClock: MonotonicClock {
     var now: TimeInterval {
-        ProcessInfo.processInfo.systemUptime
+        #if TEST_BUILD
+            if let manual = UITestHarness.manualClock { return manual.now }
+        #endif
+        return ProcessInfo.processInfo.systemUptime
     }
 }
 

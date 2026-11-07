@@ -32,7 +32,13 @@ final class PowerSourceMonitor {
 
     @ObservationIgnored private let source: any PowerSource
 
-    init(source: any PowerSource = IOKitPowerSource()) {
+    /// - Parameter source: nil is IOKit (in the Test build, `--ui-testing-power` when set).
+    init(source: (any PowerSource)? = nil) {
+        var fallback: any PowerSource = IOKitPowerSource()
+        #if TEST_BUILD
+            if let fake = UITestHarness.powerSource { fallback = fake }
+        #endif
+        let source = source ?? fallback
         self.source = source
         isOnBattery = source.current == .battery
         source.startObserving { [weak self] in self?.refresh() }

@@ -378,6 +378,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             showMainWindowAfterLaunch()
         }
+        #if TEST_BUILD
+            UITestOpenTarget.didFinishLaunching(self)
+        #endif
     }
 
     /// Runtime setup is never gated by first-use guidance.
@@ -1363,13 +1366,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         static func applyIfRequested(arguments: [String] = ProcessInfo.processInfo.arguments) {
             guard !didApply else { return }
             didApply = true
-            guard arguments.contains(resetArgument), let bundleID = Bundle.main.bundleIdentifier else { return }
-            NSLog("[Diduny] UI testing: resetting state for %@", bundleID)
-            UserDefaults.standard.removePersistentDomain(forName: bundleID)
-            AuthService.removeStoredSession()
-            if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-                try? FileManager.default.removeItem(at: appSupport.appendingPathComponent(bundleID))
+            let didReset = arguments.contains(resetArgument)
+            if didReset, let bundleID = Bundle.main.bundleIdentifier {
+                NSLog("[Diduny] UI testing: resetting state for %@", bundleID)
+                UserDefaults.standard.removePersistentDomain(forName: bundleID)
+                AuthService.removeStoredSession()
+                if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+                    try? FileManager.default.removeItem(at: appSupport.appendingPathComponent(bundleID))
+                }
             }
+            #if TEST_BUILD
+                UITestHarness.applySeed(didReset: didReset)
+            #endif
         }
     }
 #endif

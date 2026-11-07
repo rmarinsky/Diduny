@@ -26,7 +26,10 @@ final class UsageService {
         hasStoredSession: Bool,
         usage: UsageResponse?
     ) -> Bool {
-        hasStoredSession && (usage == nil || canUseCloudTranscription(hasStoredSession: true, usage: usage))
+        #if TEST_BUILD
+            if let quota = UITestHarness.quota { return hasStoredSession && quota == "available" }
+        #endif
+        return hasStoredSession && (usage == nil || canUseCloudTranscription(hasStoredSession: true, usage: usage))
     }
 
     var formattedRemaining: String {

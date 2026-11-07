@@ -324,6 +324,10 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     private func scheduleTabAutoHide() {
+        #if TEST_BUILD
+            // `--ui-testing-command-panel-pinned`: the tab stays on screen (test-plan 2.2).
+            guard !UITestHarness.isCommandPanelPinned else { return }
+        #endif
         guard EdgeCommandPanelAutoHidePolicy.shouldSchedule(
             isLiveFeedbackMinimized: model?.isLiveFeedbackMinimized == true
         ) else { return }
@@ -436,6 +440,13 @@ final class EdgeCommandPanelController: NSObject {
 
     private var dismissTask: Task<Void, Never>?
 
+    #if TEST_BUILD
+        /// `--ui-testing-open=commandPanel.home`: the home, as a hover on the tab opens it.
+        func expandForUITesting() {
+            showExpanded()
+        }
+    #endif
+
     /// True while a live recording is hidden to the red-dot edge tab.
     var isLiveFeedbackMinimized: Bool {
         model?.isLiveFeedbackMinimized == true
@@ -534,7 +545,13 @@ final class EdgeCommandPanelController: NSObject {
         let contentView = EdgeCommandPanelContentView(
             tabView: makeTabView(),
             expandedView: makeExpandedView(),
-            onHoverChange: { [weak self] hovering in self?.setHovering(hovering) }
+            onHoverChange: { [weak self] hovering in
+                #if TEST_BUILD
+                    // Pinned: no 450 ms collapse on mouse exit. Closing a menu outside still collapses.
+                    if !hovering, UITestHarness.isCommandPanelPinned { return }
+                #endif
+                self?.setHovering(hovering)
+            }
         )
         panelContentView = contentView
         panel.contentView = contentView

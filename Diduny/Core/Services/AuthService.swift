@@ -10,7 +10,12 @@ protocol AuthTokenStore: Sendable {
 @Observable
 @MainActor
 final class AuthService {
-    static let shared = AuthService()
+    static let shared: AuthService = {
+        #if TEST_BUILD
+            if let fake = makeForUITesting() { return fake }
+        #endif
+        return AuthService()
+    }()
 
     nonisolated static var hasStoredSession: Bool {
         UserDefaults.standard.bool(forKey: Keys.sessionPresent)
@@ -371,3 +376,22 @@ enum AuthError: LocalizedError {
         }
     }
 }
+
+#if TEST_BUILD
+    extension AuthService {
+        /// `--ui-testing-signed-in`: a fake session for `tester@example.com` held in memory, never the
+        /// Keychain; `--ui-testing-signed-out`: no session. No network either way.
+        static func makeForUITesting() -> AuthService? {
+            let store = InMemoryKeyBackend()
+            if UITestHarness.has("--ui-testing-signed-in") {
+                try? store.save(key: Keys.accessToken, value: "ui-test-access")
+                try? store.save(key: Keys.refreshToken, value: "ui-test-refresh")
+                try? store.save(key: Keys.accessTokenExpiresAt, value: "4102444800000")
+                try? store.save(key: Keys.userEmail, value: "tester@example.com")
+            } else if !UITestHarness.has("--ui-testing-signed-out") {
+                return nil
+            }
+            return AuthService(tokenStore: store, migrateLegacySession: false)
+        }
+    }
+#endif

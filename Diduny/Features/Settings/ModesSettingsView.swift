@@ -12,12 +12,16 @@ struct ModesSettingsView: View {
     @MainActor
     private static func liveModel() -> ModesViewModel {
         let whisper = WhisperModelManager.availableModels.first { $0.name == SettingsStorage.shared.selectedWhisperModel }
-        return ModesViewModel(
+        let model = ModesViewModel(
             source: LiveModesSettingsSource(),
             readiness: LiveEngineReadinessSource(),
             engines: ProviderRegistry.shared.modules.compactMap { EngineCapabilities.make($0, activeWhisperModel: whisper) },
             isSignedIn: { AuthService.hasStoredSession }
         )
+        #if TEST_BUILD
+            if let job = UITestOpenTarget.requestedModesJob { model.expand(job) }
+        #endif
+        return model
     }
 
     var body: some View {

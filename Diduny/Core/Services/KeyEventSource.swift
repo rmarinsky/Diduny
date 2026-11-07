@@ -65,11 +65,17 @@ final class NSEventKeySource: KeyEventSource {
         }) {
             monitors.append(local)
         }
+        #if TEST_BUILD
+            UITestKeySources.register(self, mask: mask, handler: handler)
+        #endif
     }
 
     func stop() {
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
+        #if TEST_BUILD
+            UITestKeySources.unregister(self)
+        #endif
     }
 }
 
@@ -91,11 +97,36 @@ final class KeyboardShortcutsRegistrar: HotkeyRegistrar {
 
     func onKeyDown(for name: KeyboardShortcuts.Name, handler: @escaping () -> Void) {
         KeyboardShortcuts.onKeyDown(for: name, action: handler)
+        #if TEST_BUILD
+            uiTestHandlers[name] = handler
+        #endif
     }
 
     func removeHandler(for name: KeyboardShortcuts.Name) {
         KeyboardShortcuts.removeHandler(for: name)
+        #if TEST_BUILD
+            uiTestHandlers[name] = nil
+        #endif
     }
+
+    #if TEST_BUILD
+        /// Handlers by name, so bridge `hotkey` dispatches as the Carbon callback would.
+        private var uiTestHandlers: [KeyboardShortcuts.Name: () -> Void] = [:]
+
+        /// Fires the enabled name whose stored shortcut is `keys` ("cmd+opt+d"); false when none matches.
+        func fireForUITesting(keys: String) -> Bool {
+            guard let shortcut = UITestKeys.shortcut(keys),
+                  let match = uiTestHandlers.first(where: { isEnabled($0.key) && getShortcut(for: $0.key) == shortcut })
+            else { return false }
+            match.value()
+            return true
+        }
+
+        /// Names with a handler that are enabled now (probe `registered`).
+        func registeredForUITesting() -> [String] {
+            uiTestHandlers.keys.filter(isEnabled).map(\.rawValue).sorted()
+        }
+    #endif
 
     func disable(_ name: KeyboardShortcuts.Name) {
         KeyboardShortcuts.disable(name)

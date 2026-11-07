@@ -76,6 +76,17 @@ final class SystemAudioTester {
     }
 
     private func start() async {
+        #if TEST_BUILD
+            // Fake system audio (test-plan 2.2): a silent clip, no Screen Recording permission.
+            if UITestHarness.usesFakeAudio {
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent("test_system_audio_\(UUID().uuidString).wav")
+                try? UITestHarness.silentWAV().write(to: url)
+                clipURL = url
+                isCapturing = true
+                status = String(localized: "Capturing... Play some audio on your Mac, then press Stop.")
+                return
+            }
+        #endif
         guard await SystemAudioCaptureService.checkPermission() else {
             status = String(localized: "Screen Recording permission required. Please enable in System Settings > Privacy & Security.")
             return

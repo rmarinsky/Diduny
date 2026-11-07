@@ -130,6 +130,14 @@ final class ClipboardService {
 
     func paste(expectedProcessIdentifier: pid_t?) async throws {
         lastPaste = nil
+        #if TEST_BUILD
+            // `--ui-testing-stub-paste`: record instead of posting ⌘V; the target is "Notes".
+            if UITestHarness.stubsPaste {
+                UITestProbeCounters.recordPaste()
+                lastPaste = PasteRecord(appName: "Notes", at: Date())
+                return
+            }
+        #endif
         // Check accessibility permission first
         let isGranted = ClipboardService.isAccessibilityGranted()
         Log.app.info("Accessibility permission check: \(isGranted)")
@@ -161,6 +169,9 @@ final class ClipboardService {
 
     /// Captures selected text from the frontmost app by simulating Cmd+C.
     func captureSelectedText() async throws -> String {
+        #if TEST_BUILD
+            if let text = UITestHarness.stubbedSelection.withLock({ $0 }) { return text }
+        #endif
         let isGranted = ClipboardService.isAccessibilityGranted()
         Log.app.info("Accessibility permission check (copy): \(isGranted)")
 
@@ -190,6 +201,12 @@ final class ClipboardService {
 
     /// Sends the given shortcut to the frontmost app (used by Force submit after a successful paste).
     func sendShortcut(keyCode: CGKeyCode, flags: CGEventFlags) async throws {
+        #if TEST_BUILD
+            if UITestHarness.stubsPaste {
+                UITestProbeCounters.recordSubmit()
+                return
+            }
+        #endif
         guard ClipboardService.isAccessibilityGranted() else {
             throw ClipboardError.accessibilityNotGranted
         }
