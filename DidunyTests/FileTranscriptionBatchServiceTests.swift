@@ -530,6 +530,22 @@ final class FileTranscriptionBatchServiceTests: XCTestCase {
     }
 
     @MainActor
+    func test_filesFallBackToSelectedWhisperModelWhenTurboIsAbsent() {
+        let snapshot = fileSnapshot(readiness: [.parakeet: .notDownloaded(bytes: 1)],
+                                    downloaded: ["ggml-small"], selected: "ggml-small")
+        XCTAssertNil(snapshot.onDeviceEngineID)
+        XCTAssertEqual(snapshot.localModelName, "ggml-small")
+        XCTAssertNil(snapshot.unavailableMessage)
+    }
+
+    @MainActor
+    func test_filesFallBackToAppleSpeechWhenNoWhisperModelIsDownloaded() {
+        let snapshot = fileSnapshot(readiness: [.parakeet: .notDownloaded(bytes: 1)])
+        XCTAssertEqual(snapshot.onDeviceEngineID, STTProviderID.appleSpeech)
+        XCTAssertNil(snapshot.unavailableMessage)
+    }
+
+    @MainActor
     func test_filesRefuseWhenNothingOnThisMacCanRun() {
         let snapshot = fileSnapshot(readiness: [.parakeet: .notDownloaded(bytes: 1), .appleSpeech: .unavailable])
         XCTAssertEqual(snapshot.unavailableMessage, FileTranscriptionSettingsSnapshot.nothingReadyMessage)
