@@ -68,6 +68,7 @@ struct CalendarConfiguration: Codable, Equatable {
     var popup = false
     var fullScreen = true
     var recordOnJoin = true
+    /// Retired as the engine choice (8A); the settings migration moved `true` to "Starts in: This Mac".
     var localRecording = true
     var repeatDuringMeeting = true
     /// nil opens meeting links with the system's default browser.
@@ -136,7 +137,8 @@ struct CalendarConfiguration: Codable, Equatable {
     private(set) var menuClock = Date()
     private(set) var busy = false
     private(set) var error: String?
-    var onJoin: ((CalendarMeeting, Bool, Bool) -> Void)?
+    /// Meeting, record, and the reminder's per-meeting pick (nil: Settings › Modes decides, 8A).
+    var onJoin: ((CalendarMeeting, Bool, Bool?) -> Void)?
     var onReminder: (([CalendarMeeting]) -> Void)?
     var onEarlyReminder: (([CalendarMeeting]) -> Void)?
     private let defaults: UserDefaults
@@ -273,7 +275,7 @@ struct CalendarConfiguration: Codable, Equatable {
               current.meetingURL.map(CalendarMeeting.isJoinURL) ?? record,
               let onJoin else { return false }
         acknowledge([current])
-        onJoin(current, record, local ?? configuration.localRecording)
+        onJoin(current, record, local)
         return true
     }
 

@@ -114,14 +114,14 @@ struct RunTimeRoutingTests {
         #expect(start.recordOnly && start.provider == .local)
     }
 
-    @Test("A cloud engine in Record only keeps the audio on this Mac until WP-62")
+    @Test("A cloud engine in Record only records without streaming and runs its engine after Stop (WP-62)")
     func recordOnlyCloudStaysLocal() {
         let start = RunTimeRouting.meetingStart(
             segment: .recordOnly,
             route: RunTimeRoute(engine: .didunyCloud, modelID: nil, unavailable: nil, baseProvider: .cloud)
         )
         #expect(start.provider == .local && start.recordOnly && !start.localPreview)
-        #expect(start.runningEngine == .whisper)
+        #expect(start.runningEngine == .didunyCloud)
     }
 
     @Test("Signed out: the Cloud persona runs Local, recovers on this Mac, and Turbo does not translate (bug 9)")

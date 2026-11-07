@@ -188,6 +188,26 @@ struct SettingsMigrationTests {
         #expect(defaults.string(forKey: "defaultTranslationTargetLanguage") == "uk")
     }
 
+    @Test("A calendar that recorded on this Mac moves a Cloud start to This Mac; the field stays (8A, T5-MIG-13)",
+          arguments: [(true, MeetingSegment.thisMac), (false, .cloud)])
+    func calendarLocalRecording(local: Bool, expected: MeetingSegment) throws {
+        let (defaults, _) = try Self.load("cloud-default")
+        var calendar = CalendarConfiguration()
+        calendar.localRecording = local
+        let blob = try JSONEncoder().encode(calendar)
+        defaults.set(blob, forKey: "calendar.connection.v1")
+        Self.migrate(defaults, hasKey: false, appleSilicon: true)
+        #expect(ModeDefaults(defaults: defaults).meetingStartsIn == expected)
+        #expect(defaults.data(forKey: "calendar.connection.v1") == blob)
+    }
+
+    @Test("No saved calendar: Starts in is unchanged")
+    func noCalendar() throws {
+        let (defaults, _) = try Self.load("cloud-default")
+        Self.migrate(defaults, hasKey: false, appleSilicon: true)
+        #expect(ModeDefaults(defaults: defaults).meetingStartsIn == .cloud)
+    }
+
     // MARK: - Helpers
 
     static func environment(hasKey: Bool, appleSilicon: Bool) -> SettingsMigration.Environment {

@@ -36,10 +36,8 @@ struct MeetingStartRoute: Equatable {
 
     var selection: JobProviderSelection { JobProviderSelection(providerID: engine.rawValue, modelID: modelID) }
 
-    /// The engine that makes the text: a cloud engine in Record only is Whisper until WP-62.
-    var runningEngine: EngineID {
-        recordOnly && (engine == .didunyCloud || engine == .elevenLabs) ? .whisper : engine
-    }
+    /// The engine that makes the text; Record only runs its own engine after Stop, cloud ones too (WP-62).
+    var runningEngine: EngineID { engine }
 
     /// Recovering an orphaned capture: Cloud only for a signed-in Cloud segment without an after-Stop
     /// engine on this Mac; Record only, This Mac, Parakeet and Apple recover on this Mac.
@@ -110,13 +108,18 @@ enum RunTimeRouting {
         saved ?? pair.languageB
     }
 
+    /// A calendar meeting starts in "Starts in" (8A); the reminder's per-meeting pick, when made, wins.
+    /// `localRecording` no longer picks the segment.
+    static func calendarSegment(localOverride: Bool?, startsIn: MeetingSegment) -> MeetingSegment {
+        localOverride.map { $0 ? .thisMac : .cloud } ?? startsIn
+    }
+
     static func baseProvider(for engine: EngineID, signedIn: Bool) -> TranscriptionProvider {
         engine == .whisper || !signedIn ? .local : .cloud
     }
 
-    /// Cloud streams live; This Mac streams Whisper's preview or Apple; Record only records and
-    /// transcribes after Stop. A cloud engine in Record only keeps the audio on this Mac (Whisper after
-    /// Stop) until WP-62 sends it to the cloud after Stop.
+    /// Cloud streams live; This Mac streams Whisper's preview or Apple; Record only records and its
+    /// engine transcribes after Stop (Diduny Cloud and ElevenLabs with speaker labels, WP-62).
     static func meetingStart(segment: MeetingSegment, route: RunTimeRoute) -> MeetingStartRoute {
         let onDevice = route.onDeviceEngineID
         var start = MeetingStartRoute(segment: segment, engine: route.engine, modelID: route.modelID,

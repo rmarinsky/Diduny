@@ -105,7 +105,13 @@ extension AppDelegate {
         }
     }
 
-    func joinCalendarMeeting(_ meeting: CalendarMeeting, record: Bool, local: Bool,
+    /// Settings › Modes › Meeting "Starts in" and its engine (8A), unless the reminder picked one.
+    func calendarStartRoute(localOverride: Bool?) -> MeetingStartRoute {
+        meetingStartRoute(segment: RunTimeRouting.calendarSegment(
+            localOverride: localOverride, startsIn: SettingsStorage.shared.modeDefaults.meetingStartsIn))
+    }
+
+    func joinCalendarMeeting(_ meeting: CalendarMeeting, record: Bool, local: Bool?,
                              openURL: ((URL) -> Bool)? = nil) {
         let openURL = openURL ?? { AppDelegate.openMeetingLink($0, configuration: CalendarConnection.shared.configuration) }
         let opened: Bool
@@ -141,7 +147,7 @@ extension AppDelegate {
                 DictationOverlayController.shared.showInfo(message: String(localized: "The current recording could not be linked. An existing meeting link was kept."))
             }
         case let .startRecording(showLibrary):
-            toggleMeetingRecording(provider: local ? .local : .cloud, calendarMeeting: meeting)
+            startMeeting(calendarStartRoute(localOverride: local), calendarMeeting: meeting)
             if showLibrary { openMainWindow(section: .recordings) }
         }
     }
@@ -236,7 +242,7 @@ struct RecordCurrentMeetingIntent: AppIntent {
         guard state != .recording, state != .processing else { return .result(dialog: "A meeting recording is already running.") }
         let connection = CalendarConnection.shared
         if let meeting = connection.currentMeetings.first(where: { $0.start <= Date().addingTimeInterval(300) }) {
-            delegate.toggleMeetingRecording(provider: connection.configuration.localRecording ? .local : .cloud, calendarMeeting: meeting)
+            delegate.startMeeting(delegate.calendarStartRoute(localOverride: nil), calendarMeeting: meeting)
         } else {
             delegate.toggleMeetingRecording()
         }

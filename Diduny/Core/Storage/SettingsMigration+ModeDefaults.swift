@@ -62,7 +62,7 @@ extension SettingsMigration {
             .cloud: selection(.didunyCloud),
             .recordOnly: selection(environment.isAppleSilicon ? .parakeet : .whisper),
         ]
-        let startsIn: MeetingSegment
+        var startsIn: MeetingSegment
         switch stored.flatMap({ EngineID(rawValue: $0.providerID) }) {
         case .elevenLabs where environment.hasProviderKey(STTProviderID.elevenLabs)
             && stored?.modelID == ElevenLabsProvider.realtimeModelID:
@@ -92,6 +92,10 @@ extension SettingsMigration {
             }
         }
 
+        // 8A: calendar meetings now follow "Starts in". A calendar that recorded on this Mac moves a Cloud
+        // start to This Mac, so no meeting that ran on this Mac starts going to the cloud.
+        if startsIn == .cloud, calendarRecordedLocally(defaults) { startsIn = .thisMac }
+
         // The segments the row decides are written; the others only when unset.
         var decided: Set<MeetingSegment> = [startsIn]
         if case .appleSpeech? = stored.flatMap({ EngineID(rawValue: $0.providerID) }) { decided.insert(.recordOnly) }
@@ -103,6 +107,14 @@ extension SettingsMigration {
             store.setSelection(value, forKey: key)
         }
         ModeDefaults(defaults: defaults).apply([.startsIn(startsIn)])
+    }
+
+    /// The saved calendar connection with `localRecording` on (missing key: the old default, on).
+    /// The field stays in the blob; it is only read here.
+    private static func calendarRecordedLocally(_ defaults: UserDefaults) -> Bool {
+        guard let data = defaults.data(forKey: "calendar.connection.v1"),
+              let saved = try? JSONDecoder().decode(CalendarConfiguration.self, from: data) else { return false }
+        return saved.localRecording
     }
 
     /// Steps 4-5: keep Parakeet or Apple; anything else is what runs today, `fallback`.

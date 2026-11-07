@@ -20,12 +20,13 @@ extension AppDelegate {
     }
 
     /// Starts in `route`'s segment with its engine; refuses an on-device engine that is not ready.
-    func startMeeting(_ route: MeetingStartRoute) {
+    func startMeeting(_ route: MeetingStartRoute, calendarMeeting: CalendarMeeting? = nil) {
         if let message = onDeviceEngineStartError(for: route) {
             DictationOverlayController.shared.showInfo(message: message, duration: 4)
             return
         }
-        toggleMeetingRecording(provider: route.provider, recordOnly: route.recordOnly, startRoute: route)
+        toggleMeetingRecording(provider: route.provider, calendarMeeting: calendarMeeting,
+                               recordOnly: route.recordOnly, startRoute: route)
     }
 
     func toggleMeetingRecording(
@@ -297,8 +298,7 @@ extension AppDelegate {
 
         let sessionID = UUID()
         activeMeetingTranscriptionSessionID = sessionID
-        // Calendar recordings capture audio only, so they keep the existing Cloud/Local path.
-        // The user's own live engine: ElevenLabs (their key) or Apple on this Mac.
+        // The user's own live engine: ElevenLabs (their key) or Apple on this Mac; calendar meetings too (8A).
         activeMeetingTranslateTarget = translateTarget
         // Calendar and Translate meeting starts pass only Cloud or Local: audio only, Whisper after Stop.
         activeMeetingStartRoute = startRoute ?? MeetingStartRoute(
@@ -309,9 +309,9 @@ extension AppDelegate {
         if translateTarget != nil || recordOnly {
             // Record only, or meeting translation on an on-device engine: no live stream; transcribed and translated after Stop.
             meetingRealtimeService = nil
-        } else if calendarMeeting == nil, let elevenLabs = makeElevenLabsMeetingService() {
+        } else if let elevenLabs = makeElevenLabsMeetingService() {
             meetingRealtimeService = elevenLabs
-        } else if calendarMeeting == nil, let apple = makeAppleMeetingService() {
+        } else if let apple = makeAppleMeetingService() {
             meetingRealtimeService = apple
         } else {
             meetingRealtimeService = nil
@@ -409,8 +409,7 @@ extension AppDelegate {
             // up is buffered by CloudRealtimeService and flushed on connect —
             // recording never waits for the network.
             guard !Task.isCancelled, activeMeetingTranscriptionSessionID == sessionID else { return }
-            // Calendar recordings capture audio only; the transcript is made after the meeting.
-            let localPreview = !recordOnly && calendarMeeting == nil && activeMeetingStartRoute?.localPreview == true
+            let localPreview = !recordOnly && activeMeetingStartRoute?.localPreview == true
             let store = await setupMeetingLiveTranscription(cloudModeEnabled: cloudModeEnabled, localPreview: localPreview)
             let stillOwnsSession = activeMeetingTranscriptionSessionID == sessionID
             guard !Task.isCancelled,
@@ -905,6 +904,7 @@ extension AppDelegate {
         // Captured now: the session state is cleared when this stop finishes.
         let translateTarget = activeMeetingTranslateTarget
         let stopStartRoute = activeMeetingStartRoute
+        let recordOnlyEngine = translateTarget == nil && stopStartRoute?.recordOnly == true ? stopStartRoute?.engine : nil
 
         // Finalize and disconnect real-time transcription (if active)
         let didReceiveRealtimeFinalization = await stopMeetingLiveTranscription(finalizeCloud: true)
@@ -1176,9 +1176,13 @@ extension AppDelegate {
                         savedRecordingID: savedRecordingID,
                         cloudModeEnabled: cloudModeEnabled,
                         hasLocalModel: WhisperModelManager.shared.selectedModel() != nil || onDeviceEngine(for: .meeting) != nil
-                            || translateTarget != nil
+                            || translateTarget != nil || recordOnlyEngine != nil
                     ) { recordingIDs, action, provider in
-                        if let target = translateTarget {
+                        if let engine = recordOnlyEngine {
+                            // Record only: its engine after Stop, with speaker labels (WP-62).
+                            RecordingQueueService.shared.enqueue(recordingIDs, action: .transcribeDiarize,
+                                                                 engineOverride: engine)
+                        } else if let target = translateTarget {
                             RecordingQueueService.shared.enqueue(recordingIDs, action: .translate, targetLanguage: target,
                                                                  engineOverride: stopStartRoute?.engine)
                         } else {

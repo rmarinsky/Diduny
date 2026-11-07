@@ -96,7 +96,7 @@ import SwiftUI
         await connection.connect()
         var actions = 0
         connection.onJoin = { received, record, local in
-            XCTAssertEqual(received, event); XCTAssertTrue(record); XCTAssertTrue(local); actions += 1
+            XCTAssertEqual(received, event); XCTAssertTrue(record); XCTAssertNil(local, "No pick: Settings › Modes decides (8A)"); actions += 1
         }
         connection.join(event, record: false)
         XCTAssertEqual(actions, 0)
