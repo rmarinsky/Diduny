@@ -130,10 +130,21 @@ struct ShortcutsSettingsHitTestingTests {
             if let view = views.first(where: { $0.accessibilityIdentifier() == identifier }) {
                 return view.convert(view.bounds, to: nil)
             }
-            guard let name = ShortcutRow.allCases.first(where: { $0.keysIdentifier == identifier })?.shortcutName,
+            let row = ShortcutRow.allCases.first {
+                [$0.keysIdentifier, $0.pressCountIdentifier, $0.enabledIdentifier].contains(identifier)
+            }
+            guard let name = row?.shortcutName,
                   let recorder = views.compactMap({ $0 as? KeyboardShortcuts.RecorderCocoa }).first(where: { $0.shortcutName == name })
             else { return nil }
-            return recorder.convert(recorder.bounds, to: nil)
+            let keys = recorder.convert(recorder.bounds, to: nil)
+            if identifier == row?.keysIdentifier { return keys }
+            // The row's count (segmented) and switch: the AppKit control of that kind on the keys' line.
+            let isCount = identifier == row?.pressCountIdentifier
+            let control = views.first { view in
+                (isCount ? view is NSSegmentedControl : view is NSSwitch)
+                    && abs(view.convert(view.bounds, to: nil).midY - keys.midY) < keys.height
+            }
+            return control.map { $0.convert($0.bounds, to: nil) }
         }
 
         /// Clicks at a fraction of the identified control's width, centred vertically.
