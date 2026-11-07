@@ -2,16 +2,13 @@ import XCTest
 
 /// Command home (WP-41). Runs on CI only (`DIDUNY_UI_TESTS=1`).
 final class CommandPanelUITests: DidunyUITestCase {
-    /// Hovers the collapsed tab (the real path, T2-HM-01) and returns the home. `P-STD` pins the tab,
-    /// which otherwise hides itself after 3 s.
-    /// The panel window is not exposed as an XCUI window, so the tab (`commandPanel.tab`) stands for it.
+    /// Opens the home with `--ui-testing-open=commandPanel.home` (test-plan 2.6; the hover path is
+    /// T2-HM-01's). `P-STD` pins the panel. The tab stands for the panel, which XCUI does not list
+    /// as a window.
     private func openHome() -> (tab: XCUIElement, home: XCUIElement) {
-        let app = launchApp(onboardingCompleted: true, profile: .standard)
-        let tab = waitForElement(app.descendants(matching: .any)["commandPanel.tab"])
-        waitForElement(tab, toMatch: "isHittable == true")
-        tab.hover()
+        let app = launchApp(onboardingCompleted: true, profile: .standard, open: "commandPanel.home")
         let home = waitForElement(app.descendants(matching: .any)["commandPanel.home"])
-        return (tab, home)
+        return (app.descendants(matching: .any)["commandPanel.tab"], home)
     }
 
     /// WP-20 carry-over: a pick made with the pointer outside the panel collapses it once the menu closes.

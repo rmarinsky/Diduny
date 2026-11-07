@@ -68,10 +68,10 @@ final class LanguagesUITests: DidunyUITestCase {
         search.click()
         search.typeText("zzz")
         waitForElement(element("popup.empty"))
-        // Outside the popup: a group heading, which does nothing when clicked.
-        let heading = mainWindow.staticTexts.matching(NSPredicate(format: "label == 'Voice commands' OR value == 'Voice commands'")).firstMatch
-        waitForElement(heading, toMatch: "isHittable == true")
-        heading.click()
+        // Outside the popup: the sidebar item of the page already shown, so the click changes nothing else.
+        let outside = mainWindow.buttons["Sidebar Languages"]
+        waitForElement(outside, toMatch: "isHittable == true")
+        outside.click()
         waitForDisappearance(popup)
     }
 }

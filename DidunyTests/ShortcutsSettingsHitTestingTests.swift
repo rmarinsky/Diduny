@@ -1,4 +1,5 @@
 import AppKit
+import KeyboardShortcuts
 @testable import Diduny
 import SwiftUI
 import Testing
@@ -114,8 +115,25 @@ struct ShortcutsSettingsHitTestingTests {
             }
             var hit: NSObject?
             waitUntil { hit = window.contentView.flatMap(find); return hit != nil }
-            guard let hit, let screenFrame = (value("accessibilityFrame", of: hit) as? NSValue)?.rectValue else { return nil }
-            return window.convertFromScreen(screenFrame)
+            if let hit, let screenFrame = (value("accessibilityFrame", of: hit) as? NSValue)?.rectValue {
+                return window.convertFromScreen(screenFrame)
+            }
+            return appKitFrame(of: identifier)
+        }
+
+        /// Fallback when the runner's accessibility tree has no SwiftUI ids (CI, macOS 26): the
+        /// segmented control and the switch are AppKit views carrying the id, and a keys field is the
+        /// `RecorderCocoa` of its row's shortcut, laid under the field.
+        private func appKitFrame(of identifier: String) -> NSRect? {
+            guard let content = window.contentView else { return nil }
+            let views = Self.allViews(in: content)
+            if let view = views.first(where: { $0.accessibilityIdentifier() == identifier }) {
+                return view.convert(view.bounds, to: nil)
+            }
+            guard let name = ShortcutRow.allCases.first(where: { $0.keysIdentifier == identifier })?.shortcutName,
+                  let recorder = views.compactMap({ $0 as? KeyboardShortcuts.RecorderCocoa }).first(where: { $0.shortcutName == name })
+            else { return nil }
+            return recorder.convert(recorder.bounds, to: nil)
         }
 
         /// Clicks at a fraction of the identified control's width, centred vertically.

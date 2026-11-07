@@ -42,19 +42,25 @@ final class AudioUITests: DidunyUITestCase {
         waitForElement(play, toMatch: "label == 'Play'")
     }
 
+    /// XCUI drags sliders by pixels, so a drag lands within one 5 % step of the target (CI gave 145 %
+    /// and 150 % for the same 0.75). The text must show exactly where the slider is, and the slider must
+    /// be at the target or its neighbouring step. "150%" and "100%" themselves are `AudioSettingsTextTests`.
+    private func adjust(_ id: String, to position: CGFloat, near percent: Int) {
+        let slider = waitForElement(element(id))
+        slider.adjust(toNormalizedSliderPosition: position)
+        let shown = Int((slider.normalizedSliderPosition * 200 / 5).rounded()) * 5
+        XCTAssertLessThanOrEqual(abs(shown - percent), 5, "\(id) at \(shown)%")
+        waitForElement(element("\(id).value"), toMatch: "value == '\(shown)%'")
+    }
+
     func test_levelSlidersShowPercent() {
         openAudio()
         let source = waitForElement(element("audio.meeting.source"))
         click(source.radioButtons["System + microphone"])
-        waitForElement(element("audio.meeting.micLevel")).adjust(toNormalizedSliderPosition: 0.75)
-        waitForElement(element("audio.meeting.micLevel.value"), toMatch: "value == '150%'")
-        // 0.5 is today's value (100%); move away first so the drag to 0.5 is a real change. XCUI's drag
-        // lands about 2 pt short on this 129 pt slider (CI: 0.25 gave 45%, 0.5 gave 95%), so aim 1%
-        // past the stop; the 0.05 step snaps it to the stop.
-        waitForElement(element("audio.meeting.systemLevel")).adjust(toNormalizedSliderPosition: 0.26)
-        waitForElement(element("audio.meeting.systemLevel.value"), toMatch: "value == '50%'")
-        element("audio.meeting.systemLevel").adjust(toNormalizedSliderPosition: 0.51)
-        waitForElement(element("audio.meeting.systemLevel.value"), toMatch: "value == '100%'")
+        adjust("audio.meeting.micLevel", to: 0.75, near: 150)
+        // 0.5 is today's value (100%); move away first so the drag to 0.5 is a real change.
+        adjust("audio.meeting.systemLevel", to: 0.25, near: 50)
+        adjust("audio.meeting.systemLevel", to: 0.5, near: 100)
     }
 
     func test_systemOnlyHidesMicrophoneLevel() {
