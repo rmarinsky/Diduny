@@ -63,17 +63,51 @@ struct FileTranscriptionSettingsSnapshot {
     let localModelName: String
     /// Parakeet / Apple picked for files; transcribes on this Mac instead of Whisper.
     var onDeviceEngineID: String? = nil
+    /// Nothing on this Mac can run the Files engine; the batch refuses with this message (plan default 16).
+    var unavailableMessage: String? = nil
+
+    static let nothingReadyMessage = String(localized: "No on-device engine is ready for files. Download Parakeet V3 or a Whisper model in Settings › Local models.")
 
     @MainActor
     static func current() -> Self {
         let settings = SettingsStorage.shared
-        let fileEngine = settings.providerDefaults.selection(for: .file).providerID
-        return Self(
-            provider: .local,
+        let whisper = WhisperModelManager.shared
+        return resolve(
+            defaults: settings.modeDefaults,
+            readiness: LiveEngineReadinessSource(),
+            whisper: .init(downloaded: whisper.downloadedModels, selected: whisper.selectedModel()?.name),
             languageHints: settings.speechLanguageHints,
-            localModelName: settings.selectedWhisperModel,
-            onDeviceEngineID: STTProviderID.onDeviceEngines.contains(fileEngine) ? fileEngine : nil
+            selectedWhisperModel: settings.selectedWhisperModel
         )
+    }
+
+    /// Files and URLs run on this Mac only (decision 3): the Files engine (default Parakeet V3) with its
+    /// fallback; a stored cloud engine runs Whisper. Audio never leaves the Mac.
+    @MainActor
+    static func resolve(
+        defaults: ModeDefaults,
+        readiness: any EngineReadinessSource,
+        whisper: EffectiveEngineResolver.WhisperState,
+        languageHints: [String],
+        selectedWhisperModel: String
+    ) -> Self {
+        let stored = defaults.selection(for: .file)
+        let onThisMac: Set<EngineID> = [.whisper, .parakeet, .appleSpeech]
+        let override = EngineID(rawValue: stored.providerID).map(onThisMac.contains) == true
+            ? nil : JobProviderSelection(providerID: EngineID.whisper.rawValue, modelID: nil)
+        var snapshot = Self(provider: .local, languageHints: languageHints, localModelName: selectedWhisperModel)
+        switch EffectiveEngineResolver.resolve(job: .file, override: override, defaults: defaults,
+                                               readiness: readiness, whisper: whisper) {
+        case let .engine(engine, model), let .fallback(engine, model, _):
+            if STTProviderID.onDeviceEngines.contains(engine.rawValue) {
+                snapshot.onDeviceEngineID = engine.rawValue
+            } else if let model {
+                snapshot = Self(provider: .local, languageHints: languageHints, localModelName: model)
+            }
+        case .none:
+            snapshot.unavailableMessage = nothingReadyMessage
+        }
+        return snapshot
     }
 }
 
@@ -1512,6 +1546,7 @@ final class FileTranscriptionBatchService {
 
 private final class LiveFileTranscriptionBatchTranscriber: FileTranscriptionBatchTranscribing {
     func preflightError(for settings: FileTranscriptionSettingsSnapshot) -> String? {
+        if let message = settings.unavailableMessage { return message }
         if settings.onDeviceEngineID != nil {
             return OnDeviceEngines.engine(id: settings.onDeviceEngineID) == nil ? OnDeviceEngines.notReadyMessage : nil
         }

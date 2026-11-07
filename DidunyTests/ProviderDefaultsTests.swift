@@ -76,12 +76,18 @@ final class ProviderDefaultsTests: XCTestCase {
     }
 
     func testFileSnapshotPicksUpOnDeviceSelection() {
-        let defaults = SettingsStorage.shared.providerDefaults
-        let previous = defaults.selection(for: .file)
-        defer { defaults.setSelection(previous, for: .file) }
-        defaults.setSelection(JobProviderSelection(providerID: STTProviderID.parakeet, modelID: nil), for: .file)
-        XCTAssertEqual(FileTranscriptionSettingsSnapshot.current().onDeviceEngineID, STTProviderID.parakeet)
-        defaults.setSelection(.didunyCloud, for: .file)
-        XCTAssertNil(FileTranscriptionSettingsSnapshot.current().onDeviceEngineID)
+        let suite = "diduny.file-snapshot.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let modes = ModeDefaults(defaults: defaults)
+        func snapshot() -> FileTranscriptionSettingsSnapshot {
+            .resolve(defaults: modes, readiness: FakeEngineReadinessSource(), whisper: .init(downloaded: [], selected: nil),
+                     languageHints: [], selectedWhisperModel: "ggml-base")
+        }
+        modes.apply([.engine(.file, JobProviderSelection(providerID: STTProviderID.parakeet, modelID: nil))])
+        XCTAssertEqual(snapshot().onDeviceEngineID, STTProviderID.parakeet)
+        modes.apply([.engine(.file, .didunyCloud)])
+        XCTAssertNil(snapshot().onDeviceEngineID)
+        XCTAssertEqual(snapshot().provider, .local)
     }
 }
