@@ -68,7 +68,10 @@ final class LanguagesUITests: DidunyUITestCase {
         search.click()
         search.typeText("zzz")
         waitForElement(element("popup.empty"))
-        mainWindow.staticTexts["Languages"].firstMatch.click()
+        // Outside the popup: a group heading, which does nothing when clicked.
+        let heading = text("Voice commands", identifier: "", in: mainWindow)
+        waitForElement(heading, toMatch: "isHittable == true")
+        heading.click()
         waitForDisappearance(popup)
     }
 }

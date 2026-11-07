@@ -27,6 +27,8 @@ final class GeneralSettingsUITests: DidunyUITestCase {
                    "general.deleteExpired", "general.setupGuide", "general.screenRecording.askAgain",
                    "general.typingSpeed", "general.typingTest"] {
             let control = waitForElement(element(id), "Missing \(id)")
+            // The page is taller than the CI screen: bring each row into view first.
+            scrollIntoView(control, in: page)
             XCTAssertTrue(control.isHittable, "\(id) is not hittable")
         }
     }

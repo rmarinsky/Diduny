@@ -10,8 +10,10 @@ final class AudioUITests: DidunyUITestCase {
         mainWindow.descendants(matching: .any)[id]
     }
 
+    /// `P-STD` with fake input devices: no microphone or Screen Recording on CI; recording yields
+    /// silence at a steady 0.5 level (test-plan 4.8).
     private func openAudio() {
-        launchApp(onboardingCompleted: true)
+        launchApp(onboardingCompleted: true, profile: LaunchProfile.standard.adding("--ui-testing-audio-devices=Test Mic A,Test Mic B"))
         waitForElement(mainWindow)
         let item = waitForElement(mainWindow.buttons["Sidebar Audio"])
         item.click()
@@ -26,18 +28,18 @@ final class AudioUITests: DidunyUITestCase {
     func test_microphoneTestTogglesLabels() {
         openAudio()
         let record = waitForElement(element("audio.mic.record"))
-        XCTAssertEqual(record.title, "Record")
+        XCTAssertEqual(record.label, "Record")
         click(record)
-        waitForElement(record, toMatch: "title == 'Stop Recording'")
+        waitForElement(record, toMatch: "label == 'Stop Recording'")
         waitForElement(element("audio.mic.level"), toMatch: "value != '0%'")
         click(record)
-        waitForElement(record, toMatch: "title == 'Record'")
+        waitForElement(record, toMatch: "label == 'Record'")
         let play = element("audio.mic.play")
         waitForElement(play, toMatch: "isEnabled == true")
         click(play)
-        waitForElement(play, toMatch: "title == 'Stop'")
+        waitForElement(play, toMatch: "label == 'Stop'")
         click(play)
-        waitForElement(play, toMatch: "title == 'Play'")
+        waitForElement(play, toMatch: "label == 'Play'")
     }
 
     func test_levelSlidersShowPercent() {
@@ -46,7 +48,10 @@ final class AudioUITests: DidunyUITestCase {
         click(source.radioButtons["System + microphone"])
         waitForElement(element("audio.meeting.micLevel")).adjust(toNormalizedSliderPosition: 0.75)
         waitForElement(element("audio.meeting.micLevel.value"), toMatch: "value == '150%'")
-        waitForElement(element("audio.meeting.systemLevel")).adjust(toNormalizedSliderPosition: 0.5)
+        // 0.5 is today's value (100%); move away first so the drag to 0.5 is a real change.
+        waitForElement(element("audio.meeting.systemLevel")).adjust(toNormalizedSliderPosition: 0.25)
+        waitForElement(element("audio.meeting.systemLevel.value"), toMatch: "value == '50%'")
+        element("audio.meeting.systemLevel").adjust(toNormalizedSliderPosition: 0.5)
         waitForElement(element("audio.meeting.systemLevel.value"), toMatch: "value == '100%'")
     }
 
@@ -62,13 +67,13 @@ final class AudioUITests: DidunyUITestCase {
         openAudio()
         let capture = waitForElement(element("audio.meeting.capture"))
         click(capture)
-        waitForElement(capture, toMatch: "title == 'Stop Capture'")
+        waitForElement(capture, toMatch: "label == 'Stop Capture'")
         click(capture)
-        waitForElement(capture, toMatch: "title == 'Capture'")
+        waitForElement(capture, toMatch: "label == 'Capture'")
         let play = element("audio.meeting.play")
         waitForElement(play, toMatch: "isEnabled == true")
         click(play)
-        waitForElement(play, toMatch: "title == 'Stop'")
+        waitForElement(play, toMatch: "label == 'Stop'")
     }
 
     func test_identifySpeakersOffHidesVoiceProfile() {

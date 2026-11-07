@@ -1,17 +1,10 @@
 import XCTest
 
-/// WP-30 live dictation panel (test-plan T1-DI-20 to 26, T1-SH-05, T1-SH-06). Needs the
-/// `--ui-testing-open=livePanel.<job>` harness target; CI only.
+/// WP-30 live dictation panel (test-plan T1-DI-20 to 26, T1-SH-05, T1-SH-06), opened with
+/// `--ui-testing-open=livePanel.<job>` on profile `P-STD`; CI only.
 final class LiveDictationPanelUITests: DidunyUITestCase {
-    private func openLivePanel(_ job: String, extra: [String] = []) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
-            "-proxyBaseURL", Self.unreachableProxyURL, "-SUEnableAutomaticChecks", "NO",
-            "--ui-testing-reset", "-onboarding.completed", "YES", "-onboarding.version", "1",
-            "--ui-testing-open=livePanel.\(job)",
-        ] + extra
-        app.launch()
+    private func openLivePanel(_ job: String, profile: LaunchProfile = .standard, extra: [String] = []) -> XCUIApplication {
+        let app = launchApp(onboardingCompleted: true, profile: profile, open: "livePanel.\(job)", arguments: extra)
         waitForElement(app.descendants(matching: .any)["livePanel.title"])
         return app
     }
@@ -20,32 +13,41 @@ final class LiveDictationPanelUITests: DidunyUITestCase {
         app.descendants(matching: .any)[id]
     }
 
+    /// What the element says: its label and its value (SwiftUI text reads as the value).
+    private func spoken(_ element: XCUIElement) -> String {
+        "\(element.label) \(element.value as? String ?? "")"
+    }
+
     /// T1-DI-20
     func test_dictationPanelOpensWithSettingsDefaults() {
         let app = openLivePanel("dictation")
-        XCTAssertEqual(element(app, "livePanel.title").label, "Dictating")
+        waitForElement(element(app, "livePanel.title"), toMatch: "value == 'Dictating'")
         XCTAssertEqual(element(app, "livePanel.output").value as? String, "Original")
-        XCTAssertEqual(element(app, "livePanel.engine").label.contains("Diduny Cloud"), true)
-        XCTAssertEqual(element(app, "livePanel.caption").label, "Text as you speak")
+        XCTAssertTrue(spoken(element(app, "livePanel.engine")).contains("Diduny Cloud"), spoken(element(app, "livePanel.engine")))
+        waitForElement(element(app, "livePanel.caption"), toMatch: "value == 'Text as you speak'")
     }
 
     /// T1-DI-21
     func test_outputMenuSearchAndPick() {
         let app = openLivePanel("dictation")
-        element(app, "livePanel.output").click()
+        let output = element(app, "livePanel.output")
+        waitForElement(output, toMatch: "isHittable == true")
+        output.click()
         let search = waitForElement(element(app, "pickerMenu.search"))
         search.typeText("Ukr")
-        element(app, "pickerMenu.row.lang.uk").click()
-        waitForElement(element(app, "livePanel.title"), toMatch: "label == 'Translating'")
+        let row = element(app, "pickerMenu.row.lang.uk")
+        waitForElement(row, toMatch: "isHittable == true")
+        row.click()
+        waitForElement(element(app, "livePanel.title"), toMatch: "value == 'Translating'")
         XCTAssertEqual(element(app, "livePanel.output").value as? String, "Ukrainian")
-        XCTAssertEqual(element(app, "livePanel.caption").label, "Live translation")
+        waitForElement(element(app, "livePanel.caption"), toMatch: "value == 'Live translation'")
     }
 
     /// T1-DI-24
     func test_stopKeycapFollowsPushToTalk() {
-        let app = openLivePanel("dictation", extra: [
-            "-pushToTalkKey", "rightShift", "-pushToTalkToggleEnabled", "YES", "-pushToTalkToggleTapCount", "2",
-        ])
+        let app = openLivePanel("dictation", profile: LaunchProfile.standard.seeding(defaults: [
+            "pushToTalkKey": "rightShift", "pushToTalkToggleEnabled": true, "pushToTalkToggleTapCount": 2,
+        ]))
         let value = element(app, "livePanel.stop").value as? String ?? ""
         XCTAssertTrue(value.contains("⇧ ×2"), value)
         XCTAssertTrue(value.contains("Cancel: Esc ×2"), value)
@@ -53,7 +55,7 @@ final class LiveDictationPanelUITests: DidunyUITestCase {
 
     /// T1-DI-25
     func test_noBatteryWarningInDictation() {
-        let app = openLivePanel("dictation", extra: ["--ui-testing-power=battery"])
+        let app = openLivePanel("dictation", profile: .battery)
         XCTAssertFalse(element(app, "livePanel.batteryWarning").exists)
     }
 
@@ -61,7 +63,7 @@ final class LiveDictationPanelUITests: DidunyUITestCase {
     func test_copyCopiesTheLiveText() {
         let app = openLivePanel("dictation")
         let copy = element(app, "livePanel.copy")
-        waitForElement(copy, toMatch: "isEnabled == true")
+        waitForElement(copy, toMatch: "isEnabled == true AND isHittable == true")
         copy.click()
         waitForElement(copy, toMatch: "label == 'Copied'")
         XCTAssertFalse((NSPasteboard.general.string(forType: .string) ?? "").isEmpty)
@@ -84,7 +86,7 @@ final class LiveDictationPanelUITests: DidunyUITestCase {
 
     /// T1-SH-06
     func test_noCancelHintWhenCancelIsOff() {
-        let app = openLivePanel("dictation", extra: ["-escapeCancelEnabled", "NO"])
+        let app = openLivePanel("dictation", profile: LaunchProfile.standard.seeding(defaults: ["escapeCancelEnabled": false]))
         let value = element(app, "livePanel.stop").value as? String ?? ""
         XCTAssertFalse(value.contains("Cancel:"), value)
     }

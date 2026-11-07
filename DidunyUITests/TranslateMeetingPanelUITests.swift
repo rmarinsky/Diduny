@@ -1,60 +1,58 @@
 import XCTest
 
-/// Translate meeting live panel (test-plan T1-TM-20 to T1-TM-23). Needs the `--ui-testing-open=livePanel.<job>`
-/// target and the transcript bridge (test-plan 7.4); CI only.
+/// Translate meeting live panel (test-plan T1-TM-20 to T1-TM-23), opened with
+/// `--ui-testing-open=livePanel.meetingTranslation` on profile `P-STD`; CI only.
 final class TranslateMeetingPanelUITests: DidunyUITestCase {
-    private var panelApp: XCUIApplication!
-
-    override func tearDownWithError() throws {
-        panelApp?.terminate()
-        try super.tearDownWithError()
+    private func openPanel(profile: LaunchProfile = .standard, extra: [String] = []) -> XCUIApplication {
+        let app = launchApp(onboardingCompleted: true, profile: profile, open: "livePanel.meetingTranslation", arguments: extra)
+        waitForElement(app.descendants(matching: .any)["livePanel.title"])
+        return app
     }
 
-    private func openPanel(extra: [String] = []) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
-            "-proxyBaseURL", Self.unreachableProxyURL, "-SUEnableAutomaticChecks", "NO",
-            "--ui-testing-reset", "-onboarding.completed", "YES", "-onboarding.version", "1",
-            "--ui-testing-open=livePanel.meetingTranslation",
-        ] + extra
-        app.launch()
-        panelApp = app
-        return app
+    private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
+        app.descendants(matching: .any)[id]
+    }
+
+    private func click(_ element: XCUIElement) {
+        waitForElement(element, toMatch: "isHittable == true")
+        element.click()
     }
 
     func test_T1_TM_20_opensLive() {
         let app = openPanel()
-        XCTAssertEqual(waitForElement(app.staticTexts["livePanel.title"]).label, "Translating meeting")
+        waitForElement(element(app, "livePanel.title"), toMatch: "value == 'Translating meeting'")
         XCTAssertEqual(app.buttons["livePanel.between"].value as? String, "EN ↔ UK")
-        XCTAssertEqual(app.buttons["livePanel.engine"].value as? String, "Diduny Cloud")
-        XCTAssertEqual(app.staticTexts["livePanel.caption"].label, "Live · both directions · speaker labels")
+        let engine = element(app, "livePanel.engine")
+        XCTAssertTrue("\(engine.label) \(engine.value as? String ?? "")".contains("Diduny Cloud"))
+        waitForElement(element(app, "livePanel.caption"), toMatch: "value == 'Live · both directions · speaker labels'")
         XCTAssertEqual(app.buttons["livePanel.showOriginal"].label, "Show original text")
-        XCTAssertEqual(app.descendants(matching: .any)["livePanel.status"].value as? String, "live")
+        XCTAssertEqual(element(app, "livePanel.status").value as? String, "live")
     }
 
     func test_T1_TM_21_showAndHideOriginalText() {
         let app = openPanel(extra: ["--ui-testing-transcript-emit=2"])
         let link = waitForElement(app.buttons["livePanel.showOriginal"])
-        XCTAssertEqual(app.staticTexts.matching(identifier: "livePanel.originalLine").count, 0)
-        link.click()
-        XCTAssertEqual(link.label, "Hide original text")
-        XCTAssertGreaterThan(app.staticTexts.matching(identifier: "livePanel.originalLine").count, 0)
-        link.click()
-        XCTAssertEqual(app.staticTexts.matching(identifier: "livePanel.originalLine").count, 0)
+        let original = app.staticTexts.matching(identifier: "livePanel.originalLine").firstMatch
+        XCTAssertFalse(original.exists)
+        click(link)
+        waitForElement(link, toMatch: "label == 'Hide original text'")
+        waitForElement(original)
+        click(link)
+        waitForDisappearance(original)
     }
 
     func test_T1_TM_22_betweenPickChangesThePair() {
-        let app = openPanel()
-        waitForElement(app.buttons["livePanel.between"]).click()
-        waitForElement(app.descendants(matching: .any)["pickerMenu.row.pair.en-pl"]).click()
-        XCTAssertEqual(app.buttons["livePanel.between"].value as? String, "EN ↔ PL")
+        // Between offers the pairs of Your languages; Polish must be one of them.
+        let app = openPanel(profile: LaunchProfile.standard.seeding(defaults: ["yourLanguages": ["en", "uk", "pl"]]))
+        click(waitForElement(app.buttons["livePanel.between"]))
+        click(waitForElement(element(app, "pickerMenu.row.pair.en-pl")))
+        waitForElement(app.buttons["livePanel.between"], toMatch: "value == 'EN ↔ PL'")
     }
 
     func test_T1_TM_23_otherLanguagesOpensSettingsLanguages() {
         let app = openPanel()
-        waitForElement(app.buttons["livePanel.between"]).click()
-        waitForElement(app.descendants(matching: .any)["pickerMenu.row.otherLanguages"]).click()
-        waitForElement(app.descendants(matching: .any)["section.languages"])
+        click(waitForElement(app.buttons["livePanel.between"]))
+        click(waitForElement(element(app, "pickerMenu.row.otherLanguages")))
+        waitForElement(element(app, "section.languages"))
     }
 }

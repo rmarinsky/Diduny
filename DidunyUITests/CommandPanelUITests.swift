@@ -2,9 +2,10 @@ import XCTest
 
 /// Command home (WP-41). Runs on CI only (`DIDUNY_UI_TESTS=1`).
 final class CommandPanelUITests: DidunyUITestCase {
-    /// Hovers the collapsed tab (the real path, T2-HM-01) and returns the home.
+    /// Hovers the collapsed tab (the real path, T2-HM-01) and returns the home. `P-STD` pins the tab,
+    /// which otherwise hides itself after 3 s.
     private func openHome() -> (panel: XCUIElement, home: XCUIElement) {
-        let app = launchApp(onboardingCompleted: true)
+        let app = launchApp(onboardingCompleted: true, profile: .standard)
         let panel = waitForElement(app.windows["commandPanel"])
         panel.hover()
         let home = waitForElement(panel.otherElements["commandPanel.home"])
