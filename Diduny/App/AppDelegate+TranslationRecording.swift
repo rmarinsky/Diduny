@@ -222,8 +222,8 @@ extension AppDelegate {
             }
             return
         }
-        // Whisper translating itself (or signed out on Diduny Cloud, today's Local fallback) gives English.
-        let targetLanguage = translationByokPlan == nil && routedTranslationProvider == .local ? "en" : target
+        // The target is never rewritten (bug 2): Whisper translates itself only into English, else Diduny does.
+        let targetLanguage = target
         activeTranslationLanguagePair = pair
         activeTranslationTargetLanguage = targetLanguage
 
@@ -262,6 +262,18 @@ extension AppDelegate {
                 Log.app.warning("startTranslationRecording: English-only model cannot translate")
                 await MainActor.run {
                     appState.errorMessage = WhisperError.modelDoesNotSupportTranslation.localizedDescription
+                    appState.translationRecordingState = .error
+                    handleTranslationStateChange(.error)
+                    activeTranslationLanguagePair = nil
+                    activeTranslationTargetLanguage = nil
+                }
+                return
+            }
+            // Signed out on Diduny Cloud: Whisper alone cannot reach this target; refuse at Start (7A).
+            if RunTimeRouting.localTranslation(model: model.name, target: targetLanguage,
+                                               signedIn: AuthService.hasStoredSession) == .signInNeeded {
+                await MainActor.run {
+                    appState.errorMessage = String(localized: "Translation uses Diduny. Sign in to enable it. Transcription with your own provider still works.")
                     appState.translationRecordingState = .error
                     handleTranslationStateChange(.error)
                     activeTranslationLanguagePair = nil

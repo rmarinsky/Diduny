@@ -475,8 +475,7 @@ extension AppDelegate {
                             afterStopEngine: onDeviceSelection(for: translateTarget != nil ? .meetingTranslation : .meeting))
                 )
                 if translateTarget != nil {
-                    overlayStore.showRunningMeetingTranslation(
-                        engine: onDeviceSelection(for: .meetingTranslation).flatMap(EngineID.init(rawValue:)) ?? .whisper)
+                    overlayStore.showRunningMeetingTranslation(engine: activeMeetingStartRoute?.engine ?? .whisper)
                 }
                 if !cloudModeEnabled {
                     updateRecordingFeedbackConnectionStatus(.connected, mode: .meeting)
@@ -905,6 +904,7 @@ extension AppDelegate {
         let appleLiveMeeting = meetingRealtimeService is AppleLiveTranscriptionService
         // Captured now: the session state is cleared when this stop finishes.
         let translateTarget = activeMeetingTranslateTarget
+        let stopStartRoute = activeMeetingStartRoute
 
         // Finalize and disconnect real-time transcription (if active)
         let didReceiveRealtimeFinalization = await stopMeetingLiveTranscription(finalizeCloud: true)
@@ -1179,7 +1179,8 @@ extension AppDelegate {
                             || translateTarget != nil
                     ) { recordingIDs, action, provider in
                         if let target = translateTarget {
-                            RecordingQueueService.shared.enqueue(recordingIDs, action: .translate, targetLanguage: target)
+                            RecordingQueueService.shared.enqueue(recordingIDs, action: .translate, targetLanguage: target,
+                                                                 engineOverride: stopStartRoute?.engine)
                         } else {
                             RecordingQueueService.shared.enqueue(
                                 recordingIDs,

@@ -97,6 +97,14 @@ enum RunTimeRouting {
         return signedIn ? .didunyStep : .signInNeeded
     }
 
+    /// Translate meeting on an engine that cannot translate live: audio only, the engine transcribes after
+    /// Stop and Diduny translates (WP-61, 10A).
+    static func meetingTranslationAfterStop(_ route: RunTimeRoute) -> MeetingStartRoute {
+        MeetingStartRoute(segment: .recordOnly, engine: route.engine, modelID: route.modelID, provider: .local,
+                          recordOnly: false, localPreview: false, afterStopEngineID: route.onDeviceEngineID,
+                          unavailable: route.unavailable)
+    }
+
     /// Translate meeting recovery: the target saved with the session, else the pair's Language B.
     static func meetingTranslationRecoveryTarget(saved: String?, pair: TranslationLanguagePair) -> String {
         saved ?? pair.languageB
