@@ -3,6 +3,9 @@ import Testing
 @testable import Diduny
 
 /// T5-SB-01 and T5-HK-41 (panels redesign WP-50).
+/// Main actor: a shortcut's text reads the keyboard layout (Text Input Sources), which traps off the
+/// main thread on the macOS 26 runner. The app builds it in the SwiftUI body, on the main actor.
+@MainActor
 struct MainSectionSidebarTests {
     @Test func mainItemsInOrder() {
         #expect(MainSection.mainItems == [.overview, .recordings, .benchmark, .typingTest])
