@@ -29,7 +29,7 @@ struct ShortcutCaptureOverlay: NSViewRepresentable {
     }
 }
 
-/// Invisible `KeyboardShortcuts.RecorderCocoa` laid under the styled field (spec 4.14, D8). A click
+/// Invisible `KeyboardShortcuts.RecorderCocoa` laid over the styled field (spec 4.14, D8). A click
 /// anywhere on the field starts recording; the recorder's own Escape keeps the old value. The
 /// visible layer, "Press keys..." and the accent border, is `ShortcutField` driven by `isRecording`.
 ///

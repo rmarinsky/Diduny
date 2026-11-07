@@ -106,17 +106,14 @@ struct ShortcutsSettingsView: View {
                 if recording { recordingRow = row } else if recordingRow == row { recordingRow = nil }
             }
         )
+        let rowLabel = String(localized: Self.titleResource(of: row))
         return ShortcutField(
             shortcut: model.keys(for: row),
-            rowLabel: String(localized: Self.titleResource(of: row)),
+            rowLabel: rowLabel,
             isRecording: isRecording.wrappedValue,
             isOff: !isOn
         )
-        // The recorder lies under the styled field (test-plan 3.1): the field takes no clicks, so
-        // they reach the recorder, and the field stays the element at its own point (hittable).
-        .allowsHitTesting(false)
-        .accessibilityIdentifier(row.keysIdentifier)
-        .background {
+        .overlay {
             Group {
                 if let name = row.shortcutName {
                     ShortcutRecorderOverlay(name: name, isRecording: isRecording) {
@@ -134,6 +131,15 @@ struct ShortcutsSettingsView: View {
             }
             .allowsHitTesting(isOn)
         }
+        // Field and recorder are one element, so the field is the element at its own point
+        // (hittable); otherwise the invisible recorder answers there.
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(Text("\(rowLabel) shortcut"))
+        .accessibilityValue(Text(verbatim: isRecording.wrappedValue
+                ? String(localized: "Press keys...")
+                : ShortcutField.spokenName(model.keys(for: row) ?? "", locale: .current)))
+        .accessibilityIdentifier(row.keysIdentifier)
     }
 
     private var pairPicker: some View {
