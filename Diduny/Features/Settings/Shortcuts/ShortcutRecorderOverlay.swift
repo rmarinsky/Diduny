@@ -48,6 +48,7 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
 
     func updateNSView(_ nsView: Container, context _: Context) {
         nsView.recorder.shortcutName = name
+        nsView.wantsRecording = isRecording
     }
 
     final class Container: NSView {
@@ -55,6 +56,14 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
         private let onRecordingChange: (Bool) -> Void
         private var endEditingObserver: NSObjectProtocol?
         private var startObserver: NSObjectProtocol?
+        /// SwiftUI detaches and re-attaches this host when the field redraws for `isRecording`; the
+        /// detach resigns the recorder, which is not the user ending the recording.
+        private var isDetaching = false
+
+        /// The row's `isRecording`: the recorder holds focus while it is set, also across a re-attach.
+        var wantsRecording = false {
+            didSet { focusRecorderIfWanted() }
+        }
 
         init(name: KeyboardShortcuts.Name, onRecordingChange: @escaping (Bool) -> Void, onChange: @escaping () -> Void) {
             self.onRecordingChange = onRecordingChange
@@ -72,12 +81,10 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
                 queue: .main
             ) { [weak self] _ in
                 #if TEST_BUILD
-                    UITestCaptureTrace.note("endEditing")
-                    UITestCaptureTrace.note("stack " + Thread.callStackSymbols.prefix(30).map {
-                        $0.split(separator: " ", omittingEmptySubsequences: true).dropFirst(3).prefix(1).joined()
-                    }.joined(separator: " < "))
+                    UITestCaptureTrace.note("endEditing detaching=\(self?.isDetaching ?? false)")
                 #endif
-                self?.onRecordingChange(false)
+                guard let self, !isDetaching else { return }
+                onRecordingChange(false)
             }
             startObserver = NotificationCenter.default.addObserver(
                 forName: ShortcutRecorderOverlay.startRecordingNotification,
@@ -98,6 +105,28 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
         }
 
         override var mouseDownCanMoveWindow: Bool { false }
+
+        override func viewWillMove(toSuperview newSuperview: NSView?) {
+            if newSuperview == nil { isDetaching = true }
+            super.viewWillMove(toSuperview: newSuperview)
+        }
+
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            if newWindow == nil { isDetaching = true }
+            super.viewWillMove(toWindow: newWindow)
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil else { return }
+            isDetaching = false
+            focusRecorderIfWanted()
+        }
+
+        private func focusRecorderIfWanted() {
+            guard wantsRecording, !isDetaching, let window, recorder.currentEditor() == nil else { return }
+            window.makeFirstResponder(recorder)
+        }
 
         override func hitTest(_ point: NSPoint) -> NSView? {
             !isHiddenOrHasHiddenAncestor && bounds.contains(convert(point, from: superview)) ? self : nil
