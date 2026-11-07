@@ -1768,7 +1768,7 @@
 "On battery, live text on this Mac drains it fast." = "On battery, live text on this Mac drains it fast.";
 "Use Cloud" = "Use Cloud";
 "Recording without live text" = "Recording without live text";
-"Pick This Mac or Cloud to see text from now on." = "Pick This Mac or Cloud to see text from now on.";
+"To see text from now on, use Turn on live transcript below." = "To see text from now on, use Turn on live transcript below.";
 "Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript." = "Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript.";
 "Download %@" = "Download %@";
 "On this Mac, recommended" = "On this Mac, recommended";

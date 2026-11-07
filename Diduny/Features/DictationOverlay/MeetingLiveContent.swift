@@ -3,7 +3,8 @@ import SwiftUI
 // MARK: - State
 
 /// What the meeting live panel shows (design-spec 7.1, changes/01 section 2). Pure: inputs in, strings out.
-/// The segment list is an array so a fourth segment (for example a bring-your-own-key engine) is a data change.
+/// The segment row lays out any count, but the segments come from `MeetingSegment` and its exhaustive switches,
+/// so a fourth segment also needs a new case there.
 @MainActor
 struct MeetingPanelState {
     struct Segment: Equatable {
@@ -27,7 +28,7 @@ struct MeetingPanelState {
     static var batteryWarningText: String { String(localized: "On battery, live text on this Mac drains it fast.") }
     static var useCloudTitle: String { String(localized: "Use Cloud") }
     static var calmTitle: String { String(localized: "Recording without live text") }
-    static var calmDetail: String { String(localized: "Pick This Mac or Cloud to see text from now on.") }
+    static var calmDetail: String { String(localized: "To see text from now on, use Turn on live transcript below.") }
     static var parakeetMissingText: String {
         String(localized: "Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript.")
     }
@@ -43,6 +44,8 @@ struct MeetingPanelState {
     let caption: String
     let status: Status
     let showsBatteryWarning: Bool
+    /// The battery warning's "Use Cloud" link; hidden while switching is locked (until WP-63, decision 1A).
+    let showsUseCloudLink: Bool
     /// Set when Record only uses Parakeet V3 and it is not downloaded.
     let parakeetDownloadBytes: Int64?
 
@@ -142,6 +145,7 @@ struct MeetingPanelState {
             }
         }
         showsBatteryWarning = segment == .thisMac && isOnBattery
+        showsUseCloudLink = !switchingLocked
         if segment == .recordOnly, resolved == .parakeet, case let .notDownloaded(bytes) = ready(.parakeet) {
             parakeetDownloadBytes = bytes
         } else {
@@ -285,7 +289,8 @@ struct MeetingLiveContent<Waveform: View>: View {
                 .accessibilityIdentifier("livePanel.caption")
             if state.showsBatteryWarning {
                 WarningLine(
-                    message: MeetingPanelState.batteryWarningText, linkTitle: MeetingPanelState.useCloudTitle,
+                    message: MeetingPanelState.batteryWarningText,
+                    linkTitle: state.showsUseCloudLink ? MeetingPanelState.useCloudTitle : nil,
                     action: { segment = .cloud }, id: "livePanel.batteryWarning", linkID: "livePanel.useCloud"
                 )
             }

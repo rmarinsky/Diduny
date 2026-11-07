@@ -1768,7 +1768,7 @@
 "On battery, live text on this Mac drains it fast." = "Від батареї живий текст на цьому Mac швидко її розряджає.";
 "Use Cloud" = "Перейти на Хмару";
 "Recording without live text" = "Запис без живого тексту";
-"Pick This Mac or Cloud to see text from now on." = "Виберіть «Цей Mac» або «Хмара», щоб бачити текст відтепер.";
+"To see text from now on, use Turn on live transcript below." = "Щоб бачити текст відтепер, натисніть «Увімкнути живу транскрипцію» нижче.";
 "Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript." = "Parakeet V3 не завантажено. Доки його немає, транскрипт робить Whisper Large v3 Turbo.";
 "Download %@" = "Завантажити %@";
 "On this Mac, recommended" = "На цьому Mac, рекомендовано";

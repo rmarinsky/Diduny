@@ -146,7 +146,7 @@ struct LivePanelStateMeetingTests {
         #expect(state.showsCalmBox)
         #expect(!state.isCopyEnabled)
         #expect(MeetingPanelState.calmTitle == "Recording without live text")
-        #expect(MeetingPanelState.calmDetail == "Pick This Mac or Cloud to see text from now on.")
+        #expect(MeetingPanelState.calmDetail == "To see text from now on, use Turn on live transcript below.")
         #expect(!Self.state(.cloud).showsCalmBox)
         #expect(Self.state(.cloud).isCopyEnabled)
     }

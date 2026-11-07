@@ -31,6 +31,7 @@ struct RunningMeetingPanelTests {
         #expect(state.engine == .whisper)
         #expect(state.segments.filter(\.isEnabled).map(\.id) == [.recordOnly])
         #expect(state.isFieldStatic)
+        #expect(!state.showsUseCloudLink)
     }
 
     @Test("Translate meeting on Cloud offers only Diduny Cloud, never a local engine")
