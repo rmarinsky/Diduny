@@ -107,23 +107,35 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
         override var mouseDownCanMoveWindow: Bool { false }
 
         override func viewWillMove(toSuperview newSuperview: NSView?) {
+            #if TEST_BUILD
+                UITestCaptureTrace.note("willMoveSuperview nil=\(newSuperview == nil)")
+            #endif
             if newSuperview == nil { isDetaching = true }
             super.viewWillMove(toSuperview: newSuperview)
         }
 
         override func viewWillMove(toWindow newWindow: NSWindow?) {
+            #if TEST_BUILD
+                UITestCaptureTrace.note("willMoveWindow nil=\(newWindow == nil)")
+            #endif
             if newWindow == nil { isDetaching = true }
             super.viewWillMove(toWindow: newWindow)
         }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            #if TEST_BUILD
+                UITestCaptureTrace.note("didMoveWindow nil=\(window == nil) self=\(ObjectIdentifier(self).hashValue % 1000)")
+            #endif
             guard window != nil else { return }
             isDetaching = false
             focusRecorderIfWanted()
         }
 
         private func focusRecorderIfWanted() {
+            #if TEST_BUILD
+                UITestCaptureTrace.note("focus? wants=\(wantsRecording) det=\(isDetaching) win=\(window != nil) ed=\(recorder.currentEditor() != nil)")
+            #endif
             guard wantsRecording, !isDetaching, let window, recorder.currentEditor() == nil else { return }
             window.makeFirstResponder(recorder)
         }
