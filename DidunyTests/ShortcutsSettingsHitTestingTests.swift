@@ -97,16 +97,25 @@ struct ShortcutsSettingsHitTestingTests {
         }
 
         /// Window-base frame of the accessibility element with this identifier.
+        /// SwiftUI's elements below the hosting view are `AccessibilityNode`s, which answer the
+        /// NSAccessibility getters but do not conform to `NSAccessibilityProtocol`, so they are read
+        /// by key. The tree is built lazily (the first query returns no children), so it is polled.
         func frame(of identifier: String) -> NSRect? {
-            func find(_ element: Any) -> NSAccessibilityElementProtocol? {
-                guard let element = element as? NSAccessibilityElementProtocol else { return nil }
-                if (element as? NSAccessibilityProtocol)?.accessibilityIdentifier() == identifier { return element }
-                let children = (element as? NSAccessibilityProtocol)?.accessibilityChildren() ?? []
-                for child in children { if let hit = find(child) { return hit } }
+            func value(_ key: String, of object: NSObject) -> Any? {
+                object.responds(to: NSSelectorFromString(key)) ? object.value(forKey: key) : nil
+            }
+            func find(_ element: Any) -> NSObject? {
+                guard let element = element as? NSObject else { return nil }
+                if value("accessibilityIdentifier", of: element) as? String == identifier { return element }
+                for child in value("accessibilityChildren", of: element) as? [Any] ?? [] {
+                    if let hit = find(child) { return hit }
+                }
                 return nil
             }
-            guard let content = window.contentView, let hit = find(content) else { return nil }
-            return window.convertFromScreen(hit.accessibilityFrame())
+            var hit: NSObject?
+            waitUntil { hit = window.contentView.flatMap(find); return hit != nil }
+            guard let hit, let screenFrame = (value("accessibilityFrame", of: hit) as? NSValue)?.rectValue else { return nil }
+            return window.convertFromScreen(screenFrame)
         }
 
         /// Clicks at a fraction of the identified control's width, centred vertically.
