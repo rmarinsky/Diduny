@@ -17,23 +17,21 @@ struct LanguagesSettingsView: View {
                 SettingsLineRow(
                     title: LocalizedStringKey(LanguagesSettingsModel.listText(model.speak)),
                     caption: "Sent to the engine as a hint. Suggested from your keyboard layouts. With none chosen the engine detects the language.",
-                    kind: .button
+                    kind: .button,
+                    titleIdentifier: "languages.speak"
                 ) {
                     ChangeButton(list: .speak, model: model, presenter: presenter)
                 }
-                .accessibilityIdentifier("languages.speak")
-                .accessibilityValue(Text(verbatim: LanguagesSettingsModel.listText(model.speak)))
 
                 group("Your languages")
                 SettingsLineRow(
                     title: LocalizedStringKey(LanguagesSettingsModel.listText(model.yourLanguages)),
                     caption: "Shown first and in crimson in every Translate into menu and language list.",
-                    kind: .button
+                    kind: .button,
+                    titleIdentifier: "languages.yours"
                 ) {
                     ChangeButton(list: .yourLanguages, model: model, presenter: presenter)
                 }
-                .accessibilityIdentifier("languages.yours")
-                .accessibilityValue(Text(verbatim: LanguagesSettingsModel.listText(model.yourLanguages)))
                 targetRow
                 pairRow
 

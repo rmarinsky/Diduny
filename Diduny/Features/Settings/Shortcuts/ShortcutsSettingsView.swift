@@ -106,17 +106,31 @@ struct ShortcutsSettingsView: View {
                 if recording { recordingRow = row } else if recordingRow == row { recordingRow = nil }
             }
         )
+        let rowLabel = String(localized: Self.titleResource(of: row))
         return ShortcutField(
             shortcut: model.keys(for: row),
-            rowLabel: String(localized: Self.titleResource(of: row)),
+            rowLabel: rowLabel,
             isRecording: isRecording.wrappedValue,
             isOff: !isOn
         )
+        // A recorder row's overlay is the accessibility element (`ShortcutRecorderOverlay`).
+        .accessibilityHidden(row.shortcutName != nil)
         .accessibilityIdentifier(row.keysIdentifier)
         .overlay {
             Group {
                 if let name = row.shortcutName {
-                    ShortcutRecorderOverlay(name: name, isRecording: isRecording) {
+                    ShortcutRecorderOverlay(
+                        name: name,
+                        isRecording: isRecording,
+                        accessibility: .init(
+                            identifier: row.keysIdentifier,
+                            label: String(localized: "\(rowLabel) shortcut"),
+                            value: isRecording.wrappedValue
+                                ? String(localized: "Press keys...")
+                                : ShortcutField.spokenName(model.keys(for: row) ?? "", locale: .current),
+                            isEnabled: isOn
+                        )
+                    ) {
                         model.shortcutDidChange(row)
                     }
                 } else {

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The visible shortcut field (design-spec 4.14): the whole shortcut as one string ("⌥⌘D"),
@@ -81,19 +82,69 @@ struct ShortcutPressCountPicker: View {
     var disabledCounts: Set<Int> = []
 
     var body: some View {
-        Picker("Press count", selection: $selection) {
-            ForEach(1 ... 3, id: \.self) { count in
-                Text(verbatim: "\(count)×").tag(count)
-                    .disabled(disabledCounts.contains(count))
-                    .opacity(disabledCounts.contains(count) ? 0.5 : 1)
+        Group {
+            if disabledCounts.isEmpty {
+                Picker("Press count", selection: $selection) {
+                    ForEach(1 ... 3, id: \.self) { count in
+                        Text(verbatim: "\(count)×").tag(count)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } else {
+                // SwiftUI ignores `.disabled` on a segment; AppKit disables it for the pointer and
+                // for accessibility alike.
+                SegmentedCountControl(selection: $selection, disabledCounts: disabledCounts)
             }
         }
-        .pickerStyle(.segmented)
         .controlSize(.small)
         // White on `AccentColor` dark is 2.96:1; filled controls use `accentFill` (spec 1.1).
         .tint(DS.Palette.accentFill)
         .labelsHidden()
         .fixedSize()
         .opacity(isOff ? 0.45 : 1)
+    }
+}
+
+/// The 1× 2× 3× segments as an `NSSegmentedControl`, for rows where a count cannot be picked.
+private struct SegmentedCountControl: NSViewRepresentable {
+    @Binding var selection: Int
+    let disabledCounts: Set<Int>
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl(
+            labels: ["1×", "2×", "3×"], trackingMode: .selectOne,
+            target: context.coordinator, action: #selector(Coordinator.changed(_:))
+        )
+        control.controlSize = .small
+        control.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
+        control.selectedSegmentBezelColor = NSColor(DS.Palette.accentFill)
+        control.setAccessibilityLabel(String(localized: "Press count"))
+        return control
+    }
+
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        context.coordinator.selection = $selection
+        control.isEnabled = isEnabled
+        for index in 0 ..< 3 {
+            control.setEnabled(!disabledCounts.contains(index + 1), forSegment: index)
+        }
+        control.selectedSegment = selection - 1
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selection: $selection)
+    }
+
+    final class Coordinator: NSObject {
+        var selection: Binding<Int>
+
+        init(selection: Binding<Int>) {
+            self.selection = selection
+        }
+
+        @objc func changed(_ sender: NSSegmentedControl) {
+            selection.wrappedValue = sender.selectedSegment + 1
+        }
     }
 }

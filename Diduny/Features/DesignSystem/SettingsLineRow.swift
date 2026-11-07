@@ -28,6 +28,8 @@ struct SettingsLineRow<Control: View>: View {
     var kind: Kind = .other
     /// Off for the last row inside an expander or a popup.
     var showsHairline = true
+    /// Identifier of the title text, for rows whose title is the value (Languages lists, test-plan 2.1).
+    var titleIdentifier: String?
     @ViewBuilder var control: () -> Control
 
     var body: some View {
@@ -37,6 +39,7 @@ struct SettingsLineRow<Control: View>: View {
                     Text(title)
                         .font(DS.Font.body)
                         .foregroundStyle(DS.Palette.text)
+                        .accessibilityIdentifier(ifPresent: titleIdentifier)
                     if let caption {
                         Text(caption)
                             .font(DS.Font.meta)
@@ -59,13 +62,17 @@ struct SettingsLineRow<Control: View>: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// With a caption the controls take the row label as their label and the caption as their
-    /// hint (spec 4.10); without one each control keeps its own label.
+    /// With a caption the control takes the row label as its label and the caption as its hint
+    /// (spec 4.10); without one it keeps its own label. Button and segmented rows hold several
+    /// controls with their own text ("Record" and "Play", keys, count and switch), so each keeps its
+    /// own label and only gets the hint: one shared label would hide which control is which.
     @ViewBuilder private var controls: some View {
         let cluster = HStack(spacing: DS.Space.sm) { control() }
             .fixedSize()
             .frame(height: kind.slotHeight)
-        if let caption {
+        if let caption, kind == .button || kind == .segmented {
+            cluster.accessibilityHint(Text(caption))
+        } else if let caption {
             cluster
                 .accessibilityLabel(Text(title))
                 .accessibilityHint(Text(caption))

@@ -34,9 +34,21 @@ struct ShortcutCaptureOverlay: NSViewRepresentable {
 /// visible layer, "Press keys..." and the accent border, is `ShortcutField` driven by `isRecording`.
 ///
 /// The recorder fills the whole field: it cancels recording on a mouse-up outside its own bounds.
+///
+/// The overlay, not the styled field under it, is the accessibility element: it is what a click
+/// reaches, so the field is hittable, and VoiceOver can press it to start recording.
 struct ShortcutRecorderOverlay: NSViewRepresentable {
+    /// What the styled field would say: identifier, "<row> shortcut", the spoken keys.
+    struct Accessibility: Equatable {
+        var identifier: String
+        var label: String
+        var value: String
+        var isEnabled: Bool
+    }
+
     let name: KeyboardShortcuts.Name
     @Binding var isRecording: Bool
+    let accessibility: Accessibility
     let onChange: () -> Void
 
     func makeNSView(context _: Context) -> Container {
@@ -45,12 +57,14 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
 
     func updateNSView(_ nsView: Container, context _: Context) {
         nsView.recorder.shortcutName = name
+        nsView.accessibility = accessibility
     }
 
     final class Container: NSView {
         private(set) var recorder: KeyboardShortcuts.RecorderCocoa!
         private let onRecordingChange: (Bool) -> Void
         private var endEditingObserver: NSObjectProtocol?
+        var accessibility = Accessibility(identifier: "", label: "", value: "", isEnabled: true)
 
         init(name: KeyboardShortcuts.Name, onRecordingChange: @escaping (Bool) -> Void, onChange: @escaping () -> Void) {
             self.onRecordingChange = onRecordingChange
@@ -61,6 +75,7 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
             }
             recorder.alphaValue = 0.01
             recorder.focusRingType = .none
+            recorder.setAccessibilityElement(false)
             addSubview(recorder)
             endEditingObserver = NotificationCenter.default.addObserver(
                 forName: NSControl.textDidEndEditingNotification,
@@ -85,8 +100,27 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
         }
 
         override func mouseDown(with _: NSEvent) {
+            startRecording()
+        }
+
+        private func startRecording() {
             onRecordingChange(true)
             window?.makeFirstResponder(recorder)
+        }
+
+        override func isAccessibilityElement() -> Bool { true }
+        override func accessibilityRole() -> NSAccessibility.Role? { .button }
+        override func accessibilityIdentifier() -> String { accessibility.identifier }
+        override func accessibilityLabel() -> String? { accessibility.label }
+        override func accessibilityValue() -> Any? { accessibility.value }
+        override func isAccessibilityEnabled() -> Bool { accessibility.isEnabled }
+        override func accessibilityChildren() -> [Any]? { [] }
+        override func accessibilityHitTest(_: NSPoint) -> Any? { self }
+
+        override func accessibilityPerformPress() -> Bool {
+            guard accessibility.isEnabled else { return false }
+            startRecording()
+            return true
         }
 
         override func layout() {

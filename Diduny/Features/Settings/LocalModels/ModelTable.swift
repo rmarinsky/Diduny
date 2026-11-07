@@ -120,6 +120,8 @@ struct ModelTable: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .help(row.help ?? "")
             }
+            // One element per row: the name and "Recommended" would otherwise both carry the id.
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("models.row.\(row.id)")
             cell(DS.ModelTable.live) { marks([row.live], column: "Live text", row: row) }
                 .accessibilityIdentifier(cellID("live"))
