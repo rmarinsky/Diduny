@@ -115,12 +115,6 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
         }
 
         private func startRecording() {
-            // Keys go to the key window only; in a window that is not key the recorder ends editing at
-            // once (macOS may refuse to activate an accessory app on launch).
-            if let window, !window.isKeyWindow {
-                NSApp.activate()
-                window.makeKey()
-            }
             onRecordingChange(true)
             let made = window?.makeFirstResponder(recorder) ?? false
             #if TEST_BUILD
