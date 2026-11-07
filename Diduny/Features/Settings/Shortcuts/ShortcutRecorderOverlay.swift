@@ -35,6 +35,9 @@ struct ShortcutCaptureOverlay: NSViewRepresentable {
 ///
 /// The recorder fills the whole field: it cancels recording on a mouse-up outside its own bounds.
 struct ShortcutRecorderOverlay: NSViewRepresentable {
+    /// Posted with the shortcut name's raw value: the field's accessibility press starts recording.
+    static let startRecordingNotification = Notification.Name("ShortcutRecorderOverlay.startRecording")
+
     let name: KeyboardShortcuts.Name
     @Binding var isRecording: Bool
     let onChange: () -> Void
@@ -51,6 +54,7 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
         private(set) var recorder: KeyboardShortcuts.RecorderCocoa!
         private let onRecordingChange: (Bool) -> Void
         private var endEditingObserver: NSObjectProtocol?
+        private var startObserver: NSObjectProtocol?
 
         init(name: KeyboardShortcuts.Name, onRecordingChange: @escaping (Bool) -> Void, onChange: @escaping () -> Void) {
             self.onRecordingChange = onRecordingChange
@@ -69,6 +73,14 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
             ) { [weak self] _ in
                 self?.onRecordingChange(false)
             }
+            startObserver = NotificationCenter.default.addObserver(
+                forName: ShortcutRecorderOverlay.startRecordingNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] note in
+                guard let self, note.object as? String == recorder.shortcutName.rawValue else { return }
+                startRecording()
+            }
         }
 
         @available(*, unavailable)
@@ -76,6 +88,7 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
 
         deinit {
             if let endEditingObserver { NotificationCenter.default.removeObserver(endEditingObserver) }
+            if let startObserver { NotificationCenter.default.removeObserver(startObserver) }
         }
 
         override var mouseDownCanMoveWindow: Bool { false }
@@ -85,6 +98,10 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
         }
 
         override func mouseDown(with _: NSEvent) {
+            startRecording()
+        }
+
+        private func startRecording() {
             onRecordingChange(true)
             window?.makeFirstResponder(recorder)
         }

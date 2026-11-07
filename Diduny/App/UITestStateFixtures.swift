@@ -86,8 +86,8 @@
                 if parts.count > 1, parts[1] == "prompt" {
                     EdgeCommandPanelController.shared.showMeetingSuggestion(DetectedMeeting(id: UUID(), client: .zoom))
                 } else {
-                    EdgeCommandPanelController.shared.showCollapsed()
-                    EdgeCommandPanelController.shared.expandForUITesting()
+                    // Launch already showed the tab; expand once its placement has landed, as a hover would.
+                    DispatchQueue.main.async { EdgeCommandPanelController.shared.expandForUITesting() }
                 }
             case "livePanel":
                 guard parts.count > 1 else { return }

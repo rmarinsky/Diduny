@@ -140,6 +140,11 @@ struct ShortcutsSettingsView: View {
                 ? String(localized: "Press keys...")
                 : ShortcutField.spokenName(model.keys(for: row) ?? "", locale: .current)))
         .accessibilityIdentifier(row.keysIdentifier)
+        // VoiceOver (and an accessibility press) starts recording as a click does.
+        .accessibilityAction {
+            guard isOn, let name = row.shortcutName else { return }
+            NotificationCenter.default.post(name: ShortcutRecorderOverlay.startRecordingNotification, object: name.rawValue)
+        }
     }
 
     private var pairPicker: some View {
