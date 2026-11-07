@@ -41,7 +41,11 @@ struct GeneralSettingsView: View {
 
     private var topGroup: some View {
         GeneralGroup(heading: nil) {
-            SettingsLineRow(title: "App language", kind: .popUp) {
+            SettingsLineRow(
+                title: "App language",
+                caption: "Restart Diduny to apply the language to all windows and menus. Recording and translation languages do not change.",
+                kind: .popUp
+            ) {
                 Picker("App language", selection: $appLanguage) {
                     ForEach(AppLanguage.allCases) { Text($0.displayName).tag($0) }
                 }

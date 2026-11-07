@@ -148,9 +148,6 @@ enum DS {
 
     /// Four type levels: title, headline, body, secondary (callout 12 / caption 11).
     enum Font {
-        /// TODO(panels redesign): stays until the first Settings package moves `Scaffold`
-        /// to `settingsTitle`; that package then removes `pageTitle`.
-        static let pageTitle = SwiftUI.Font.system(size: 22, weight: .bold)
         static let headline = SwiftUI.Font.system(size: 13, weight: .semibold)
         static let body = SwiftUI.Font.system(size: 13)
         static let callout = SwiftUI.Font.system(size: 12)
