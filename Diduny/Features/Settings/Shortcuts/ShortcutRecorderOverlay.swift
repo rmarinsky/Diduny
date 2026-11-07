@@ -73,6 +73,9 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
             ) { [weak self] _ in
                 #if TEST_BUILD
                     UITestCaptureTrace.note("endEditing")
+                    UITestCaptureTrace.note("stack " + Thread.callStackSymbols.prefix(30).map {
+                        $0.split(separator: " ", omittingEmptySubsequences: true).dropFirst(3).prefix(1).joined()
+                    }.joined(separator: " < "))
                 #endif
                 self?.onRecordingChange(false)
             }

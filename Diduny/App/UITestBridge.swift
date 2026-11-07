@@ -145,7 +145,7 @@
 
         static func note(_ event: String) {
             events.append(event)
-            if events.count > 20 { events.removeFirst() }
+            if events.count > 40 { events.removeFirst() }
         }
 
         static func state() -> [String: Any] {
