@@ -104,6 +104,9 @@ struct ShortcutsSettingsView: View {
             get: { recordingRow == row },
             set: { recording in
                 if recording { recordingRow = row } else if recordingRow == row { recordingRow = nil }
+                #if TEST_BUILD
+                    UITestCaptureTrace.recordingRow = recordingRow.map { "\($0)" }
+                #endif
             }
         )
         let rowLabel = String(localized: Self.titleResource(of: row))

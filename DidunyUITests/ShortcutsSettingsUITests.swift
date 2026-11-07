@@ -88,6 +88,7 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
         openShortcuts()
         let keys = element("shortcuts.addMeetingChapter.keys")
         keys.click()
+        print("CAPTURE-PROBE escape:", probe()["capture"] ?? "none")
         waitForElement(keys, toMatch: "value == 'Press keys...'")
         app.typeKey(.escape, modifierFlags: [])
         waitForElement(keys, toMatch: "value == 'Option Command B'")
@@ -98,6 +99,7 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
         openShortcuts()
         let keys = element("shortcuts.toggleHistoryPalette.keys")
         keys.click()
+        print("CAPTURE-PROBE sc04:", probe()["capture"] ?? "none")
         app.typeKey("h", modifierFlags: [.control, .option])
         waitForElement(keys, toMatch: "value == 'Control Option H'")
 

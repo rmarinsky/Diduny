@@ -121,6 +121,46 @@
         }
     }
 
+    /// Shortcut capture state for the probe's `capture` key (WP-90): which row records and why it stopped.
+    @MainActor
+    enum UITestCaptureTrace {
+        static var recordingRow: String?
+        static var events: [String] = []
+
+        private static var clickMonitor: Any?
+
+        /// Notes where each click lands: its window and the view hit-testing returns.
+        static func watchClicks() {
+            guard clickMonitor == nil else { return }
+            clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { event in
+                MainActor.assumeIsolated {
+                    let view = event.window?.contentView.flatMap { content in
+                        content.superview?.hitTest(event.locationInWindow) ?? content.hitTest(event.locationInWindow)
+                    }
+                    note("\(event.type == .leftMouseDown ? "down" : "up") win=\(event.window?.title ?? "nil") key=\(event.window?.isKeyWindow ?? false) hit=\(view.map { String(describing: type(of: $0)) } ?? "nil")")
+                }
+                return event
+            }
+        }
+
+        static func note(_ event: String) {
+            events.append(event)
+            if events.count > 20 { events.removeFirst() }
+        }
+
+        static func state() -> [String: Any] {
+            let key = NSApp.keyWindow
+            return [
+                "row": recordingRow ?? NSNull(),
+                "sessionActive": ShortcutCaptureSession.shared.isActive,
+                "keyWindow": key?.title ?? NSNull(),
+                "appActive": NSApp.isActive,
+                "firstResponder": key?.firstResponder.map { String(describing: type(of: $0)) } ?? NSNull(),
+                "events": events,
+            ]
+        }
+    }
+
     /// Side effects that `--ui-testing-stub-paste` records instead of posting events.
     enum UITestProbeCounters {
         private static let state = OSAllocatedUnfairLock<(paste: Int, submit: Bool)>(initialState: (0, false))
@@ -160,6 +200,7 @@
             panel.setFrameOrigin(NSScreen.main?.frame.origin ?? .zero)
             panel.orderFrontRegardless()
             self.panel = panel
+            UITestCaptureTrace.watchClicks()
             refresh()
             // App-side polling keeps the probe current; tests wait on its value with a predicate.
             timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
@@ -192,6 +233,7 @@
                     "pair": "\(store.meetingTranslationPair.languageA)-\(store.meetingTranslationPair.languageB)",
                 ] as [String: Any],
             ]
+            probe["capture"] = UITestCaptureTrace.state()
             if let appState {
                 probe["recording"] = [
                     "voice": appState.recordingState.description,

@@ -71,6 +71,9 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
                 object: recorder,
                 queue: .main
             ) { [weak self] _ in
+                #if TEST_BUILD
+                    UITestCaptureTrace.note("endEditing")
+                #endif
                 self?.onRecordingChange(false)
             }
             startObserver = NotificationCenter.default.addObserver(
@@ -102,6 +105,9 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
         }
 
         override func mouseDown(with _: NSEvent) {
+            #if TEST_BUILD
+                UITestCaptureTrace.note("mouseDown")
+            #endif
             startRecording()
         }
 
@@ -113,7 +119,12 @@ struct ShortcutRecorderOverlay: NSViewRepresentable {
                 window.makeKey()
             }
             onRecordingChange(true)
-            window?.makeFirstResponder(recorder)
+            let made = window?.makeFirstResponder(recorder) ?? false
+            #if TEST_BUILD
+                UITestCaptureTrace.note("start key=\(window?.isKeyWindow ?? false) made=\(made)")
+            #else
+                _ = made
+            #endif
         }
 
         override func layout() {
