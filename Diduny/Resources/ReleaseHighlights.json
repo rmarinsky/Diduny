@@ -1,17 +1,19 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "A meeting panel no longer gets stuck on Finalizing",
+    "headline": "New panels, a calendar of your recordings, and engines you can switch mid-recording",
     "highlights": [
-      "If you minimized the panel while recording a meeting, it could stay on \"Finalizing\" after Stop. It now closes once the meeting is saved.",
-      "Your recording was never at risk: it was saved and transcribed as usual, only the panel didn't go away."
+      "Recordings is now a calendar: meetings, voice notes and calendar events on one day, with an inspector to transcribe, translate and group.",
+      "Switch the mode during a meeting, or the engine during a dictation, without stopping. The text so far is kept.",
+      "After Stop, the Diduny logo lands where your text appears. Settings are redesigned, in a window you can resize."
     ]
   },
   "uk": {
-    "headline": "Панель зустрічі більше не зависає на «Finalizing»",
+    "headline": "Нові панелі, календар записів і рушії, які можна змінити під час запису",
     "highlights": [
-      "Якщо під час запису зустрічі ти згортав панель, після «Стоп» вона могла лишитися на «Finalizing». Тепер вона закривається, щойно зустріч збережено.",
-      "Запис при цьому не губився: він зберігався й транскрибувався як завжди, просто панель не зникала."
+      "Записи тепер у календарі: зустрічі, голосові нотатки й події одного дня поруч, а збоку інспектор, щоб транскрибувати, перекладати й групувати.",
+      "Змінюй режим під час зустрічі чи рушій під час диктування, не зупиняючись. Уже сказаний текст лишається.",
+      "Після «Стоп» логотип Diduny зʼявляється там, де вставився текст. Налаштування перероблено, а вікно тепер можна розтягувати."
     ]
   }
 }
