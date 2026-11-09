@@ -47,6 +47,16 @@ enum MeetingChunkStitcher {
         }
     }
 
+    enum RepairError: LocalizedError {
+        case fileTooLarge(String)
+
+        var errorDescription: String? {
+            switch self {
+            case let .fileTooLarge(name): "\(name) is too large to repair as a WAV file."
+            }
+        }
+    }
+
     // MARK: - Public API
 
     /// Stitches `chunkURLs` into `outputURL` in order. Throws if no chunk is readable.
@@ -72,27 +82,53 @@ enum MeetingChunkStitcher {
 
     /// A process killed mid-write leaves the audio on disk but the WAV header claiming no
     /// samples, so `AVAudioFile` reads length 0. Writes a corrected copy to `outputURL` and
-    /// returns true; returns false, writing nothing, when the header is already right or the
-    /// file has no recognisable WAV layout. The source file is never changed.
+    /// returns true; returns false, writing nothing, when the header needs no repair or the
+    /// file has no recognisable WAV layout. The source file is never changed. A declared size
+    /// that fits the file is trusted: bytes after it are other WAV chunks, not audio.
     static func writeRepairedCopy(of chunkURL: URL, to outputURL: URL) throws -> Bool {
-        let bytes = try Data(contentsOf: chunkURL, options: .mappedIfSafe)
-        guard let layout = wavLayout(of: bytes) else { return false }
-        let available = bytes.count - layout.dataOffset
-        let audioBytes = available / layout.blockAlign * layout.blockAlign
-        // Up to one trailing pad byte is normal in a properly closed file.
-        guard layout.declaredDataSize < available - 1 || layout.declaredDataSize > available else { return false }
+        let (fileSize, layout) = try readLayout(of: chunkURL)
+        guard let layout else { return false }
+        let available = fileSize - layout.dataOffset
+        guard available > 0, layout.declaredDataSize == 0 || layout.declaredDataSize > available else { return false }
+        // A WAV header stores sizes in 32 bits.
+        guard fileSize <= Int(UInt32.max) else { throw RepairError.fileTooLarge(chunkURL.lastPathComponent) }
 
-        var repaired = Data(bytes.prefix(layout.dataOffset + audioBytes))
-        func patch(_ value: Int, at offset: Int) {
-            withUnsafeBytes(of: UInt32(value).littleEndian) {
-                repaired.replaceSubrange(offset ..< offset + 4, with: $0)
-            }
-        }
-        patch(repaired.count - 8, at: 4)
-        patch(audioBytes, at: layout.dataOffset - 4)
+        let audioBytes = available / layout.blockAlign * layout.blockAlign
         try? FileManager.default.removeItem(at: outputURL)
-        try repaired.write(to: outputURL)
+        try FileManager.default.copyItem(at: chunkURL, to: outputURL)
+        let handle = try FileHandle(forUpdating: outputURL)
+        defer { try? handle.close() }
+        try handle.truncate(atOffset: UInt64(layout.dataOffset + audioBytes))
+        try handle.seek(toOffset: 4)
+        try handle.write(contentsOf: littleEndianBytes(layout.dataOffset + audioBytes - 8))
+        try handle.seek(toOffset: UInt64(layout.dataOffset - 4))
+        try handle.write(contentsOf: littleEndianBytes(audioBytes))
         return true
+    }
+
+    /// True only when the file provably holds no audio bytes: an empty file, or a WAV header
+    /// with nothing after it (a chunk opened by a rotation just before the process died).
+    static func hasNoAudio(_ chunkURL: URL) throws -> Bool {
+        let (fileSize, layout) = try readLayout(of: chunkURL)
+        if fileSize == 0 { return true }
+        guard let layout else { return false }
+        return fileSize <= layout.dataOffset
+    }
+
+    private static func littleEndianBytes(_ value: Int) -> Data {
+        withUnsafeBytes(of: UInt32(value).littleEndian) { Data($0) }
+    }
+
+    private static func readLayout(
+        of url: URL
+    ) throws -> (fileSize: Int, layout: (dataOffset: Int, declaredDataSize: Int, blockAlign: Int)?) {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let fileSize = (attributes[.size] as? NSNumber)?.intValue ?? 0
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        // The writer pads its header to 4 KB; only the header is ever loaded.
+        let header = try handle.read(upToCount: 64 * 1024) ?? Data()
+        return (fileSize, wavLayout(of: header))
     }
 
     private static func wavLayout(of bytes: Data) -> (dataOffset: Int, declaredDataSize: Int, blockAlign: Int)? {
