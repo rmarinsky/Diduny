@@ -34,7 +34,7 @@ extension EdgeCommandAction {
 struct CommandTileStart: Equatable {
     let action: EdgeCommandAction
     let engine: EngineID
-    /// True when the engine came from the one-recording pick, not Settings.
+    /// True when the engine came from the panel's session pick, not Settings.
     let isPick: Bool
     /// Record meeting only.
     let segment: MeetingSegment?
@@ -104,6 +104,17 @@ enum CommandHome {
         )
     }
 
+    /// What a picked tile start runs for its job; nil when the tile follows Settings > Modes.
+    static func panelSelection(_ start: CommandTileStart, job: STTJob) -> JobProviderSelection? {
+        start.isPick ? ModeEngineRules.selection(engine: start.engine, job: job) : nil
+    }
+
+    /// The one engine all four tiles use on "As in Settings", or nil when the modes differ.
+    static func sharedEngine(_ defaults: CommandHomeDefaults) -> EngineID? {
+        let engines = Set(tiles.map { engine(for: $0, pick: nil, defaults: defaults) })
+        return engines.count == 1 ? engines.first : nil
+    }
+
     // MARK: Captions (02 section 5)
 
     static func caption(
@@ -114,9 +125,7 @@ enum CommandHome {
     ) -> String {
         switch action {
         case .transcribe:
-            caps.map { $0.liveDictation != .none } ?? true
-                ? String(localized: "Voice → text")
-                : String(localized: "Text after Stop")
+            String(localized: "Voice → text")
         case .translate:
             String(localized: "Voice → \(languageName(target))")
         case .meeting:

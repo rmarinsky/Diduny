@@ -116,7 +116,7 @@ struct MeetingSuggestion: Equatable {
 final class EdgeCommandPanelModel {
     /// Engines the tiles use on "As in Settings" (an input, see `CommandHomeDefaults`).
     var defaults: CommandHomeDefaults
-    /// The one-recording engine pick. Never stored; consumed by a tile start, cleared by any other start.
+    /// The engine pick for tile starts. Memory only: lasts until "As in Settings" or the app quits.
     private(set) var pick: EngineID?
     /// Translate into, for the Translate tile only. Kept after Stop; never written to Settings.
     private(set) var target: String
@@ -151,11 +151,12 @@ final class EdgeCommandPanelModel {
     }
 
     var engineFieldLabel: String {
-        pick == nil ? String(localized: "Engine") : String(localized: "Engine, next recording")
+        pick == nil ? String(localized: "Engine, as in Settings") : String(localized: "Engine, this session")
     }
 
     var engineFieldValue: String {
-        pick.map(CommandHome.engineName) ?? String(localized: "As in Settings")
+        let engine = pick ?? CommandHome.sharedEngine(defaults)
+        return engine.map(CommandHome.engineName) ?? String(localized: "Different per mode")
     }
 
     func engine(for action: EdgeCommandAction) -> EngineID {
@@ -178,18 +179,12 @@ final class EdgeCommandPanelModel {
         target = CommandHome.validTarget(code)
     }
 
-    /// A tile start: what to record with. Consumes the pick (it applies to one recording).
-    func consumeStart(
+    /// A tile start: what to record with. The pick stays for later tile starts.
+    func tileStart(
         _ action: EdgeCommandAction,
         caps: (EngineID) -> EngineCapabilities?
     ) -> CommandTileStart {
-        defer { pick = nil }
-        return CommandHome.start(action, pick: pick, defaults: defaults, target: target, pair: pair, caps: caps)
-    }
-
-    /// Any recording start not from a tile (hotkey, menu bar) clears a pending pick (02 Q14 default).
-    func clearPick() {
-        pick = nil
+        CommandHome.start(action, pick: pick, defaults: defaults, target: target, pair: pair, caps: caps)
     }
 
     /// The picked engine stopped being usable (key removed): back to "As in Settings" (P:411).

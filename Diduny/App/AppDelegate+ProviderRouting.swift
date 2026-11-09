@@ -14,7 +14,7 @@ extension AppDelegate {
         return RunTimeRouting.route(
             job: job,
             segment: segment,
-            override: override,
+            override: override ?? appState.panelEngines[job],
             defaults: SettingsStorage.shared.modeDefaults,
             readiness: LiveEngineReadinessSource(),
             whisper: .init(downloaded: whisper.downloadedModels, selected: whisper.selectedModel()?.name),

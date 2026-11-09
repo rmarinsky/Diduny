@@ -1789,7 +1789,8 @@
 "Hide original text" = "Сховати оригінал";
 
 /* Panels redesign WP-41 */
-"Engine, next recording" = "Рушій, наступний запис";
+"Engine, this session" = "Рушій, цей сеанс";
+"Engine, as in Settings" = "Рушій, як у Налаштуваннях";
 "As in Settings" = "Як у Налаштуваннях";
 "Each mode uses its own default" = "Кожен режим має свій типовий";
 "Providers..." = "Провайдери...";

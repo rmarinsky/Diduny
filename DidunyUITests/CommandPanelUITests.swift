@@ -34,7 +34,7 @@ final class CommandPanelUITests: DidunyUITestCase {
     func testHomeShowsEngineAndTranslateIntoAndAllTiles() {
         let (_, home) = openHome()
 
-        waitForElement(home.buttons["commandPanel.engine"], toMatch: "value == 'As in Settings'")
+        waitForElement(home.buttons["commandPanel.engine"], toMatch: "value == 'Diduny Cloud'")
         waitForElement(home.buttons["commandPanel.translateInto"])
         for tile in ["transcribe", "translate", "recordMeeting", "translateMeeting"] {
             waitForElement(home.buttons["commandPanel.tile.\(tile)"])

@@ -2,7 +2,7 @@
 import Foundation
 import Testing
 
-/// Command home: "As in Settings", the one-recording pick, captions, Translate into, signed out (WP-41).
+/// Command home: "As in Settings", the session pick, captions, Translate into, signed out (WP-41).
 @MainActor
 struct EdgeCommandHomeTests {
     private static let caps: (EngineID) -> EngineCapabilities? = EdgeCommandPanelController.engineCapabilities
@@ -37,9 +37,14 @@ struct EdgeCommandHomeTests {
         ))
 
         #expect(CommandHome.tiles.map(home.engine(for:)) == [.parakeet, .appleSpeech, .whisper, .didunyCloud])
-        #expect(home.consumeStart(.meeting, caps: Self.caps).segment == .thisMac)
-        #expect(home.engineFieldLabel == String(localized: "Engine"))
-        #expect(home.engineFieldValue == String(localized: "As in Settings"))
+        #expect(home.tileStart(.meeting, caps: Self.caps).segment == .thisMac)
+        #expect(home.engineFieldLabel == String(localized: "Engine, as in Settings"))
+        #expect(home.engineFieldValue == String(localized: "Different per mode"))
+    }
+
+    @Test("As in Settings names the engine when all four modes share it")
+    func engineFieldNamesSharedEngine() {
+        #expect(model().engineFieldValue == "Diduny Cloud")
     }
 
     @Test("T2-EN-02 A pick applies to all four tiles")
@@ -49,22 +54,37 @@ struct EdgeCommandHomeTests {
         #expect(home.pickEngine(rowID: EngineID.whisper.rawValue))
 
         #expect(CommandHome.tiles.map(home.engine(for:)) == Array(repeating: .whisper, count: 4))
-        #expect(home.engineFieldLabel == String(localized: "Engine, next recording"))
+        #expect(home.engineFieldLabel == String(localized: "Engine, this session"))
         #expect(home.engineFieldValue == "Whisper")
     }
 
-    @Test("T2-EN-03 The pick applies to one recording")
-    func pickIsConsumedByTheStart() {
+    @Test("T2-EN-03 The pick lasts until As in Settings")
+    func pickLastsForTheSession() {
         let home = model()
         home.pickEngine(rowID: EngineID.parakeet.rawValue)
 
-        let start = home.consumeStart(.transcribe, caps: Self.caps)
+        for _ in 0 ..< 2 {
+            let start = home.tileStart(.transcribe, caps: Self.caps)
+            #expect(start.engine == .parakeet)
+            #expect(start.isPick)
+        }
+        #expect(home.pick == .parakeet)
 
-        #expect(start.engine == .parakeet)
-        #expect(start.isPick)
+        home.pickEngine(rowID: CommandHome.asInSettingsRowID)
+
         #expect(home.pick == nil)
-        #expect(home.engineFieldValue == String(localized: "As in Settings"))
-        #expect(home.consumeStart(.transcribe, caps: Self.caps).engine == .didunyCloud)
+        #expect(home.tileStart(.transcribe, caps: Self.caps).engine == .didunyCloud)
+    }
+
+    @Test("A picked tile start reaches the route the recording runs")
+    func pickReachesTheRoute() throws {
+        let home = model()
+        home.pickEngine(rowID: EngineID.parakeet.rawValue)
+        let selection = try #require(CommandHome.panelSelection(home.tileStart(.transcribe, caps: Self.caps), job: .dictation))
+
+        #expect(selection.providerID == EngineID.parakeet.rawValue)
+        home.pickEngine(rowID: CommandHome.asInSettingsRowID)
+        #expect(CommandHome.panelSelection(home.tileStart(.transcribe, caps: Self.caps), job: .dictation) == nil)
     }
 
     @Test("T2-EN-04 The pick never writes Settings")
@@ -82,7 +102,7 @@ struct EdgeCommandHomeTests {
 
         home.pickEngine(rowID: EngineID.parakeet.rawValue)
         home.pickTarget("pl")
-        _ = home.consumeStart(.translate, caps: Self.caps)
+        _ = home.tileStart(.translate, caps: Self.caps)
         controller.pickEngineRow(EngineID.whisper.rawValue)
         controller.pickEngineRow(CommandHome.asInSettingsRowID)
 
@@ -156,20 +176,25 @@ struct EdgeCommandHomeTests {
         let home = model()
         home.pickEngine(rowID: engine.rawValue)
 
-        #expect(home.consumeStart(.meeting, caps: Self.caps).segment == segment)
+        #expect(home.tileStart(.meeting, caps: Self.caps).segment == segment)
     }
 
-    @Test("T2-EN-08 A start that is not from a tile clears a pending pick")
-    func hotkeyStartClearsPick() {
-        let home = model(defaults: CommandHomeDefaults(
-            dictation: .appleSpeech, translation: .didunyCloud,
-            meetingSegment: .cloud, meetingEngine: .didunyCloud, translateMeeting: .didunyCloud
-        ))
+    @Test("T2-EN-08 The tile's engine ends with its recording; the pick stays and hotkeys see Settings")
+    func hotkeyStartsFollowSettings() {
+        let home = model()
+        let state = AppState()
         home.pickEngine(rowID: EngineID.parakeet.rawValue)
+        let selection = CommandHome.panelSelection(home.tileStart(.transcribe, caps: Self.caps), job: .dictation)
 
-        home.clearPick()
+        state.panelEngines[.dictation] = selection
+        state.panelEngines[.dictationTranslation] = selection
+        state.recordingState = .recording
+        #expect(state.panelEngines[.dictation] == selection)
+        state.recordingState = .idle
 
-        #expect(home.engine(for: .transcribe) == .appleSpeech)
+        #expect(state.panelEngines[.dictation] == nil)
+        #expect(state.panelEngines[.dictationTranslation] == selection)
+        #expect(home.pick == .parakeet)
     }
 
     @Test("T2-TL-01 Tile captions with Settings defaults")
@@ -181,7 +206,7 @@ struct EdgeCommandHomeTests {
         (EngineID.didunyCloud, ["Voice → text", "Voice → English", "System + mic", "Live · EN ↔ UK"]),
         (.elevenLabs, ["Voice → text", "Voice → English", "System + mic", "After Stop · EN ↔ UK"]),
         (.whisper, ["Voice → text", "Voice → English", "System + mic", "After Stop · EN ↔ UK"]),
-        (.parakeet, ["Text after Stop", "Voice → English", "System + mic", "After Stop · EN ↔ UK"]),
+        (.parakeet, ["Voice → text", "Voice → English", "System + mic", "After Stop · EN ↔ UK"]),
         (.appleSpeech, ["Voice → text", "Voice → English", "System + mic", "After Stop · EN ↔ UK"]),
     ])
     func captionsPerPick(engine: EngineID, expected: [String]) {
@@ -198,7 +223,7 @@ struct EdgeCommandHomeTests {
             meetingSegment: .cloud, meetingEngine: .didunyCloud, translateMeeting: .whisper
         ))
 
-        #expect(captions(home).first == "Text after Stop")
+        #expect(captions(home).first == "Voice → text")
         #expect(captions(home).last == "After Stop · EN ↔ UK")
     }
 
@@ -222,8 +247,8 @@ struct EdgeCommandHomeTests {
 
         #expect(captions(home)[1] == "Voice → \(CommandHome.languageName("pl"))")
         #expect(captions(home)[3] == "Live · EN ↔ UK")
-        #expect(home.consumeStart(.translate, caps: Self.caps).targetLanguage == "pl")
-        #expect(home.consumeStart(.translateMeeting, caps: Self.caps).pair == Self.enUK)
+        #expect(home.tileStart(.translate, caps: Self.caps).targetLanguage == "pl")
+        #expect(home.tileStart(.translateMeeting, caps: Self.caps).pair == Self.enUK)
     }
 
     @Test("T2-TI-03 Translate into is kept after a start")
@@ -231,8 +256,7 @@ struct EdgeCommandHomeTests {
         let home = model()
         home.pickTarget("pl")
 
-        _ = home.consumeStart(.translate, caps: Self.caps)
-        home.clearPick()
+        _ = home.tileStart(.translate, caps: Self.caps)
 
         #expect(home.target == "pl")
     }

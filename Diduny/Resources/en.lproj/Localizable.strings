@@ -1789,7 +1789,8 @@
 "Hide original text" = "Hide original text";
 
 /* Panels redesign WP-41 */
-"Engine, next recording" = "Engine, next recording";
+"Engine, this session" = "Engine, this session";
+"Engine, as in Settings" = "Engine, as in Settings";
 "As in Settings" = "As in Settings";
 "Each mode uses its own default" = "Each mode uses its own default";
 "Providers..." = "Providers...";

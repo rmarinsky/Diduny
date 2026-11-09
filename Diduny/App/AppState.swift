@@ -24,8 +24,12 @@ enum RecordingState: Equatable, CustomStringConvertible {
 @MainActor
 final class AppState {
     var billingSelection: BillingSelection?
+    /// The command panel's pick for the recording a tile started, by job. Set at the tile start and dropped
+    /// when that recording ends, so hotkey starts keep following Settings > Modes.
+    var panelEngines: [STTJob: JobProviderSelection] = [:]
     var recordingState: RecordingState = .idle {
         didSet {
+            if recordingState == .idle { panelEngines[.dictation] = nil }
             Log.app.debug("recordingState changed: \(oldValue.description) -> \(self.recordingState.description)")
         }
     }
@@ -79,6 +83,7 @@ final class AppState {
     // Meeting translation (system audio -> Ukrainian)
     var meetingTranslationRecordingState: RecordingState = .idle {
         didSet {
+            if meetingTranslationRecordingState == .idle { panelEngines[.meetingTranslation] = nil }
             Log.app.debug(
                 "meetingTranslationRecordingState changed: \(oldValue.description) -> \(self.meetingTranslationRecordingState.description)"
             )
@@ -90,6 +95,7 @@ final class AppState {
     // Translation recording (EN <-> UK)
     var translationRecordingState: RecordingState = .idle {
         didSet {
+            if translationRecordingState == .idle { panelEngines[.dictationTranslation] = nil }
             Log.app
                 .debug(
                     "translationRecordingState changed: \(oldValue.description) -> \(self.translationRecordingState.description)"

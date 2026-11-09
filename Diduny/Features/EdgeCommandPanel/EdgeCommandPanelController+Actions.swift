@@ -9,15 +9,23 @@ extension EdgeCommandPanelController {
         case .transcribe:
             if appDelegate.appState.recordingState == .idle {
                 guard appDelegate.canStartRecording(kind: .voice) else { showCollapsed(); return }
-                _ = model.consumeStart(.transcribe, caps: Self.engineCapabilities)
+                let start = model.tileStart(.transcribe, caps: Self.engineCapabilities)
+                appDelegate.appState.panelEngines[.dictation] = CommandHome.panelSelection(start, job: .dictation)
             }
             appDelegate.toggleRecording()
         case .translate:
             if appDelegate.appState.translationRecordingState == .idle {
                 guard appDelegate.canStartRecording(kind: .translation) else { showCollapsed(); return }
-                let start = model.consumeStart(.translate, caps: Self.engineCapabilities)
+                let start = model.tileStart(.translate, caps: Self.engineCapabilities)
                 let target = start.targetLanguage ?? model.target
-                Task { await appDelegate.startTranslationRecording(targetLanguage: target) }
+                appDelegate.appState.panelEngines[.dictationTranslation] = CommandHome.panelSelection(start, job: .dictationTranslation)
+                Task {
+                    await appDelegate.startTranslationRecording(targetLanguage: target)
+                    // A refused start never leaves idle: a later hotkey start must not inherit the pick.
+                    if appDelegate.appState.translationRecordingState == .idle {
+                        appDelegate.appState.panelEngines[.dictationTranslation] = nil
+                    }
+                }
             } else {
                 appDelegate.toggleTranslationRecording()
             }
@@ -27,9 +35,9 @@ extension EdgeCommandPanelController {
                 return
             }
             guard appDelegate.canStartRecording(kind: .meeting) else { showCollapsed(); return }
-            let start = model.consumeStart(.meeting, caps: Self.engineCapabilities)
+            let start = model.tileStart(.meeting, caps: Self.engineCapabilities)
             if start.isPick, let segment = start.segment {
-                // The segment follows the picked engine (02 section 8 step 0); the pick holds for this meeting.
+                // The segment follows the picked engine (02 section 8 step 0).
                 appDelegate.startMeeting(appDelegate.meetingStartRoute(
                     segment: segment,
                     override: ModeEngineRules.selection(engine: start.engine, job: .meeting, segment: segment)
@@ -40,8 +48,14 @@ extension EdgeCommandPanelController {
         case .translateMeeting:
             if appDelegate.appState.meetingTranslationRecordingState == .idle {
                 guard appDelegate.canStartRecording(kind: .meetingTranslation) else { showCollapsed(); return }
-                let start = model.consumeStart(.translateMeeting, caps: Self.engineCapabilities)
-                Task { await appDelegate.startMeetingTranslationRecording(languagePair: start.pair) }
+                let start = model.tileStart(.translateMeeting, caps: Self.engineCapabilities)
+                appDelegate.appState.panelEngines[.meetingTranslation] = CommandHome.panelSelection(start, job: .meetingTranslation)
+                Task {
+                    await appDelegate.startMeetingTranslationRecording(languagePair: start.pair)
+                    if appDelegate.appState.meetingTranslationRecordingState == .idle {
+                        appDelegate.appState.panelEngines[.meetingTranslation] = nil
+                    }
+                }
             } else {
                 appDelegate.toggleMeetingTranslationRecording()
             }
