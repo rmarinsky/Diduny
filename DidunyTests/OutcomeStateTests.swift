@@ -10,6 +10,11 @@ struct OutcomeStateTests {
         #expect(EdgeCommandExpandedView.ContentState.home.slidesIn)
     }
 
+    @Test func autoHidesOnlyWithAutoPaste() {
+        #expect(DictationOverlayController.outcomeAutoHideDelay(autoPaste: true) == 0.8)
+        #expect(DictationOverlayController.outcomeAutoHideDelay(autoPaste: false) == nil)
+    }
+
     // T2-ST-01
     @Test func dictationSubtitle() {
         let outcome = EdgeCommandOutcome(flow: .dictation, durationSeconds: 7)

@@ -109,9 +109,17 @@ final class DictationOverlayController {
             endSurfaceSession()
             return
         }
-        // Floating surface: the outcome replaces the live view and stays until ×, New recording or
-        // the next recording (default 8, WP-42), so the old 0.8 s auto-hide after a paste is gone.
+        // Floating surface: the outcome replaces the live view and closes as the success panel did.
         showPanel()
+        if let delay = Self.outcomeAutoHideDelay(autoPaste: SettingsStorage.shared.autoPaste) {
+            scheduleAutoHide(delay: delay)
+        }
+    }
+
+    /// Roman, 2026-11-09, replaces default 8: with auto-paste the outcome closes after 0.8 s. With
+    /// auto-paste off it stays until ×, New recording or the next recording.
+    nonisolated static func outcomeAutoHideDelay(autoPaste: Bool) -> TimeInterval? {
+        autoPaste ? 0.8 : nil
     }
 
     /// Two-way Cloud translation names the pair (WP-41 "EN ↔ UK"). One-direction engines name the

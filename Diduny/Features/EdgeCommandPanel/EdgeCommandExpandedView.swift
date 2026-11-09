@@ -24,7 +24,7 @@ struct EdgeCommandExpandedView: View {
     let onCollapse: () -> Void
     let onDrag: () -> Void
     let onDragEnd: () -> Void
-    /// The outcome after Stop (WP-42, default 8); shown in place of the live view until ×,
+    /// The outcome after Stop (WP-42); shown in place of the live view until it auto-hides, ×,
     /// New recording or the next recording.
     var outcomeStore: EdgeCommandOutcomeStore = DictationOverlayController.shared.outcomeStore
     var onCloseOutcome: () -> Void = {}

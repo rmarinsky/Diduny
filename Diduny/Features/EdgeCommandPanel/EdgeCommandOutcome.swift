@@ -115,7 +115,7 @@ enum StopProgressTiming {
 }
 
 /// Holds the outcome of the last recording on the Floating surface until the panel closes,
-/// New recording, or the next recording starts (default 8).
+/// New recording, or the next recording starts.
 @Observable
 @MainActor
 final class EdgeCommandOutcomeStore {
