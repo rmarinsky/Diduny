@@ -11,9 +11,11 @@ final class CommandPanelUITests: DidunyUITestCase {
         return (app.descendants(matching: .any)["commandPanel.tab"], home)
     }
 
-    /// WP-20 carry-over: a pick made with the pointer outside the panel collapses it once the menu closes.
-    func testPickingFromTheEngineMenuOutsideThePanelCollapsesIt() throws {
-        let (tab, home) = openHome()
+    /// Roman, 2026-11-09: an Engine pick made with the pointer outside the panel returns the pointer to
+    /// the Engine field, so the panel stays open once the menu closes. This replaces the WP-20 carry-over,
+    /// where the panel collapsed.
+    func testPickingFromTheEngineMenuOutsideThePanelKeepsItOpen() throws {
+        let (_, home) = openHome()
         let panelFrame = home.frame
         home.buttons["commandPanel.engine"].click()
 
@@ -27,8 +29,8 @@ final class CommandPanelUITests: DidunyUITestCase {
         let row = try XCTUnwrap(outside, "No engine row lies outside the panel")
         row.click()
 
-        waitForDisappearance(home)
-        waitForElement(tab, "The collapsed tab stays on screen")
+        waitForDisappearance(row)
+        XCTAssertFalse(home.waitForNonExistence(timeout: 2), "The panel collapsed after the pick")
     }
 
     func testHomeShowsEngineAndTranslateIntoAndAllTiles() {
