@@ -12,12 +12,20 @@ enum MeetingStopPlan: Equatable {
     static func plan(
         history: MeetingEngineHistory,
         afterStop: EffectiveEngineResolver.Result,
-        liveTextAccepted: Bool
+        liveTextAccepted: Bool,
+        hasLiveText: Bool = true
     ) -> MeetingStopPlan {
         if history.spans.count == 1, let only = history.spans.first, only.target.isLive,
            only.target.segment == .cloud, !only.disrupted, liveTextAccepted
         {
             return .keepLiveText(only.target.engine)
+        }
+        // Coordinator's rule, stricter than ADR D3: a dropped Cloud meeting is redone only by the configured engine
+        // itself. With a stand-in or nothing, the text the user has beats a weaker transcript.
+        if history.spans.count == 1, let only = history.spans.first, only.target.isLive,
+           only.target.segment == .cloud, only.disrupted, hasLiveText
+        {
+            if case .engine = afterStop {} else { return .keepLiveText(only.target.engine) }
         }
         let reason: Reason
         if history.spans.count > 1 || history.spans.contains(where: \.disrupted) {

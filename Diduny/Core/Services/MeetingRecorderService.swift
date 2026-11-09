@@ -216,6 +216,7 @@ final class MeetingRecorderService: NSObject {
         _ = try await systemAudioService?.stopCapture()
         lastRecordingStats = (systemAudioService?.writtenFrames ?? 0, 0)
         systemAudioService = nil
+        onRealtimeAudioData = nil // Only now: capture has stopped (ADR-0013 D1).
         isRecording = false
 
         let stopTime = Date()
@@ -333,6 +334,7 @@ final class MeetingRecorderService: NSObject {
         let recordingId = currentRecordingId
         _ = try? await systemAudioService?.stopCapture()
         systemAudioService = nil
+        onRealtimeAudioData = nil // Only now: capture has stopped (ADR-0013 D1).
         outputURL = nil
         isRecording = false
         startTime = nil
@@ -353,6 +355,7 @@ final class MeetingRecorderService: NSObject {
         let capturedRecordingId = currentRecordingId
         _ = try? await systemAudioService?.stopCapture()
         systemAudioService = nil
+        onRealtimeAudioData = nil // Only now: capture has stopped (ADR-0013 D1).
         outputURL = nil
         isRecording = false
         startTime = nil

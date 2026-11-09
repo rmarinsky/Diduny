@@ -29,6 +29,8 @@ final class RecordingQueueService {
         var localFallbackOnUsageLimit = false
         /// The engine the meeting ran (Record only, Translate meeting); nil reads Settings › Modes.
         var engineOverride: EngineID? = nil
+        /// The meeting's live text, saved if this run fails, so a failed redo never leaves nothing.
+        var textIfItFails: String? = nil
     }
 
     private var processingTask: Task<Void, Never>?
@@ -73,7 +75,8 @@ final class RecordingQueueService {
         whisperModelOverride: String? = nil,
         targetLanguage: String? = nil,
         localFallbackOnUsageLimit: Bool = false,
-        engineOverride: EngineID? = nil
+        engineOverride: EngineID? = nil,
+        textIfItFails: String? = nil
     ) -> Bool {
         guard !ids.isEmpty else { return false }
 
@@ -85,7 +88,8 @@ final class RecordingQueueService {
                 whisperModelOverride: whisperModelOverride,
                 targetLanguage: targetLanguage,
                 localFallbackOnUsageLimit: localFallbackOnUsageLimit,
-                engineOverride: engineOverride
+                engineOverride: engineOverride,
+                textIfItFails: textIfItFails
             )
         }
         guard !newItems.isEmpty else { return false }
@@ -93,7 +97,7 @@ final class RecordingQueueService {
         var admitted = false
         for item in newItems {
             if let error = preflightError(for: item) {
-                storage.updateRecording(id: item.id, status: .failed, error: error)
+                storage.updateRecording(id: item.id, status: .failed, text: item.textIfItFails, error: error)
                 continue
             }
             storage.updateRecording(id: item.id, status: .processing, error: nil)
@@ -369,7 +373,7 @@ final class RecordingQueueService {
             currentJobStatus = nil
             Log.app.info("Queue processed recording \(item.id): \(status.rawValue)")
         } catch is CancellationError {
-            storage.updateRecording(id: item.id, status: .unprocessed, error: nil)
+            storage.updateRecording(id: item.id, status: .unprocessed, text: item.textIfItFails, error: nil)
             currentJobStatus = nil
             Log.app.info("Queue cancelled recording \(item.id)")
         } catch let error as TranscriptionError where Self.usageLimitFallbackProvider(
@@ -386,13 +390,14 @@ final class RecordingQueueService {
                 whisperModelOverride: item.whisperModelOverride,
                 targetLanguage: item.targetLanguage,
                 // A named engine stays named, so the retry is Whisper through the same runner.
-                engineOverride: item.engineOverride == nil ? nil : .whisper
+                engineOverride: item.engineOverride == nil ? nil : .whisper,
+                textIfItFails: item.textIfItFails
             )
             pendingItems.insert(localItem, at: 0)
             currentJobStatus = nil
             Log.app.notice("Queue: cloud usage limit for \(item.id, privacy: .public), retrying on this Mac")
         } catch {
-            storage.updateRecording(id: item.id, status: .failed, error: error.localizedDescription)
+            storage.updateRecording(id: item.id, status: .failed, text: item.textIfItFails, error: error.localizedDescription)
             currentJobStatus = nil
             Log.app.error("Queue failed for recording \(item.id): \(error.localizedDescription)")
         }
@@ -654,7 +659,8 @@ final class RecordingQueueService {
         whisperModelOverride: String?,
         targetLanguage: String?,
         localFallbackOnUsageLimit: Bool,
-        engineOverride: EngineID?
+        engineOverride: EngineID?,
+        textIfItFails: String?
     ) -> QueueItem? {
         guard currentItem?.id != id else {
             Log.app.info("Queue skipped duplicate active recording \(id)")
@@ -673,7 +679,8 @@ final class RecordingQueueService {
             whisperModelOverride: whisperModelOverride,
             targetLanguage: targetLanguage,
             localFallbackOnUsageLimit: localFallbackOnUsageLimit,
-            engineOverride: engineOverride
+            engineOverride: engineOverride,
+            textIfItFails: textIfItFails
         )
     }
 

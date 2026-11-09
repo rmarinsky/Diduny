@@ -613,7 +613,6 @@ extension AppDelegate {
         let controller = meetingEngineController
         meetingEngineController = nil
         let confirmed = await controller?.shutdown(finalize: finalizeCloud) ?? true
-        meetingRecorderService.onRealtimeAudioData = nil
         meetingRealtimeService = nil
         if localMeetingStreamingService != nil {
             localMeetingStreamingService = nil
@@ -714,7 +713,6 @@ extension AppDelegate {
 
         // Captured now: the session state is cleared when this stop finishes.
         let translateTarget = activeMeetingTranslateTarget
-        let stopStartRoute = activeMeetingStartRoute
 
         // Finalize and disconnect real-time transcription (if active). A switch still connecting is cancelled first.
         let engineController = meetingEngineController
@@ -842,7 +840,8 @@ extension AppDelegate {
             let plan = MeetingStopPlan.plan(
                 history: history ?? MeetingEngineHistory(spans: []),
                 afterStop: resolveAfterStopEngine(afterStopEngine),
-                liveTextAccepted: liveTextAccepted
+                liveTextAccepted: liveTextAccepted,
+                hasLiveText: !realtimeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             )
             Log.app.notice("Meeting stop plan: \(String(describing: plan), privacy: .public)")
 
@@ -854,6 +853,13 @@ extension AppDelegate {
                 rawTranscript = nil
             }
             let keptEngine: EngineID? = if case let .keepLiveText(engine) = plan { engine } else { nil }
+            // A redo that fails or cannot run must not leave nothing: the meeting's live text is saved instead.
+            var liveTextToSave: String?
+            if rawTranscript == nil, translateTarget == nil {
+                store?.commitProvisional()
+                let text = store?.finalTranscriptText ?? ""
+                liveTextToSave = text.isEmpty ? nil : text
+            }
 
             // Apply server-side cleanup (filler words, dedup, formatting).
             // Falls back to raw text silently if no auth / no network.
@@ -924,8 +930,7 @@ extension AppDelegate {
                     if let translateTarget {
                         queued = enqueueTranslateMeetingAfterStop(
                             savedRecordingID, target: translateTarget, history: history,
-                            liveTexts: engineController?.liveTexts ?? [:], fallbackEngine: stopStartRoute?.engine ?? afterStopEngine,
-                            afterStopEngine: afterStopEngine
+                            liveTexts: engineController?.liveTexts ?? [:], afterStopEngine: afterStopEngine
                         )
                     } else if case let .wholeRecording(engine, modelID, _) = plan {
                         // C16: Diduny out of minutes at Stop retries on this Mac when a model is ready.
@@ -934,7 +939,8 @@ extension AppDelegate {
                             action: .transcribeDiarize,
                             whisperModelOverride: engine == .whisper ? modelID : nil,
                             localFallbackOnUsageLimit: engine == .didunyCloud,
-                            engineOverride: engine
+                            engineOverride: engine,
+                            textIfItFails: liveTextToSave
                         )
                     }
                 }
@@ -974,6 +980,7 @@ extension AppDelegate {
                     RecordingsLibraryStorage.shared.updateRecording(
                         id: recordingId,
                         status: .unprocessed,
+                        text: liveTextToSave,
                         error: nil
                     )
                     if case .saveOnly = plan {

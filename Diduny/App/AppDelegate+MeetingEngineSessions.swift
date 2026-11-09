@@ -79,6 +79,8 @@ final class RealtimeEngineSession: MeetingEngineSession {
 final class WhisperEngineSession: MeetingEngineSession {
     private let whisper: WhisperTranscriptionService
     let stream: LocalWhisperStreamingService
+    /// This session's own hold, so an old session's tail cannot release the next one's.
+    private let holdID = UUID()
     nonisolated let audioConsumer: @Sendable (Data) -> Void
 
     init(whisper: WhisperTranscriptionService, callbacks: MeetingSessionCallbacks) {
@@ -97,7 +99,7 @@ final class WhisperEngineSession: MeetingEngineSession {
     }
 
     func start() async throws {
-        try await whisper.prepareForStreaming()
+        try await whisper.prepareForStreaming(holdID)
     }
 
     func finish(cap: Duration?) async -> Bool {
@@ -107,13 +109,43 @@ final class WhisperEngineSession: MeetingEngineSession {
         } else {
             await stream.stop()
         }
-        whisper.endRecordingHold()
+        whisper.endStreamingHold(holdID)
         return true
     }
 
     func cancel() async {
         await stream.stop()
-        whisper.endRecordingHold()
+        whisper.endStreamingHold(holdID)
+    }
+}
+
+/// Readiness for a mid-meeting choice: unlike the menus' source, it really checks Whisper's model and the Diduny session.
+@MainActor
+struct MeetingEngineReadiness: EngineReadinessSource {
+    var base: any EngineReadinessSource
+    var hasWhisperModel: () -> Bool
+    var signedIn: () -> Bool
+    var hasQuota: () -> Bool
+
+    static func live(checksQuota: Bool = true) -> MeetingEngineReadiness {
+        MeetingEngineReadiness(
+            base: LiveEngineReadinessSource(),
+            hasWhisperModel: { WhisperModelManager.shared.selectedModel() != nil },
+            signedIn: { AuthService.hasStoredSession },
+            hasQuota: {
+                !checksQuota || UsageService.canOfferCloudTranscription(
+                    hasStoredSession: AuthService.hasStoredSession, usage: UsageService.shared.cachedUsage)
+            }
+        )
+    }
+
+    func readiness(of engine: EngineID) -> EngineReadiness {
+        switch engine {
+        case .whisper where !hasWhisperModel(): .notDownloaded(bytes: 0)
+        case .didunyCloud where !signedIn(): .signedOut
+        case .didunyCloud where !hasQuota(): .noQuota
+        default: base.readiness(of: engine)
+        }
     }
 }
 
@@ -156,11 +188,11 @@ extension AppDelegate {
             turns: { overlay.store.meetingTurnCount },
             finalText: { [weak store] in store?.finalTranscriptText ?? "" },
             readiness: { target in
-                MeetingEngineController.failure(from: LiveEngineReadinessSource().readiness(of: target.engine), engine: target.engine)
+                MeetingEngineController.failure(from: MeetingEngineReadiness.live().readiness(of: target.engine), engine: target.engine)
             },
             makeSession: { [weak self] target, callbacks in
                 guard let self else { return nil }
-                let pair = translating ? (activeMeetingTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()) : nil
+                let pair = translating ? (meetingEngineController?.pendingPair ?? activeMeetingTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()) : nil
                 let preprocess: (([RealtimeToken]) -> [RealtimeToken])? = translating
                     ? { [weak self] tokens in self?.meetingTranslationTimestampBackfill.annotate(tokens) ?? tokens } : nil
                 return makeMeetingEngineSession(target, translationPair: pair, preprocess: preprocess, callbacks: callbacks)
@@ -204,6 +236,10 @@ extension AppDelegate {
                 overlay.store.markSegmentBoundary()
             },
             didCut: { [weak self] target in self?.meetingDidCut(to: target) },
+            commitPair: { [weak self] pair in
+                self?.commitMeetingTranslationPair(pair)
+                overlay.store.meetingTranslationPair = pair
+            },
             didChange: { machine in overlay.store.applyMeetingSwitch(machine) }
         ))
     }
@@ -223,16 +259,20 @@ extension AppDelegate {
             click: { [weak controller] in controller?.click($0) },
             changePair: { [weak self, weak controller] pair in
                 guard let self, let controller else { return false }
-                let previous = activeMeetingTranslationLanguagePair
-                activeMeetingTranslationLanguagePair = pair
-                activeMeetingTranslationTargetLanguage = pair.languageB
-                if activeMeetingTranslateTarget != nil { activeMeetingTranslateTarget = pair.languageB }
-                guard controller.machine.running.isLive else { return true }
-                let started = controller.restartLive(label: pair.shortLabel)
-                if !started { activeMeetingTranslationLanguagePair = previous }
-                return started
+                guard controller.machine.running.isLive else {
+                    commitMeetingTranslationPair(pair)
+                    return true
+                }
+                controller.restartLive(pair: pair)
+                return false // Shown once the cut commits it.
             }
         )
+    }
+
+    private func commitMeetingTranslationPair(_ pair: TranslationLanguagePair) {
+        activeMeetingTranslationLanguagePair = pair
+        activeMeetingTranslationTargetLanguage = pair.languageB
+        if activeMeetingTranslateTarget != nil { activeMeetingTranslateTarget = pair.languageB }
     }
 
     /// ADR-0012 D3 at Stop time: Parakeet still missing gets its stand-in, even when picked in the panel.
@@ -243,7 +283,8 @@ extension AppDelegate {
             override: JobProviderSelection(providerID: engine.rawValue, modelID: nil),
             allowsStandIn: true,
             defaults: SettingsStorage.shared.modeDefaults,
-            readiness: LiveEngineReadinessSource(),
+            // Out of quota still resolves: the queue's 402 falls back to Whisper (D5).
+            readiness: MeetingEngineReadiness.live(checksQuota: false),
             whisper: .init(downloaded: whisper.downloadedModels, selected: whisper.selectedModel()?.name)
         )
     }
@@ -256,8 +297,8 @@ extension AppDelegate {
     /// The Translate meeting that ran on `meetingRecordingState`. One non-live span: today's whole translation.
     /// After a switch: only the part after it (D4).
     func enqueueTranslateMeetingAfterStop(
-        _ id: UUID, target: String, history: MeetingEngineHistory?, liveTexts: [Int: String],
-        fallbackEngine: EngineID, afterStopEngine: EngineID
+        _ id: UUID, target: String, history: MeetingEngineHistory?, liveTexts: [Int: String], afterStopEngine: EngineID,
+        queue: RecordingQueueService = .shared, resolve: ((EngineID) -> EffectiveEngineResolver.Result)? = nil
     ) -> Bool {
         let stats = meetingRecorderService.lastRecordingStats
         let parts = history.map {
@@ -266,9 +307,15 @@ extension AppDelegate {
         } ?? []
         guard (history?.spans.count ?? 1) > 1 || parts.contains(where: { if case .live = $0 { true } else { false } }), !parts.isEmpty else {
             if (history?.spans.count ?? 1) > 1 { Log.app.notice("Translate meeting: offsets unusable, translating the whole recording") }
-            return RecordingQueueService.shared.enqueue([id], action: .translate, targetLanguage: target, engineOverride: fallbackEngine)
+            // The engine picked last, not the one the meeting started on.
+            switch resolve?(afterStopEngine) ?? resolveAfterStopEngine(afterStopEngine) {
+            case let .engine(engine, _), let .fallback(engine, _, _):
+                return queue.enqueue([id], action: .translate, targetLanguage: target, engineOverride: engine)
+            case .none:
+                return false // Unprocessed, with the save-only line.
+            }
         }
-        return RecordingQueueService.shared.enqueue([id], action: .translateParts(standInParts(parts), target: target))
+        return queue.enqueue([id], action: .translateParts(standInParts(parts), target: target))
     }
 
     /// The parts for a live Translate meeting after a switch; nil when the one-span path applies. Empty: offsets

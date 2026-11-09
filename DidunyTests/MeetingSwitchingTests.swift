@@ -210,6 +210,25 @@ struct MeetingSwitchMachineTests {
         #expect(m.markers.isEmpty)
     }
 
+    @Test("Clicking the running engine retries only after a terminal failure")
+    func retryAfterTerminal() {
+        var m = machine()
+        #expect(m.handle(.click(Self.cloud, failure: nil, at: at(5))).isEmpty)
+        _ = m.handle(.dropped(id: 1, terminal: true, frame: 10))
+        #expect(m.handle(.click(Self.cloud, failure: nil, at: at(6))) == [.startSession(id: 2, target: Self.cloud)])
+    }
+
+    @Test("A pre-check failure keeps what to retry")
+    func failedTargetKept() {
+        var m = machine()
+        _ = m.handle(.click(Self.local, failure: .other, at: at(5)))
+        #expect(m.failedTarget == Self.local)
+        var display = MeetingSwitchDisplay(machine: m)
+        #expect(MeetingSwitchText.line(display, translateMeeting: false, canUseAppleSpeech: false, canUseElevenLabs: false)?.linkTitle == "Try again")
+        display.failedTarget = nil
+        #expect(MeetingSwitchText.line(display, translateMeeting: false, canUseAppleSpeech: false, canUseElevenLabs: false)?.linkTitle == nil)
+    }
+
     @Test("A pair change is a live-to-live cut with its own line, and keeps the engine")
     func pairChange() {
         var m = machine()
@@ -278,6 +297,16 @@ struct MeetingStopPlanTests {
         #expect(m.markers.isEmpty)
         #expect(MeetingStopPlan.plan(history: m.history, afterStop: .engine(.parakeet, modelID: nil), liveTextAccepted: true)
             == .wholeRecording(.parakeet, modelID: nil, reason: .mixed))
+    }
+
+    @Test("A dropped Cloud meeting: only the configured engine itself redoes it, otherwise the text stays")
+    func droppedCloudKeepsText() {
+        let dropped = [span(.live(.didunyCloud), disrupted: true)]
+        #expect(plan(dropped, afterStop: .fallback(.whisper, modelID: "t", because: .notDownloaded(bytes: 1))) == .keepLiveText(.didunyCloud))
+        #expect(plan(dropped, afterStop: .none(.signedOut)) == .keepLiveText(.didunyCloud))
+        #expect(plan(dropped) == .wholeRecording(.parakeet, modelID: nil, reason: .mixed))
+        #expect(MeetingStopPlan.plan(history: MeetingEngineHistory(spans: dropped), afterStop: .none(.signedOut),
+                                     liveTextAccepted: false, hasLiveText: false) == .saveOnly)
     }
 
     @Test("A stand-in engine is used; nothing to run saves only")
@@ -431,6 +460,68 @@ struct MeetingQueueSeamTests {
         #expect(storage.recordings.first { $0.id == id }?.status == .transcribed)
     }
 
+    @Test("A failed redo saves the meeting's live text and keeps the audio")
+    func failedRedoKeepsText() async throws {
+        let storage = try storage()
+        let id = try #require(storage.saveRecording(audioData: Data("RIFF....WAVEfmt ".utf8), type: .meeting, duration: 42, forceSave: true))
+        let queue = RecordingQueueService(storage: storage, localModelIsAvailable: { _ in true }, hasSession: { true },
+                                          makeRunner: { _ in runner(Calls(), whisper: { throw Failure.boom }) })
+        #expect(queue.enqueue([id], action: .transcribeDiarize, engineOverride: .whisper, textIfItFails: "live words"))
+        await waitUntilDone(queue)
+        let saved = try #require(storage.recordings.first { $0.id == id })
+        #expect(saved.status == .failed)
+        #expect(saved.transcriptionText == "live words")
+        #expect(storage.hasPlayableAudio(for: saved))
+    }
+
+    @Test("After-Stop Translate meeting: the engine picked last runs, not the one it started on")
+    func translatePickRuns() throws {
+        let storage = try storage()
+        let id = try #require(storage.saveRecording(audioData: Data("RIFF....WAVEfmt ".utf8), type: .meetingTranslation, duration: 42, forceSave: true))
+        let queue = RecordingQueueService(storage: storage, startsAutomatically: false, localModelIsAvailable: { _ in true }, hasSession: { true })
+        var machine = MeetingSwitchMachine(start: .afterStopOnly(.elevenLabs), afterStopEngine: .elevenLabs)
+        _ = machine.handle(.click(.afterStopOnly(.whisper), failure: nil, at: MeetingCutPoint(frame: 0, elapsed: 1, turns: 0)))
+        var asked: EngineID?
+        #expect(AppDelegate().enqueueTranslateMeetingAfterStop(
+            id, target: "uk", history: machine.history, liveTexts: [:], afterStopEngine: machine.afterStopEngine, queue: queue,
+            resolve: { asked = $0; return .engine($0, modelID: nil) }
+        ))
+        #expect(asked == .whisper)
+        #expect(queue.isQueued(id))
+    }
+
+    @Test("No engine: an after-Stop Translate meeting stays out of the queue, not failed")
+    func translateNoEngine() throws {
+        let storage = try storage()
+        let id = try #require(storage.saveRecording(audioData: Data("RIFF....WAVEfmt ".utf8), type: .meetingTranslation, duration: 42, forceSave: true))
+        let queue = RecordingQueueService(storage: storage, startsAutomatically: false, hasSession: { true })
+        let machine = MeetingSwitchMachine(start: .afterStopOnly(.whisper), afterStopEngine: .whisper)
+        #expect(!AppDelegate().enqueueTranslateMeetingAfterStop(
+            id, target: "uk", history: machine.history, liveTexts: [:], afterStopEngine: .whisper, queue: queue,
+            resolve: { _ in .none(.notDownloaded(bytes: 0)) }
+        ))
+        #expect(storage.recordings.first { $0.id == id }?.status != .failed)
+    }
+
+    @Test("Mid-meeting readiness checks the model and the session; resolver then reaches saveOnly")
+    func realReadiness() {
+        struct AllReady: EngineReadinessSource { func readiness(of _: EngineID) -> EngineReadiness { .ready } }
+        let source = MeetingEngineReadiness(base: AllReady(), hasWhisperModel: { false }, signedIn: { false }, hasQuota: { false })
+        #expect(source.readiness(of: .whisper) == .notDownloaded(bytes: 0))
+        #expect(source.readiness(of: .didunyCloud) == .signedOut)
+        #expect(MeetingEngineController.failure(from: source.readiness(of: .didunyCloud), engine: .didunyCloud) == .signedOut)
+        let noQuota = MeetingEngineReadiness(base: AllReady(), hasWhisperModel: { true }, signedIn: { true }, hasQuota: { false })
+        #expect(MeetingEngineController.failure(from: noQuota.readiness(of: .didunyCloud), engine: .didunyCloud) == .noQuota)
+        let defaults = UserDefaults(suiteName: "MeetingReadiness-\(UUID().uuidString)")!
+        let result = EffectiveEngineResolver.resolve(
+            job: .meeting, segment: .recordOnly, override: JobProviderSelection(providerID: EngineID.whisper.rawValue, modelID: nil),
+            allowsStandIn: true, defaults: ModeDefaults(defaults: defaults), readiness: source,
+            whisper: .init(downloaded: [], selected: nil)
+        )
+        #expect(MeetingStopPlan.plan(history: MeetingEngineHistory(spans: [MeetingEngineSpan(target: .afterStopOnly(.whisper), startFrame: 0)]),
+                                     afterStop: result, liveTextAccepted: false) == .saveOnly)
+    }
+
     @Test("Parts keep live text, translate only the ranges, and save as translated")
     func parts() async throws {
         let storage = try storage()
@@ -450,7 +541,7 @@ struct MeetingQueueSeamTests {
         let result = await QueueEngineRunner.translateParts([
             .live(text: "kept"), .afterStop(range: nil, engine: .parakeet), .live(text: "later"),
         ]) { _, _ in throw Failure.boom }
-        #expect(result.text == "kept")
+        #expect(result.text == "kept\n\nlater")
         #expect(result.error is Failure)
     }
 }
@@ -510,5 +601,19 @@ struct LiveTranscriptCommitTests {
         let store = LiveTranscriptStore()
         store.commitProvisional()
         #expect(store.segments.isEmpty)
+    }
+}
+
+struct WhisperHoldTests {
+    @Test("An old session's release does not end the new session's hold")
+    func holdsBalance() {
+        let whisper = WhisperTranscriptionService()
+        let old = UUID(), new = UUID()
+        try? whisper.insertStreamingHoldForTesting(old)
+        try? whisper.insertStreamingHoldForTesting(new)
+        whisper.endStreamingHold(old)
+        #expect(whisper.hasStreamingHold)
+        whisper.endStreamingHold(new)
+        #expect(!whisper.hasStreamingHold)
     }
 }

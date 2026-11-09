@@ -28,7 +28,8 @@ final class LocalWhisperStreamingServiceTests: XCTestCase {
         await delegate.stopMeetingLiveTranscription()
 
         XCTAssertNil(delegate.localMeetingStreamingService)
-        XCTAssertNil(delegate.meetingRecorderService.onRealtimeAudioData)
+        // The fan-out stays until capture stops (ADR-0013 D1); it has no consumer now.
+        XCTAssertNotNil(delegate.meetingRecorderService.onRealtimeAudioData)
     }
 
     func testWhisperSegmentTimestampsConvertToMilliseconds() {

@@ -13,6 +13,7 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
     private var loadedModelPath: String?
     private var pendingLoad: (path: String, task: Task<WhisperContext, Error>)?
     private var isHeldForRecording = false
+    private var streamingHolds: Set<UUID> = []
 
     private var unloadTask: Task<Void, Never>?
     private var policyObserver: NSObjectProtocol?
@@ -51,16 +52,28 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
     }
 
     /// Like `beginRecordingHold`, but waits for the model and throws: a mid-meeting switch must know it failed.
-    func prepareForStreaming() async throws {
-        stateLock.withLock { isHeldForRecording = true }
+    /// Each session holds with its own id; the model unloads only when none is left.
+    func prepareForStreaming(_ holdID: UUID) async throws {
+        stateLock.withLock { _ = streamingHolds.insert(holdID) }
         cancelUnloadTimer()
         do {
             _ = try await ensureContext()
         } catch {
-            endRecordingHold()
+            endStreamingHold(holdID)
             throw error
         }
     }
+
+    func endStreamingHold(_ holdID: UUID) {
+        let released = stateLock.withLock { streamingHolds.remove(holdID) != nil && streamingHolds.isEmpty }
+        if released { scheduleModelUnload() }
+    }
+
+    func insertStreamingHoldForTesting(_ holdID: UUID) throws {
+        stateLock.withLock { _ = streamingHolds.insert(holdID) }
+    }
+
+    var hasStreamingHold: Bool { stateLock.withLock { !streamingHolds.isEmpty } }
 
     func endRecordingHold() {
         let wasHeld = stateLock.withLock {
@@ -248,7 +261,7 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         }
 
         stateLock.withLock {
-            guard whisperContext != nil, !isHeldForRecording else { return }
+            guard whisperContext != nil, !isHeldForRecording, streamingHolds.isEmpty else { return }
             unloadTask?.cancel()
             unloadTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(interval))
@@ -260,7 +273,7 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
 
     private func unloadModel() {
         let didUnload = stateLock.withLock {
-            guard whisperContext != nil, !isHeldForRecording else { return false }
+            guard whisperContext != nil, !isHeldForRecording, streamingHolds.isEmpty else { return false }
             whisperContext = nil
             loadedModelPath = nil
             return true

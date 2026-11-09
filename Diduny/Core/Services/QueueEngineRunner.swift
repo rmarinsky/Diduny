@@ -47,12 +47,14 @@ struct QueueEngineRunner {
         return GeneratedTranscript(text: step.text)
     }
 
-    /// Joins kept live text and translated ranges, in order. Stops at the first failure and returns what is ready.
+    /// Joins kept live text and translated ranges, in order. A failed range does not drop later ones: everything
+    /// that can be made is returned, with the first error.
     static func translateParts(
         _ parts: [TranslatePart],
         translate: (AudioTrimRange?, EngineID) async throws -> String
     ) async -> (text: String, error: Error?) {
         var texts: [String] = []
+        var firstError: Error?
         for part in parts {
             switch part {
             case let .live(text):
@@ -61,10 +63,11 @@ struct QueueEngineRunner {
                 do {
                     texts.append(try await translate(range, engine))
                 } catch {
-                    return (texts.joined(separator: "\n\n"), error)
+                    if error is CancellationError { return (texts.joined(separator: "\n\n"), error) }
+                    firstError = firstError ?? error
                 }
             }
         }
-        return (texts.joined(separator: "\n\n"), nil)
+        return (texts.joined(separator: "\n\n"), firstError)
     }
 }
