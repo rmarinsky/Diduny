@@ -38,6 +38,8 @@ struct PickerField: View {
     /// Nil for a static field (one option only).
     private let menu: (() -> PickerMenuModel)?
     private let onPick: (String) -> Void
+    /// After a pick, puts a pointer that ended up outside the window back on this field.
+    private let returnsPointerOnPick: Bool
 
     @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
@@ -54,6 +56,7 @@ struct PickerField: View {
         menuAlignment: FloatingSurfacePlacement.Alignment = .leading,
         identifier: String,
         presenter: FloatingSurfacePresenter = .shared,
+        returnsPointerOnPick: Bool = false,
         menu: @escaping () -> PickerMenuModel,
         onPick: @escaping (String) -> Void
     ) {
@@ -63,6 +66,7 @@ struct PickerField: View {
         self.menuAlignment = menuAlignment
         self.identifier = identifier
         self.presenter = presenter
+        self.returnsPointerOnPick = returnsPointerOnPick
         self.menu = menu
         self.onPick = onPick
     }
@@ -75,6 +79,7 @@ struct PickerField: View {
         menuAlignment = .leading
         self.identifier = identifier
         presenter = .shared
+        returnsPointerOnPick = false
         menu = nil
         onPick = { _ in }
     }
@@ -127,9 +132,21 @@ struct PickerField: View {
 
     private func open(fromKeyboard: Bool) {
         guard isEnabled, let menu, let frame = anchor.screenFrame else { return }
+        let window = anchor.window
+        let returnsPointer = returnsPointerOnPick
+        let onPick = onPick
         presenter.toggleMenu(
             owner: identifier, model: menu(), alignment: menuAlignment, anchor: frame,
-            parent: anchor.window, fromKeyboard: fromKeyboard, onPick: onPick
+            parent: window, fromKeyboard: fromKeyboard,
+            onPick: { row in
+                if returnsPointer, let window, let target = PointerReturn.target(
+                    pointer: NSEvent.mouseLocation, windowFrame: window.frame, field: frame,
+                    primaryScreenMaxY: NSScreen.screens.first?.frame.maxY ?? 0
+                ) {
+                    CGWarpMouseCursorPosition(target)
+                }
+                onPick(row)
+            }
         )
     }
 
@@ -194,6 +211,15 @@ struct PickerField: View {
             .font(.system(size: DS.Field.chevronSize, weight: .semibold))
             .foregroundStyle(color)
             .accessibilityHidden(true)
+    }
+}
+
+/// Where to warp a pointer back to after a menu pick (AppKit y up, one origin for all displays; CG y down from
+/// the top of the primary display). Nil when the pointer is still inside the window.
+enum PointerReturn {
+    static func target(pointer: NSPoint, windowFrame: NSRect, field: NSRect, primaryScreenMaxY: CGFloat) -> CGPoint? {
+        guard !windowFrame.contains(pointer) else { return nil }
+        return CGPoint(x: field.midX, y: primaryScreenMaxY - field.midY)
     }
 }
 

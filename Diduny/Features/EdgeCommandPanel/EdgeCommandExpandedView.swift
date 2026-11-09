@@ -110,6 +110,7 @@ struct EdgeCommandExpandedView: View {
             }
         }
         .animation(contentState.slidesIn ? swap?.animation : nil, value: contentState)
+        .focusRingOnlyAfterTab()
     }
 
     /// Command home (spec 7.4, 7.5; `cmdHome` P:577-592).
@@ -123,6 +124,7 @@ struct EdgeCommandExpandedView: View {
                     value: model.engineFieldValue,
                     layout: .stacked,
                     identifier: "commandPanel.engine",
+                    returnsPointerOnPick: true,
                     menu: { CommandHome.engineMenu(pick: model.pick, caps: capabilities, readiness: readiness) },
                     onPick: onEngineRow
                 )
