@@ -17,6 +17,17 @@ struct EffectiveEngineResolverTests {
                                         readiness: readiness, whisper: .init(downloaded: downloaded, selected: selected))
     }
 
+    @Test("An explicitly picked Parakeet that is not downloaded refuses; it never runs another engine")
+    func pickedParakeetRefuses() {
+        let notDownloaded = EngineReadiness.notDownloaded(bytes: 1)
+        var fake = FakeEngineReadinessSource()
+        fake.states[.parakeet] = notDownloaded
+        let turbo = WhisperModelManager.WhisperModel.recommendedName
+
+        #expect(resolve(.dictation, override: JobProviderSelection(providerID: "parakeet-v3"), fake, downloaded: [turbo])
+            == .none(notDownloaded))
+    }
+
     @Test("The override wins")
     func overrideWins() {
         let result = resolve(.dictation, override: JobProviderSelection(providerID: "apple-speech"), FakeEngineReadinessSource())

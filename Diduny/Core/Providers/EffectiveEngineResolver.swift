@@ -15,7 +15,7 @@ enum EffectiveEngineResolver {
         var selected: String?
     }
 
-    /// The override wins over the mode default. A Parakeet V3 that is not ready falls back to Whisper
+    /// The override wins over the mode default. A mode default of Parakeet V3 that is not ready falls back to Whisper
     /// Large v3 Turbo if downloaded, else the selected Whisper model if downloaded, else Apple Speech if ready.
     @MainActor
     static func resolve(
@@ -32,7 +32,8 @@ enum EffectiveEngineResolver {
         guard let engine = EngineID(rawValue: selection.providerID) else { return .none(.unavailable) }
         let state = readiness.readiness(of: engine)
         if state == .ready { return .engine(engine, modelID: selection.modelID) }
-        guard engine == .parakeet else { return .none(state) }
+        // An explicit pick never silently changes engine: Start refuses and names Local models.
+        guard engine == .parakeet, override == nil else { return .none(state) }
 
         let turbo = WhisperModelManager.WhisperModel.recommendedName
         if whisper.downloaded.contains(turbo) {
