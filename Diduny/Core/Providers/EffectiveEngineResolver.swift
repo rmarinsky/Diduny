@@ -22,6 +22,8 @@ enum EffectiveEngineResolver {
         job: STTJob,
         segment: MeetingSegment? = nil,
         override: JobProviderSelection? = nil,
+        /// A Record only pick during a meeting may fall back at Stop (design: not a failure); a Start pick may not.
+        allowsStandIn: Bool = false,
         defaults: ModeDefaults,
         readiness: any EngineReadinessSource,
         whisper: WhisperState
@@ -33,7 +35,7 @@ enum EffectiveEngineResolver {
         let state = readiness.readiness(of: engine)
         if state == .ready { return .engine(engine, modelID: selection.modelID) }
         // An explicit pick never silently changes engine: Start refuses and names Local models.
-        guard engine == .parakeet, override == nil else { return .none(state) }
+        guard engine == .parakeet, override == nil || allowsStandIn else { return .none(state) }
 
         let turbo = WhisperModelManager.WhisperModel.recommendedName
         if whisper.downloaded.contains(turbo) {

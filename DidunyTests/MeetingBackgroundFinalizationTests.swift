@@ -99,35 +99,6 @@ final class MeetingBackgroundFinalizationTests: XCTestCase {
 
     // MARK: - Stop routing
 
-    func test_stopRoute_cloudWithAcceptedLiveTranscript_usesIt() {
-        XCTAssertEqual(
-            AppDelegate.meetingStopRoute(provider: .cloud, acceptsRealtimeTranscript: true, hasLocalModel: true),
-            .realtimeTranscript
-        )
-    }
-
-    func test_stopRoute_cloudWithoutLiveTranscript_goesToQueue() {
-        XCTAssertEqual(
-            AppDelegate.meetingStopRoute(provider: .cloud, acceptsRealtimeTranscript: false, hasLocalModel: true),
-            .queueCloud(localFallback: true)
-        )
-        XCTAssertEqual(
-            AppDelegate.meetingStopRoute(provider: .cloud, acceptsRealtimeTranscript: false, hasLocalModel: false),
-            .queueCloud(localFallback: false)
-        )
-    }
-
-    func test_stopRoute_local_queuesOrSavesOnly() {
-        XCTAssertEqual(
-            AppDelegate.meetingStopRoute(provider: .local, acceptsRealtimeTranscript: false, hasLocalModel: true),
-            .queueLocal
-        )
-        XCTAssertEqual(
-            AppDelegate.meetingStopRoute(provider: .local, acceptsRealtimeTranscript: false, hasLocalModel: false),
-            .saveOnly
-        )
-    }
-
     func test_usageLimit_fallsBackToLocalOnlyWhenAllowedAndModelReady() {
         let limit = TranscriptionError.usageLimitExceeded(usedHours: 10, limitHours: 10)
         XCTAssertEqual(

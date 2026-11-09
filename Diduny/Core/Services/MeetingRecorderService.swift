@@ -36,6 +36,9 @@ final class MeetingRecorderService: NSObject {
         }
     }
 
+    /// What the last stopped recording holds: Translate meeting's offsets depend on it (ADR-0013 D4).
+    private(set) var lastRecordingStats = (totalFrames: 0, skippedChunks: 0)
+
     /// Frames the saved audio holds so far; 0 before capture starts.
     var writtenFrames: Int { systemAudioService?.writtenFrames ?? 0 }
 
@@ -211,6 +214,7 @@ final class MeetingRecorderService: NSObject {
         let capturedChunkURLs = chunkURLs
         let capturedDirectoryURL = inProgressDirectoryURL
         _ = try await systemAudioService?.stopCapture()
+        lastRecordingStats = (systemAudioService?.writtenFrames ?? 0, 0)
         systemAudioService = nil
         isRecording = false
 
@@ -235,6 +239,7 @@ final class MeetingRecorderService: NSObject {
             do {
                 let result = try MeetingChunkStitcher.stitch(chunkURLs: capturedChunkURLs, outputURL: target)
                 stitchResult = result
+                lastRecordingStats.skippedChunks = result.skippedChunks
                 stitchedURL = result.outputURL
                 Log.recording.info(
                     "Stitch ok: appended=\(result.appendedChunkCount) skipped=\(result.skippedChunks) totalDur=\(String(format: "%.2f", result.totalDurationSeconds))s"
@@ -242,6 +247,7 @@ final class MeetingRecorderService: NSObject {
             } catch {
                 Log.recording.error("Stitch FAILED: \(error.localizedDescription) — falling back to last chunk only")
                 stitchResult = nil
+                lastRecordingStats.skippedChunks = max(capturedChunkURLs.count - 1, 1)
                 stitchedURL = capturedChunkURLs.last
             }
         } else {

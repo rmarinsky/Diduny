@@ -140,9 +140,58 @@
             }
             overlay.startRecording(mode: mode)
             overlay.updateConnectionStatus(.connected)
+            installFakeMeetingEngines(mode: mode, overlay: overlay)
             if UITestHarness.manualClock != nil { overlay.store.endedAt = overlay.store.startedAt }
             UITestScript.emit(count: UITestHarness.transcriptEmitCount ?? 2)
         }
+    }
+
+    // MARK: - Fake meeting engines
+
+    /// Switching runs the real controller and machine; only the sessions are fake, and they are ready at once.
+    final class UITestFakeMeetingSession: MeetingEngineSession {
+        nonisolated let audioConsumer: @Sendable (Data) -> Void = { _ in }
+        func start() async throws {}
+        func finish(cap _: Duration?) async -> Bool { true }
+        func cancel() async {}
+    }
+
+    extension UITestOpenTarget {
+        static func installFakeMeetingEngines(mode: RecordingMode, overlay: DictationOverlayController) {
+            guard mode.isMeeting else { return }
+            let store = overlay.store
+            let start: MeetingEngineTarget = mode == .meetingTranslation
+                ? (store.meetingTranslationEngine == .didunyCloud ? .live(.didunyCloud) : .afterStopOnly(store.meetingTranslationEngine))
+                : store.meetingSegment == .recordOnly
+                ? .afterStopOnly(store.meetingEngines[.recordOnly] ?? .parakeet)
+                : .live(store.meetingEngines[store.meetingSegment] ?? .didunyCloud)
+            let startedAt = UITestHarness.manualClock?.now ?? 0
+            let controller = MeetingEngineController(
+                start: start, afterStopEngine: store.meetingEngines[.recordOnly] ?? .parakeet,
+                environment: .init(
+                    readFrame: { Int((UITestHarness.manualClock?.now ?? 0) - startedAt) * 16000 },
+                    elapsed: { (UITestHarness.manualClock?.now ?? 0) - startedAt },
+                    turns: { store.meetingTurnCount },
+                    finalText: { store.displayText },
+                    readiness: { MeetingEngineController.failure(from: LiveEngineReadinessSource().readiness(of: $0.engine), engine: $0.engine) },
+                    makeSession: { _, _ in UITestFakeMeetingSession() },
+                    applyTokens: { _ in },
+                    applyStatus: { overlay.updateConnectionStatus($0) },
+                    applyError: { _ in },
+                    closeTurn: { store.commitProvisional(); store.markSegmentBoundary() },
+                    didCut: { _ in },
+                    didChange: { store.applyMeetingSwitch($0) }
+                )
+            )
+            fakeMeetingController = controller
+            Task { await controller.startInitial() }
+            store.meetingSwitchHandler = MeetingSwitchHandler(
+                click: { controller.click($0) },
+                changePair: { pair in controller.machine.running.isLive ? controller.restartLive(label: pair.shortLabel) : true }
+            )
+        }
+
+        private static var fakeMeetingController: MeetingEngineController?
     }
 
     // MARK: - Scripted transcript (`DIDUNY_UI_TEST_SCRIPT`, default `two-speakers-en-uk`)

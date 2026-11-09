@@ -226,12 +226,69 @@ extension AppDelegate {
                 let previous = activeMeetingTranslationLanguagePair
                 activeMeetingTranslationLanguagePair = pair
                 activeMeetingTranslationTargetLanguage = pair.languageB
+                if activeMeetingTranslateTarget != nil { activeMeetingTranslateTarget = pair.languageB }
                 guard controller.machine.running.isLive else { return true }
                 let started = controller.restartLive(label: pair.shortLabel)
                 if !started { activeMeetingTranslationLanguagePair = previous }
                 return started
             }
         )
+    }
+
+    /// ADR-0012 D3 at Stop time: Parakeet still missing gets its stand-in, even when picked in the panel.
+    func resolveAfterStopEngine(_ engine: EngineID) -> EffectiveEngineResolver.Result {
+        let whisper = WhisperModelManager.shared
+        return EffectiveEngineResolver.resolve(
+            job: .meeting, segment: .recordOnly,
+            override: JobProviderSelection(providerID: engine.rawValue, modelID: nil),
+            allowsStandIn: true,
+            defaults: SettingsStorage.shared.modeDefaults,
+            readiness: LiveEngineReadinessSource(),
+            whisper: .init(downloaded: whisper.downloadedModels, selected: whisper.selectedModel()?.name)
+        )
+    }
+
+    /// The queue refused the recording at the hand-off and wrote the reason on the row.
+    func recordingFailedAtHandOff(_ id: UUID) -> Bool {
+        RecordingsLibraryStorage.shared.recordings.first { $0.id == id }?.status == .failed
+    }
+
+    /// The Translate meeting that ran on `meetingRecordingState`. One non-live span: today's whole translation.
+    /// After a switch: only the part after it (D4).
+    func enqueueTranslateMeetingAfterStop(
+        _ id: UUID, target: String, history: MeetingEngineHistory?, liveTexts: [Int: String],
+        fallbackEngine: EngineID, afterStopEngine: EngineID
+    ) -> Bool {
+        let stats = meetingRecorderService.lastRecordingStats
+        let parts = history.map {
+            TranslatePlan.plan(history: $0, liveTexts: liveTexts, afterStopEngine: afterStopEngine,
+                               totalFrames: stats.totalFrames, sampleRate: 16000, skippedChunks: stats.skippedChunks)
+        } ?? []
+        guard (history?.spans.count ?? 1) > 1 || parts.contains(where: { if case .live = $0 { true } else { false } }), !parts.isEmpty else {
+            if (history?.spans.count ?? 1) > 1 { Log.app.notice("Translate meeting: offsets unusable, translating the whole recording") }
+            return RecordingQueueService.shared.enqueue([id], action: .translate, targetLanguage: target, engineOverride: fallbackEngine)
+        }
+        return RecordingQueueService.shared.enqueue([id], action: .translateParts(standInParts(parts), target: target))
+    }
+
+    /// The parts for a live Translate meeting after a switch; nil when the one-span path applies. Empty: offsets
+    /// are unusable, translate the whole recording.
+    func translateMeetingParts(history: MeetingEngineHistory?, liveTexts: [Int: String], afterStopEngine: EngineID) -> [TranslatePart]? {
+        guard let history, history.spans.count > 1 || history.spans.first?.failedAtFrame != nil else { return nil }
+        let stats = meetingRecorderService.lastRecordingStats
+        return standInParts(TranslatePlan.plan(history: history, liveTexts: liveTexts, afterStopEngine: afterStopEngine,
+                                               totalFrames: stats.totalFrames, sampleRate: 16000, skippedChunks: stats.skippedChunks))
+    }
+
+    /// Each after-Stop part gets the engine that can run at Stop: a missing Parakeet gets its stand-in.
+    private func standInParts(_ parts: [TranslatePart]) -> [TranslatePart] {
+        parts.map { part in
+            guard case let .afterStop(range, engine) = part else { return part }
+            switch resolveAfterStopEngine(engine) {
+            case let .engine(id, _), let .fallback(id, _, _): return .afterStop(range: range, engine: id)
+            case .none: return part
+            }
+        }
     }
 
     func applyMeetingTranslationConnectionStatus(_ status: RealtimeConnectionStatus, store: LiveTranscriptStore?) {

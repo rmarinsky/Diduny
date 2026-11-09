@@ -1286,7 +1286,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         meetingAutoResetTask?.cancel()
         handleStateChange(
             state,
-            mode: .meeting,
+            // A Translate meeting on an after-Stop engine shows the Translate panel: no segments, its Engine menu.
+            mode: activeMeetingTranslateTarget != nil ? .meetingTranslation : .meeting,
             currentStateGetter: { self.appState.meetingRecordingState },
             stateResetter: { self.appState.meetingRecordingState = $0 },
             autoResetTaskSetter: { self.meetingAutoResetTask = $0 },

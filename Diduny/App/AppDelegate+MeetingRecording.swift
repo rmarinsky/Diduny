@@ -576,8 +576,7 @@ extension AppDelegate {
         let afterStop: EngineID = if case let .afterStopOnly(engine) = target { engine }
             else { SettingsStorage.shared.modeDefaults.engine(for: .recordOnly) }
         let controller = makeMeetingEngineController(
-            start: target, afterStop: afterStop, store: store, sessionID: activeMeetingTranscriptionSessionID,
-            translation: activeMeetingTranslationLanguagePair.flatMap { activeMeetingTranslateTarget == nil ? $0 : nil }
+            start: target, afterStop: afterStop, store: store, sessionID: activeMeetingTranscriptionSessionID, translation: nil
         )
         meetingEngineController = controller
         let fanOut = controller.fanOut
@@ -670,42 +669,6 @@ extension AppDelegate {
 
     // MARK: - Stop Meeting Recording
 
-    enum MeetingStopRoute: Equatable {
-        /// The live transcript is complete enough to use as the result.
-        case realtimeTranscript
-        /// Cloud transcription runs in the queue; `localFallback` retries on this Mac if Cloud runs out.
-        case queueCloud(localFallback: Bool)
-        /// Local transcription runs in the queue.
-        case queueLocal
-        /// No way to transcribe now; the audio stays in Recordings.
-        case saveOnly
-    }
-
-    nonisolated static func meetingStopRoute(
-        provider: TranscriptionProvider,
-        acceptsRealtimeTranscript: Bool,
-        hasLocalModel: Bool
-    ) -> MeetingStopRoute {
-        switch provider {
-        case .cloud:
-            acceptsRealtimeTranscript ? .realtimeTranscript : .queueCloud(localFallback: hasLocalModel)
-        case .local:
-            hasLocalModel ? .queueLocal : .saveOnly
-        }
-    }
-
-    @discardableResult
-    static func enqueueLocalMeetingTranscriptionIfReady(
-        savedRecordingID: UUID?,
-        cloudModeEnabled: Bool,
-        hasLocalModel: Bool,
-        enqueue: ([UUID], RecordingQueueService.QueueAction, TranscriptionProvider?) -> Void
-    ) -> Bool {
-        guard let savedRecordingID, !cloudModeEnabled, hasLocalModel else { return false }
-        enqueue([savedRecordingID], .transcribe, .local)
-        return true
-    }
-
     func addMeetingChapter() {
         guard appState.meetingRecordingState == .recording,
               let startTime = appState.meetingRecordingStartTime else { return }
@@ -734,6 +697,7 @@ extension AppDelegate {
             activeMeetingTranscriptionProvider = nil
             activeMeetingStartRoute = nil
             activeMeetingTranslateTarget = nil
+            activeMeetingTranslationLanguagePair = nil
         }
 
         // Deactivate chapter bookmark hotkey
@@ -748,19 +712,15 @@ extension AppDelegate {
         appState.meetingRecordingState = .processing
         handleMeetingStateChange(.processing)
 
-        // Own-engine meetings (ElevenLabs key or Apple on this Mac): the committed live text is the final
-        // transcript, with no Diduny server cleanup and no Diduny Cloud fallback.
-        let byokMeeting = meetingRealtimeService != nil
-        let appleLiveMeeting = meetingRealtimeService is AppleLiveTranscriptionService
         // Captured now: the session state is cleared when this stop finishes.
         let translateTarget = activeMeetingTranslateTarget
         let stopStartRoute = activeMeetingStartRoute
-        let recordOnlyEngine = translateTarget == nil && stopStartRoute?.recordOnly == true ? stopStartRoute?.engine : nil
 
         // Finalize and disconnect real-time transcription (if active). A switch still connecting is cancelled first.
         let engineController = meetingEngineController
         let didReceiveRealtimeFinalization = await stopMeetingLiveTranscription(finalizeCloud: true)
-        _ = engineController
+        let history = engineController?.machine.history
+        let afterStopEngine = engineController?.machine.afterStopEngine ?? .whisper
 
         // Next meeting start should hit a warm SCShareableContent cache.
         ShareableContentCache.shared.prewarm()
@@ -874,48 +834,26 @@ extension AppDelegate {
             await tracksAttached
 
             let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
-            let cloudModeEnabled = activeMeetingTranscriptionProvider == .cloud
-            // ElevenLabs meetings: the committed live text is the final transcript.
-            let acceptsRealtimeTranscript = cloudModeEnabled && (byokMeeting
-                ? !realtimeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                : shouldAcceptRealtimeTranscript(
-                    realtimeText,
-                    duration: duration,
-                    didReceiveFinalization: didReceiveRealtimeFinalization
-                ))
-            let route = Self.meetingStopRoute(
-                provider: cloudModeEnabled ? .cloud : .local,
-                acceptsRealtimeTranscript: acceptsRealtimeTranscript,
-                hasLocalModel: WhisperModelManager.shared.selectedModel() != nil || onDeviceEngine(for: .meeting) != nil
+            let liveEngine = history?.spans.last?.target.engine
+            // ElevenLabs: the committed live text is the final transcript. Diduny: the acceptance guard.
+            let liveTextAccepted = liveEngine == .didunyCloud
+                ? shouldAcceptRealtimeTranscript(realtimeText, duration: duration, didReceiveFinalization: didReceiveRealtimeFinalization)
+                : !realtimeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let plan = MeetingStopPlan.plan(
+                history: history ?? MeetingEngineHistory(spans: []),
+                afterStop: resolveAfterStopEngine(afterStopEngine),
+                liveTextAccepted: liveTextAccepted
             )
-            // The queue needs the saved library row; without it the audio waits for recovery.
-            // A BYOK meeting never falls back to the Diduny Cloud queue.
-            let handsOffToQueue: Bool = if case .queueCloud = route { librarySavedId != nil && !byokMeeting } else { false }
-            // Apple live text came out empty: transcribe the saved recording with Apple on this Mac instead.
-            var queuedOnThisMac = false
-            if appleLiveMeeting, !acceptsRealtimeTranscript, let librarySavedId {
-                queuedOnThisMac = RecordingQueueService.shared.enqueue(
-                    [librarySavedId], action: .transcribe, providerOverride: .local
-                )
-            }
+            Log.app.notice("Meeting stop plan: \(String(describing: plan), privacy: .public)")
 
             let rawTranscript: GeneratedTranscript?
-            if route == .realtimeTranscript {
+            if translateTarget == nil, case .keepLiveText = plan {
                 rawTranscript = GeneratedTranscript(text: realtimeText)
                 Log.app.info("Using real-time transcript (\(realtimeText.count) chars)")
-            } else if cloudModeEnabled, !byokMeeting {
-                if !realtimeText.isEmpty {
-                    Log.app
-                        .warning(
-                            "Ignoring partial real-time transcript (\(realtimeText.count) chars, finalized=\(didReceiveRealtimeFinalization)); handing the meeting to the transcription queue"
-                        )
-                }
-                Log.app.notice("No usable real-time transcript; meeting goes to the transcription queue")
-                rawTranscript = nil
             } else {
                 rawTranscript = nil
-                Log.app.info("Saving meeting recording without automatic transcription")
             }
+            let keptEngine: EngineID? = if case let .keepLiveText(engine) = plan { engine } else { nil }
 
             // Apply server-side cleanup (filler words, dedup, formatting).
             // Falls back to raw text silently if no auth / no network.
@@ -930,7 +868,7 @@ extension AppDelegate {
                     await TranscriptCleanupService.shared.clean(
                         rawTranscript.text,
                         fillerWords: SettingsStorage.shared.fillerWords,
-                        serverCleanup: !byokMeeting
+                        serverCleanup: keptEngine == .didunyCloud
                     )
                 }
             } else {
@@ -982,19 +920,29 @@ extension AppDelegate {
             } else {
                 // Say "in background" only when the queue actually took the recording.
                 var queued = false
-                if handsOffToQueue, let savedRecordingID = librarySavedId,
-                   case let .queueCloud(localFallback) = route
-                {
-                    queued = RecordingQueueService.shared.enqueue(
-                        [savedRecordingID],
-                        action: .transcribeDiarize,
-                        providerOverride: .cloud,
-                        localFallbackOnUsageLimit: localFallback
-                    )
+                if let savedRecordingID = librarySavedId {
+                    if let translateTarget {
+                        queued = enqueueTranslateMeetingAfterStop(
+                            savedRecordingID, target: translateTarget, history: history,
+                            liveTexts: engineController?.liveTexts ?? [:], fallbackEngine: stopStartRoute?.engine ?? afterStopEngine,
+                            afterStopEngine: afterStopEngine
+                        )
+                    } else if case let .wholeRecording(engine, modelID, _) = plan {
+                        // C16: Diduny out of minutes at Stop retries on this Mac when a model is ready.
+                        queued = RecordingQueueService.shared.enqueue(
+                            [savedRecordingID],
+                            action: .transcribeDiarize,
+                            whisperModelOverride: engine == .whisper ? modelID : nil,
+                            localFallbackOnUsageLimit: engine == .didunyCloud,
+                            engineOverride: engine
+                        )
+                    }
                 }
                 await MainActor.run {
                     // Shown before .success so the panel switches in place instead of hiding.
-                    if queued {
+                    if queued, translateTarget == nil {
+                        DictationOverlayController.shared.showBackgroundHandoff(detail: plan.stopLine(preview: liveEngine))
+                    } else if queued {
                         DictationOverlayController.shared.showBackgroundHandoff()
                     }
                     appState.lastTranscription = nil
@@ -1016,43 +964,20 @@ extension AppDelegate {
                         kind: .cloud,
                         provider: TranscriptionProvider.cloud.rawValue
                     )
-                } else if handsOffToQueue || queuedOnThisMac {
-                    // Already handed to a queue before the panel update.
+                } else if RecordingQueueService.shared.isQueued(savedRecordingID)
+                    || RecordingQueueService.shared.currentRecordingId == savedRecordingID
+                {
+                    // Already handed to the queue before the panel update.
+                } else if recordingFailedAtHandOff(savedRecordingID) {
+                    // Preflight refused and said why on the row; the audio stays.
                 } else {
                     RecordingsLibraryStorage.shared.updateRecording(
                         id: recordingId,
                         status: .unprocessed,
                         error: nil
                     )
-
-                    let didEnqueue = Self.enqueueLocalMeetingTranscriptionIfReady(
-                        savedRecordingID: savedRecordingID,
-                        cloudModeEnabled: cloudModeEnabled,
-                        hasLocalModel: WhisperModelManager.shared.selectedModel() != nil || onDeviceEngine(for: .meeting) != nil
-                            || translateTarget != nil || recordOnlyEngine != nil
-                    ) { recordingIDs, action, provider in
-                        if let engine = recordOnlyEngine {
-                            // Record only: its engine after Stop, with speaker labels (WP-62).
-                            RecordingQueueService.shared.enqueue(recordingIDs, action: .transcribeDiarize,
-                                                                 engineOverride: engine)
-                        } else if let target = translateTarget {
-                            RecordingQueueService.shared.enqueue(recordingIDs, action: .translate, targetLanguage: target,
-                                                                 engineOverride: stopStartRoute?.engine)
-                        } else {
-                            RecordingQueueService.shared.enqueue(
-                                recordingIDs,
-                                action: action,
-                                providerOverride: provider
-                            )
-                        }
-                    }
-                    if !cloudModeEnabled, !didEnqueue {
-                        DictationOverlayController.shared.showInfo(
-                            message: String(
-                                localized: "Recording saved. Download a local model in Settings to transcribe it."
-                            ),
-                            duration: 3.0
-                        )
+                    if case .saveOnly = plan {
+                        DictationOverlayController.shared.showInfo(message: MeetingStopPlan.saveOnlyLine, duration: 3.0)
                     }
                 }
             }
@@ -1071,7 +996,7 @@ extension AppDelegate {
                 CompletionSound.play()
             }
 
-            if byokMeeting, let byokError = meetingByokError {
+            if let byokError = meetingByokError {
                 meetingByokError = nil
                 let savedID = librarySavedId
                 Task { @MainActor in self.presentMeetingByokError(byokError, recordingID: savedID) }

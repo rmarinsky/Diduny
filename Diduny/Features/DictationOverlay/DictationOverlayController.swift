@@ -218,7 +218,7 @@ final class DictationOverlayController {
     private var isNotchHandoffShowing = false
 
     /// Stop handed the meeting to the transcription queue: say so for 2 s, then close.
-    func showBackgroundHandoff(duration: TimeInterval = 2.0) {
+    func showBackgroundHandoff(duration: TimeInterval = 2.0, detail: String? = nil) {
         recordOutcome(resultText: "", recordingID: nil)
         let message = String(localized: "Transcribing in background")
         autoHideTask?.cancel()
@@ -240,7 +240,7 @@ final class DictationOverlayController {
             dismiss()
             return
         }
-        store.backgroundHandoffDetail = String(localized: "The transcript will appear in Recordings.")
+        store.backgroundHandoffDetail = detail ?? String(localized: "The transcript will appear in Recordings.")
         store.phase = .info(message)
         showPanel()
         scheduleAutoHide(delay: duration)

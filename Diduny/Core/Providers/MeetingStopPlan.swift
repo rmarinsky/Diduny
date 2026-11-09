@@ -38,6 +38,39 @@ enum MeetingStopPlan: Equatable {
     }
 }
 
+extension MeetingStopPlan {
+    static var saveOnlyLine: String {
+        String(localized: "The whole recording is saved. No engine on this Mac can make the transcript yet. Download a model in Local models.")
+    }
+
+    /// The hand-off text after Stop, per `mid-meeting-switching.md`. Nil keeps the plain line.
+    func stopLine(preview: EngineID?) -> String? {
+        switch self {
+        case .keepLiveText, .saveOnly:
+            return nil
+        case let .wholeRecording(engine, _, reason):
+            let name = MeetingPanelState.name(engine)
+            let onThisMac = engine != .didunyCloud && engine != .elevenLabs
+            switch (reason, onThisMac) {
+            case (.mixed, true):
+                return String(localized: "The engine changed during this meeting, so \(name) makes one transcript from the whole recording, on this Mac. It replaces the live text.")
+            case (.mixed, false):
+                return String(localized: "The engine changed during this meeting, so \(name) makes one transcript from the whole recording, in the cloud. It replaces the live text.")
+            case (.liveDraft, true), (.liveTextRejected, true):
+                let from = preview.map(MeetingPanelState.name) ?? name
+                return String(localized: "The live text was a preview from \(from). \(name) is making the transcript of the whole meeting, on this Mac. It replaces the live text.")
+            case (.liveDraft, false), (.liveTextRejected, false):
+                let from = preview.map(MeetingPanelState.name) ?? name
+                return String(localized: "The live text was a preview from \(from). \(name) is making the transcript of the whole meeting, in the cloud. It replaces the live text.")
+            case (.recordOnly, true):
+                return String(localized: "\(name) is making the transcript of the whole meeting, on this Mac.")
+            case (.recordOnly, false):
+                return String(localized: "\(name) is making the transcript of the whole meeting, in the cloud.")
+            }
+        }
+    }
+}
+
 /// One part of a Translate meeting's saved text, in time order (ADR-0013 D4).
 enum TranslatePart: Equatable, Sendable {
     case live(text: String)
