@@ -45,6 +45,15 @@ struct LiveSessionEngine: Equatable {
         ))
     }
 
+    /// Translate with Whisper, or Diduny Cloud signed out, starts no live stream: the text comes after Stop.
+    @MainActor
+    static func running(_ route: RunTimeRoute, job: STTJob) -> LiveSessionEngine? {
+        if job == .dictationTranslation, route.baseProvider == .local, [.whisper, .didunyCloud].contains(route.engine) {
+            return make(route.engine, liveOverride: LiveText.none)
+        }
+        return running(route.selection)
+    }
+
     /// The engine the session runs (`RunTimeRoute`, fixed at start until WP-64). ElevenLabs follows its
     /// model: no realtime capability means after Stop.
     @MainActor
@@ -88,7 +97,8 @@ struct LivePanelState: Equatable {
         connectionStatus: RealtimeConnectionStatus,
         engine: LiveSessionEngine?,
         output: DictationOutput,
-        hasText: Bool
+        hasText: Bool,
+        previewPastLimit: Bool = false
     ) {
         let translating = output != .original
         let isDictation = !mode.isMeeting
@@ -98,7 +108,10 @@ struct LivePanelState: Equatable {
         icon = isDictation ? (translating ? "globe" : "mic") : mode.icon
         status = Self.status(phase: phase, connection: connectionStatus, live: live)
 
-        if isDictation, let engine {
+        if isDictation, translating, previewPastLimit {
+            // The box is back on the spoken words: the translation comes at Stop.
+            caption = String(localized: "Translation after Stop")
+        } else if isDictation, let engine {
             caption = EngineCaptions.dictationPanelCaption(translating: translating, caps: engine.caps)
         } else {
             caption = nil

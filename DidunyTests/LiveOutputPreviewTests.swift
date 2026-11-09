@@ -29,5 +29,6 @@ struct LiveOutputPreviewTests {
 
         #expect(store.visibleText == spoken)
         #expect(!store.isShowingConvertedPreview)
+        #expect(store.panelState.caption == String(localized: "Translation after Stop"))
     }
 }

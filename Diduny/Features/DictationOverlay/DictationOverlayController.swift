@@ -418,7 +418,7 @@ final class DictationOverlayController {
         case .fileTranscription: nil
         }
         store.sessionEngine = job.flatMap { job in
-            AppDelegate.current.flatMap { LiveSessionEngine.running($0.modeRoute(for: job).selection) }
+            AppDelegate.current.flatMap { LiveSessionEngine.running($0.modeRoute(for: job), job: job) }
         }
     }
 

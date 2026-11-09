@@ -89,7 +89,8 @@ final class LiveDictationOverlayStore {
             connectionStatus: connectionStatus,
             engine: sessionEngine,
             output: mode.isMeeting ? .original : displayedOutput,
-            hasText: hasText
+            hasText: hasText,
+            previewPastLimit: selectedOutput != nativeOutput && !isPreviewable
         )
     }
 

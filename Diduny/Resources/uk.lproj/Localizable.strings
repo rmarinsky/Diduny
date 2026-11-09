@@ -2039,3 +2039,6 @@
 "Dictated and pasted" = "Надиктовано і вставлено";
 "Translated and pasted" = "Перекладено і вставлено";
 "Meeting ended and pasted" = "Зустріч завершено і вставлено";
+
+/* Dev feedback 2026-11-09: preview past its limit */
+"Translation after Stop" = "Переклад після Stop";

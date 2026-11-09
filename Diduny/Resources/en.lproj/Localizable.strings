@@ -2039,3 +2039,6 @@
 "Dictated and pasted" = "Dictated and pasted";
 "Translated and pasted" = "Translated and pasted";
 "Meeting ended and pasted" = "Meeting ended and pasted";
+
+/* Dev feedback 2026-11-09: preview past its limit */
+"Translation after Stop" = "Translation after Stop";
