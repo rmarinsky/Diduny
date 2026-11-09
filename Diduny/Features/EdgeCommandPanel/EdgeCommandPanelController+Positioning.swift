@@ -103,6 +103,10 @@ extension EdgeCommandPanelController {
         panel.contentView?.layoutSubtreeIfNeeded()
         panel.displayIfNeeded()
         CATransaction.flush()
+        if let content = panelContentView {
+            EdgeCommandPanelLogoEntrance.play(on: content, cornerRadius: EdgeCommandPanelPlacement.expandedCornerRadius)
+            CATransaction.flush()
+        }
     }
 
     /// Fresh appearance: the window grows out of the edge tab's frame while a
