@@ -219,6 +219,15 @@
             if field.stringValue != json { field.stringValue = json }
         }
 
+        private static func parakeetState(_ state: ModelDownloadState) -> [String: Any] {
+            switch state {
+            case .notDownloaded: ["state": "notDownloaded"]
+            case let .downloading(value): ["state": "downloading", "percent": Int((value * 100).rounded())]
+            case .downloaded: ["state": "downloaded"]
+            case .failed: ["state": "failed"]
+            }
+        }
+
         private func state() -> [String: Any] {
             let store = DictationOverlayController.shared.store
             let settings = SettingsStorage.shared
@@ -226,6 +235,7 @@
                 "seq": UITestBridge.shared.seq,
                 "lastAction": UITestBridge.shared.lastAction,
                 "surface": settings.recordingFeedbackSurface.rawValue,
+                "parakeet": Self.parakeetState(ParakeetModelController.shared.state),
                 "pasteCount": UITestProbeCounters.pasteCount,
                 "submitSent": UITestProbeCounters.submitSent,
                 "registered": KeyboardShortcutsRegistrar.shared.registeredForUITesting(),

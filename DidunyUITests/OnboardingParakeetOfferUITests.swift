@@ -11,6 +11,12 @@ final class OnboardingParakeetOfferUITests: DidunyUITestCase {
         app.windows["Welcome to Diduny"].descendants(matching: .any)[suffix.isEmpty ? id : "\(id).\(suffix)"]
     }
 
+    /// A sibling of the card on Ready; the subtitle is unique to the badge.
+    private var doubleOptionBadge: XCUIElement {
+        app.windows["Welcome to Diduny"].descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS 'Translate automatically' OR value CONTAINS 'Translate automatically'")).firstMatch
+    }
+
     private func openReady(parakeet: String) {
         launchApp(open: "onboarding.ready", arguments: [
             "--ui-testing-fake-downloads", "--ui-testing-parakeet=\(parakeet)",
@@ -21,11 +27,13 @@ final class OnboardingParakeetOfferUITests: DidunyUITestCase {
 
     func test_hiddenWhenAlreadyDownloaded() {
         openReady(parakeet: "downloaded")
+        waitForElement(doubleOptionBadge)
         XCTAssertFalse(element().exists)
     }
 
     func test_hiddenOnIntel() {
         openReady(parakeet: "unsupported")
+        waitForElement(doubleOptionBadge)
         XCTAssertFalse(element().exists)
     }
 
@@ -39,7 +47,7 @@ final class OnboardingParakeetOfferUITests: DidunyUITestCase {
         waitForElement(element("percent"), toMatch: "value == '42%' OR label == '42%'")
         bridge("download.advance", ["percent": 100])
         waitForElement(element("ready"))
-        waitForElement(element("ready"))
+        waitForElement(element("title"), toMatch: "value == 'Parakeet V3 is ready' OR label == 'Parakeet V3 is ready'")
     }
 
     func test_cancelReturnsToNotDownloaded() {
@@ -71,6 +79,13 @@ final class OnboardingParakeetOfferUITests: DidunyUITestCase {
         app.windows["Welcome to Diduny"].buttons["onboarding.primary"].click()
         waitForDisappearance(app.windows["Welcome to Diduny"])
         bridge("download.advance", ["percent": 30])
-        XCTAssertEqual((probe()["lastAction"] as? String), "download.advance")
+        var parakeet = probe()["parakeet"] as? [String: Any]
+        XCTAssertEqual(parakeet?["state"] as? String, "downloading")
+        XCTAssertEqual(parakeet?["percent"] as? Int, 30)
+
+        bridge("download.advance", ["percent": 100])
+        waitForElement(probeElement, toMatch: "value CONTAINS '\"state\":\"downloaded\"'")
+        parakeet = probe()["parakeet"] as? [String: Any]
+        XCTAssertEqual(parakeet?["state"] as? String, "downloaded")
     }
 }
