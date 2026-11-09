@@ -104,6 +104,11 @@ enum CommandHome {
         )
     }
 
+    /// "Providers..." opens another window, so the pointer stays where it is.
+    static func returnsPointer(afterPicking rowID: String) -> Bool {
+        rowID != providersRowID
+    }
+
     /// What a picked tile start runs for its job; nil when the tile follows Settings > Modes.
     static func panelSelection(_ start: CommandTileStart, job: STTJob) -> JobProviderSelection? {
         start.isPick ? ModeEngineRules.selection(engine: start.engine, job: job) : nil

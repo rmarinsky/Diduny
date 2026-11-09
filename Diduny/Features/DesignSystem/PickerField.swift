@@ -38,8 +38,8 @@ struct PickerField: View {
     /// Nil for a static field (one option only).
     private let menu: (() -> PickerMenuModel)?
     private let onPick: (String) -> Void
-    /// After a pick, puts a pointer that ended up outside the window back on this field.
-    private let returnsPointerOnPick: Bool
+    /// After a mouse pick of a row this accepts, puts a pointer that ended up outside the window back on this field.
+    private let returnsPointerOnPick: (String) -> Bool
 
     @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
@@ -56,7 +56,7 @@ struct PickerField: View {
         menuAlignment: FloatingSurfacePlacement.Alignment = .leading,
         identifier: String,
         presenter: FloatingSurfacePresenter = .shared,
-        returnsPointerOnPick: Bool = false,
+        returnsPointerOnPick: @escaping (String) -> Bool = { _ in false },
         menu: @escaping () -> PickerMenuModel,
         onPick: @escaping (String) -> Void
     ) {
@@ -79,7 +79,7 @@ struct PickerField: View {
         menuAlignment = .leading
         self.identifier = identifier
         presenter = .shared
-        returnsPointerOnPick = false
+        returnsPointerOnPick = { _ in false }
         menu = nil
         onPick = { _ in }
     }
@@ -139,7 +139,7 @@ struct PickerField: View {
             owner: identifier, model: menu(), alignment: menuAlignment, anchor: frame,
             parent: window, fromKeyboard: fromKeyboard,
             onPick: { row in
-                if returnsPointer, let window, let target = PointerReturn.target(
+                if NSApp.currentEvent?.type != .keyDown, returnsPointer(row), let window, let target = PointerReturn.target(
                     pointer: NSEvent.mouseLocation, windowFrame: window.frame, field: frame,
                     primaryScreenMaxY: NSScreen.screens.first?.frame.maxY ?? 0
                 ) {

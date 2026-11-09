@@ -124,7 +124,7 @@ struct EdgeCommandExpandedView: View {
                     value: model.engineFieldValue,
                     layout: .stacked,
                     identifier: "commandPanel.engine",
-                    returnsPointerOnPick: true,
+                    returnsPointerOnPick: CommandHome.returnsPointer(afterPicking:),
                     menu: { CommandHome.engineMenu(pick: model.pick, caps: capabilities, readiness: readiness) },
                     onPick: onEngineRow
                 )
