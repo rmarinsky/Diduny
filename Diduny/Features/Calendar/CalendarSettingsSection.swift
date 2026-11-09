@@ -231,7 +231,7 @@ struct CalendarSettingsSection: View {
 
     private var startsInTitle: String {
         switch MeetingSegment(rawValue: startsInRaw) ?? ModeDefaults.newInstallStartsIn {
-        case .thisMac: String(localized: "This Mac")
+        case .thisMac: String(localized: "Local")
         case .cloud: String(localized: "Cloud")
         case .recordOnly: String(localized: "Record only")
         }

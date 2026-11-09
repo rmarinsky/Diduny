@@ -237,7 +237,7 @@ struct EngineCaptionsTests {
     }
 
     static let startsIn: [(MeetingSegment, String, String)] = [
-        (.thisMac, "This Mac", "Live text made on this Mac"),
+        (.thisMac, "Local", "Live text made on this Mac"),
         (.cloud, "Cloud", "Live text from the cloud"),
         (.recordOnly, "Record only", "No live text. Transcript after Stop")
     ]

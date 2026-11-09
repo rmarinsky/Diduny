@@ -58,7 +58,7 @@ enum EngineCaptions {
     /// "Starts in" menu row for a meeting segment.
     static func startsIn(_ segment: MeetingSegment) -> (title: String, subline: String) {
         switch segment {
-        case .thisMac: (String(localized: "This Mac"), String(localized: "Live text made on this Mac"))
+        case .thisMac: (String(localized: "Local"), String(localized: "Live text made on this Mac"))
         case .cloud: (String(localized: "Cloud"), String(localized: "Live text from the cloud"))
         case .recordOnly: (String(localized: "Record only"), String(localized: "No live text. Transcript after Stop"))
         }

@@ -1461,7 +1461,6 @@
 "recommended" = "recommended";
 "%@, recommended" = "%@, recommended";
 "Not downloaded, %@" = "Not downloaded, %@";
-"This Mac" = "This Mac";
 "Live text made on this Mac" = "Live text made on this Mac";
 "Live text from the cloud" = "Live text from the cloud";
 "Record only" = "Record only";
@@ -1835,7 +1834,7 @@
 "Hold to record" = "Hold to record";
 "Hold for" = "Hold for";
 "How long you hold the key before recording starts." = "How long you hold the key before recording starts.";
-"Engine on This Mac" = "Engine on This Mac";
+"Local engine" = "Local engine";
 "Live text made on this Mac." = "Live text made on this Mac.";
 "Engine in Cloud" = "Engine in Cloud";
 "Live text from the cloud." = "Live text from the cloud.";

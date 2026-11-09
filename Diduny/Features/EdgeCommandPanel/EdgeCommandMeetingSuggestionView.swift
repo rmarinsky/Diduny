@@ -92,7 +92,7 @@ struct MeetingSuggestionView: View {
 
     static func title(for segment: MeetingSegment) -> LocalizedStringKey {
         switch segment {
-        case .thisMac: "This Mac"
+        case .thisMac: "Local"
         case .cloud: "Cloud"
         case .recordOnly: "Record only"
         }

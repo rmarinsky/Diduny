@@ -33,7 +33,7 @@ struct LivePanelStateMeetingTests {
     func segments() {
         let items = Self.state(.cloud).segments
         #expect(items.map(\.id) == [.thisMac, .cloud, .recordOnly])
-        #expect(items.map(\.title) == ["This Mac", "Cloud", "Record only"])
+        #expect(items.map(\.title) == ["Local", "Cloud", "Record only"])
         #expect(items.map(\.accessibilityID) == [
             "livePanel.segment.localLive", "livePanel.segment.cloudLive", "livePanel.segment.recordOnly",
         ])

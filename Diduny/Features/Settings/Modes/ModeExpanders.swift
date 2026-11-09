@@ -97,7 +97,7 @@ struct ModeExpander: View {
     // MARK: Meeting
 
     @ViewBuilder private var meetingRows: some View {
-        segmentRow(.thisMac, title: "Engine on This Mac", caption: "Live text made on this Mac.", suffix: "localLive")
+        segmentRow(.thisMac, title: "Local engine", caption: "Live text made on this Mac.", suffix: "localLive")
         segmentRow(.cloud, title: "Engine in Cloud", caption: "Live text from the cloud.", suffix: "cloudLive")
         segmentRow(
             .recordOnly,
