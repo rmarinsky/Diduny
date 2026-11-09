@@ -141,6 +141,7 @@
             overlay.startRecording(mode: mode)
             overlay.updateConnectionStatus(.connected)
             installFakeMeetingEngines(mode: mode, overlay: overlay)
+            installFakeDictationEngines(mode: mode, overlay: overlay)
             if UITestHarness.manualClock != nil { overlay.store.endedAt = overlay.store.startedAt }
             UITestScript.emit(count: UITestHarness.transcriptEmitCount ?? 2)
         }
@@ -199,6 +200,35 @@
         }
 
         private static var fakeMeetingController: MeetingEngineController?
+
+        /// WP-64: the dictation panels' Engine picker runs the real switcher; sessions are fake and ready at once.
+        static func installFakeDictationEngines(mode: RecordingMode, overlay: DictationOverlayController) {
+            guard !mode.isMeeting, let engine = overlay.store.sessionEngine?.id else { return }
+            let store = overlay.store
+            let translating = mode != .voice
+            let switcher = DictationEngineSwitcher(
+                start: store.sessionEngine?.hasLiveText == false ? .afterStopOnly(engine) : .live(engine),
+                startSession: .init(stop: { .empty }, cancel: {}),
+                environment: .init(
+                    readiness: { _ in nil },
+                    makeSession: { _, _ in (UITestFakeMeetingSession(), DictationSpanSink()) },
+                    applyTokens: { _ in },
+                    applyStatus: { overlay.updateConnectionStatus($0) },
+                    closeTurn: { store.commitProvisional() },
+                    didCut: { target in
+                        store.sessionEngine = LiveSessionEngine.make(target.engine, liveOverride: target.isLive ? nil : LiveText.none)
+                    },
+                    didChange: { store.meetingSwitch = MeetingSwitchDisplay(machine: $0) }
+                )
+            )
+            fakeDictationSwitcher = switcher
+            store.meetingSwitchHandler = MeetingSwitchHandler(
+                click: { switcher.click(DictationSwitchPlan.target(for: $0.engine, elevenLabsLive: false, translating: translating)) },
+                changePair: { _ in false }
+            )
+        }
+
+        private static var fakeDictationSwitcher: DictationEngineSwitcher?
     }
 
     // MARK: - Scripted transcript (`DIDUNY_UI_TEST_SCRIPT`, default `two-speakers-en-uk`)

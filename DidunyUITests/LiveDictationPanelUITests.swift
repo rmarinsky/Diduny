@@ -90,4 +90,34 @@ final class LiveDictationPanelUITests: DidunyUITestCase {
         let value = element(app, "livePanel.stop").value as? String ?? ""
         XCTAssertFalse(value.contains("Cancel:"), value)
     }
+
+    /// T1-DI-22 (WP-64): an engine without live text keeps the text so far and says the rest comes after Stop.
+    /// Deviation from the test-plan row: Roman's 2026-11-09 brief keeps the text, so no calm box with text.
+    func test_engineMenuPickWithoutLiveText() {
+        let app = openLivePanel("dictation")
+        let engine = element(app, "livePanel.engine")
+        waitForElement(engine, toMatch: "isHittable == true")
+        engine.click()
+        waitForElement(element(app, "pickerMenu.row.diduny-cloud"))
+        let parakeet = element(app, "pickerMenu.row.parakeet-v3")
+        waitForElement(parakeet, toMatch: "isHittable == true")
+        parakeet.click()
+        waitForText("Text after Stop", identifier: "livePanel.caption", in: app)
+        waitForText("The rest of the text comes after Stop.", identifier: "livePanel.engineSwitchLine", in: app)
+        XCTAssertTrue(spoken(element(app, "livePanel.engine")).contains("Parakeet V3"), spoken(element(app, "livePanel.engine")))
+        XCTAssertTrue(element(app, "livePanel.copy").isEnabled)
+    }
+
+    /// WP-64: a live engine pick keeps the text and names the new engine.
+    func test_engineMenuPickLiveEngineKeepsText() {
+        let app = openLivePanel("dictation")
+        let copy = element(app, "livePanel.copy")
+        waitForElement(copy, toMatch: "isEnabled == true")
+        element(app, "livePanel.engine").click()
+        let apple = element(app, "pickerMenu.row.apple-speech")
+        waitForElement(apple, toMatch: "isHittable == true")
+        apple.click()
+        waitForElement(element(app, "livePanel.engine"), toMatch: "value CONTAINS 'Apple Speech' OR label CONTAINS 'Apple Speech'")
+        XCTAssertTrue(copy.isEnabled)
+    }
 }

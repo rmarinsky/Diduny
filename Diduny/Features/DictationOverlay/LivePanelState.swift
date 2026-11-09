@@ -117,7 +117,8 @@ struct LivePanelState: Equatable {
             caption = nil
         }
 
-        if isDictation, let engine, !engine.hasLiveText, phase != .pasted {
+        // After a switch to such an engine the text so far stays in the box (WP-64).
+        if isDictation, let engine, !engine.hasLiveText, !hasText, phase != .pasted {
             body = .calm(
                 title: String(localized: "Recording"),
                 detail: String(localized: "No live text with \(engine.name). The text is pasted after Stop.")

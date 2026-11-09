@@ -23,7 +23,8 @@ extension LiveDictationOverlayStore {
             runningIsLive: meetingSwitch.runningIsLive,
             readiness: LiveEngineReadinessSource(),
             isOnBattery: powerSource.isOnBattery,
-            connection: connectionStatus
+            connection: connectionStatus,
+            segmentsEnabled: meetingSwitchHandler != nil
         )
     }
 
@@ -156,6 +157,10 @@ struct MeetingSwitchDisplay: Equatable {
     /// What "Try again" clicks.
     var failedTarget: MeetingEngineTarget?
     var note: MeetingPersistentNote?
+    /// The target a switch is connecting to; nil when none is.
+    var pending: MeetingEngineTarget?
+    /// A cut happened: the recording has more than one span.
+    var switched = false
 
     init() {}
 
@@ -167,6 +172,8 @@ struct MeetingSwitchDisplay: Equatable {
         failure = machine.failure
         failedTarget = machine.failedTarget
         note = machine.persistentNote
+        pending = machine.isConnecting ? machine.selected : nil
+        switched = machine.history.spans.count > 1
     }
 }
 

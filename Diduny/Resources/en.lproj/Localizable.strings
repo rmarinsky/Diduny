@@ -2066,3 +2066,8 @@
 "The live text was a preview from %@. %@ is making the transcript of the whole meeting, in the cloud. It replaces the live text." = "The live text was a preview from %@. %@ is making the transcript of the whole meeting, in the cloud. It replaces the live text.";
 "%@ is making the transcript of the whole meeting, on this Mac." = "%@ is making the transcript of the whole meeting, on this Mac.";
 "%@ is making the transcript of the whole meeting, in the cloud." = "%@ is making the transcript of the whole meeting, in the cloud.";
+
+/* Panels redesign WP-64 */
+"Connecting to %@..." = "Connecting to %@...";
+"The rest of the text comes after Stop." = "The rest of the text comes after Stop.";
+"The rest is translated after Stop." = "The rest is translated after Stop.";

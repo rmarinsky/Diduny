@@ -75,7 +75,11 @@ struct LivePanelStateTests {
     func copyRules() throws {
         #expect(Self.state(engine: try Self.engine(.didunyCloud), hasText: true).isCopyEnabled)
         #expect(!Self.state(engine: try Self.engine(.didunyCloud), hasText: false).isCopyEnabled)
-        #expect(!Self.state(engine: try Self.engine(.parakeet), hasText: true).isCopyEnabled)
+        #expect(!Self.state(engine: try Self.engine(.parakeet), hasText: false).isCopyEnabled)
+        // WP-64: after a switch to an engine without live text, the text so far stays in the box and copies.
+        let switched = Self.state(engine: try Self.engine(.parakeet), hasText: true)
+        #expect(switched.body == .transcript)
+        #expect(switched.isCopyEnabled)
     }
 
     @Test("T1-SH-07 Stop shows the progress row with the mode's line", arguments: [

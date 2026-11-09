@@ -19,6 +19,10 @@ struct DictationLiveContent: View {
             if let caption = state.caption {
                 captionLine(caption)
             }
+            if let line = store.dictationSwitchLine {
+                LivePanelCaption(text: line)
+                    .accessibilityIdentifier("livePanel.engineSwitchLine")
+            }
             switch state.body {
             case .transcript:
                 TranscriptBox(height: DS.Size.transcriptDictation) {
@@ -56,14 +60,26 @@ struct DictationLiveContent: View {
         return store.selectedOutput.label
     }
 
-    /// Static until the engine can change during a recording (WP-64).
+    /// A picker while the recording runs (WP-64): a pick switches the engine and keeps the text so far.
+    @ViewBuilder
     private var engineField: some View {
-        PickerField(
-            staticLabel: "Engine",
-            value: store.sessionEngine?.name ?? "",
-            layout: .stackedInPair,
-            identifier: "livePanel.engine"
-        )
+        if store.canSwitchDictationEngine {
+            PickerField(
+                label: "Engine",
+                value: store.sessionEngine?.name ?? "",
+                layout: .stackedInPair,
+                identifier: "livePanel.engine",
+                menu: { store.dictationEngineMenu },
+                onPick: { store.pickDictationEngine(rowID: $0) }
+            )
+        } else {
+            PickerField(
+                staticLabel: "Engine",
+                value: store.sessionEngine?.name ?? "",
+                layout: .stackedInPair,
+                identifier: "livePanel.engine"
+            )
+        }
     }
 
     /// The caption, and "Set by voice · Undo" after a spoken command (01 Q18 default).
