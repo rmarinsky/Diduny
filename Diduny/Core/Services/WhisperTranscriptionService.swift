@@ -50,6 +50,18 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         }
     }
 
+    /// Like `beginRecordingHold`, but waits for the model and throws: a mid-meeting switch must know it failed.
+    func prepareForStreaming() async throws {
+        stateLock.withLock { isHeldForRecording = true }
+        cancelUnloadTimer()
+        do {
+            _ = try await ensureContext()
+        } catch {
+            endRecordingHold()
+            throw error
+        }
+    }
+
     func endRecordingHold() {
         let wasHeld = stateLock.withLock {
             defer { isHeldForRecording = false }

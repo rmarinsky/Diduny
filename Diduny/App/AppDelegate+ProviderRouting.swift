@@ -110,18 +110,24 @@ extension AppDelegate {
 
     /// The ElevenLabs plan for meetings when the user picked an ElevenLabs model and it is routable, else nil.
     var elevenLabsMeetingPlan: ExecutionPlan? {
+        elevenLabsMeetingPlan(selection: (activeMeetingStartRoute ?? meetingStartRoute()).selection)
+    }
+
+    private func elevenLabsMeetingPlan(selection: JobProviderSelection) -> ExecutionPlan? {
         ProviderEngineRouting.byokPlan(
             for: .meeting,
             providerID: STTProviderID.elevenLabs,
-            selection: (activeMeetingStartRoute ?? meetingStartRoute()).selection,
+            selection: selection,
             context: providerRoutingContext
         )
     }
 
     /// Live ElevenLabs session for a meeting: VAD commits plus a manual commit every ~25 s, reconnecting on
     /// session limit or drop (bounded) so multi-hour meetings keep their committed text. Nil when not selected.
-    func makeElevenLabsMeetingService() -> ElevenLabsRealtimeService? {
-        guard elevenLabsMeetingPlan?.mode == .live,
+    /// `selection` is a mid-meeting target; nil reads the meeting's start.
+    func makeElevenLabsMeetingService(selection: JobProviderSelection? = nil) -> ElevenLabsRealtimeService? {
+        let plan = selection.map { elevenLabsMeetingPlan(selection: $0) } ?? elevenLabsMeetingPlan
+        guard plan?.mode == .live,
               let key = ProviderKeyStore.shared.key(for: STTProviderID.elevenLabs) else { return nil }
         return ElevenLabsRealtimeService(
             apiKey: key,
@@ -133,9 +139,10 @@ extension AppDelegate {
     }
 
     /// Live Apple session for a meeting when Apple is the meeting engine and ready; nil otherwise.
-    func makeAppleMeetingService() -> AppleLiveTranscriptionService? {
+    /// `forceReady`: a mid-meeting target, whatever the meeting started on.
+    func makeAppleMeetingService(forceReady: Bool = false) -> AppleLiveTranscriptionService? {
         let start = activeMeetingStartRoute ?? meetingStartRoute()
-        guard start.segment != .recordOnly, start.engine == .appleSpeech,
+        guard forceReady || (start.segment != .recordOnly && start.engine == .appleSpeech),
               OnDeviceEngines.engine(id: STTProviderID.appleSpeech) != nil else { return nil }
         return AppleLiveTranscriptionService(farField: true)
     }

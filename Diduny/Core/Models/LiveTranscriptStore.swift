@@ -95,6 +95,16 @@ final class LiveTranscriptStore {
         forceNewSegmentForNextFinalToken = true
     }
 
+    /// At a cut: text still provisional stays as a turn, so the next engine cannot replace it (C6).
+    func commitProvisional() {
+        guard !provisionalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        wordCount -= _provisionalWordCount
+        _provisionalWordCount = 0
+        appendFinalToken(RealtimeToken(text: provisionalText, isFinal: true, speaker: provisionalSpeaker))
+        provisionalText = ""
+        provisionalSpeaker = nil
+    }
+
     // MARK: - Reset
 
     func reset() {

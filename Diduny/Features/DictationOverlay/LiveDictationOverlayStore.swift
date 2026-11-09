@@ -328,6 +328,13 @@ final class LiveDictationOverlayStore {
         meetingTranscript.markSegmentBoundary()
     }
 
+    /// At a cut: the old engine's provisional text stays (ADR-0013 D1, C6).
+    func commitProvisional() {
+        meetingTranscript.commitProvisional()
+        finalText += provisionalText
+        provisionalText = ""
+    }
+
     func bestText(includeProvisional: Bool) -> String {
         let primary = composedText(final: finalText, provisional: includeProvisional ? provisionalText : "")
         if !primary.isEmpty {

@@ -489,3 +489,25 @@ struct MeetingAudioFanOutTests {
         #expect(sink.total == 1)
     }
 }
+
+@MainActor
+struct LiveTranscriptCommitTests {
+    @Test("Whisper's provisional text stays at a cut and the next batch does not replace it")
+    func commitKeepsText() {
+        let store = LiveTranscriptStore()
+        store.processTokens([RealtimeToken(text: "draft words", isFinal: false)])
+        store.commitProvisional()
+        store.markSegmentBoundary()
+        store.processTokens([RealtimeToken(text: "new words", isFinal: false)])
+        #expect(store.segments.map(\.text) == ["draft words"])
+        #expect(store.provisionalText == "new words")
+        #expect(store.wordCount == 4)
+    }
+
+    @Test("Nothing provisional, nothing added")
+    func commitEmpty() {
+        let store = LiveTranscriptStore()
+        store.commitProvisional()
+        #expect(store.segments.isEmpty)
+    }
+}
