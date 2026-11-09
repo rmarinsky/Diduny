@@ -67,6 +67,7 @@ struct MeetingPanelState {
         isAppleSilicon: Bool = ParakeetModelStore.isSupportedHardware,
         isOnBattery: Bool,
         connection: RealtimeConnectionStatus,
+        segmentsEnabled: Bool = true,
         capabilities: (EngineID) -> EngineCapabilities? = MeetingPanelState.registryCapabilities
     ) {
         func ready(_ id: EngineID) -> EngineReadiness { readiness.readiness(of: id) }
@@ -101,8 +102,9 @@ struct MeetingPanelState {
             Segment(
                 id: seg,
                 title: EngineCaptions.startsIn(seg).title,
-                // Clickable even with no usable engine: the click says why (N20).
-                isEnabled: true,
+                // Clickable even with no usable engine: the click says why (N20). Not before the recording runs:
+                // until then nothing would route the click.
+                isEnabled: segmentsEnabled,
                 accessibilityID: "livePanel.segment." + Self.testID(seg)
             )
         }

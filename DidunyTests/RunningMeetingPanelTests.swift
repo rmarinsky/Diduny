@@ -26,6 +26,9 @@ struct RunningMeetingPanelTests {
     func switchingOpen() {
         let store = LiveDictationOverlayStore()
         store.showRunningMeeting(segment: .recordOnly, engine: .whisper)
+        // Before the recording runs nothing routes a click, so no segment is clickable (WP-64 fix).
+        #expect(store.meetingPanelState.segments.allSatisfy { !$0.isEnabled })
+        store.meetingSwitchHandler = MeetingSwitchHandler(click: { _ in }, changePair: { _ in true })
         let state = store.meetingPanelState
         #expect(state.segment == .recordOnly)
         #expect(state.engine == .whisper)
