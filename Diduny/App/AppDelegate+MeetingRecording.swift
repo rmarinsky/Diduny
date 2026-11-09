@@ -1215,7 +1215,7 @@ extension AppDelegate {
             }
 
             if SettingsStorage.shared.playSoundOnCompletion {
-                NSSound(named: .init("Funk"))?.play()
+                CompletionSound.play()
             }
 
             if byokMeeting, let byokError = meetingByokError {

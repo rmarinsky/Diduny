@@ -690,7 +690,7 @@ extension AppDelegate {
 
             if SettingsStorage.shared.playSoundOnCompletion {
                 Log.app.info("stopRecording: Playing sound")
-                NSSound(named: .init("Funk"))?.play()
+                CompletionSound.play()
             }
 
             RecoveryStateManager.shared.clearState()

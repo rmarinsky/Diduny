@@ -750,7 +750,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 MainWindowController.shared.showRecording(id: result.recordingID)
 
                 if SettingsStorage.shared.playSoundOnCompletion {
-                    NSSound(named: .init("Funk"))?.play()
+                    CompletionSound.play()
                 }
             } catch {
                 Log.app.error("Recovery transcription failed: \(error.localizedDescription)")

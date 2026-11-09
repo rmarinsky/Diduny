@@ -648,7 +648,7 @@ extension AppDelegate {
             }
 
             if SettingsStorage.shared.playSoundOnCompletion {
-                NSSound(named: .init("Funk"))?.play()
+                CompletionSound.play()
             }
 
         } catch is CancellationError {

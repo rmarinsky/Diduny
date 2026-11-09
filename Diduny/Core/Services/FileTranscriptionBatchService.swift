@@ -359,7 +359,7 @@ final class FileTranscriptionBatchService {
         settingsSnapshot: { .current() },
         playCompletionSound: {
             guard SettingsStorage.shared.playSoundOnCompletion else { return }
-            NSSound(named: .init("Funk"))?.play()
+            CompletionSound.play()
         }
     )
 
