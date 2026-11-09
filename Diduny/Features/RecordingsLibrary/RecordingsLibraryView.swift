@@ -305,7 +305,7 @@ struct RecordingsLibraryView: View {
                 Button {
                     toggleSelectionMode()
                 } label: {
-                    Text(isSelectionMode ? "Done" : "Select several")
+                    Text(isSelectionMode ? String(localized: "Done") : String(localized: "Select several"))
                 }
                 .buttonStyle(.bordered)
                 .disabled(storage.recordings.isEmpty)
@@ -341,7 +341,7 @@ struct RecordingsLibraryView: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                     .font(DS.Font.body)
-                TextField(listFilter?.showsBatches == true ? "Search batches" : "Search meetings, people and transcripts",
+                TextField(listFilter?.showsBatches == true ? String(localized: "Search batches") : String(localized: "Search meetings, people and transcripts"),
                           text: $searchText)
                     .textFieldStyle(.plain)
                     .font(DS.Font.body)

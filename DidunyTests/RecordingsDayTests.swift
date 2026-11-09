@@ -1,5 +1,6 @@
 @testable import Diduny
 import Foundation
+import SwiftUI
 import Testing
 
 @Suite("Recordings day (redesign B)")
@@ -230,7 +231,9 @@ struct RecordingsDayTests {
     }
 
     @Test func nameSuggestionComesFromTheEventElseTheTranscript() {
-        let linked = recording(.meeting, 10, 0, event: event("e", 10, 0, minutes: 30, title: "Hiring sync"))
+        var linked = recording(.meeting, 10, 0, event: event("e", 10, 0, minutes: 30, title: "Hiring sync"))
+        #expect(RecordingNameSuggestion.make(for: linked) == nil, "The title already is the event's")
+        linked.title = "Candidates, round 2"
         #expect(RecordingNameSuggestion.make(for: linked) == .init(source: .event, name: "Hiring sync"))
 
         let spoken = recording(.meeting, 10, 0, text: "Plan for December and the contract. Then other things.")
@@ -243,5 +246,39 @@ struct RecordingsDayTests {
         #expect(Recording.RecordingType.voice.canAttachCalendarEvent)
         #expect(Recording.RecordingType.meeting.canAttachCalendarEvent)
         #expect(!Recording.RecordingType.fileTranscription.canAttachCalendarEvent)
+    }
+
+    // MARK: Inspector
+
+    @Test func resultShowsTheCurrentRunWithTranslationsAsTabsAndOlderRunsAsPreviousVersions() {
+        var r = recording(.meeting, 10, 0, text: "hello")
+        let t0 = at(10, 0)
+        r.transcriptHistory = [
+            TranscriptVersion(createdAt: t0, kind: .cloud, text: "first"),
+            TranscriptVersion(createdAt: t0.addingTimeInterval(60), kind: .local, text: "second"),
+            TranscriptVersion(createdAt: t0.addingTimeInterval(120), kind: .translation, targetLanguageCode: "uk", text: "uk 1"),
+            TranscriptVersion(createdAt: t0.addingTimeInterval(180), kind: .local, text: "third"),
+            TranscriptVersion(createdAt: t0.addingTimeInterval(240), kind: .translation, targetLanguageCode: "uk", text: "uk 2"),
+            TranscriptVersion(createdAt: t0.addingTimeInterval(300), kind: .translation, targetLanguageCode: "en", text: "en")
+        ]
+        let versions = RecordingVersions(r)
+        #expect(versions.current?.text == "third")
+        #expect(versions.previousCount == 2)
+        #expect(versions.translations.map(\.text) == ["uk 2", "en"], "Newest per language, one tab each")
+    }
+
+    @Test func inspectorIsFixedWidthAndNeverResizesTheWindow() {
+        #expect(RecordingsLibraryView.inspectorWidth(windowWidth: 1000) == 480)
+        #expect(RecordingsLibraryView.inspectorWidth(windowWidth: 1699) == 480)
+        #expect(RecordingsLibraryView.inspectorWidth(windowWidth: 1700) == 560)
+        // At a 1000 window the calendar keeps 1000 - 238 - 480 = 282 and stacks.
+        #expect(1000 - DS.Layout.sidebarWidth - 480 < RecordingsDayView<EmptyView>.narrowWidth)
+    }
+
+    @Test func openStateFollowsTheSelection() {
+        let id = UUID()
+        #expect(RecordingsInspectorSelection.recording(id, parentBatchID: nil).opensRecording(id))
+        #expect(!RecordingsInspectorSelection.recording(id, parentBatchID: nil).marksRow(id, isSelectionMode: true))
+        #expect(!RecordingsInspectorSelection.event("k").opensRecording(id))
     }
 }

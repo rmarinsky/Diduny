@@ -154,7 +154,7 @@ struct RecordingDetailView: View {
                suggestion.name != currentRecording.customTitle
             {
                 HStack(spacing: 4) {
-                    Text(suggestion.source == .event ? "Event title:" : "Suggested from the transcript:")
+                    Text(suggestion.source == .event ? String(localized: "Event title:") : String(localized: "Suggested from the transcript:"))
                     Button(suggestion.name) { title = suggestion.name; saveTitle() }
                         .buttonStyle(.link)
                         .lineLimit(1)
@@ -164,7 +164,7 @@ struct RecordingDetailView: View {
                 .foregroundStyle(DS.Palette.secondary)
             }
 
-            Text("\(formattedDate). \(formattedDuration)\(currentRecording.recoverySource != nil ? String(localized: ". Recovered from an interrupted session") : "")")
+            Text(verbatim: "\(formattedDate). \(formattedDuration)\(currentRecording.recoverySource != nil ? String(localized: ". Recovered from an interrupted session") : "")")
                 .font(DS.Font.caption)
                 .foregroundStyle(DS.Palette.secondary)
 
@@ -235,7 +235,7 @@ struct RecordingDetailView: View {
 
     private var moreMenu: some View {
         Menu {
-            Button(currentRecording.description?.isEmpty == false ? "Edit description" : "Add description") {
+            Button(currentRecording.description?.isEmpty == false ? String(localized: "Edit description") : String(localized: "Add description")) {
                 isEditingDescription = true
             }
             Button("Save transcript as TXT…") {
@@ -417,7 +417,7 @@ struct RecordingDetailView: View {
     private var recoverySection: some View {
         let failure = currentRecording.recoveryFailureMessage
         return VStack(alignment: .leading, spacing: DS.Space.sm) {
-            Text(failure == nil ? "This recording was interrupted" : "Could not recover the audio")
+            Text(failure == nil ? String(localized: "This recording was interrupted") : String(localized: "Could not recover the audio"))
                 .font(DS.Font.headline)
             Text(failure == nil
                 ? String(localized: "Diduny saved about \(formattedDuration) of audio in pieces. Put them back together first, then you can listen and transcribe.")
@@ -436,7 +436,7 @@ struct RecordingDetailView: View {
                 HStack { ProgressView().controlSize(.small); Text("Recovering audio...") }
             } else {
                 HStack(spacing: DS.Space.sm) {
-                    Button(failure == nil ? "Recover audio" : "Try again") { recoverAudio(.saveAudioOnly) }
+                    Button(failure == nil ? String(localized: "Recover audio") : String(localized: "Try again")) { recoverAudio(.saveAudioOnly) }
                         .buttonStyle(.borderedProminent)
                         .tint(DS.Palette.accent)
                         .controlSize(.large)
@@ -487,7 +487,7 @@ struct RecordingDetailView: View {
             ForEach(Array(artifacts.enumerated()), id: \.offset) { _, artifact in
                 VStack(alignment: .leading, spacing: DS.Space.sm) {
                     HStack {
-                        Text(artifact.provenance == .youtubeAuthored ? "YouTube Captions · Authored" : "YouTube Captions · Automatic")
+                        Text(artifact.provenance == .youtubeAuthored ? String(localized: "YouTube Captions · Authored") : String(localized: "YouTube Captions · Automatic"))
                             .font(DS.Font.headline)
                         Spacer()
                         Button("Export…") { exportCaption(artifact) }

@@ -49,7 +49,7 @@ struct RecordingsDeletionSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.md) {
-            Text(doomed.count == 1 ? "Delete this recording?" : "Delete \(doomed.count) recordings?")
+            Text(doomed.count == 1 ? String(localized: "Delete this recording?") : String(localized: "Delete \(doomed.count) recordings?"))
                 .font(DS.Font.headline)
             Text("These are deleted with their audio, transcripts and translations. This cannot be undone.")
                 .font(DS.Font.callout)
@@ -74,7 +74,7 @@ struct RecordingsDeletionSheet: View {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button(doomed.count == 1 ? "Delete" : "Delete \(doomed.count)", role: .destructive) {
+                Button(doomed.count == 1 ? String(localized: "Delete") : String(localized: "Delete \(doomed.count)"), role: .destructive) {
                     onDelete()
                     dismiss()
                 }
