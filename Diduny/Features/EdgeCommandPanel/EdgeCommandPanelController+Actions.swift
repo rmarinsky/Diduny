@@ -11,8 +11,14 @@ extension EdgeCommandPanelController {
                 guard appDelegate.canStartRecording(kind: .voice) else { showCollapsed(); return }
                 let start = model.tileStart(.transcribe, caps: Self.engineCapabilities)
                 appDelegate.appState.panelEngines[.dictation] = CommandHome.panelSelection(start, job: .dictation)
+                appDelegate.voicePipelineTask?.cancel()
+                appDelegate.voicePipelineTask = Task {
+                    await appDelegate.startRecording()
+                    appDelegate.appState.dropPanelEngineIfIdle(.dictation)
+                }
+            } else {
+                appDelegate.toggleRecording()
             }
-            appDelegate.toggleRecording()
         case .translate:
             if appDelegate.appState.translationRecordingState == .idle {
                 guard appDelegate.canStartRecording(kind: .translation) else { showCollapsed(); return }
@@ -21,10 +27,7 @@ extension EdgeCommandPanelController {
                 appDelegate.appState.panelEngines[.dictationTranslation] = CommandHome.panelSelection(start, job: .dictationTranslation)
                 Task {
                     await appDelegate.startTranslationRecording(targetLanguage: target)
-                    // A refused start never leaves idle: a later hotkey start must not inherit the pick.
-                    if appDelegate.appState.translationRecordingState == .idle {
-                        appDelegate.appState.panelEngines[.dictationTranslation] = nil
-                    }
+                    appDelegate.appState.dropPanelEngineIfIdle(.dictationTranslation)
                 }
             } else {
                 appDelegate.toggleTranslationRecording()
@@ -52,9 +55,7 @@ extension EdgeCommandPanelController {
                 appDelegate.appState.panelEngines[.meetingTranslation] = CommandHome.panelSelection(start, job: .meetingTranslation)
                 Task {
                     await appDelegate.startMeetingTranslationRecording(languagePair: start.pair)
-                    if appDelegate.appState.meetingTranslationRecordingState == .idle {
-                        appDelegate.appState.panelEngines[.meetingTranslation] = nil
-                    }
+                    appDelegate.appState.dropPanelEngineIfIdle(.meetingTranslation)
                 }
             } else {
                 appDelegate.toggleMeetingTranslationRecording()

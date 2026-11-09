@@ -51,12 +51,14 @@ enum RunTimeRouting {
     static func route(
         job: STTJob,
         segment: MeetingSegment? = nil,
-        override: JobProviderSelection? = nil,
+        override explicit: JobProviderSelection? = nil,
+        panelEngines: [STTJob: JobProviderSelection] = [:],
         defaults: ModeDefaults,
         readiness: any EngineReadinessSource,
         whisper: EffectiveEngineResolver.WhisperState,
         signedIn: Bool
     ) -> RunTimeRoute {
+        let override = explicit ?? panelEngines[job]
         let selection = override ?? (job == .meeting
             ? defaults.selection(for: segment ?? defaults.meetingStartsIn)
             : defaults.selection(for: job))

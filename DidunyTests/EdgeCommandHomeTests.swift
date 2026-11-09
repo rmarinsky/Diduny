@@ -197,6 +197,48 @@ struct EdgeCommandHomeTests {
         #expect(home.pick == .parakeet)
     }
 
+    @Test("modeRoute runs the tile's engine, and only for its job")
+    func modeRouteReadsPanelEngines() {
+        let delegate = AppDelegate()
+        let settingsEngine = SettingsStorage.shared.modeDefaults.engine(for: .dictation)
+        let picked: EngineID = settingsEngine == .appleSpeech ? .whisper : .appleSpeech
+        let selection = ModeEngineRules.selection(engine: picked, job: .dictation)
+
+        delegate.appState.panelEngines[.dictation] = selection
+
+        #expect(delegate.modeRoute(for: .dictation).engine == picked)
+    }
+
+    @Test("A refused start drops the tile's engine; a running recording keeps it")
+    func refusedStartDropsEngine() {
+        let state = AppState()
+        let selection = ModeEngineRules.selection(engine: .whisper, job: .dictation)
+        state.panelEngines = [.dictation: selection, .dictationTranslation: selection, .meetingTranslation: selection]
+
+        state.translationRecordingState = .recording
+        state.dropPanelEngineIfIdle(.dictationTranslation)
+        #expect(state.panelEngines[.dictationTranslation] == selection)
+
+        state.dropPanelEngineIfIdle(.dictation)
+        state.dropPanelEngineIfIdle(.meetingTranslation)
+        #expect(state.panelEngines[.dictation] == nil)
+        #expect(state.panelEngines[.meetingTranslation] == nil)
+    }
+
+    @Test("Providers... does not move the pointer; engine rows do")
+    func pointerReturnRows() {
+        #expect(!CommandHome.returnsPointer(afterPicking: CommandHome.providersRowID))
+        #expect(CommandHome.returnsPointer(afterPicking: EngineID.parakeet.rawValue))
+    }
+
+    @Test("Translate on Whisper claims no live text; dictation on Whisper keeps its preview")
+    func whisperTranslateIsNotLive() throws {
+        let route = RunTimeRoute(engine: .whisper, modelID: nil, unavailable: nil, baseProvider: .local)
+
+        #expect(try #require(LiveSessionEngine.running(route, job: .dictationTranslation)).hasLiveText == false)
+        #expect(try #require(LiveSessionEngine.running(route, job: .dictation)).hasLiveText)
+    }
+
     @Test("T2-TL-01 Tile captions with Settings defaults")
     func captionsWithDefaults() {
         #expect(captions(model()) == ["Voice → text", "Voice → English", "System + mic", "Live · EN ↔ UK"])

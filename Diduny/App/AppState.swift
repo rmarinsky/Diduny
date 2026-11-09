@@ -27,6 +27,18 @@ final class AppState {
     /// The command panel's pick for the recording a tile started, by job. Set at the tile start and dropped
     /// when that recording ends, so hotkey starts keep following Settings > Modes.
     var panelEngines: [STTJob: JobProviderSelection] = [:]
+
+    /// After a tile start returns: a refused start never left idle, and a later hotkey start must not inherit the pick.
+    func dropPanelEngineIfIdle(_ job: STTJob) {
+        let state: RecordingState = switch job {
+        case .dictation: recordingState
+        case .dictationTranslation: translationRecordingState
+        case .meetingTranslation: meetingTranslationRecordingState
+        default: .recording
+        }
+        if state == .idle { panelEngines[job] = nil }
+    }
+
     var recordingState: RecordingState = .idle {
         didSet {
             if recordingState == .idle { panelEngines[.dictation] = nil }
