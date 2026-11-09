@@ -80,6 +80,52 @@ struct StaticComponentMetricsTests {
         }
     }
 
+    /// Roman's DEV: the live group took the whole 226 pt track and Record only fell off the panel.
+    @Test("Meeting groups: every segment keeps its full label inside the 226 pt track", arguments: [
+        (["Local", "Cloud", "Record only"], ["Live text", "After Stop"]),
+        (["Локально", "Хмара", "Лише запис"], ["Текст наживо", "Після зупинки"]),
+    ])
+    func meetingGroupsFit(titles: [String], captions: [String]) throws {
+        let recorder = WidthRecorder()
+        func track(_ range: Range<Int>, caption: String) -> some View {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: caption).font(.system(size: 10.5)).lineLimit(1).padding(.leading, 2)
+                ModeSegmentsLayout {
+                    ForEach(range, id: \.self) { index in
+                        ModeSegmentButton(title: LocalizedStringKey(titles[index]), isSelected: index == 0) {}
+                            .background(GeometryReader { proxy in
+                                let _ = recorder.record(index, proxy.size.width)
+                                Color.clear
+                            })
+                    }
+                }
+                .padding(DS.Size.segmentInset)
+            }
+        }
+        let groups = MeetingSegmentGroupsLayout {
+            track(0 ..< 2, caption: captions[0])
+            track(2 ..< 3, caption: captions[1])
+        }
+        .frame(width: 226)
+        _ = try #require(RetinaHost.render(groups))
+
+        // The gap between the groups, each track's 2 x inset padding, and the gap inside the first track.
+        var total = 6 + DS.Size.segmentInset * 5
+        for (index, title) in titles.enumerated() {
+            let width = try #require(recorder.widths[index], "segment \(index) not laid out")
+            let ideal = size(ModeSegmentButton(title: LocalizedStringKey(title), isSelected: false) {}).width
+            #expect(width >= ideal - Self.tolerance, "\(title): \(width), needs \(ideal)")
+            total += width
+        }
+        #expect(total <= 226 + Self.tolerance, "track overflows: \(total)")
+    }
+
+    @Test("Meeting groups: the second keeps its width, the first takes the rest, a short track shrinks both")
+    func meetingGroupWidths() {
+        #expect(MeetingSegmentGroupsLayout.widths(first: 100, second: 80, available: 226, spacing: 6) == [140, 80])
+        #expect(MeetingSegmentGroupsLayout.widths(first: 150, second: 150, available: 206, spacing: 6) == [100, 100])
+    }
+
     // MARK: - Panel buttons (4.4, 4.5)
 
     @Test("Copy and Stop share a 274 pt row as 102 and 164, both 38 high")

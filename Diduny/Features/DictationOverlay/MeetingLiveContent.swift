@@ -260,9 +260,8 @@ struct MeetingLiveContent<Waveform: View>: View {
         VStack(alignment: .leading, spacing: DS.Panel.blockGap) {
             HStack(spacing: DS.Panel.blockGap) {
                 waveform()
-                HStack(alignment: .top, spacing: 6) {
+                MeetingSegmentGroupsLayout {
                     group(String(localized: "Live text"), state.segments.filter { $0.id != .recordOnly }, next: .recordOnly)
-                        .layoutPriority(1)
                     group(String(localized: "After Stop"), state.segments.filter { $0.id == .recordOnly }, next: .cloud)
                 }
             }

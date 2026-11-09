@@ -37,6 +37,42 @@ struct ModeSegmentsLayout: Layout {
     }
 }
 
+/// The two captioned groups of the meeting panel (option A), as CSS `flex: 1 1 auto` and `flex: 0 1 auto`:
+/// the second keeps its ideal width and the first takes the rest. A short track shrinks both in proportion.
+/// `ModeSegmentsLayout` fills whatever it is offered, so an `HStack` would give one group all the room.
+struct MeetingSegmentGroupsLayout: Layout {
+    var spacing: CGFloat = 6
+
+    static func widths(first: CGFloat, second: CGFloat, available: CGFloat, spacing: CGFloat) -> [CGFloat] {
+        let room = max(available - spacing, 0)
+        let total = first + second
+        guard total > room else { return [room - second, second] }
+        guard total > 0 else { return [0, 0] }
+        return [first * room / total, second * room / total]
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        let ideal = subviews.map { $0.sizeThatFits(.unspecified) }
+        let idealWidth = ideal.map(\.width).reduce(0, +) + spacing * CGFloat(max(subviews.count - 1, 0))
+        return CGSize(width: proposal.width ?? idealWidth, height: ideal.map(\.height).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        guard subviews.count == 2 else { return }
+        let widths = Self.widths(
+            first: subviews[0].sizeThatFits(.unspecified).width,
+            second: subviews[1].sizeThatFits(.unspecified).width,
+            available: bounds.width,
+            spacing: spacing
+        )
+        subviews[0].place(at: bounds.origin, proposal: ProposedViewSize(width: widths[0], height: bounds.height))
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX + widths[0] + spacing, y: bounds.minY),
+            proposal: ProposedViewSize(width: widths[1], height: bounds.height)
+        )
+    }
+}
+
 /// This Mac / Cloud / Record only (design-spec 4.3). The selected segment is filled with the
 /// brand accent and cross-fades (M9); the fill does not slide.
 struct ModeSegments<ID: Hashable>: View {

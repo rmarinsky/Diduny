@@ -42,7 +42,11 @@ final class MeetingLivePanelUITests: DidunyUITestCase {
         waitForElement(group)
         XCTAssertTrue(app.buttons["livePanel.segment.cloudLive"].isSelected)
         XCTAssertFalse(app.buttons["livePanel.segment.localLive"].isSelected)
-        XCTAssertFalse(app.buttons["livePanel.segment.recordOnly"].isSelected)
+        let recordOnly = app.buttons["livePanel.segment.recordOnly"]
+        XCTAssertFalse(recordOnly.isSelected)
+        // Roman's DEV: Record only fell off the panel's right edge.
+        XCTAssertTrue(recordOnly.isHittable)
+        XCTAssertGreaterThan(recordOnly.frame.width, 60)
         let minimize = app.buttons["livePanel.minimize"]
         waitForElement(minimize, toMatch: "label == 'Hide recording panel'")
     }
