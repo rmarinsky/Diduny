@@ -206,6 +206,12 @@ extension RecordingsLibraryView {
     func groupSelected() {
         let members = selectedRecordings
         guard members.count > 1 else { return }
+        // A recording sits in one group at most; moving it silently would change another group.
+        let grouped = Set(batchStorage.batches.filter { $0.isRecordingGroup == true }.flatMap(\.recordingIDs))
+        if let taken = members.first(where: { grouped.contains($0.id) }) {
+            operationErrorMessage = String(localized: "“\(taken.displayTitle)” is already in a group. Ungroup it first.")
+            return
+        }
         let name = members.compactMap(\.calendarMeeting?.title).first ?? members[0].displayTitle
         do {
             let group = try batchStorage.createRecordingGroup(name: name, recordingIDs: members.map(\.id))
@@ -213,7 +219,10 @@ extension RecordingsLibraryView {
             selectedRecordingIds.removeAll()
             requestInspectorSelection(.group(group.id))
             flash = RecordingsFlash(text: String(localized: "Grouped \(members.count) recordings."), undo: {
-                try? batchStorage.ungroup(batchID: group.id)
+                do { try batchStorage.ungroup(batchID: group.id) } catch {
+                    operationErrorMessage = String(localized: "The group could not be removed.")
+                    return
+                }
                 if inspectorSelection == .group(group.id) { requestInspectorSelection(nil) }
             })
         } catch {
@@ -254,7 +263,11 @@ extension RecordingsLibraryView {
             operationErrorMessage = String(localized: "The recordings and their files were left unchanged.")
             return
         }
-        if let groupID = deletion.groupID { try? batchStorage.ungroup(batchID: groupID) }
+        if let groupID = deletion.groupID {
+            do { try batchStorage.ungroup(batchID: groupID) } catch {
+                operationErrorMessage = String(localized: "The recordings were deleted, but the empty group could not be removed.")
+            }
+        }
         selectedRecordingIds.subtract(ids)
         if isSelectionMode, selectedRecordingIds.isEmpty { cancelSelection() }
     }
