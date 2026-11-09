@@ -143,12 +143,11 @@ struct LivePanelStateMeetingTests {
     @Test("Record only: calm box, Copy disabled")
     func recordOnlyBody() {
         let state = Self.state(.recordOnly)
-        #expect(state.showsCalmBox)
-        #expect(!state.isCopyEnabled)
+        #expect(state.showsCalmBox(hasText: false))
+        #expect(!state.showsCalmBox(hasText: true))
         #expect(MeetingPanelState.calmTitle == "Recording without live text")
-        #expect(MeetingPanelState.calmDetail == "To see text from now on, use Turn on live transcript below.")
-        #expect(!Self.state(.cloud).showsCalmBox)
-        #expect(Self.state(.cloud).isCopyEnabled)
+        #expect(MeetingPanelState.calmDetail == "Pick Local or Cloud to see text from now on.")
+        #expect(!Self.state(.cloud).showsCalmBox(hasText: false))
     }
 
     // MARK: T1-MT-10, T1-MT-11
@@ -188,7 +187,8 @@ struct LivePanelStateMeetingTests {
         #expect(withKey.segments.first { $0.id == .cloud }?.isEnabled == true)
 
         let noKey = Self.state(.thisMac, readiness: [.didunyCloud: .noQuota, .elevenLabs: .needsKey])
-        #expect(noKey.segments.first { $0.id == .cloud }?.isEnabled == false)
+        // N20: the segment stays clickable and the click explains; only the menu row is disabled.
+        #expect(noKey.segments.first { $0.id == .cloud }?.isEnabled == true)
     }
 
     // MARK: T1-MT-13

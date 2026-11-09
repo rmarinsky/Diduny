@@ -13,7 +13,10 @@ struct TranslateMeetingLiveContent: View {
                 turns: store.meetingTranslation.turns,
                 showsOriginal: $store.meetingTranslationShowsOriginal,
                 onPickPair: store.pickMeetingTranslationPair,
-                onPickEngine: { if !store.meetingSwitchingLocked { store.meetingTranslationEngine = $0 } },
+                onPickEngine: store.pickMeetingTranslationEngine,
+                markers: store.meetingSwitch.markers,
+                switchLine: store.meetingSwitchLine,
+                onFailureAction: store.runMeetingFailureAction,
                 // SwiftUI's `NSApp.delegate` is an adaptor, not `AppDelegate`.
                 onOpenLanguages: { AppDelegate.current?.openSettings(tab: .languages) }
             ) {
@@ -31,14 +34,11 @@ struct MeetingLiveSection: View {
         MeetingLiveContent(
             state: store.meetingPanelState,
             lines: store.meetingLines,
-            // Locked until WP-63: a segment pick would not move the audio.
-            segment: Binding(
-                get: { store.meetingSegment },
-                set: { if !store.meetingSwitchingLocked { store.meetingSegment = $0 } }
-            ),
-            onPickEngine: { if !store.meetingSwitchingLocked { store.meetingEngines[store.meetingSegment] = $0 } },
+            segment: Binding(get: { store.meetingSegment }, set: { store.pickMeetingSegment($0) }),
+            onPickEngine: store.pickMeetingEngine,
             onDownloadParakeet: { ParakeetModelController.shared.download() },
-            onTurnOnLiveTranscript: store.meetingTurnOnLiveTranscript
+            switchLine: store.meetingSwitchLine,
+            onFailureAction: store.runMeetingFailureAction
         ) {
             LiveWaveformCircle(store: store)
         }

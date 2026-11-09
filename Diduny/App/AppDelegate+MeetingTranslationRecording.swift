@@ -425,7 +425,7 @@ extension AppDelegate {
         return store
     }
 
-    private func filterMeetingTranslatedTokens(_ tokens: [RealtimeToken]) -> [RealtimeToken] {
+    func filterMeetingTranslatedTokens(_ tokens: [RealtimeToken]) -> [RealtimeToken] {
         let translatedStatuses: Set = [
             "translation",
             "translated",

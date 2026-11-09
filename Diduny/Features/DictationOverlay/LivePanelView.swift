@@ -133,16 +133,12 @@ struct LivePanelView: View {
             let meeting = store.meetingPanelState.status
             return meeting.isLive ? .live(LocalizedStringKey(meeting.text)) : .plain(LocalizedStringKey(meeting.text))
         case .meetingTranslation:
+            if store.meetingSwitch.isConnecting { return .plain(LocalizedStringKey(MeetingPanelState.connectingStatus)) }
             if let text = store.translateMeetingPanelModel?.notLiveStatus { return .plain(LocalizedStringKey(text)) }
             return Self.panelStatus(state.status)
         case .voice, .translation, .fileTranscription:
             return Self.panelStatus(state.status)
         }
-    }
-
-    /// Record only has no live text to copy (WP-31).
-    private func isCopyEnabled(_ state: LivePanelState) -> Bool {
-        state.isCopyEnabled && (store.mode != .meeting || store.meetingPanelState.isCopyEnabled)
     }
 
     static func panelStatus(_ status: LivePanelState.Status) -> PanelStatus {
@@ -160,7 +156,7 @@ struct LivePanelView: View {
         } else {
             PanelControlsLayout(weights: [1, 1.6]) {
                 CopyButton(isCopied: store.copiedAt != nil, action: onCopy)
-                    .disabled(!isCopyEnabled(state))
+                    .disabled(!state.isCopyEnabled)
                     .help("Copy transcript")
                     .accessibilityIdentifier("livePanel.copy")
                 if showsCloseButton {

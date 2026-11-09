@@ -28,7 +28,8 @@ struct MeetingPanelState {
     static var batteryWarningText: String { String(localized: "On battery, live text on this Mac drains it fast.") }
     static var useCloudTitle: String { String(localized: "Use Cloud") }
     static var calmTitle: String { String(localized: "Recording without live text") }
-    static var calmDetail: String { String(localized: "To see text from now on, use Turn on live transcript below.") }
+    static var calmDetail: String { String(localized: "Pick Local or Cloud to see text from now on.") }
+    static var connectingStatus: String { String(localized: "Recording · connecting...") }
     static var parakeetMissingText: String {
         String(localized: "Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript.")
     }
@@ -44,13 +45,11 @@ struct MeetingPanelState {
     let caption: String
     let status: Status
     let showsBatteryWarning: Bool
-    /// The battery warning's "Use Cloud" link; hidden while switching is locked (until WP-63, decision 1A).
-    let showsUseCloudLink: Bool
     /// Set when Record only uses Parakeet V3 and it is not downloaded.
     let parakeetDownloadBytes: Int64?
 
-    var showsCalmBox: Bool { segment == .recordOnly }
-    var isCopyEnabled: Bool { segment != .recordOnly }
+    /// Text stays on Record only, with a note under it; the box is calm only with nothing to show (D7).
+    func showsCalmBox(hasText: Bool) -> Bool { segment == .recordOnly && !hasText }
 
     var downloadParakeetTitle: String? {
         parakeetDownloadBytes.map { bytes in
@@ -62,7 +61,8 @@ struct MeetingPanelState {
     init(
         segment: MeetingSegment,
         engines: [MeetingSegment: EngineID],
-        switchingLocked: Bool = false,
+        isConnecting: Bool = false,
+        runningIsLive: Bool = true,
         readiness: any EngineReadinessSource,
         isAppleSilicon: Bool = ParakeetModelStore.isSupportedHardware,
         isOnBattery: Bool,
@@ -101,7 +101,8 @@ struct MeetingPanelState {
             Segment(
                 id: seg,
                 title: EngineCaptions.startsIn(seg).title,
-                isEnabled: switchingLocked ? seg == segment : groups(seg).flatMap(\.engines).contains(where: usable),
+                // Clickable even with no usable engine: the click says why (N20).
+                isEnabled: true,
                 accessibilityID: "livePanel.segment." + Self.testID(seg)
             )
         }
@@ -113,7 +114,7 @@ struct MeetingPanelState {
         engine = resolved
         engineName = Self.name(resolved)
         fieldLabel = segment == .recordOnly ? String(localized: "Transcript after Stop") : String(localized: "Engine")
-        isFieldStatic = switchingLocked || all.count <= 1
+        isFieldStatic = all.count <= 1
 
         menu = PickerMenuModel(
             groups: list.map { group in
@@ -133,7 +134,9 @@ struct MeetingPanelState {
         )
         caption = capabilities(resolved).map { EngineCaptions.meetingPanelCaption(segment: segment, caps: $0) } ?? ""
 
-        if segment == .recordOnly {
+        if isConnecting {
+            status = Status(text: Self.connectingStatus, isLive: runningIsLive)
+        } else if segment == .recordOnly {
             status = Status(text: String(localized: "Recording, no live text"), isLive: false)
         } else {
             switch connection {
@@ -145,7 +148,6 @@ struct MeetingPanelState {
             }
         }
         showsBatteryWarning = segment == .thisMac && isOnBattery
-        showsUseCloudLink = !switchingLocked
         if segment == .recordOnly, resolved == .parakeet, case let .notDownloaded(bytes) = ready(.parakeet) {
             parakeetDownloadBytes = bytes
         } else {
@@ -169,7 +171,7 @@ struct MeetingPanelState {
     }
 
     /// Panel names (Proto `ENG`); proper nouns, not localized.
-    static func name(_ id: EngineID) -> String {
+    nonisolated static func name(_ id: EngineID) -> String {
         switch id {
         case .didunyCloud: "Diduny Cloud"
         case .elevenLabs: "ElevenLabs"
@@ -193,12 +195,14 @@ struct MeetingPanelState {
 // MARK: - Transcript lines
 
 /// Live meeting transcript as label lines and paragraphs, no timestamps (01 section 2 item 6).
-/// Marker lines ("06:22 · switched to Cloud") are appended by WP-63.
+/// Marker lines ("06:22 · switched to Cloud") sit where the switch happened; they never reach Copy or the library.
 enum MeetingTranscriptLines {
     enum Line: Equatable {
         case speaker(String)
         case text(String)
         case marker(String)
+        /// Under a marker: what happens to the time without live text.
+        case note(String)
     }
 
     struct Turn: Equatable {
@@ -206,10 +210,17 @@ enum MeetingTranscriptLines {
         let text: String
     }
 
-    static func make(turns: [Turn], speakerLabels: Bool, markers: [Line] = []) -> [Line] {
+    static func make(turns: [Turn], speakerLabels: Bool, markers: [MeetingSwitchMarker] = [], translateMeeting: Bool = false) -> [Line] {
         var lines: [Line] = []
         var lastSpeaker: String?
-        for turn in turns {
+        func addMarkers(where isDue: (MeetingSwitchMarker) -> Bool) {
+            for marker in markers where isDue(marker) {
+                lines.append(.marker(MeetingSwitchText.marker(marker, translateMeeting: translateMeeting)))
+                if let note = MeetingSwitchText.gapNote(marker) { lines.append(.note(note)) }
+            }
+        }
+        for (index, turn) in turns.enumerated() {
+            addMarkers { $0.afterTurnCount == index }
             let text = turn.text.trimmingCharacters(in: .whitespaces)
             guard !text.isEmpty else { continue }
             if speakerLabels, let speaker = turn.speaker, speaker != lastSpeaker {
@@ -218,7 +229,8 @@ enum MeetingTranscriptLines {
             }
             lines.append(.text(text))
         }
-        return lines + markers
+        addMarkers { $0.afterTurnCount >= turns.count }
+        return lines
     }
 
     static func label(_ speaker: String) -> String {
@@ -236,8 +248,9 @@ struct MeetingLiveContent<Waveform: View>: View {
     @Binding var segment: MeetingSegment
     let onPickEngine: (EngineID) -> Void
     let onDownloadParakeet: () -> Void
-    /// Record only: streams the rest of the meeting to Cloud (nil hides the link).
-    var onTurnOnLiveTranscript: (() -> Void)?
+    /// A failure or persistent line under the engine, with its link's action.
+    var switchLine: MeetingSwitchText.Line?
+    var onFailureAction: () -> Void = {}
     /// The 38 pt waveform circle (`LiveWaveformCircle` draws its own frame, tint and identifier).
     @ViewBuilder let waveform: () -> Waveform
 
@@ -245,28 +258,45 @@ struct MeetingLiveContent<Waveform: View>: View {
         VStack(alignment: .leading, spacing: DS.Panel.blockGap) {
             HStack(spacing: DS.Panel.blockGap) {
                 waveform()
-                ModeSegments(
-                    items: state.segments.map {
-                        .init(id: $0.id, title: LocalizedStringKey($0.title), isEnabled: $0.isEnabled, accessibilityID: $0.accessibilityID)
-                    },
-                    selection: $segment
-                )
+                HStack(alignment: .top, spacing: 6) {
+                    group(String(localized: "Live text"), state.segments.filter { $0.id != .recordOnly }, next: .recordOnly)
+                        .layoutPriority(1)
+                    group(String(localized: "After Stop"), state.segments.filter { $0.id == .recordOnly }, next: .cloud)
+                }
             }
             engineBlock
-            if state.showsCalmBox {
+            if state.showsCalmBox(hasText: !lines.isEmpty) {
                 CalmBox(
                     title: LocalizedStringKey(MeetingPanelState.calmTitle),
                     detail: LocalizedStringKey(MeetingPanelState.calmDetail),
-                    height: DS.Size.transcriptMeeting,
-                    action: onTurnOnLiveTranscript.map {
-                        (title: "Turn on live transcript", id: "livePanel.turnOnLiveTranscript", run: $0)
-                    }
+                    height: DS.Size.transcriptMeeting
                 )
             } else {
                 TranscriptBox(height: DS.Size.transcriptMeeting) {
                     ForEach(Array(lines.enumerated()), id: \.offset) { _, line in lineView(line) }
                 }
             }
+        }
+    }
+
+    /// One captioned group (option A): the caption over its segments, so live and after-Stop never read alike.
+    private func group(_ caption: String, _ segments: [MeetingPanelState.Segment], next: MeetingSegment) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: caption)
+                .font(.system(size: 10.5))
+                .foregroundStyle(DS.Palette.secondary)
+                .lineLimit(1)
+                .padding(.leading, 2)
+            ModeSegments(
+                items: segments.map {
+                    .init(id: $0.id, title: LocalizedStringKey($0.title), isEnabled: $0.isEnabled, accessibilityID: $0.accessibilityID)
+                },
+                selection: $segment,
+                onStepPastEnd: { direction in
+                    if direction > 0, next == .recordOnly { segment = .recordOnly }
+                    if direction < 0, next == .cloud { segment = .cloud }
+                }
+            )
         }
     }
 
@@ -290,8 +320,14 @@ struct MeetingLiveContent<Waveform: View>: View {
             if state.showsBatteryWarning {
                 WarningLine(
                     message: MeetingPanelState.batteryWarningText,
-                    linkTitle: state.showsUseCloudLink ? MeetingPanelState.useCloudTitle : nil,
+                    linkTitle: MeetingPanelState.useCloudTitle,
                     action: { segment = .cloud }, id: "livePanel.batteryWarning", linkID: "livePanel.useCloud"
+                )
+            }
+            if let switchLine {
+                WarningLine(
+                    message: switchLine.message, linkTitle: switchLine.linkTitle,
+                    action: onFailureAction, id: "livePanel.switchLine", linkID: "livePanel.switchLineAction"
                 )
             }
             if let download = state.downloadParakeetTitle {
@@ -317,6 +353,11 @@ struct MeetingLiveContent<Waveform: View>: View {
                 .font(DS.Font.caption)
                 .foregroundStyle(DS.Palette.secondary)
                 .accessibilityIdentifier("livePanel.marker")
+        case let .note(text):
+            Text(verbatim: text)
+                .font(DS.Font.caption)
+                .foregroundStyle(DS.Palette.secondary)
+                .accessibilityIdentifier("livePanel.gapNote")
         }
     }
 }

@@ -76,7 +76,7 @@ struct EdgeCommandPanelModelTests {
         )
 
         #expect(dictation == NSRect(x: 1140, y: 294, width: 300, height: 312))
-        #expect(meeting == NSRect(x: 1140, y: 247, width: 300, height: 406))
+        #expect(meeting == NSRect(x: 1140, y: 241.5, width: 300, height: 417))
     }
 
     @Test("Every expanded state is 300 wide and takes the content's fitting height")

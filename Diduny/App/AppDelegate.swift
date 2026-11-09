@@ -148,13 +148,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The segment and engine the running meeting started with (WP-17); nil when idle.
     var activeMeetingStartRoute: MeetingStartRoute?
     var meetingTranslationPipelineTask: Task<Void, Never>?
-    /// In-flight meeting realtime WS connect, launched before capture setup so
-    /// the handshake overlaps it. Held so stop/cancel can abort a connect that
-    /// is still in progress.
-    var meetingRealtimeConnectTask: Task<Void, Never>?
-    /// Batches meeting realtime tokens to ≤10Hz store updates. Held so the
-    /// stop path can flush the tail before reading the transcript.
-    var meetingTokenCoalescer: RealtimeTokenCoalescer?
+    /// Runs the meeting's live engines and switches between them (ADR-0013). One per recording.
+    var meetingEngineController: MeetingEngineController?
 
     // Auto-reset Tasks (success/error → idle timers)
     var voiceAutoResetTask: Task<Void, Never>?

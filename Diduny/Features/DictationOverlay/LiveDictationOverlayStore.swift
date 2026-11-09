@@ -35,14 +35,14 @@ final class LiveDictationOverlayStore {
     var finalText = ""
     var provisionalText = ""
     var copiedAt: Date?
-    /// Set while a meeting records audio only; turns on the cloud live transcript.
-    var onTurnOnLiveTranscript: (() -> Void)?
     /// Meeting panel segment and engine per segment (WP-31). Seeded from Settings > Modes once WP-13 lands.
     var meetingSegment: MeetingSegment = .cloud
     var meetingEngines: [MeetingSegment: EngineID] = MeetingPanelState.defaultEngines
-    /// Until WP-63 moves audio mid-meeting, the panel shows the running segment and engine and
-    /// offers no switch: a pick that only changed the label would misreport where audio goes.
-    var meetingSwitchingLocked = true
+    /// The running meeting's switch state and where clicks go (ADR-0013). Nil handler: no meeting behind the panel.
+    var meetingSwitch = MeetingSwitchDisplay()
+    var meetingSwitchHandler: MeetingSwitchHandler?
+    /// The target being connected, for "Try again" when it fails.
+    @ObservationIgnored var lastSelected: MeetingEngineTarget?
     /// What the live STT stream produces for this session.
     private(set) var nativeOutput: DictationOutput = .original
     /// Output of the session or picked in the panel, before any spoken command.
@@ -237,7 +237,8 @@ final class LiveDictationOverlayStore {
         listensForVoiceCommands = false
         outputOptions = []
         convertedPreview = nil
-        onTurnOnLiveTranscript = nil
+        meetingSwitch = MeetingSwitchDisplay()
+        meetingSwitchHandler = nil
         sessionEngine = nil
     }
 

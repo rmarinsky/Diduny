@@ -461,20 +461,16 @@ extension AppDelegate {
                 appState.meetingRecordingStartTime = Date()
                 appState.liveTranscriptStore = store
                 handleMeetingStateChange(.recording)
-                let runningSegment = RunningMeetingSession.segment(
-                    recordOnly: recordOnly, cloudMode: cloudModeEnabled, localPreview: localPreview)
-                let ownLiveEngine: EngineID? = meetingRealtimeService is ElevenLabsRealtimeService ? .elevenLabs
-                    : meetingRealtimeService is AppleLiveTranscriptionService ? .appleSpeech : nil
                 let overlayStore = DictationOverlayController.shared.store
-                overlayStore.showRunningMeeting(
-                    segment: runningSegment,
-                    engine: startRoute.flatMap { $0.segment == runningSegment && translateTarget == nil ? $0.runningEngine : nil }
-                        ?? RunningMeetingSession.engine(
-                            segment: runningSegment, ownLiveEngine: ownLiveEngine,
-                            afterStopEngine: onDeviceSelection(for: translateTarget != nil ? .meetingTranslation : .meeting))
-                )
-                if translateTarget != nil {
-                    overlayStore.showRunningMeetingTranslation(engine: activeMeetingStartRoute?.engine ?? .whisper)
+                if let controller = meetingEngineController {
+                    if translateTarget != nil {
+                        overlayStore.showRunningMeetingTranslation(engine: controller.machine.selected.engine)
+                    } else {
+                        overlayStore.showRunningMeeting(segment: controller.machine.selected.segment, engine: controller.machine.selected.engine)
+                        // The start also seeds the after-Stop engine the Record only field shows.
+                        overlayStore.meetingEngines[.recordOnly] = controller.machine.afterStopEngine
+                    }
+                    overlayStore.meetingSwitchHandler = meetingSwitchHandler(for: controller)
                 }
                 if !cloudModeEnabled {
                     updateRecordingFeedbackConnectionStatus(.connected, mode: .meeting)
@@ -483,11 +479,6 @@ extension AppDelegate {
                     // Own live engines (ElevenLabs, Apple) give no speaker labels.
                     DictationOverlayController.shared.showInfoDuringRecording(
                         message: String(localized: "No speaker labels"), mode: .meeting, duration: 3)
-                }
-                if !cloudModeEnabled, !localPreview {
-                    DictationOverlayController.shared.store.onTurnOnLiveTranscript = { [weak self] in
-                        self?.turnOnMeetingLiveTranscript()
-                    }
                 }
             }
             didStart = true
@@ -574,202 +565,63 @@ extension AppDelegate {
 
     // MARK: - Real-Time Transcription Setup
 
+    /// Builds the meeting's controller and fan-out and starts its first engine. Record only starts none.
     func setupMeetingLiveTranscription(
         cloudModeEnabled: Bool,
         localPreview: Bool
     ) async -> LiveTranscriptStore {
-        if cloudModeEnabled {
-            return await setupRealtimeTranscription(sessionID: activeMeetingTranscriptionSessionID)
-        }
-
-        guard localPreview else {
-            Log.app.info("Local meeting mode selected — live preview disabled, recording only")
-            return LiveTranscriptStore()
-        }
-
-        Log.app.info("Local meeting mode selected — starting live Whisper preview")
         let store = LiveTranscriptStore()
-        store.isActive = true
-        store.connectionStatus = .connected
-
-        let whisper = whisperTranscriptionService
-        whisper.beginRecordingHold()
-        let stream = LocalWhisperStreamingService(
-            transcribe: { samples in
-                try await whisper.transcribeRawSamples(samples)
-            },
-            onText: { [weak self, store] text in
-                let tokens = [RealtimeToken(text: text, isFinal: false)]
-                await store.processTokens(tokens)
-                await self?.updateRecordingFeedbackTokens(tokens, mode: .meeting)
-            },
-            onError: { [weak self, store] error in
-                Log.whisper.warning("Local meeting preview failed: \(error.localizedDescription)")
-                await MainActor.run {
-                    store.connectionStatus = .failed("Live preview unavailable")
-                }
-                await self?.updateRecordingFeedbackConnectionStatus(
-                    .failed("Live preview unavailable"),
-                    mode: .meeting
-                )
-            }
+        let target = initialMeetingTarget(cloudModeEnabled: cloudModeEnabled, localPreview: localPreview)
+        store.speakerLabels = target.engine == .didunyCloud || !target.isLive
+        let afterStop: EngineID = if case let .afterStopOnly(engine) = target { engine }
+            else { SettingsStorage.shared.modeDefaults.engine(for: .recordOnly) }
+        let controller = makeMeetingEngineController(
+            start: target, afterStop: afterStop, store: store, sessionID: activeMeetingTranscriptionSessionID,
+            translation: activeMeetingTranslationLanguagePair.flatMap { activeMeetingTranslateTarget == nil ? $0 : nil }
         )
-
-        localMeetingStreamingService = stream
-        meetingRecorderService.onRealtimeAudioData = { [weak stream] pcmData in
-            Task { await stream?.appendPCM16(pcmData) }
+        meetingEngineController = controller
+        let fanOut = controller.fanOut
+        meetingRecorderService.onRealtimeAudioData = { fanOut.deliver($0) }
+        if target.isLive {
+            Log.app.info("Meeting starts live on \(target.engine.rawValue, privacy: .public)")
+            store.isActive = true
+            if target.segment == .thisMac, target.engine == .whisper { store.connectionStatus = .connected }
+        } else {
+            Log.app.info("Meeting starts with no live text")
         }
+        await controller.startInitial()
         return store
     }
 
-    /// Adds a cloud live transcript to an audio-only meeting recording, from now on. The recording stays
-    /// local: the final transcript is still made on this Mac from the whole audio after Stop.
-    func turnOnMeetingLiveTranscript() {
-        guard appState.meetingRecordingState == .recording, activeMeetingTranscriptionProvider == .local,
-              localMeetingStreamingService == nil, meetingRealtimeConnectTask == nil else { return }
-        guard UsageService.canOfferCloudTranscription(hasStoredSession: AuthService.hasStoredSession,
-                                                      usage: UsageService.shared.cachedUsage) else {
-            DictationOverlayController.shared.showInfoDuringRecording(
-                message: String(localized: "Sign in to Diduny with minutes left to turn on the live transcript."),
-                mode: .meeting, duration: 4)
-            return
-        }
-        DictationOverlayController.shared.store.onTurnOnLiveTranscript = nil
-        let sessionID = activeMeetingTranscriptionSessionID
-        Task { @MainActor in
-            let store = await setupRealtimeTranscription(sessionID: sessionID)
-            guard appState.meetingRecordingState == .recording, activeMeetingTranscriptionSessionID == sessionID else {
-                _ = await stopMeetingLiveTranscription()
-                return
-            }
-            appState.liveTranscriptStore = store
-            DictationOverlayController.shared.store.showRunningMeeting(segment: .cloud, engine: .didunyCloud)
+    /// The start's engine as a target. Own engines stream live; Record only keeps its route's engine.
+    private func initialMeetingTarget(cloudModeEnabled: Bool, localPreview: Bool) -> MeetingEngineTarget {
+        if meetingRealtimeService is ElevenLabsRealtimeService { return .live(.elevenLabs) }
+        if meetingRealtimeService is AppleLiveTranscriptionService { return .live(.appleSpeech) }
+        let route = activeMeetingStartRoute
+        switch RunningMeetingSession.segment(recordOnly: route?.recordOnly == true, cloudMode: cloudModeEnabled, localPreview: localPreview) {
+        case .cloud: return .live(.didunyCloud)
+        case .thisMac: return .live(.whisper)
+        case .recordOnly:
+            return .afterStopOnly(route?.segment == .recordOnly && route?.provider == .local ? route?.engine ?? .whisper
+                : SettingsStorage.shared.modeDefaults.engine(for: .recordOnly))
         }
     }
 
+    /// Ends the meeting's engines. `finalizeCloud` lets the current one finish (Stop); otherwise everything is cut
+    /// at once and nothing may write status or text afterwards (Cancel, sleep, capture error).
     @discardableResult
     func stopMeetingLiveTranscription(finalizeCloud: Bool = false) async -> Bool {
-        meetingRealtimeConnectTask?.cancel()
-        meetingRealtimeConnectTask = nil
-
-        if let localMeetingStreamingService {
-            meetingRecorderService.onRealtimeAudioData = nil
-            self.localMeetingStreamingService = nil
-            await localMeetingStreamingService.stop()
-            appState.liveTranscriptStore?.connectionStatus = .disconnected
-            return true
-        }
-
-        let rtService: RealtimeTranscriptionProtocol = meetingRealtimeService ?? realtimeTranscriptionService
-        meetingRealtimeService = nil
-        var didReceiveFinalization = true
-        if finalizeCloud, appState.liveTranscriptStore != nil {
-            let result = await rtService.finalize(profile: .safe)
-            didReceiveFinalization = result.didReceiveFinishedSignal
-        }
-        await rtService.disconnect()
-        rtService.clearCallbacks()
+        let controller = meetingEngineController
+        meetingEngineController = nil
+        let confirmed = await controller?.shutdown(finalize: finalizeCloud) ?? true
         meetingRecorderService.onRealtimeAudioData = nil
-        await meetingTokenCoalescer?.flushNow()
-        meetingTokenCoalescer = nil
-        return didReceiveFinalization
-    }
-
-    private func setupRealtimeTranscription(sessionID: UUID?) async -> LiveTranscriptStore {
-        let store = await MainActor.run { LiveTranscriptStore() }
-
-        let rtService: RealtimeTranscriptionProtocol = meetingRealtimeService ?? realtimeTranscriptionService
-        let isByok = meetingRealtimeService != nil
-        await MainActor.run { store.speakerLabels = !isByok }
-
-        // Stream the exact same mixed mono audio that is written to fallback WAV.
-        meetingRecorderService.onRealtimeAudioData = { [weak rtService] pcmData in
-            rtService?.sendAudioData(pcmData)
+        meetingRealtimeService = nil
+        if localMeetingStreamingService != nil {
+            localMeetingStreamingService = nil
+            appState.liveTranscriptStore?.connectionStatus = .disconnected
         }
-
-        // Wire token callbacks. Batches are coalesced to ≤10Hz before touching
-        // the @Observable store — per-message main-actor updates made SwiftUI
-        // re-render for every WS message and lag grew with the meeting.
-        let coalescer = RealtimeTokenCoalescer { [weak self, weak store] events in
-            for event in events {
-                switch event {
-                case let .tokens(tokens):
-                    store?.processTokens(tokens)
-                    self?.updateRecordingFeedbackTokens(tokens, mode: .meeting)
-                case .segmentBoundary:
-                    store?.markSegmentBoundary()
-                    self?.markRecordingFeedbackSegmentBoundary(mode: .meeting)
-                }
-            }
-        }
-        meetingTokenCoalescer = coalescer
-        rtService.onTokensReceived = { [weak coalescer] tokens in
-            coalescer?.add(tokens)
-        }
-
-        let connectionStatusHandler: (RealtimeConnectionStatus) -> Void = { [weak self, weak store] status in
-            Task { @MainActor in
-                self?.applyMeetingRealtimeConnectionStatus(
-                    status,
-                    sessionID: sessionID,
-                    store: store
-                )
-            }
-        }
-
-        // Boundaries go through the coalescer so they stay ordered relative to
-        // the token batches it is still holding.
-        rtService.onSegmentBoundary = { [weak coalescer] boundary in
-            coalescer?.addBoundary(boundary)
-        }
-
-        let errorHandler: (Error) -> Void = { [weak self] error in
-            Log.transcription.error("Realtime transcription error: \(error.localizedDescription)")
-            Task { @MainActor in
-                self?.recordMeetingByokError(error, sessionID: sessionID)
-                self?.fallBackMeetingToLocalIfUsageUnavailable(error, sessionID: sessionID)
-            }
-            // Don't stop recording — file recording continues independently
-        }
-        rtService.setConnectionHandlers(
-            onError: errorHandler,
-            onConnectionStatusChanged: connectionStatusHandler
-        )
-
-        // Connect in the background — recording start never waits for the
-        // network, and CloudRealtimeService buffers audio until the socket is
-        // up. On failure the recording continues (async transcription fallback
-        // on stop); the store's connectionStatus reflects progress in the UI.
-        meetingRealtimeConnectTask?.cancel()
-        meetingRealtimeConnectTask = Task { [weak self, weak store] in
-            guard let self else { return }
-            do {
-                let languageHints = SettingsStorage.shared.speechLanguageHints
-                try await rtService.connect(
-                    languageHints: languageHints,
-                    strictLanguageHints: !languageHints.isEmpty
-                )
-                await MainActor.run {
-                    store?.isActive = true
-                }
-                Log.transcription.info("Meeting real-time transcription connected successfully")
-            } catch {
-                Log.transcription.error(
-                    "Meeting real-time transcription FAILED to connect: \(error.localizedDescription)"
-                )
-                // Stop/cancel paths abort this task; don't overwrite the store
-                // state they are tearing down.
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    store?.isActive = true
-                    store?.connectionStatus = .failed(error.localizedDescription)
-                }
-                recordMeetingByokError(error, sessionID: sessionID)
-                fallBackMeetingToLocalIfUsageUnavailable(error, sessionID: sessionID)
-            }
-        }
-
-        return store
+        DictationOverlayController.shared.store.meetingSwitchHandler = nil
+        return confirmed
     }
 
     @discardableResult
@@ -812,7 +664,6 @@ extension AppDelegate {
               case .usageLimitExceeded = error as? RealtimeTranscriptionError
         else { return false }
         activeMeetingTranscriptionProvider = .local
-        meetingRecorderService.onRealtimeAudioData = nil
         Log.app.info("Meeting transcription switched from Cloud to Local after usage rejection")
         return true
     }
@@ -906,8 +757,10 @@ extension AppDelegate {
         let stopStartRoute = activeMeetingStartRoute
         let recordOnlyEngine = translateTarget == nil && stopStartRoute?.recordOnly == true ? stopStartRoute?.engine : nil
 
-        // Finalize and disconnect real-time transcription (if active)
+        // Finalize and disconnect real-time transcription (if active). A switch still connecting is cancelled first.
+        let engineController = meetingEngineController
         let didReceiveRealtimeFinalization = await stopMeetingLiveTranscription(finalizeCloud: true)
+        _ = engineController
 
         // Next meeting start should hit a warm SCShareableContent cache.
         ShareableContentCache.shared.prewarm()

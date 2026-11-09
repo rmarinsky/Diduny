@@ -113,11 +113,11 @@ enum EdgeCommandPanelPlacement {
         switch presentation {
         case .collapsed: 0
         case let .commands(isCloud): isCloud ? 326 : 250
-        // Design-spec 10.3: dictation 311.7, meeting 406, Translate meeting 362, meeting prompt 229.
+        // Design-spec 10.3: dictation 311.7, meeting 417 (two captioned segment groups), Translate meeting 362, meeting prompt 229.
         case let .live(mode):
             switch mode {
             case .meetingTranslation: 362
-            case _ where mode.isMeeting: 406
+            case _ where mode.isMeeting: 417
             default: 312
             }
         case .meetingSuggestion: 229

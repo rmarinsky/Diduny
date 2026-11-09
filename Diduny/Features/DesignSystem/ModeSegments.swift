@@ -51,6 +51,8 @@ struct ModeSegments<ID: Hashable>: View {
     let items: [Item]
     @Binding var selection: ID
     var accessibilityLabel: LocalizedStringKey = "Transcript mode"
+    /// An arrow pressed at the last segment: the next group takes it (-1 or +1).
+    var onStepPastEnd: ((Int) -> Void)?
 
     /// Left (-1) and Right (+1) arrows: the nearest enabled segment that way; stops at the ends.
     static func step(from current: ID, by direction: Int, in items: [Item]) -> ID {
@@ -81,7 +83,12 @@ struct ModeSegments<ID: Hashable>: View {
     }
 
     private func move(_ direction: Int) -> KeyPress.Result {
-        selection = Self.step(from: selection, by: direction, in: items)
+        let next = Self.step(from: selection, by: direction, in: items)
+        if next == selection, let onStepPastEnd {
+            onStepPastEnd(direction)
+        } else {
+            selection = next
+        }
         return .handled
     }
 }

@@ -10,6 +10,10 @@ struct TranslateMeetingPanelContent<Waveform: View>: View {
     /// A pair picked for this meeting only (decision 14 DEFAULT).
     let onPickPair: (TranslationLanguagePair) -> Void
     let onPickEngine: (EngineID) -> Void
+    /// Panel-only lines where a switch or a pair change happened.
+    var markers: [MeetingSwitchMarker] = []
+    var switchLine: MeetingSwitchText.Line?
+    var onFailureAction: () -> Void = {}
     /// "Other languages..." opens Settings > Languages.
     let onOpenLanguages: () -> Void
     @ViewBuilder var waveform: () -> Waveform
@@ -23,10 +27,16 @@ struct TranslateMeetingPanelContent<Waveform: View>: View {
                 fields
             }
             captionLine
+            if let switchLine {
+                WarningLine(
+                    message: switchLine.message, linkTitle: switchLine.linkTitle,
+                    action: onFailureAction, id: "livePanel.switchLine", linkID: "livePanel.switchLineAction"
+                )
+            }
             if model.isLive {
                 transcript
             } else {
-                CalmBox(title: "Recording", detail: "\(model.calmDetail ?? "")", height: Self.boxHeight)
+                CalmBox(title: "Recording", detail: "\(turns.isEmpty ? model.calmDetail ?? "" : MeetingSwitchText.translateCalmWithText(pair: model.pair, locale: model.locale))", height: Self.boxHeight)
             }
         }
     }
@@ -94,7 +104,8 @@ struct TranslateMeetingPanelContent<Waveform: View>: View {
 
     private var transcript: some View {
         TranscriptBox(height: Self.boxHeight) {
-            ForEach(turns) { turn in
+            ForEach(Array(turns.enumerated()), id: \.element.id) { index, turn in
+                markerLines(afterTurn: index)
                 VStack(alignment: .leading, spacing: 0) {
                     if let label = turn.label {
                         Text(verbatim: label)
@@ -118,6 +129,18 @@ struct TranslateMeetingPanelContent<Waveform: View>: View {
                 .padding(.top, turn.label == nil ? 0 : 6)
                 .textSelection(.enabled)
             }
+            ForEach(markers.indices.filter { markers[$0].afterTurnCount >= turns.count }, id: \.self) { markerLine(markers[$0]) }
         }
+    }
+
+    @ViewBuilder private func markerLines(afterTurn index: Int) -> some View {
+        ForEach(markers.indices.filter { markers[$0].afterTurnCount == index && index < turns.count }, id: \.self) { markerLine(markers[$0]) }
+    }
+
+    private func markerLine(_ marker: MeetingSwitchMarker) -> some View {
+        Text(verbatim: MeetingSwitchText.marker(marker, translateMeeting: true))
+            .font(DS.Font.caption)
+            .foregroundStyle(DS.Palette.secondary)
+            .accessibilityIdentifier("livePanel.marker")
     }
 }
