@@ -63,7 +63,10 @@ struct SettingsPageWidthTests {
             let limit = Self.column(window: window, max: max)
             let width = await contentWidth(page, language: "en", pageWidth: Self.pageWidth(window: window))
             #expect(width <= limit + 0.5, "\(name) at \(window) is \(width) wide, the column is \(limit)")
-            if fills { #expect(width >= limit - 0.5, "\(name) at \(window) is \(width), not filling \(limit)") }
+            // With legacy (always shown) scroll bars, as on the CI runner, the scroller takes its width from the page.
+            let scroller = NSScroller.preferredScrollerStyle == .legacy
+                ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
+            if fills { #expect(width >= limit - scroller - 0.5, "\(name) at \(window) is \(width), not filling \(limit)") }
         }
     }
 
