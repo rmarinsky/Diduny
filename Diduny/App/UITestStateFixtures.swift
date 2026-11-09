@@ -149,6 +149,7 @@
     // MARK: - Fake meeting engines
 
     /// Switching runs the real controller and machine; only the sessions are fake, and they are ready at once.
+    @MainActor
     final class UITestFakeMeetingSession: MeetingEngineSession {
         nonisolated let audioConsumer: @Sendable (Data) -> Void = { _ in }
         func start() async throws {}
@@ -156,6 +157,7 @@
         func cancel() async {}
     }
 
+    @MainActor
     extension UITestOpenTarget {
         static func installFakeMeetingEngines(mode: RecordingMode, overlay: DictationOverlayController) {
             guard mode.isMeeting else { return }

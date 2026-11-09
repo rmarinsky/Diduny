@@ -1390,9 +1390,7 @@
 "Applies to this meeting only" = "Applies to this meeting only";
 "Download model" = "Download model";
 "Recording only. The transcript will be ready after the meeting, made on this Mac." = "Recording only. The transcript will be ready after the meeting, made on this Mac.";
-"Turn on live transcript" = "Turn on live transcript";
 "Live view from now, in the cloud. The final transcript is still made on this Mac." = "Live view from now, in the cloud. The final transcript is still made on this Mac.";
-"Sign in to Diduny with minutes left to turn on the live transcript." = "Sign in to Diduny with minutes left to turn on the live transcript.";
 "Looks like the call ended" = "Looks like the call ended";
 "%@ stopped. Diduny is still recording. If you rejoin, recording just continues." = "%@ stopped. Diduny is still recording. If you rejoin, recording just continues.";
 "Back in the call — still recording" = "Back in the call — still recording";
@@ -1764,7 +1762,6 @@
 "On battery, live text on this Mac drains it fast." = "On battery, live text on this Mac drains it fast.";
 "Use Cloud" = "Use Cloud";
 "Recording without live text" = "Recording without live text";
-"To see text from now on, use Turn on live transcript below." = "To see text from now on, use Turn on live transcript below.";
 "Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript." = "Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript.";
 "Download %@" = "Download %@";
 "On this Mac, recommended" = "On this Mac, recommended";
@@ -2041,3 +2038,31 @@
 
 /* Dev feedback 2026-11-09: preview past its limit */
 "Translation after Stop" = "Translation after Stop";
+
+/* Panels redesign WP-63 */
+"Recording · connecting..." = "Recording · connecting...";
+"Pick Local or Cloud to see text from now on." = "Pick Local or Cloud to see text from now on.";
+"%@ · switched to %@" = "%@ · switched to %@";
+"%@ · now %@" = "%@ · now %@";
+"No text here until you switch back. All of it goes into the transcript after Stop." = "No text here until you switch back. All of it goes into the transcript after Stop.";
+"No live text for %@. It goes into the transcript after Stop." = "No live text for %@. It goes into the transcript after Stop.";
+"No internet. Still recording without live text." = "No internet. Still recording without live text.";
+"No internet. Still on %@." = "No internet. Still on %@.";
+"Whisper has no model yet. Still on %@." = "Whisper has no model yet. Still on %@.";
+"Use Apple Speech" = "Use Apple Speech";
+"Diduny quota used up. Still on %@." = "Diduny quota used up. Still on %@.";
+"Use ElevenLabs" = "Use ElevenLabs";
+"Sign in to use Diduny Cloud. Still on %@." = "Sign in to use Diduny Cloud. Still on %@.";
+"Check your ElevenLabs key. Still on %@." = "Check your ElevenLabs key. Still on %@.";
+"Couldn't switch. Still on %@." = "Couldn't switch. Still on %@.";
+"Diduny quota used up. Recording continues without live text." = "Diduny quota used up. Recording continues without live text.";
+"No internet. Recording continues." = "No internet. Recording continues.";
+"Use Local" = "Use Local";
+"Text so far comes back with Diduny Cloud. What is said now is translated into %@ after Stop." = "Text so far comes back with Diduny Cloud. What is said now is translated into %@ after Stop.";
+"The whole recording is saved. No engine on this Mac can make the transcript yet. Download a model in Local models." = "The whole recording is saved. No engine on this Mac can make the transcript yet. Download a model in Local models.";
+"The engine changed during this meeting, so %@ makes one transcript from the whole recording, on this Mac. It replaces the live text." = "The engine changed during this meeting, so %@ makes one transcript from the whole recording, on this Mac. It replaces the live text.";
+"The engine changed during this meeting, so %@ makes one transcript from the whole recording, in the cloud. It replaces the live text." = "The engine changed during this meeting, so %@ makes one transcript from the whole recording, in the cloud. It replaces the live text.";
+"The live text was a preview from %@. %@ is making the transcript of the whole meeting, on this Mac. It replaces the live text." = "The live text was a preview from %@. %@ is making the transcript of the whole meeting, on this Mac. It replaces the live text.";
+"The live text was a preview from %@. %@ is making the transcript of the whole meeting, in the cloud. It replaces the live text." = "The live text was a preview from %@. %@ is making the transcript of the whole meeting, in the cloud. It replaces the live text.";
+"%@ is making the transcript of the whole meeting, on this Mac." = "%@ is making the transcript of the whole meeting, on this Mac.";
+"%@ is making the transcript of the whole meeting, in the cloud." = "%@ is making the transcript of the whole meeting, in the cloud.";

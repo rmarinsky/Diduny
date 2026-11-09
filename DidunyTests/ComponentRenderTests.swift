@@ -301,7 +301,7 @@ private enum ComponentGallery {
                 Text(verbatim: "One risk: the notarization queue was slow last week.")
             }
             CalmBox(title: "Recording without live text",
-                    detail: "To see text from now on, use Turn on live transcript below.",
+                    detail: "Pick Local or Cloud to see text from now on.",
                     height: DS.Size.transcriptDictation)
             ResultBox(text: "Yes, by the way, I want to refresh the window view now.")
             ResultBox(text: String(repeating: "A long result that has to scroll inside the box once it passes 170 points. ", count: 12))

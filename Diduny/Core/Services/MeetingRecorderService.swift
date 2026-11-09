@@ -239,7 +239,7 @@ final class MeetingRecorderService: NSObject {
             do {
                 let result = try MeetingChunkStitcher.stitch(chunkURLs: capturedChunkURLs, outputURL: target)
                 stitchResult = result
-                lastRecordingStats.skippedChunks = result.skippedChunks
+                lastRecordingStats.skippedChunks = result.skippedChunks.count
                 stitchedURL = result.outputURL
                 Log.recording.info(
                     "Stitch ok: appended=\(result.appendedChunkCount) skipped=\(result.skippedChunks) totalDur=\(String(format: "%.2f", result.totalDurationSeconds))s"

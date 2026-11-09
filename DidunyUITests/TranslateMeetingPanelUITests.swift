@@ -55,4 +55,14 @@ final class TranslateMeetingPanelUITests: DidunyUITestCase {
         click(waitForElement(element(app, "pickerMenu.row.otherLanguages")))
         waitForElement(element(app, "section.languages"))
     }
+
+    func test_T1_TM_24_nonLiveEngineTurnsThePanelRecordOnly() {
+        let app = openPanel(extra: ["--ui-testing-transcript-emit=0"])
+        click(waitForElement(element(app, "livePanel.engine")))
+        click(waitForElement(element(app, "pickerMenu.row.local-whisper")))
+        waitForElement(element(app, "livePanel.calm"))
+        waitForElement(element(app, "livePanel.status"), toMatch: "label == 'Recording · no live text'")
+        XCTAssertFalse(app.buttons["livePanel.showOriginal"].exists)
+        waitForText("Translating meeting", identifier: "livePanel.title", in: app)
+    }
 }

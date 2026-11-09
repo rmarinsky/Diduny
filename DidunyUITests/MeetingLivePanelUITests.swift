@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 /// Meeting live panel (test-plan T1-MT-20, T1-MT-26, T1-A11Y-01; WP-31), opened with
@@ -23,8 +24,7 @@ final class MeetingLivePanelUITests: DidunyUITestCase {
     }
 
     /// T1-MT-26
-    func testNoBatteryWarningOutsideThisMac() throws {
-        try XCTSkipIf(true, "Needs mid-meeting segment switching (WP-63): segments are locked to the running one")
+    func testNoBatteryWarningOutsideThisMac() {
         let app = open("livePanel.meeting", profile: .battery)
         waitForElement(app.buttons["livePanel.segment.cloudLive"])
         XCTAssertFalse(app.descendants(matching: .any)["livePanel.batteryWarning"].exists)
@@ -46,4 +46,96 @@ final class MeetingLivePanelUITests: DidunyUITestCase {
         let minimize = app.buttons["livePanel.minimize"]
         waitForElement(minimize, toMatch: "label == 'Hide recording panel'")
     }
+
+    /// T1-MT-21
+    func test_T1_MT_21_everySegmentIsClickable() {
+        let app = open("livePanel.meeting")
+        app.buttons["livePanel.segment.localLive"].click()
+        waitForElement(app.staticTexts["livePanel.marker"])
+        XCTAssertTrue(app.staticTexts["livePanel.marker"].label.hasSuffix("switched to Local"))
+        waitForText("Live text (preview) · no speaker labels", identifier: "livePanel.caption", in: app)
+        bridge("clock.advance", ["seconds": 5])
+        app.buttons["livePanel.segment.recordOnly"].click()
+        waitForElement(app.buttons["livePanel.segment.recordOnly"], toMatch: "isSelected == true")
+        let status = app.descendants(matching: .any)["livePanel.status"]
+        waitForElement(status, toMatch: "label == 'Recording, no live text'")
+        // Text stays on Record only and Copy works (Roman, 2026-11-09).
+        waitForElement(app.descendants(matching: .any)["livePanel.gapNote"])
+        XCTAssertTrue(app.buttons["livePanel.copy"].isEnabled)
+        app.buttons["livePanel.segment.cloudLive"].click()
+        waitForElement(app.buttons["livePanel.segment.cloudLive"], toMatch: "isSelected == true")
+        XCTAssertEqual(probe()["session"].flatMap { ($0 as? [String: Any])?["segment"] as? String }, MeetingSegmentRaw.cloud)
+    }
+
+    /// T1-MT-22
+    func test_T1_MT_22_localEngineMenuSwitches() {
+        let app = open("livePanel.meeting.localLive")
+        let engine = waitForElement(app.buttons["livePanel.engine"])
+        engine.click()
+        let apple = app.descendants(matching: .any)["pickerMenu.row.apple-speech"]
+        waitForElement(apple)
+        apple.click()
+        waitForText("Live text · no speaker labels", identifier: "livePanel.caption", in: app)
+        waitForElement(app.staticTexts["livePanel.marker"])
+        XCTAssertTrue(app.staticTexts["livePanel.marker"].label.hasSuffix("switched to Apple Speech"))
+    }
+
+    /// T1-MT-24
+    func test_T1_MT_24_cloudEngineSwitch() {
+        let app = open("livePanel.meeting", profile: LaunchProfile.standard.adding("--ui-testing-elevenlabs-key=present"))
+        let engine = waitForElement(app.buttons["livePanel.engine"])
+        engine.click()
+        let row = app.descendants(matching: .any)["pickerMenu.row.elevenlabs"]
+        waitForElement(row)
+        row.click()
+        waitForText("Live text · no speaker labels", identifier: "livePanel.caption", in: app)
+        XCTAssertTrue(waitForElement(app.staticTexts["livePanel.marker"]).label.hasSuffix("switched to ElevenLabs"))
+    }
+
+    /// T1-MT-25
+    func test_T1_MT_25_batteryLinkSwitchesToCloud() {
+        let app = open("livePanel.meeting.localLive", profile: .battery)
+        waitForElement(app.descendants(matching: .any)["livePanel.batteryWarning"])
+        let link = app.descendants(matching: .any)["livePanel.useCloud"]
+        waitForElement(link)
+        link.click()
+        waitForElement(app.buttons["livePanel.segment.cloudLive"], toMatch: "isSelected == true")
+        XCTAssertFalse(app.descendants(matching: .any)["livePanel.batteryWarning"].exists)
+        app.buttons["livePanel.segment.localLive"].click()
+        waitForElement(app.descendants(matching: .any)["livePanel.batteryWarning"])
+        bridge("power", ["source": "ac"])
+        waitForDisappearance(app.descendants(matching: .any)["livePanel.batteryWarning"])
+    }
+
+    /// T1-A11Y-02
+    func test_T1_A11Y_02_arrowMovesAcrossGroups() {
+        let app = open("livePanel.meeting")
+        let cloud = waitForElement(app.buttons["livePanel.segment.cloudLive"])
+        cloud.click()
+        cloud.typeKey(.rightArrow, modifierFlags: [])
+        waitForElement(app.buttons["livePanel.segment.recordOnly"], toMatch: "isSelected == true")
+    }
+
+    /// Marker pair (ADR-0013 risks): the line shows in the panel and stays out of Copy.
+    func test_markerShowsInThePanel() {
+        let app = open("livePanel.meeting")
+        app.buttons["livePanel.segment.recordOnly"].click()
+        let marker = waitForElement(app.staticTexts["livePanel.marker"])
+        XCTAssertTrue(marker.label.contains("switched to Record only"))
+    }
+
+    func test_markerStaysOutOfCopy() {
+        let app = open("livePanel.meeting")
+        app.buttons["livePanel.segment.recordOnly"].click()
+        waitForElement(app.staticTexts["livePanel.marker"])
+        NSPasteboard.general.clearContents()
+        app.buttons["livePanel.copy"].click()
+        let copied = NSPasteboard.general.string(forType: .string) ?? ""
+        XCTAssertFalse(copied.isEmpty)
+        XCTAssertFalse(copied.contains("switched to"))
+    }
+}
+
+private enum MeetingSegmentRaw {
+    static let cloud = "cloud"
 }

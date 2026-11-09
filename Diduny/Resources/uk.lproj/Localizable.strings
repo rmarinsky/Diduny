@@ -1390,9 +1390,7 @@
 "Applies to this meeting only" = "Лише для цієї зустрічі";
 "Download model" = "Завантажити модель";
 "Recording only. The transcript will be ready after the meeting, made on this Mac." = "Лише запис. Транскрипція буде готова після зустрічі, на цьому Mac.";
-"Turn on live transcript" = "Увімкнути живу транскрипцію";
 "Live view from now, in the cloud. The final transcript is still made on this Mac." = "Наживо відтепер, у хмарі. Остаточна транскрипція все одно створюється на цьому Mac.";
-"Sign in to Diduny with minutes left to turn on the live transcript." = "Щоб увімкнути живу транскрипцію, увійдіть у Diduny з доступними хвилинами.";
 "Looks like the call ended" = "Схоже, дзвінок завершився";
 "%@ stopped. Diduny is still recording. If you rejoin, recording just continues." = "%@ зупинився. Diduny досі записує. Якщо ви повернетеся, запис просто продовжиться.";
 "Back in the call — still recording" = "Знову в дзвінку — запис триває";
@@ -1764,7 +1762,6 @@
 "On battery, live text on this Mac drains it fast." = "Від батареї живий текст на цьому Mac швидко її розряджає.";
 "Use Cloud" = "Перейти на Хмару";
 "Recording without live text" = "Запис без живого тексту";
-"To see text from now on, use Turn on live transcript below." = "Щоб бачити текст відтепер, натисніть «Увімкнути живу транскрипцію» нижче.";
 "Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript." = "Parakeet V3 не завантажено. Доки його немає, транскрипт робить Whisper Large v3 Turbo.";
 "Download %@" = "Завантажити %@";
 "On this Mac, recommended" = "На цьому Mac, рекомендовано";
@@ -2041,3 +2038,31 @@
 
 /* Dev feedback 2026-11-09: preview past its limit */
 "Translation after Stop" = "Переклад після Stop";
+
+/* Panels redesign WP-63 */
+"Recording · connecting..." = "Запис · підключення...";
+"Pick Local or Cloud to see text from now on." = "Вибери Локально або Хмару, щоб бачити текст відтепер.";
+"%@ · switched to %@" = "%@ · перемкнено: %@";
+"%@ · now %@" = "%@ · тепер %@";
+"No text here until you switch back. All of it goes into the transcript after Stop." = "Тут не буде тексту, поки не перемкнеш назад. Усе це увійде в транскрипт після зупинки.";
+"No live text for %@. It goes into the transcript after Stop." = "Без тексту наживо: %@. Це увійде в транскрипт після зупинки.";
+"No internet. Still recording without live text." = "Немає інтернету. Запис триває без тексту наживо.";
+"No internet. Still on %@." = "Немає інтернету, режим лишається: %@.";
+"Whisper has no model yet. Still on %@." = "Whisper ще не має моделі, режим лишається: %@.";
+"Use Apple Speech" = "Перейти на Apple Speech";
+"Diduny quota used up. Still on %@." = "Квоту Diduny вичерпано, режим лишається: %@.";
+"Use ElevenLabs" = "Перейти на ElevenLabs";
+"Sign in to use Diduny Cloud. Still on %@." = "Увійди, щоб користуватися Diduny Cloud. Режим лишається: %@.";
+"Check your ElevenLabs key. Still on %@." = "Перевір ключ ElevenLabs. Режим лишається: %@.";
+"Couldn't switch. Still on %@." = "Не вдалося перемкнути. Режим лишається: %@.";
+"Diduny quota used up. Recording continues without live text." = "Квоту Diduny вичерпано. Запис триває без тексту наживо.";
+"No internet. Recording continues." = "Немає інтернету. Запис триває.";
+"Use Local" = "Перейти на Локально";
+"Text so far comes back with Diduny Cloud. What is said now is translated into %@ after Stop." = "Текст, що вже є, повернеться з Diduny Cloud. Те, що кажуть зараз, перекладемо на %@ після зупинки.";
+"The whole recording is saved. No engine on this Mac can make the transcript yet. Download a model in Local models." = "Весь запис збережено. На цьому Mac поки нема рушія для транскрипту. Завантаж модель у Локальних моделях.";
+"The engine changed during this meeting, so %@ makes one transcript from the whole recording, on this Mac. It replaces the live text." = "Під час зустрічі рушій змінювався, тому %@ робить один транскрипт з усього запису, на цьому Mac. Він замінить текст наживо.";
+"The engine changed during this meeting, so %@ makes one transcript from the whole recording, in the cloud. It replaces the live text." = "Під час зустрічі рушій змінювався, тому %@ робить один транскрипт з усього запису, у хмарі. Він замінить текст наживо.";
+"The live text was a preview from %@. %@ is making the transcript of the whole meeting, on this Mac. It replaces the live text." = "Текст наживо був чернеткою від %@. %@ робить транскрипт усієї зустрічі, на цьому Mac. Він замінить текст наживо.";
+"The live text was a preview from %@. %@ is making the transcript of the whole meeting, in the cloud. It replaces the live text." = "Текст наживо був чернеткою від %@. %@ робить транскрипт усієї зустрічі, у хмарі. Він замінить текст наживо.";
+"%@ is making the transcript of the whole meeting, on this Mac." = "%@ робить транскрипт усієї зустрічі, на цьому Mac.";
+"%@ is making the transcript of the whole meeting, in the cloud." = "%@ робить транскрипт усієї зустрічі, у хмарі.";
