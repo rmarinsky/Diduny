@@ -46,6 +46,9 @@ final class SystemAudioCaptureService: NSObject {
     private var currentChunkStartedAt: Date = .init()
     /// Frames written into the current chunk; used to compute durationSeconds on rotation.
     private var currentChunkFrameCount: Int = 0
+    private let writtenFrameCount = OSAllocatedUnfairLock<Int>(initialState: 0)
+    /// Frames the saved audio holds since capture started (ADR-0013 D4). Monotonic across chunk rotation and a stream restart.
+    var writtenFrames: Int { writtenFrameCount.withLock { $0 } }
     /// Writer for `tracksURL` (accessed only on fileWriteQueue).
     private var tracksWriter: MeetingTracksWriter?
 
@@ -173,6 +176,7 @@ final class SystemAudioCaptureService: NSObject {
         // Reset chunk rotation state (RLR-M3b)
         currentChunkIndex = 1
         currentChunkStartedAt = Date()
+        writtenFrameCount.withLock { $0 = 0 }
         currentChunkFrameCount = 0
 
         // Reset mixer state
@@ -1004,6 +1008,7 @@ extension SystemAudioCaptureService: SCStreamOutput {
         do {
             try audioFile.write(from: buffer)
             currentChunkFrameCount += samples.count
+            writtenFrameCount.withLock { $0 += samples.count }
 
             let now = Date()
             let currentFlushInterval = flushInterval

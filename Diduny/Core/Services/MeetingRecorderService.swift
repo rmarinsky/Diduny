@@ -36,6 +36,9 @@ final class MeetingRecorderService: NSObject {
         }
     }
 
+    /// Frames the saved audio holds so far; 0 before capture starts.
+    var writtenFrames: Int { systemAudioService?.writtenFrames ?? 0 }
+
     var onMixedSamples: (([Float]) -> Void)? {
         didSet {
             systemAudioService?.onMixedSamples = onMixedSamples

@@ -371,7 +371,7 @@ struct MeetingQueueSeamTests {
     }
 
     private struct PassthroughTranslator: TextTranslationProtocol {
-        func translate(text: String, targetLanguage: String, sourceLanguage: String?, context: String?) async throws -> String {
+        func translate(text: String, sourceLanguage _: String, targetLanguage: String) async throws -> String {
             "\(text) [\(targetLanguage)]"
         }
     }
@@ -451,5 +451,41 @@ struct MeetingQueueSeamTests {
         ]) { _, _ in throw Failure.boom }
         #expect(result.text == "kept")
         #expect(result.error is Failure)
+    }
+}
+
+struct MeetingAudioFanOutTests {
+    private final class Sink: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        func add() { lock.withLock { count += 1 } }
+        var total: Int { lock.withLock { count } }
+    }
+
+    @Test("Each buffer reaches exactly one consumer across swaps")
+    func oneConsumer() async {
+        let fanOut = MeetingAudioFanOut()
+        let first = Sink(), second = Sink()
+        fanOut.setConsumer { _ in first.add() }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { for _ in 0 ..< 2000 { fanOut.deliver(Data([1])) } }
+            group.addTask {
+                for index in 0 ..< 200 {
+                    fanOut.setConsumer(index.isMultiple(of: 2) ? { _ in second.add() } : { _ in first.add() })
+                }
+            }
+        }
+        #expect(first.total + second.total == 2000)
+    }
+
+    @Test("The swap returns the frame it read; no consumer drops the audio")
+    func swapReadsFrame() {
+        let fanOut = MeetingAudioFanOut()
+        let sink = Sink()
+        #expect(fanOut.setConsumer({ _ in sink.add() }, readFrame: { 1234 }) == 1234)
+        fanOut.deliver(Data([1]))
+        fanOut.setConsumer(nil)
+        fanOut.deliver(Data([1]))
+        #expect(sink.total == 1)
     }
 }
