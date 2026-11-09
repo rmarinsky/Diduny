@@ -62,7 +62,8 @@ final class ProvidersUITests: DidunyUITestCase {
         for (id, subtitle) in expected {
             // The language row sits behind the Dock on the 768 pt CI screen (seen at y 721).
             let button = element("providers.languages.\(id)")
-            scrollIntoView(button, in: window.scrollViews.firstMatch)
+            // Scroll over the table itself: the window's first scroll view is the sidebar, which never moved the page.
+            scrollIntoView(button, in: element("providers.table"))
             button.click()
             let popup = waitForElement(element("popup.languages.\(id)"))
             XCTAssertTrue(popup.staticTexts[subtitle].exists, id)
