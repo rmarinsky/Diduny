@@ -89,6 +89,20 @@ struct PasteMarkTests {
         #expect(PasteMarkPlan.plausibleCaretRect(glyph) == glyph)
     }
 
+    @Test func pulsePlaysWhereTheLogoEnds() {
+        let quick = PasteMarkPlan.landing(endFoundAfter: 0.02, reduceMotion: false)
+        #expect(quick.glides && quick.pulseAt == 0.24)
+        #expect(abs(quick.fadeAt - 0.70) < 0.0001)
+        let slow = PasteMarkPlan.landing(endFoundAfter: 0.25, reduceMotion: false)
+        #expect(slow.glides && abs((slow.pulseAt ?? 0) - 0.47) < 0.0001)
+        let late = PasteMarkPlan.landing(endFoundAfter: 0.5, reduceMotion: false)
+        #expect(!late.glides && late.pulseAt == 0.22 && late.fadeAt == 0.68)
+        let none = PasteMarkPlan.landing(endFoundAfter: nil, reduceMotion: false)
+        #expect(!none.glides && none.pulseAt == 0.22)
+        let reduced = PasteMarkPlan.landing(endFoundAfter: 0.02, reduceMotion: true)
+        #expect(!reduced.glides && reduced.pulseAt == nil)
+    }
+
     @Test func pollFindsTheEndOfThePastedText() async {
         let end = CaretPosition(location: 42, rect: CGRect(x: 300, y: 200, width: 8, height: 17))
         let geometry = FakeCaretGeometry(answers: [
@@ -134,5 +148,11 @@ struct PanelLogoEntranceTests {
         #expect(disc == CGRect(x: DS.Panel.padding, y: 200 - DS.Panel.padding - 28, width: 28, height: 28))
         #expect(EdgeCommandPanelLogoEntrance.duration <= 0.24)
         #expect(EdgeCommandPanelLogoEntrance.logoFade < EdgeCommandPanelLogoEntrance.duration)
+    }
+
+    @Test func onlyARecordingStartOpensFromTheLogo() {
+        #expect(EdgeCommandPanelLogoEntrance.plays(for: .immediate))
+        #expect(!EdgeCommandPanelLogoEntrance.plays(for: .morph))
+        #expect(!EdgeCommandPanelLogoEntrance.plays(for: .update))
     }
 }

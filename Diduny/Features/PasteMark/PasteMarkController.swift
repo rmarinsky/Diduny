@@ -94,24 +94,20 @@ final class PasteMarkController {
         model.phase = .done
 
         let geometry = geometry
-        let glide = Task { [weak self] in
-            let end = await Task.detached(priority: .userInitiated) {
-                await PasteMarkPlan.pollPastedEnd(geometry: geometry, before: start.location)
-            }.value
-            guard let self, let end, self.generation == generation, !reduceMotion,
-                  ContinuousClock.now - began < .seconds(timeline.fadeStart)
-            else { return }
-            self.glide(to: end.rect, duration: timeline.glide)
-        }
-        defer { glide.cancel() }
-
-        if !reduceMotion {
-            guard await sleep(until: began + .seconds(timeline.pulseStart), generation: generation) else { return }
+        let end = await Task.detached(priority: .userInitiated) {
+            await PasteMarkPlan.pollPastedEnd(geometry: geometry, before: start.location)
+        }.value
+        guard !Task.isCancelled, self.generation == generation else { return }
+        let found = end.map { _ in (ContinuousClock.now - began).seconds }
+        let landing = PasteMarkPlan.landing(endFoundAfter: found, reduceMotion: reduceMotion)
+        if landing.glides, let end { glide(to: end.rect, duration: timeline.glide) }
+        if let pulseAt = landing.pulseAt {
+            guard await sleep(until: began + .seconds(pulseAt), generation: generation) else { return }
             model.pulses += 1
         }
-        guard await sleep(until: began + .seconds(timeline.fadeStart), generation: generation) else { return }
+        guard await sleep(until: began + .seconds(landing.fadeAt), generation: generation) else { return }
         model.isVisible = false
-        guard await sleep(until: began + .seconds(timeline.total), generation: generation) else { return }
+        guard await sleep(until: began + .seconds(landing.fadeAt + timeline.fade), generation: generation) else { return }
         clear()
     }
 
@@ -202,5 +198,12 @@ private struct PasteMarkView: View {
     var body: some View {
         LogoBadge(phase: model.phase, isVisible: model.isVisible, pulseTrigger: model.pulses)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private extension Duration {
+    var seconds: TimeInterval {
+        let parts = components
+        return TimeInterval(parts.seconds) + TimeInterval(parts.attoseconds) / 1e18
     }
 }

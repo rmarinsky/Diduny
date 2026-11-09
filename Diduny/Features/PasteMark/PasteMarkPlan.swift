@@ -61,6 +61,28 @@ enum PasteMarkPlan {
         )
     }
 
+    /// The pasted end must be found within this, or the logo stays put (no late slide).
+    static let glideBudget: TimeInterval = 0.3
+
+    struct Landing: Equatable {
+        var glides: Bool
+        /// Seconds from the paste.
+        var pulseAt: TimeInterval?
+        var fadeAt: TimeInterval
+    }
+
+    /// The pulse plays where the logo ends: after the glide, or at once when it stays put.
+    /// `endFoundAfter`: when the poll found the pasted end, nil if it never did.
+    static func landing(endFoundAfter: TimeInterval?, reduceMotion: Bool) -> Landing {
+        let timeline = timeline(reduceMotion: reduceMotion)
+        if reduceMotion { return Landing(glides: false, pulseAt: nil, fadeAt: timeline.fadeStart) }
+        guard let found = endFoundAfter, found <= glideBudget else {
+            return Landing(glides: false, pulseAt: timeline.pulseStart, fadeAt: timeline.fadeStart)
+        }
+        let pulseAt = max(found + timeline.glide, timeline.pulseStart)
+        return Landing(glides: true, pulseAt: pulseAt, fadeAt: pulseAt + timeline.fadeStart - timeline.pulseStart)
+    }
+
     /// How a dictation or its translation ends on the floating panel (Roman, 2026-11-09: no result
     /// window, the text is already pasted or copied).
     enum DictationEnd: Equatable {
