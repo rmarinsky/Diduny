@@ -37,10 +37,13 @@ struct EdgeCommandOutcome: Equatable, Identifiable {
     var resultText: String = ""
     /// Meetings: the library recording, for Open recording.
     var recordingID: UUID?
+    /// Dictation with nothing more to say than "done": the header and its logo only, no result or Copy.
+    var headerOnly = false
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id && lhs.flow == rhs.flow && lhs.durationSeconds == rhs.durationSeconds
             && lhs.delivery == rhs.delivery && lhs.resultText == rhs.resultText && lhs.recordingID == rhs.recordingID
+            && lhs.headerOnly == rhs.headerOnly
     }
 
     var title: String {

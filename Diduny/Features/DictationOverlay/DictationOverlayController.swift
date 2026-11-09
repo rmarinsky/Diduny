@@ -40,6 +40,7 @@ final class DictationOverlayController {
     }
 
     func begin(mode: RecordingMode) {
+        PasteMarkController.shared.clear()
         autoHideTask?.cancel()
         isNotchHandoffShowing = false
         beginSurfaceSession()
@@ -58,6 +59,7 @@ final class DictationOverlayController {
     }
 
     func startRecording(mode: RecordingMode) {
+        PasteMarkController.shared.clear()
         autoHideTask?.cancel()
         beginSurfaceSession()
         if store.mode != mode {
@@ -85,6 +87,9 @@ final class DictationOverlayController {
         }
         store.phase = .finalizing
         store.audioLevel = 0
+        if !mode.isMeeting, SettingsStorage.shared.autoPaste {
+            PasteMarkController.shared.beginWaiting()
+        }
         if usesNotch {
             NotchManager.shared.startProcessing(mode: mode)
         } else {
@@ -99,9 +104,15 @@ final class DictationOverlayController {
             store.finalText = text
             store.provisionalText = ""
         }
-        recordOutcome(resultText: text.isEmpty ? store.finalText : text, recordingID: recordingID)
+        let resultText = text.isEmpty ? store.finalText : text
         store.phase = .pasted
         store.audioLevel = 0
+        if !store.mode.isMeeting {
+            showDictationSuccess(resultText: resultText, recordingID: recordingID)
+            return
+        }
+        PasteMarkController.shared.clear()
+        recordOutcome(resultText: resultText, recordingID: recordingID)
         if usesNotch {
             // The notch schedules its own dismissal and ends the session.
             NotchManager.shared.showSuccess(text: text)
@@ -121,6 +132,53 @@ final class DictationOverlayController {
         }
     }
 
+    /// Dictation and its translation: no result window (Roman, 2026-11-09). The logo plays at the
+    /// caret and the panel closes; without a caret the header logo stays 1.5 s. A failed paste keeps
+    /// the Copied outcome, its only message.
+    private func showDictationSuccess(resultText: String, recordingID: UUID?) {
+        let autoPaste = SettingsStorage.shared.autoPaste
+        let pasted = Self.delivery(
+            autoPaste: autoPaste, lastPaste: ClipboardService.shared.lastPaste, stoppedAt: stoppedAt
+        ) == .pasted
+        if pasted {
+            let stop = stoppedAt
+            PasteMarkController.shared.land { [weak self] caretKnown in
+                guard let self, self.stoppedAt == stop, self.store.phase == .pasted else { return }
+                self.finishDictation(
+                    PasteMarkPlan.dictationEnd(autoPaste: autoPaste, pasted: true, caretKnown: caretKnown),
+                    resultText: resultText, recordingID: recordingID
+                )
+            }
+        } else {
+            PasteMarkController.shared.clear()
+        }
+        if usesNotch {
+            recordOutcome(resultText: resultText, recordingID: recordingID)
+            NotchManager.shared.showSuccess(text: resultText)
+            endSurfaceSession()
+            return
+        }
+        guard !pasted else { return }
+        finishDictation(
+            PasteMarkPlan.dictationEnd(autoPaste: autoPaste, pasted: false, caretKnown: false),
+            resultText: resultText, recordingID: recordingID
+        )
+    }
+
+    private func finishDictation(_ end: PasteMarkPlan.DictationEnd, resultText: String, recordingID: UUID?) {
+        guard !usesNotch else { return }
+        autoHideTask?.cancel()
+        if end == .closeNow || EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
+            dismiss()
+            return
+        }
+        recordOutcome(resultText: resultText, recordingID: recordingID, headerOnly: end == .headerLogo)
+        showPanel()
+        if end == .headerLogo {
+            scheduleAutoHide(delay: PasteMarkPlan.headerLogoSeconds)
+        }
+    }
+
     /// Roman, 2026-11-09, replaces default 8: after a paste the outcome closes in 0.8 s. "Copied" (auto-paste
     /// off or a failed paste) stays until ×, New recording or the next recording.
     nonisolated static func outcomeAutoHideDelay(delivery: EdgeCommandOutcome.Delivery) -> TimeInterval? {
@@ -136,7 +194,7 @@ final class DictationOverlayController {
     }
 
     /// Builds the outcome for the stopped recording from the session (default 8, 02 Q11-Q12).
-    private func recordOutcome(resultText: String, recordingID: UUID?) {
+    private func recordOutcome(resultText: String, recordingID: UUID?, headerOnly: Bool = false) {
         let end = stoppedAt ?? store.endedAt ?? Date()
         let duration = Int(max(end.timeIntervalSince(store.startedAt), 0).rounded())
         let flow: EdgeCommandOutcome.Flow = switch store.mode {
@@ -160,7 +218,8 @@ final class DictationOverlayController {
                 stoppedAt: stoppedAt
             ),
             resultText: flow.isMeeting ? "" : resultText,
-            recordingID: recordingID ?? outcomeRecordingID
+            recordingID: recordingID ?? outcomeRecordingID,
+            headerOnly: headerOnly
         ))
     }
 
@@ -176,6 +235,7 @@ final class DictationOverlayController {
     }
 
     func showError(message: String) {
+        PasteMarkController.shared.clearIfWaiting()
         autoHideTask?.cancel()
         cancelOutputPreview()
         store.phase = .error(message)
@@ -281,11 +341,13 @@ final class DictationOverlayController {
                 break
             }
         }
-        guard usesNotch || store.phase != .pasted || outcomeStore.outcome?.delivery == .pasted else { return }
+        guard usesNotch || store.phase != .pasted || outcomeStore.outcome?.delivery == .pasted
+            || outcomeStore.outcome?.headerOnly == true else { return }
         dismiss()
     }
 
     func dismiss() {
+        PasteMarkController.shared.clearIfWaiting()
         outcomeStore.clear()
         autoHideTask?.cancel()
         cancelOutputPreview()

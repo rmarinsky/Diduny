@@ -3,8 +3,8 @@ import SwiftUI
 /// Panel header (design-spec 4.7, 4.16): icon tile, title over an optional status line, then the
 /// trailing items (timer, header links, icon buttons) after a spacer. The caller keeps it the
 /// drag handle.
-struct PanelHeader<Trailing: View>: View {
-    let icon: PanelIconTile
+struct PanelHeader<Icon: View, Trailing: View>: View {
+    let icon: Icon
     let title: LocalizedStringKey
     var status: PanelStatus?
     /// For example `livePanel.title`, `outcome.title`, `prompt.title`.

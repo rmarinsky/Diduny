@@ -16,7 +16,7 @@ struct EdgeCommandOutcomeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) { // panel block gap (design-spec 3.4)
             PanelHeader(
-                icon: PanelIconTile(symbol: "checkmark", style: .ok, pulsesOnAppear: true),
+                icon: headerLogo,
                 title: LocalizedStringKey(outcome.title),
                 status: .plain(LocalizedStringKey(outcome.subtitle(transcript: transcript))),
                 titleID: "outcome.title",
@@ -25,10 +25,12 @@ struct EdgeCommandOutcomeView: View {
                 PanelIconButton(kind: .close, action: onClose)
                     .accessibilityIdentifier("outcome.close")
             }
-            // The check pulse (M8) restarts for each new outcome, not for subtitle changes.
+            // The logo pulse (M8) restarts for each new outcome, not for subtitle changes.
             .id(outcome.id)
 
-            if outcome.flow.isMeeting {
+            if outcome.headerOnly {
+                EmptyView()
+            } else if outcome.flow.isMeeting {
                 PanelProgressBar(fraction: progressFraction, label: LocalizedStringKey(outcome.subtitle(transcript: transcript)))
                     .accessibilityIdentifier("outcome.progress")
                 PanelControlsLayout(weights: [1, 1]) {
@@ -46,6 +48,20 @@ struct EdgeCommandOutcomeView: View {
                 }
             }
         }
+    }
+
+    /// The app logo on its disc instead of the green check (stop animation). A meeting's ring spins
+    /// while the transcript is made, then closes with one pulse on "Transcript ready".
+    private var headerLogo: some View {
+        let isMeeting = outcome.flow.isMeeting
+        let ready = transcript == .ready
+        return LogoBadge(
+            phase: isMeeting && !ready ? .waiting : .done,
+            discSize: DS.Size.iconTile,
+            pulseTrigger: isMeeting && ready ? 1 : 0,
+            pulsesOnAppear: PasteMarkPlan.headerPulsesOnAppear(isMeeting: isMeeting, transcriptReady: ready)
+        )
+        .accessibilityIdentifier("outcome.logo")
     }
 
     private var newRecordingButton: some View {
