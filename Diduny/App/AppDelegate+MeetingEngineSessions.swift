@@ -284,6 +284,7 @@ extension AppDelegate {
     func resolveAfterStopEngine(_ engine: EngineID) -> EffectiveEngineResolver.Result {
         let whisper = WhisperModelManager.shared
         return EffectiveEngineResolver.resolve(
+            // Whisper after Stop runs its selected model in full, not the live preview.
             job: .meeting, segment: .recordOnly,
             override: JobProviderSelection(providerID: engine.rawValue, modelID: nil),
             allowsStandIn: true,

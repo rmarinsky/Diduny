@@ -8,41 +8,53 @@ enum MeetingStopPlan: Equatable {
     case wholeRecording(EngineID, modelID: String?, reason: Reason)
     case saveOnly
 
-    /// `keepLiveText` needs one span, a live cloud engine, no disruption and today's acceptance guard.
+    /// Roman, 2026-11-09: the mode selected at Stop replaces the earlier ones and transcribes the whole recording.
+    /// Cloud keeps its live text only for one clean span; Local never uploads; Record only runs its engine.
+    /// `resolve` is ADR-0012 D3 at Stop time for one engine.
     static func plan(
         history: MeetingEngineHistory,
-        afterStop: EffectiveEngineResolver.Result,
+        recordOnlyEngine: EngineID,
+        resolve: (EngineID) -> EffectiveEngineResolver.Result,
         liveTextAccepted: Bool,
         hasLiveText: Bool = true
     ) -> MeetingStopPlan {
-        if history.spans.count == 1, let only = history.spans.first, only.target.isLive,
-           only.target.segment == .cloud, !only.disrupted, liveTextAccepted
-        {
-            return .keepLiveText(only.target.engine)
+        guard let last = history.spans.last else { return .saveOnly }
+        let single = history.spans.count == 1
+        let clean = single && !last.disrupted
+        if clean, last.target.isLive, last.target.segment == .cloud, liveTextAccepted {
+            return .keepLiveText(last.target.engine)
         }
-        // Coordinator's rule, stricter than ADR D3: a dropped Cloud meeting is redone only by the configured engine
-        // itself. With a stand-in or nothing, the text the user has beats a weaker transcript.
-        if history.spans.count == 1, let only = history.spans.first, only.target.isLive,
-           only.target.segment == .cloud, only.disrupted, hasLiveText
-        {
-            if case .engine = afterStop {} else { return .keepLiveText(only.target.engine) }
+        let reason: Reason = !clean ? .mixed
+            : !last.target.isLive ? .recordOnly
+            : last.target.segment == .thisMac ? .liveDraft : .liveTextRejected
+        func runnable(_ engine: EngineID) -> (EngineID, String?)? {
+            switch resolve(engine) {
+            case let .engine(id, model), let .fallback(id, model, _): (id, model)
+            case .none: nil
+            }
         }
-        let reason: Reason
-        if history.spans.count > 1 || history.spans.contains(where: \.disrupted) {
-            reason = .mixed
-        } else if let only = history.spans.first, !only.target.isLive {
-            reason = .recordOnly
-        } else if history.spans.first?.target.segment == .thisMac {
-            reason = .liveDraft
-        } else {
-            reason = .liveTextRejected
+        func isLocal(_ engine: EngineID) -> Bool { engine != .didunyCloud && engine != .elevenLabs }
+
+        let chosen: (EngineID, String?)?
+        switch last.target {
+        case let .live(engine) where last.target.segment == .cloud:
+            // Only that engine itself; with nothing to run, a single span's text stays (review rule).
+            if case let .engine(id, model) = resolve(engine) {
+                chosen = (id, model)
+            } else if single, hasLiveText {
+                return .keepLiveText(engine)
+            } else {
+                chosen = nil
+            }
+        case let .live(engine):
+            // Local: on this Mac only. Its own engine after Stop, else a local Record only engine, else the best ready one.
+            let candidates = [engine] + (isLocal(recordOnlyEngine) ? [recordOnlyEngine] : []) + [.parakeet, .whisper, .appleSpeech]
+            chosen = candidates.compactMap(runnable).first { isLocal($0.0) }
+        case let .afterStopOnly(engine):
+            chosen = runnable(engine)
         }
-        switch afterStop {
-        case let .engine(engine, modelID), let .fallback(engine, modelID, _):
-            return .wholeRecording(engine, modelID: modelID, reason: reason)
-        case .none:
-            return .saveOnly
-        }
+        guard let (engine, model) = chosen else { return .saveOnly }
+        return .wholeRecording(engine, modelID: model, reason: reason)
     }
 }
 
@@ -52,7 +64,7 @@ extension MeetingStopPlan {
     }
 
     /// The hand-off text after Stop, per `mid-meeting-switching.md`. Nil keeps the plain line.
-    func stopLine(preview: EngineID?) -> String? {
+    func stopLine(preview: EngineID?, mode: MeetingSegment? = nil) -> String? {
         switch self {
         case .keepLiveText, .saveOnly:
             return nil
@@ -60,6 +72,12 @@ extension MeetingStopPlan {
             let name = MeetingPanelState.name(engine)
             let onThisMac = engine != .didunyCloud && engine != .elevenLabs
             switch (reason, onThisMac) {
+            case (.mixed, true) where mode != nil:
+                let modeName = EngineCaptions.startsIn(mode!).title
+                return String(localized: "You ended on \(modeName), so \(name) makes one transcript from the whole recording, on this Mac. It replaces the live text.")
+            case (.mixed, false) where mode != nil:
+                let modeName = EngineCaptions.startsIn(mode!).title
+                return String(localized: "You ended on \(modeName), so \(name) makes one transcript from the whole recording, in the cloud. It replaces the live text.")
             case (.mixed, true):
                 return String(localized: "The engine changed during this meeting, so \(name) makes one transcript from the whole recording, on this Mac. It replaces the live text.")
             case (.mixed, false):

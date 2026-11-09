@@ -839,7 +839,8 @@ extension AppDelegate {
                 : !realtimeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             let plan = MeetingStopPlan.plan(
                 history: history ?? MeetingEngineHistory(spans: []),
-                afterStop: resolveAfterStopEngine(afterStopEngine),
+                recordOnlyEngine: afterStopEngine,
+                resolve: resolveAfterStopEngine,
                 liveTextAccepted: liveTextAccepted,
                 hasLiveText: !realtimeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             )
@@ -947,7 +948,7 @@ extension AppDelegate {
                 await MainActor.run {
                     // Shown before .success so the panel switches in place instead of hiding.
                     if queued, translateTarget == nil {
-                        DictationOverlayController.shared.showBackgroundHandoff(detail: plan.stopLine(preview: liveEngine))
+                        DictationOverlayController.shared.showBackgroundHandoff(detail: plan.stopLine(preview: liveEngine, mode: history?.spans.last?.target.segment))
                     } else if queued {
                         DictationOverlayController.shared.showBackgroundHandoff()
                     }

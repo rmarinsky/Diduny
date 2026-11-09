@@ -2072,3 +2072,7 @@
 "The rest of the text comes after Stop." = "Решта тексту з'явиться після «Стоп».";
 "The rest is translated after Stop." = "Решту буде перекладено після «Стоп».";
 "[part not transcribed]" = "[частину не розпізнано]";
+
+/* WP-63: last mode decides the transcript */
+"You ended on %@, so %@ makes one transcript from the whole recording, on this Mac. It replaces the live text." = "Останній режим: %@, тому %@ робить один транскрипт з усього запису, на цьому Mac. Він замінить текст наживо.";
+"You ended on %@, so %@ makes one transcript from the whole recording, in the cloud. It replaces the live text." = "Останній режим: %@, тому %@ робить один транскрипт з усього запису, у хмарі. Він замінить текст наживо.";

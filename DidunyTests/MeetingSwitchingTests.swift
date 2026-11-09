@@ -244,48 +244,73 @@ struct MeetingStopPlanTests {
         MeetingEngineSpan(target: target, startFrame: frame, disrupted: disrupted)
     }
 
-    private func plan(_ spans: [MeetingEngineSpan], accepted: Bool = true,
-                      afterStop: EffectiveEngineResolver.Result = .engine(.parakeet, modelID: nil)) -> MeetingStopPlan {
-        MeetingStopPlan.plan(history: MeetingEngineHistory(spans: spans), afterStop: afterStop, liveTextAccepted: accepted)
+    /// Everything runs, unless listed in `missing`.
+    private func plan(_ spans: [MeetingEngineSpan], accepted: Bool = true, hasText: Bool = true,
+                      recordOnly: EngineID = .parakeet, missing: Set<EngineID> = []) -> MeetingStopPlan {
+        MeetingStopPlan.plan(history: MeetingEngineHistory(spans: spans), recordOnlyEngine: recordOnly,
+                             resolve: { missing.contains($0) ? .none(.unavailable) : .engine($0, modelID: nil) },
+                             liveTextAccepted: accepted, hasLiveText: hasText)
     }
 
-    @Test("One clean cloud span keeps its live text")
+    @Test("A single clean cloud span keeps its live text")
     func cleanCloud() {
         #expect(plan([span(.live(.didunyCloud))]) == .keepLiveText(.didunyCloud))
         #expect(plan([span(.live(.elevenLabs))]) == .keepLiveText(.elevenLabs))
     }
 
-    @Test("A disrupted cloud span runs the whole recording")
-    func disrupted() {
-        #expect(plan([span(.live(.didunyCloud), disrupted: true)]) == .wholeRecording(.parakeet, modelID: nil, reason: .mixed))
+    @Test("Local then Cloud: the cloud engine redoes all of it (Roman, 2026-11-09)")
+    func localToCloud() {
+        #expect(plan([span(.live(.whisper)), span(.live(.didunyCloud), 10)]) == .wholeRecording(.didunyCloud, modelID: nil, reason: .mixed))
     }
 
-    @Test("Rejected live text runs the whole recording")
+    @Test("Cloud then Local: the Local engine on this Mac, never uploaded")
+    func cloudToLocal() {
+        #expect(plan([span(.live(.didunyCloud)), span(.live(.whisper), 10)]) == .wholeRecording(.whisper, modelID: nil, reason: .mixed))
+        #expect(plan([span(.live(.didunyCloud)), span(.live(.whisper), 10)], recordOnly: .didunyCloud, missing: [.whisper, .parakeet])
+            == .wholeRecording(.appleSpeech, modelID: nil, reason: .mixed))
+        #expect(plan([span(.live(.didunyCloud)), span(.live(.whisper), 10)], recordOnly: .didunyCloud,
+                     missing: [.whisper, .parakeet, .appleSpeech]) == .saveOnly)
+    }
+
+    @Test("Local engine that cannot run after Stop: a local Record only engine stands in")
+    func localStandIn() {
+        #expect(plan([span(.live(.appleSpeech))], recordOnly: .whisper, missing: [.appleSpeech]) == .wholeRecording(.whisper, modelID: nil, reason: .liveDraft))
+    }
+
+    @Test("Local then Record only: its engine, local or cloud")
+    func localToRecordOnly() {
+        #expect(plan([span(.live(.whisper)), span(.afterStopOnly(.parakeet), 10)]) == .wholeRecording(.parakeet, modelID: nil, reason: .mixed))
+        #expect(plan([span(.live(.whisper)), span(.afterStopOnly(.didunyCloud), 10)]) == .wholeRecording(.didunyCloud, modelID: nil, reason: .mixed))
+    }
+
+    @Test("Record only then Local: Local decides")
+    func recordOnlyToLocal() {
+        #expect(plan([span(.afterStopOnly(.didunyCloud)), span(.live(.whisper), 10)], recordOnly: .didunyCloud)
+            == .wholeRecording(.whisper, modelID: nil, reason: .mixed))
+    }
+
+    @Test("A disrupted cloud span is redone by that engine; with nothing to run its text stays")
+    func disruptedCloud() {
+        #expect(plan([span(.live(.didunyCloud), disrupted: true)]) == .wholeRecording(.didunyCloud, modelID: nil, reason: .mixed))
+        #expect(plan([span(.live(.didunyCloud), disrupted: true)], missing: [.didunyCloud]) == .keepLiveText(.didunyCloud))
+        #expect(plan([span(.live(.didunyCloud), disrupted: true)], hasText: false, missing: [.didunyCloud]) == .saveOnly)
+    }
+
+    @Test("Rejected cloud text: the cloud engine redoes it")
     func rejected() {
-        #expect(plan([span(.live(.didunyCloud))], accepted: false) == .wholeRecording(.parakeet, modelID: nil, reason: .liveTextRejected))
+        #expect(plan([span(.live(.didunyCloud))], accepted: false) == .wholeRecording(.didunyCloud, modelID: nil, reason: .liveTextRejected))
     }
 
-    @Test("A failed or cancelled switch leaves one span, so the text is kept")
-    func failedSwitchStaysSingle() {
-        var m = MeetingSwitchMachine(start: .live(.didunyCloud), afterStopEngine: .parakeet)
-        let point = MeetingCutPoint(frame: 10, elapsed: 1, turns: 1)
-        _ = m.handle(.click(.live(.whisper), failure: nil, at: point))
-        _ = m.handle(.sessionFailed(id: 2, .noModel(.whisper)))
-        _ = m.handle(.click(.live(.whisper), failure: nil, at: point))
-        _ = m.handle(.click(.live(.didunyCloud), failure: nil, at: point))
-        _ = m.handle(.end)
-        #expect(MeetingStopPlan.plan(history: m.history, afterStop: .engine(.parakeet, modelID: nil), liveTextAccepted: true) == .keepLiveText(.didunyCloud))
-    }
-
-    @Test("Local alone is a draft, Apple and Whisper both")
+    @Test("Local alone is a draft its own engine redoes in full")
     func localDraft() {
-        #expect(plan([span(.live(.whisper))]) == .wholeRecording(.parakeet, modelID: nil, reason: .liveDraft))
-        #expect(plan([span(.live(.appleSpeech))]) == .wholeRecording(.parakeet, modelID: nil, reason: .liveDraft))
+        #expect(plan([span(.live(.whisper))]) == .wholeRecording(.whisper, modelID: nil, reason: .liveDraft))
+        #expect(plan([span(.live(.appleSpeech))]) == .wholeRecording(.appleSpeech, modelID: nil, reason: .liveDraft))
     }
 
-    @Test("Record only runs its engine")
+    @Test("Record only runs its engine; nothing to run saves only")
     func recordOnly() {
-        #expect(plan([span(.afterStopOnly(.whisper))], afterStop: .engine(.whisper, modelID: "m")) == .wholeRecording(.whisper, modelID: "m", reason: .recordOnly))
+        #expect(plan([span(.afterStopOnly(.whisper))]) == .wholeRecording(.whisper, modelID: nil, reason: .recordOnly))
+        #expect(plan([span(.afterStopOnly(.parakeet))], missing: [.parakeet]) == .saveOnly)
     }
 
     @Test("A round trip with no marker still redoes the whole meeting")
@@ -295,25 +320,23 @@ struct MeetingStopPlanTests {
         _ = m.handle(.click(.live(.didunyCloud), failure: nil, at: MeetingCutPoint(frame: 32000, elapsed: 2, turns: 1)))
         _ = m.handle(.sessionReady(id: 2, at: MeetingCutPoint(frame: 32000, elapsed: 2, turns: 1)))
         #expect(m.markers.isEmpty)
-        #expect(MeetingStopPlan.plan(history: m.history, afterStop: .engine(.parakeet, modelID: nil), liveTextAccepted: true)
-            == .wholeRecording(.parakeet, modelID: nil, reason: .mixed))
+        #expect(plan(m.history.spans) == .wholeRecording(.didunyCloud, modelID: nil, reason: .mixed))
     }
 
-    @Test("A dropped Cloud meeting: only the configured engine itself redoes it, otherwise the text stays")
-    func droppedCloudKeepsText() {
-        let dropped = [span(.live(.didunyCloud), disrupted: true)]
-        #expect(plan(dropped, afterStop: .fallback(.whisper, modelID: "t", because: .notDownloaded(bytes: 1))) == .keepLiveText(.didunyCloud))
-        #expect(plan(dropped, afterStop: .none(.signedOut)) == .keepLiveText(.didunyCloud))
-        #expect(plan(dropped) == .wholeRecording(.parakeet, modelID: nil, reason: .mixed))
-        #expect(MeetingStopPlan.plan(history: MeetingEngineHistory(spans: dropped), afterStop: .none(.signedOut),
-                                     liveTextAccepted: false, hasLiveText: false) == .saveOnly)
+    @Test("A failed or cancelled switch leaves one span, so the text is kept")
+    func failedSwitchStaysSingle() {
+        var m = MeetingSwitchMachine(start: .live(.didunyCloud), afterStopEngine: .parakeet)
+        let point = MeetingCutPoint(frame: 10, elapsed: 1, turns: 1)
+        _ = m.handle(.click(.live(.whisper), failure: nil, at: point))
+        _ = m.handle(.sessionFailed(id: 2, .noModel(.whisper)))
+        _ = m.handle(.end)
+        #expect(plan(m.history.spans) == .keepLiveText(.didunyCloud))
     }
 
-    @Test("A stand-in engine is used; nothing to run saves only")
-    func resolver() {
-        #expect(plan([span(.afterStopOnly(.parakeet))], afterStop: .fallback(.whisper, modelID: "turbo", because: .notDownloaded(bytes: 1)))
-            == .wholeRecording(.whisper, modelID: "turbo", reason: .recordOnly))
-        #expect(plan([span(.afterStopOnly(.parakeet))], afterStop: .none(.notDownloaded(bytes: 1))) == .saveOnly)
+    @Test("The Stop line names the mode the meeting ended on")
+    func stopLineNamesMode() {
+        let line = MeetingStopPlan.wholeRecording(.whisper, modelID: nil, reason: .mixed).stopLine(preview: nil, mode: .thisMac)
+        #expect(line == "You ended on Local, so Whisper makes one transcript from the whole recording, on this Mac. It replaces the live text.")
     }
 }
 
@@ -519,7 +542,7 @@ struct MeetingQueueSeamTests {
             whisper: .init(downloaded: [], selected: nil)
         )
         #expect(MeetingStopPlan.plan(history: MeetingEngineHistory(spans: [MeetingEngineSpan(target: .afterStopOnly(.whisper), startFrame: 0)]),
-                                     afterStop: result, liveTextAccepted: false) == .saveOnly)
+                                     recordOnlyEngine: .whisper, resolve: { _ in result }, liveTextAccepted: false) == .saveOnly)
     }
 
     @Test("Parts keep live text, translate only the ranges, and save as translated")

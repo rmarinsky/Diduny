@@ -2072,3 +2072,7 @@
 "The rest of the text comes after Stop." = "The rest of the text comes after Stop.";
 "The rest is translated after Stop." = "The rest is translated after Stop.";
 "[part not transcribed]" = "[part not transcribed]";
+
+/* WP-63: last mode decides the transcript */
+"You ended on %@, so %@ makes one transcript from the whole recording, on this Mac. It replaces the live text." = "You ended on %@, so %@ makes one transcript from the whole recording, on this Mac. It replaces the live text.";
+"You ended on %@, so %@ makes one transcript from the whole recording, in the cloud. It replaces the live text." = "You ended on %@, so %@ makes one transcript from the whole recording, in the cloud. It replaces the live text.";
