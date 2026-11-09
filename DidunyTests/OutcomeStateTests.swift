@@ -136,7 +136,11 @@ struct DevFeedbackDetailTests {
         #expect(abs(sum - total) < 0.01)
     }
 
+    /// Roman's 1.5x (DEV feedback) still holds: the old 28 pt badge is now the 42 pt logo disc. The stop animation
+    /// replaced the old burst room (44 pt layout) with pulse room, so the panel size is disc plus margins.
     @MainActor @Test func inPlaceBadgeIsOneAndAHalfTimesBigger() {
-        #expect(InplaceTranslationFeedbackController.badgeSize == CGSize(width: 66, height: 66))
+        #expect(PasteMarkPlan.disc == 28 * 1.5)
+        let side = PasteMarkPlan.disc + 2 * PasteMarkPlan.panelMargin
+        #expect(InplaceTranslationFeedbackController.badgeSize == CGSize(width: side, height: side))
     }
 }
