@@ -21,12 +21,13 @@ struct SettingsPageWidthTests {
         }
     }
 
-    private func contentWidth(_ page: some View) async -> CGFloat {
+    private func contentWidth(_ page: some View, language: String) async -> CGFloat {
         let box = Box()
         let appState = AppState()
         let host = NSHostingView(rootView: page
             .environment(appState)
             .environment(AudioDeviceManager())
+            .environment(\.locale, Locale(identifier: language))
             .environment(\.pageContentWidthProbe) { box.width = $0 }
             .frame(width: Self.pageWidth, height: 680))
         host.frame = NSRect(x: 0, y: 0, width: Self.pageWidth, height: 680)
@@ -39,9 +40,11 @@ struct SettingsPageWidthTests {
     }
 
     private func expectFits(_ page: some View, limit: CGFloat = column, _ name: String) async {
-        let width = await contentWidth(page)
-        #expect(width > 0, "\(name) reported no width")
-        #expect(width <= limit + 0.5, "\(name) is \(width) wide, the column is \(limit)")
+        for language in ["en", "uk"] {
+            let width = await contentWidth(page, language: language)
+            #expect(width > 0, "\(name) [\(language)] reported no width")
+            #expect(width <= limit + 0.5, "\(name) [\(language)] is \(width) wide, the column is \(limit)")
+        }
     }
 
     @Test func providersWithoutAKey() async { await expectFits(ProvidersSettingsView(hasKey: false), "Providers") }

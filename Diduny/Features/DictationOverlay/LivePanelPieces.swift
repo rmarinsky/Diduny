@@ -40,9 +40,18 @@ struct LiveAudioMeter: View {
     let color: Color
 
     /// The level spans -60 to 0 dB, but speech close to a mic sits near -30 dB, which lit only 2-3 bars.
-    /// The bars now cover -45 dB (quiet room, all dim) to -15 dB (loud speech, all lit).
+    /// The scale now covers -50 dB (quiet room) to -20 dB (loud speech).
     static func displayLevel(_ level: Float) -> Float {
-        max(0, min((level - 0.25) / 0.5, 1))
+        max(0, min((level - 0.167) / 0.5, 1))
+    }
+
+    /// How many of the five bars are lit: 4 at -30 dB, none in silence.
+    static func litBars(_ level: Float) -> Int {
+        (0 ..< 5).filter { displayLevel(level) >= threshold(for: $0) }.count
+    }
+
+    private static func threshold(for index: Int) -> Float {
+        Float(index + 1) / 7
     }
 
     private var shown: Float { Self.displayLevel(level) }
@@ -65,8 +74,7 @@ struct LiveAudioMeter: View {
     }
 
     private func opacity(for index: Int) -> Double {
-        let threshold = Float(index + 1) / 6
-        return shown >= threshold ? 1 : 0.35
+        shown >= Self.threshold(for: index) ? 1 : 0.35
     }
 }
 

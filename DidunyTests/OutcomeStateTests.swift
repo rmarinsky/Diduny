@@ -6,13 +6,13 @@ import Testing
 struct OutcomeStateTests {
     @Test func outcomeReplacesTheLiveViewWithoutASlide() {
         #expect(!EdgeCommandExpandedView.ContentState.outcome.slidesIn)
-        #expect(EdgeCommandExpandedView.ContentState.live.slidesIn)
+        #expect(!EdgeCommandExpandedView.ContentState.live.slidesIn)
         #expect(EdgeCommandExpandedView.ContentState.home.slidesIn)
     }
 
-    @Test func autoHidesOnlyWithAutoPaste() {
-        #expect(DictationOverlayController.outcomeAutoHideDelay(autoPaste: true) == 0.8)
-        #expect(DictationOverlayController.outcomeAutoHideDelay(autoPaste: false) == nil)
+    @Test func autoHidesOnlyAfterAPaste() {
+        #expect(DictationOverlayController.outcomeAutoHideDelay(delivery: .pasted) == 0.8)
+        #expect(DictationOverlayController.outcomeAutoHideDelay(delivery: .copied) == nil)
     }
 
     @Test func onlyRestoringFromTheTabMorphs() {
@@ -121,10 +121,10 @@ struct OutcomeStateTests {
 struct DevFeedbackDetailTests {
     @Test func normalSpeechReachesWellUpTheMeter() {
         func level(db: Float) -> Float { (db + 60) / 60 }
-        #expect(LiveAudioMeter.displayLevel(level(db: -58)) == 0)
-        #expect(LiveAudioMeter.displayLevel(level(db: -30)) == 0.5)
-        #expect(LiveAudioMeter.displayLevel(level(db: -20)) > 0.8)
-        #expect(LiveAudioMeter.displayLevel(level(db: 0)) == 1)
+        #expect(LiveAudioMeter.litBars(level(db: -58)) == 0)
+        #expect(LiveAudioMeter.litBars(level(db: -30)) >= 4)
+        #expect(LiveAudioMeter.displayLevel(level(db: -20)) > 0.99)
+        #expect(LiveAudioMeter.litBars(level(db: 0)) == 5)
     }
 
     /// Fixed columns plus flexible columns fill the row exactly, so every chevron is at the same x.

@@ -38,9 +38,10 @@ struct EdgeCommandExpandedView: View {
         case outcome
         case home
 
-        /// The outcome replaces the live view at once: a slide would show both sets of buttons.
+        /// The outcome replaces the live view at once: a slide would show both sets of buttons. The live
+        /// view too: the microphone may block the main thread and freeze a fade half way.
         var slidesIn: Bool {
-            self != .outcome
+            self != .outcome && self != .live
         }
     }
 

@@ -48,8 +48,6 @@ protocol ModesSettingsSource: AnyObject {
     /// Every mode except `.file`.
     func silence(for job: STTJob) -> ModeSilence
     func setSilence(_ value: ModeSilence, for job: STTJob)
-
-    /// 1...3; every mode except `.file`.
 }
 
 /// The mode x engine rules (05 2.1.1 and section 3), backed by WP-13's `ModeEngineRules` (ADR-0012 D3).

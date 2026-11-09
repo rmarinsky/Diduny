@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// Pinned header + leading-aligned content column (inner 840, outer 888 with 24 insets).
-/// Data screens use `scrolls: true` (default). Settings screens that host a native
-/// grouped `Form` pass `scrolls: false` because the Form scrolls itself.
 /// Receives a page's own content width, so a test can catch content wider than its column.
 extension EnvironmentValues {
     @Entry var pageContentWidthProbe: ((CGFloat) -> Void)?
 }
 
+/// Pinned header + leading-aligned content column (inner 840, outer 888 with 24 insets).
+/// Data screens use `scrolls: true` (default). Settings screens that host a native
+/// grouped `Form` pass `scrolls: false` because the Form scrolls itself.
 struct PageScaffold<Trailing: View, Content: View>: View {
     let title: LocalizedStringKey
     var subtitle: LocalizedStringKey?

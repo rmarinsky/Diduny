@@ -110,16 +110,22 @@ final class DictationOverlayController {
             return
         }
         // Floating surface: the outcome replaces the live view and closes as the success panel did.
+        let delivery = outcomeStore.outcome?.delivery ?? .copied
+        // A minimized panel has no outcome on screen; only the red-dot tab, which would stay stuck.
+        if EdgeCommandPanelController.shared.isLiveFeedbackMinimized, delivery != .pasted {
+            dismiss()
+            return
+        }
         showPanel()
-        if let delay = Self.outcomeAutoHideDelay(autoPaste: SettingsStorage.shared.autoPaste) {
+        if let delay = Self.outcomeAutoHideDelay(delivery: delivery) {
             scheduleAutoHide(delay: delay)
         }
     }
 
-    /// Roman, 2026-11-09, replaces default 8: with auto-paste the outcome closes after 0.8 s. With
-    /// auto-paste off it stays until ×, New recording or the next recording.
-    nonisolated static func outcomeAutoHideDelay(autoPaste: Bool) -> TimeInterval? {
-        autoPaste ? 0.8 : nil
+    /// Roman, 2026-11-09, replaces default 8: after a paste the outcome closes in 0.8 s. "Copied" (auto-paste
+    /// off or a failed paste) stays until ×, New recording or the next recording.
+    nonisolated static func outcomeAutoHideDelay(delivery: EdgeCommandOutcome.Delivery) -> TimeInterval? {
+        delivery == .pasted ? 0.8 : nil
     }
 
     /// Two-way Cloud translation names the pair (WP-41 "EN ↔ UK"). One-direction engines name the
@@ -276,7 +282,7 @@ final class DictationOverlayController {
                 break
             }
         }
-        guard usesNotch || store.phase != .pasted || SettingsStorage.shared.autoPaste else { return }
+        guard usesNotch || store.phase != .pasted || outcomeStore.outcome?.delivery == .pasted else { return }
         dismiss()
     }
 
