@@ -126,6 +126,7 @@ private final class CalendarReminderWindow: NSPanel {
     /// A small floating prompt: the meeting being recorded has ended. One at a time; a newer one replaces it.
     func showMeetingEnded(title: String, message: String, stop: @escaping () -> Void) {
         closeMeetingEnded()
+        KeyboardFocusRing.shared.hide()
         let panel = CalendarReminderWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 160),
                                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false

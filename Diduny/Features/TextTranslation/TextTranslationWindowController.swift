@@ -14,6 +14,7 @@ final class TextTranslationWindowController: NSObject, NSWindowDelegate {
     }
 
     func showWindow(sourceText: String) {
+        KeyboardFocusRing.shared.hide()
         // If window exists, update the view model and bring to front
         if let panel, panel.isVisible, let viewModel {
             viewModel.sourceText = sourceText
@@ -36,9 +37,9 @@ final class TextTranslationWindowController: NSObject, NSWindowDelegate {
         let view = TextTranslationView(viewModel: vm) { [weak self] in
             self?.closeWindow()
         }
-        let hostingView = NSHostingView(rootView: view)
+        let hostingView = NSHostingView(rootView: view.focusRingOnlyAfterTab())
 
-        let panel = NSPanel(
+        let panel = FocusRingPanel(
             contentRect: NSRect(x: 0, y: 0, width: 540, height: 450),
             styleMask: [.titled, .closable, .hudWindow, .utilityWindow, .nonactivatingPanel],
             backing: .buffered,

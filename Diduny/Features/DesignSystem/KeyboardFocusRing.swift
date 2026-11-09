@@ -30,6 +30,14 @@ final class KeyboardFocusRing {
     }
 }
 
+/// A plain floating panel that feeds the ring.
+final class FocusRingPanel: NSPanel {
+    override func sendEvent(_ event: NSEvent) {
+        KeyboardFocusRing.shared.note(event)
+        super.sendEvent(event)
+    }
+}
+
 private struct KeyboardFocusRingOnly: ViewModifier {
     func body(content: Content) -> some View {
         content.focusEffectDisabled(!KeyboardFocusRing.shared.isVisible)
