@@ -113,6 +113,8 @@ final class MeetingLivePanelUITests: DidunyUITestCase {
         let cloud = waitForElement(app.buttons["livePanel.segment.cloudLive"])
         cloud.click()
         cloud.typeKey(.rightArrow, modifierFlags: [])
+        XCTAssertTrue(cloud.isSelected, "An arrow moves focus only; it must not switch")
+        cloud.typeKey(.return, modifierFlags: [])
         waitForElement(app.buttons["livePanel.segment.recordOnly"], toMatch: "isSelected == true")
     }
 

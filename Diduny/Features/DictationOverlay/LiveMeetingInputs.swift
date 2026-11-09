@@ -135,11 +135,7 @@ extension LiveDictationOverlayStore {
             meetingEngines[selected.segment] = selected.engine
             if !machine.isConnecting { meetingEngines[.recordOnly] = machine.afterStopEngine }
         }
-        let wasFailed = meetingSwitch.failedTarget
-        let picked = lastSelected
         meetingSwitch = MeetingSwitchDisplay(machine: machine)
-        meetingSwitch.failedTarget = machine.failure == nil ? nil : (picked ?? wasFailed)
-        lastSelected = machine.isConnecting ? machine.selected : nil
     }
 }
 
@@ -169,6 +165,7 @@ struct MeetingSwitchDisplay: Equatable {
         runningIsLive = machine.running.isLive
         markers = machine.markers
         failure = machine.failure
+        failedTarget = machine.failedTarget
         note = machine.persistentNote
     }
 }

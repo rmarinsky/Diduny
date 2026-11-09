@@ -41,8 +41,6 @@ final class LiveDictationOverlayStore {
     /// The running meeting's switch state and where clicks go (ADR-0013). Nil handler: no meeting behind the panel.
     var meetingSwitch = MeetingSwitchDisplay()
     var meetingSwitchHandler: MeetingSwitchHandler?
-    /// The target being connected, for "Try again" when it fails.
-    @ObservationIgnored var lastSelected: MeetingEngineTarget?
     /// What the live STT stream produces for this session.
     private(set) var nativeOutput: DictationOutput = .original
     /// Output of the session or picked in the panel, before any spoken command.

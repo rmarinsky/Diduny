@@ -175,13 +175,14 @@
                     elapsed: { (UITestHarness.manualClock?.now ?? 0) - startedAt },
                     turns: { store.meetingTurnCount },
                     finalText: { store.displayText },
-                    readiness: { MeetingEngineController.failure(from: LiveEngineReadinessSource().readiness(of: $0.engine), engine: $0.engine) },
+                    readiness: { MeetingEngineController.failure(from: MeetingEngineReadiness.live().readiness(of: $0.engine), engine: $0.engine) },
                     makeSession: { _, _ in UITestFakeMeetingSession() },
                     applyTokens: { _ in },
                     applyStatus: { overlay.updateConnectionStatus($0) },
                     applyError: { _ in },
                     closeTurn: { store.commitProvisional(); store.markSegmentBoundary() },
                     didCut: { _ in },
+                    commitPair: { store.meetingTranslationPair = $0 },
                     didChange: { store.applyMeetingSwitch($0) }
                 )
             )
@@ -189,7 +190,11 @@
             Task { await controller.startInitial() }
             store.meetingSwitchHandler = MeetingSwitchHandler(
                 click: { controller.click($0) },
-                changePair: { pair in controller.machine.running.isLive ? controller.restartLive(label: pair.shortLabel) : true }
+                changePair: { pair in
+                    guard controller.machine.running.isLive else { return true }
+                    controller.restartLive(pair: pair)
+                    return false
+                }
             )
         }
 

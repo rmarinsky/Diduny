@@ -53,6 +53,9 @@ struct ModeSegments<ID: Hashable>: View {
     var accessibilityLabel: LocalizedStringKey = "Transcript mode"
     /// An arrow pressed at the last segment: the next group takes it (-1 or +1).
     var onStepPastEnd: ((Int) -> Void)?
+    /// Set: arrows only move this focus, and Space or Return commits. For a choice that has an effect the moment
+    /// it is made, such as a mid-meeting switch.
+    var focus: FocusState<ID?>.Binding?
 
     /// Left (-1) and Right (+1) arrows: the nearest enabled segment that way; stops at the ends.
     static func step(from current: ID, by direction: Int, in items: [Item]) -> ID {
@@ -72,6 +75,7 @@ struct ModeSegments<ID: Hashable>: View {
                 }
                 .disabled(!item.isEnabled)
                 .accessibilityIdentifier(ifPresent: item.accessibilityID)
+                .modifier(SegmentFocus(id: item.id, focus: focus))
             }
         }
         .padding(DS.Size.segmentInset)
@@ -80,16 +84,37 @@ struct ModeSegments<ID: Hashable>: View {
         .accessibilityLabel(accessibilityLabel)
         .onKeyPress(.leftArrow) { move(-1) }
         .onKeyPress(.rightArrow) { move(1) }
+        .onKeyPress(.return) {
+            guard let focus, let focused = focus.wrappedValue else { return .ignored }
+            selection = focused
+            return .handled
+        }
     }
 
     private func move(_ direction: Int) -> KeyPress.Result {
-        let next = Self.step(from: selection, by: direction, in: items)
-        if next == selection, let onStepPastEnd {
+        let current = focus?.wrappedValue ?? selection
+        let next = Self.step(from: current, by: direction, in: items)
+        if next == current, let onStepPastEnd {
             onStepPastEnd(direction)
+        } else if let focus {
+            focus.wrappedValue = next
         } else {
             selection = next
         }
         return .handled
+    }
+}
+
+private struct SegmentFocus<ID: Hashable>: ViewModifier {
+    let id: ID
+    let focus: FocusState<ID?>.Binding?
+
+    func body(content: Content) -> some View {
+        if let focus {
+            content.focusable().focused(focus, equals: id)
+        } else {
+            content
+        }
     }
 }
 

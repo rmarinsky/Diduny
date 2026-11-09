@@ -253,6 +253,8 @@ struct MeetingLiveContent<Waveform: View>: View {
     var onFailureAction: () -> Void = {}
     /// The 38 pt waveform circle (`LiveWaveformCircle` draws its own frame, tint and identifier).
     @ViewBuilder let waveform: () -> Waveform
+    /// A switch can cut live text or open a socket, so arrows only move this; Space or Return commits.
+    @FocusState private var focusedSegment: MeetingSegment?
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Panel.blockGap) {
@@ -293,9 +295,10 @@ struct MeetingLiveContent<Waveform: View>: View {
                 },
                 selection: $segment,
                 onStepPastEnd: { direction in
-                    if direction > 0, next == .recordOnly { segment = .recordOnly }
-                    if direction < 0, next == .cloud { segment = .cloud }
-                }
+                    if direction > 0, next == .recordOnly { focusedSegment = .recordOnly }
+                    if direction < 0, next == .cloud { focusedSegment = .cloud }
+                },
+                focus: $focusedSegment
             )
         }
     }

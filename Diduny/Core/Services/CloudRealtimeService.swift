@@ -163,6 +163,14 @@ final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unch
         try await connectWebSocket()
     }
 
+    private func throwIfSessionEnded() throws {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard sessionActive else {
+            throw RealtimeTranscriptionError.connectionFailed("Disconnected while connecting")
+        }
+    }
+
     private func connectWebSocket() async throws {
         // Pre-check cached usage to avoid unnecessary connection attempt
         if let usage = await loadUsage(), !usage.hasUnlimitedAccess,
@@ -198,6 +206,7 @@ final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unch
         // only fires when an error path unwinds out of connectWebSocket().
         defer { metrics.finish() }
 
+        try throwIfSessionEnded()
         let session = sharedSession()
 
         var wsURLString = wsURL
@@ -206,6 +215,8 @@ final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unch
         metrics.begin(.tokenFetch)
         let accessToken = await loadAccessToken()
         metrics.end(.tokenFetch)
+        // disconnect() during either await found no socket to close; opening one now would leak a billed session.
+        try throwIfSessionEnded()
         if let accessToken {
             let separator = wsURLString.contains("?") ? "&" : "?"
             wsURLString += "\(separator)token=\(accessToken)"

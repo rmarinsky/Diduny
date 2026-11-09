@@ -103,6 +103,8 @@ struct MeetingSwitchMachine {
     private(set) var runningID: UInt64?
     private(set) var markers: [MeetingSwitchMarker] = []
     private(set) var failure: SwitchFailure?
+    /// What "Try again" clicks.
+    private(set) var failedTarget: MeetingEngineTarget?
     private(set) var persistentNote: MeetingPersistentNote?
     private(set) var history: MeetingEngineHistory
     /// The engine that transcribes the whole recording after Stop.
@@ -161,6 +163,7 @@ struct MeetingSwitchMachine {
             self.pending = nil
             selected = running
             failure = reason
+            failedTarget = pending.target
             return []
         case let .dropped(id, terminal, frame):
             guard id == runningID, !history.spans.isEmpty else { return [] }
@@ -192,8 +195,19 @@ struct MeetingSwitchMachine {
 
     private mutating func click(_ target: MeetingEngineTarget, failure newFailure: SwitchFailure?, at point: MeetingCutPoint) -> [Effect] {
         failure = nil
+        failedTarget = nil
         if case let .afterStopOnly(engine) = target { afterStopEngine = engine }
-        if target == selected, pending != nil || !target.isLive || target == running { return [] }
+        // The running engine died for good: clicking it is the retry.
+        if target == running, target.isLive, pending == nil, persistentNote == .offline {
+            if let newFailure {
+                failure = newFailure
+                failedTarget = target
+                return []
+            }
+            return beginSession(target, pairLabel: nil)
+        }
+        // A pair restart has the running target too: clicking that target cancels it.
+        if target == selected, pending?.pairLabel == nil, pending != nil || !target.isLive || target == running { return [] }
 
         var effects: [Effect] = []
         if let pending {
@@ -208,6 +222,7 @@ struct MeetingSwitchMachine {
         if target.isLive {
             if let newFailure {
                 failure = newFailure
+                failedTarget = target
                 return effects
             }
             return effects + beginSession(target, pairLabel: nil)

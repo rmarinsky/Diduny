@@ -95,7 +95,9 @@ struct RunningMeetingPanelTests {
         display.running = .live(.whisper)
         display.failure = .noInternet
         let line = MeetingSwitchText.line(display, translateMeeting: false, canUseAppleSpeech: true, canUseElevenLabs: false)
-        #expect(line == .init(message: "No internet. Still on Local.", linkTitle: "Try again"))
+        #expect(line == .init(message: "No internet. Still on Local."))
+        display.failedTarget = .live(.didunyCloud)
+        #expect(MeetingSwitchText.line(display, translateMeeting: false, canUseAppleSpeech: true, canUseElevenLabs: false)?.linkTitle == "Try again")
         display.running = .live(.didunyCloud)
         display.failure = .noModel(.whisper)
         #expect(MeetingSwitchText.line(display, translateMeeting: false, canUseAppleSpeech: true, canUseElevenLabs: false)
@@ -160,7 +162,7 @@ struct MeetingEngineControllerTests {
         var turns = 0
         var controller: MeetingEngineController!
 
-        func make(start: MeetingEngineTarget) {
+        func make(start: MeetingEngineTarget, commitPair: @escaping (TranslationLanguagePair) -> Void = { _ in }) {
             controller = MeetingEngineController(start: start, afterStopEngine: .parakeet, environment: .init(
                 readFrame: { 100 }, elapsed: { 10 }, turns: { self.turns }, finalText: { self.applied.joined() },
                 readiness: { _ in nil },
@@ -178,6 +180,7 @@ struct MeetingEngineControllerTests {
                 applyError: { _ in },
                 closeTurn: {},
                 didCut: { _ in },
+                commitPair: commitPair,
                 didChange: { _ in }
             ))
         }
@@ -237,6 +240,52 @@ struct MeetingEngineControllerTests {
         #expect(pending.cancelled >= 1)
         rig.controller.fanOut.deliver(Data([1]))
         #expect(pending.received.count == 0)
+    }
+
+    enum LateEnd: CaseIterable { case stop, cancel, newerClick }
+
+    @Test("A connect returning late closes what it opened", arguments: LateEnd.allCases)
+    func lateConnectCancels(end: LateEnd) async {
+        let rig = Rig()
+        rig.make(start: .afterStopOnly(.parakeet))
+        rig.holdNext = true
+        rig.controller.click(.live(.didunyCloud))
+        await settle()
+        let late = rig.sessions[0]
+        let gate = late.startGate
+        switch end {
+        case .stop: await rig.controller.shutdown(finalize: true)
+        case .cancel: await rig.controller.shutdown(finalize: false)
+        case .newerClick: rig.controller.click(.afterStopOnly(.parakeet))
+        }
+        await settle()
+        let before = late.cancelled
+        gate?.resume()
+        await settle()
+        #expect(late.cancelled == before + 1, "The session itself disconnects after start returns")
+        rig.controller.fanOut.deliver(Data([1]))
+        #expect(late.received.count == 0)
+    }
+
+    @Test("A pair commits at the cut; a failure or a newer click drops it")
+    func pairCommit() async {
+        let pair = TranslationLanguagePair(languageA: "en", languageB: "pl")
+        let rig = Rig()
+        var committed: [TranslationLanguagePair] = []
+        rig.make(start: .live(.didunyCloud)) { committed.append($0) }
+        await rig.controller.startInitial(wait: true)
+        rig.holdNext = true
+        rig.controller.restartLive(pair: pair)
+        await settle()
+        #expect(committed.isEmpty)
+        rig.controller.click(.live(.didunyCloud)) // Back: cancels.
+        await settle()
+        #expect(rig.controller.pendingPair == nil)
+        rig.controller.restartLive(pair: pair)
+        await settle()
+        rig.sessions.last?.startGate?.resume()
+        await settle()
+        #expect(committed == [pair])
     }
 
     @Test("A cancelled session's status and text are dropped")

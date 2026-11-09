@@ -39,6 +39,8 @@ final class MeetingEngineController {
         var closeTurn: () -> Void
         /// A live session became current, or the meeting went to Record only.
         var didCut: (MeetingEngineTarget) -> Void
+        /// A new pair is now live.
+        var commitPair: (TranslationLanguagePair) -> Void = { _ in }
         /// Panel state changed.
         var didChange: (MeetingSwitchMachine) -> Void
     }
@@ -64,6 +66,8 @@ final class MeetingEngineController {
     private var snapshotLength = 0
     private var lastFinishConfirmed = true
     private var isShutDown = false
+    /// The pair a restarting session connects with; read by the session factory.
+    private(set) var pendingPair: TranslationLanguagePair?
 
     init(start: MeetingEngineTarget, afterStopEngine: EngineID, fanOut: MeetingAudioFanOut = MeetingAudioFanOut(), environment: Environment) {
         machine = MeetingSwitchMachine(start: start, afterStopEngine: afterStopEngine)
@@ -83,9 +87,11 @@ final class MeetingEngineController {
         spanOfSession[id] = 0
         textOrder = [id]
         fanOut.setConsumer(session.audioConsumer)
-        let task = Task { [weak self, weak session] in
+        // Holds the session: a connect returning after Stop must still be able to close what it opened.
+        let task = Task { [weak self, session] in
             do {
-                try await session?.start()
+                try await session.start()
+                if self?.sessions[id] == nil { await session.cancel() }
                 self?.initialConnectFinished(id)
             } catch {
                 self?.initialConnectFailed(id, error)
@@ -99,16 +105,16 @@ final class MeetingEngineController {
 
     func click(_ target: MeetingEngineTarget) {
         guard !isShutDown else { return }
-        let failure = target.isLive && target != machine.running ? env.readiness(target) : nil
+        pendingPair = nil
+        let failure = target.isLive ? env.readiness(target) : nil
         send(.click(target, failure: failure, at: cutPoint()))
     }
 
-    /// Translate meeting's Between. Returns false when no session restarts.
-    @discardableResult
-    func restartLive(label: String) -> Bool {
-        guard !isShutDown, machine.running.isLive, !machine.isConnecting else { return false }
-        send(.restartLive(label: label, failure: env.readiness(machine.running)))
-        return machine.isConnecting
+    /// Translate meeting's Between. The pair counts only from the cut; a failure or a newer click drops it.
+    func restartLive(pair: TranslationLanguagePair) {
+        guard !isShutDown, machine.running.isLive, !machine.isConnecting else { return }
+        pendingPair = pair
+        send(.restartLive(label: pair.shortLabel, failure: env.readiness(machine.running)))
     }
 
     /// `usageLimitExceeded` on connect or reconnect (D2 trigger 1). The client deadline, trigger 2, is deliberately
@@ -177,12 +183,14 @@ final class MeetingEngineController {
                 env.didCut(machine.running)
             case .cutTo:
                 retire(before)
+                if let pendingPair { env.commitPair(pendingPair) }
                 env.applyStatus(.connected)
                 env.didCut(machine.running)
             default:
                 run(effect)
             }
         }
+        if !machine.isConnecting { pendingPair = nil }
         env.didChange(machine)
     }
 
@@ -206,10 +214,15 @@ final class MeetingEngineController {
         let budget = Self.connectBudget(target)
         connectTasks[id] = Task { [weak self] in
             await withTaskGroup(of: Void.self) { group in
-                group.addTask { @MainActor [weak self, weak session] in
+                group.addTask { @MainActor [weak self, session] in
                     do {
-                        try await session?.start()
-                        self?.sessionReady(id)
+                        try await session.start()
+                        // Stale, or the controller is gone: this session disconnects itself.
+                        guard let self, machine.pendingID == id, sessions[id] === session else {
+                            await session.cancel()
+                            return
+                        }
+                        sessionReady(id)
                     } catch {
                         self?.sessionFailed(id, error)
                     }
@@ -227,11 +240,7 @@ final class MeetingEngineController {
 
     /// The cut: frame and consumer in one lock section. A stale session disconnects itself.
     private func sessionReady(_ id: UInt64) {
-        guard machine.pendingID == id, let session = sessions[id], !isShutDown else {
-            let stale = sessions.removeValue(forKey: id)
-            Task { await stale?.cancel() }
-            return
-        }
+        guard machine.pendingID == id, let session = sessions[id], !isShutDown else { return }
         let frame = fanOut.setConsumer(session.audioConsumer, readFrame: env.readFrame)
         textOrder.append(id)
         spanOfSession[id] = machine.history.spans.count
@@ -300,11 +309,6 @@ final class MeetingEngineController {
 
     private func initialConnectFinished(_ id: UInt64) {
         connectTasks[id] = nil
-        guard sessions[id] != nil, !isShutDown else {
-            let stale = sessions.removeValue(forKey: id)
-            Task { await stale?.cancel() }
-            return
-        }
     }
 
     private func initialConnectFailed(_ id: UInt64, _ error: Error) {

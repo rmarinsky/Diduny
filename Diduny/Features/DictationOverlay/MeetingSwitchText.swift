@@ -44,7 +44,8 @@ enum MeetingSwitchText {
         _ display: MeetingSwitchDisplay, translateMeeting: Bool, canUseAppleSpeech: Bool, canUseElevenLabs: Bool
     ) -> Line? {
         let current = name(of: display.running, from: nil, translateMeeting: translateMeeting)
-        let tryAgain = String(localized: "Try again")
+        // No link without something to retry.
+        let tryAgain = display.failedTarget == nil ? nil : String(localized: "Try again")
         switch display.failure {
         case .noInternet:
             if !display.runningIsLive {
