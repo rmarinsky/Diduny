@@ -98,12 +98,21 @@ extension EdgeCommandPanelController {
     }
 
     /// Live panels fill the window until WP-30/31/32 give them an intrinsic height, so they keep fixed heights.
+    /// The outcome takes the live panel's place at its own height.
     private func fittingHeight(for presentation: EdgeCommandPanelPresentation, maximum: CGFloat) -> CGFloat? {
         switch presentation {
         case .commands, .meetingSuggestion:
-            panelContentView?.expandedFittingHeight().map { min($0, maximum) }
-        case .collapsed, .live:
-            nil
+            return panelContentView?.expandedFittingHeight().map { min($0, maximum) }
+        case .live:
+            let overlay = DictationOverlayController.shared
+            guard EdgeCommandOutcomeVisibility.outcome(
+                overlay.outcomeStore.outcome,
+                isShowingLiveFeedback: model?.isShowingLiveFeedback == true,
+                phase: overlay.store.phase
+            ) != nil else { return nil }
+            return panelContentView?.expandedFittingHeight().map { min($0, maximum) }
+        case .collapsed:
+            return nil
         }
     }
 

@@ -32,11 +32,16 @@ struct EdgeCommandExpandedView: View {
     var onOpenRecording: (UUID) -> Void = { _ in }
 
     /// Which content the panel shows; a change is an M1 swap, anything else redraws in place (M3).
-    private enum ContentState: Equatable {
+    enum ContentState: Equatable {
         case prompt
         case live
         case outcome
         case home
+
+        /// The outcome replaces the live view at once: a slide would show both sets of buttons.
+        var slidesIn: Bool {
+            self != .outcome
+        }
     }
 
     private var contentState: ContentState {
@@ -78,6 +83,7 @@ struct EdgeCommandExpandedView: View {
                     onOpenRecording: { outcome.recordingID.map(onOpenRecording) }
                 )
                 .padding(DS.Panel.padding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(DS.Palette.panel, in: panelShape)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("commandPanel.outcome")
@@ -102,7 +108,7 @@ struct EdgeCommandExpandedView: View {
                     .transition(swap?.transition ?? .identity)
             }
         }
-        .animation(swap?.animation, value: contentState)
+        .animation(contentState.slidesIn ? swap?.animation : nil, value: contentState)
     }
 
     /// Command home (spec 7.4, 7.5; `cmdHome` P:577-592).

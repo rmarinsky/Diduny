@@ -4,6 +4,12 @@ import Testing
 
 @Suite("Command panel outcome after Stop")
 struct OutcomeStateTests {
+    @Test func outcomeReplacesTheLiveViewWithoutASlide() {
+        #expect(!EdgeCommandExpandedView.ContentState.outcome.slidesIn)
+        #expect(EdgeCommandExpandedView.ContentState.live.slidesIn)
+        #expect(EdgeCommandExpandedView.ContentState.home.slidesIn)
+    }
+
     // T2-ST-01
     @Test func dictationSubtitle() {
         let outcome = EdgeCommandOutcome(flow: .dictation, durationSeconds: 7)
