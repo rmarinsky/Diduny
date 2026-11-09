@@ -3,16 +3,22 @@ import SwiftUI
 extension DS {
     /// Local models table, option A (Roman 2026-11-07, replaces D12): columns sized by their content in
     /// the 713.5 column (build-vs-prototype/options.html). The delete question opens in a popover on the
-    /// trash button, so Actions only fits "Download". Translation is the flexible column.
+    /// trash button, so Actions only fits "Download". Translation takes what the others leave, and its
+    /// sublines wrap: sized by its content it reached 238 and pushed the table out of the column.
     enum ModelTable {
         static let model: CGFloat = 126
         static let live: CGFloat = 62
-        static let translation: CGFloat = 180
+        static let translationMinimum: CGFloat = 182
         static let languages: CGFloat = 76.5
         static let speed: CGFloat = 53
         static let accuracy: CGFloat = 67
         static let size: CGFloat = 56.5
         static let actions: CGFloat = 90.5
+        static let fixedColumns: CGFloat = model + live + languages + speed + accuracy + size + actions
+        static func translation(tableWidth: CGFloat) -> CGFloat {
+            max(tableWidth - fixedColumns, translationMinimum)
+        }
+
         static let cellPaddingV: CGFloat = 7
         static let cellPaddingH: CGFloat = 6
         static let font = SwiftUI.Font.system(size: 12)
@@ -23,11 +29,14 @@ extension DS {
 /// Filter row, table, legend and speaker note of Settings > Local models (design-spec 7.10).
 struct ModelTable: View {
     @Bindable var model: LocalModelsModel
+    @State private var tableWidth = ProviderComparisonTable.tableWidth
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             filterRow.padding(.bottom, DS.Space.sm)
             table
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self, of: \.size.width) { tableWidth = $0 }
             legend.padding(.top, DS.Space.md)
             Text("No local model labels speakers. Diduny labels them on this Mac after Stop; see Audio.")
                 .font(DS.ModelTable.font)
@@ -91,7 +100,7 @@ struct ModelTable: View {
             GridRow(alignment: .bottom) {
                 header("Model", DS.ModelTable.model)
                 header("Live text", DS.ModelTable.live)
-                header("Translation", nil)
+                header("Translation", translationWidth)
                 header("Languages", DS.ModelTable.languages)
                 header("Speed", DS.ModelTable.speed)
                 header("Accuracy", DS.ModelTable.accuracy)
@@ -142,7 +151,7 @@ struct ModelTable: View {
             .accessibilityIdentifier("models.row.\(row.id)")
             cell(DS.ModelTable.live) { marks([row.live], column: "Live text", row: row) }
                 .accessibilityIdentifier(cellID("live"))
-            cell(nil) { marks(row.translation, column: "Translation", row: row) }
+            cell(translationWidth) { marks(row.translation, column: "Translation", row: row) }
                 .accessibilityIdentifier(cellID("translation"))
             cell(DS.ModelTable.languages) { ModelLanguagesLink(row: row, yourLanguages: model.yourLanguages) }
             cell(DS.ModelTable.speed) { number(row.speedText) }.accessibilityIdentifier(cellID("speed"))
@@ -152,21 +161,23 @@ struct ModelTable: View {
         }
     }
 
-    private func header(_ title: LocalizedStringKey, _ width: CGFloat?) -> some View {
+    private func header(_ title: LocalizedStringKey, _ width: CGFloat) -> some View {
         cell(width) {
             Text(title).fontWeight(.semibold).fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
         }
     }
 
-    /// Fixed width including the 7 x 6 padding; nil = the flexible column.
-    private func cell(_ width: CGFloat?, @ViewBuilder _ content: () -> some View) -> some View {
+    private var translationWidth: CGFloat {
+        DS.ModelTable.translation(tableWidth: tableWidth)
+    }
+
+    /// Fixed width including the 7 x 6 padding.
+    private func cell(_ width: CGFloat, @ViewBuilder _ content: () -> some View) -> some View {
         content()
             .padding(.vertical, DS.ModelTable.cellPaddingV)
             .padding(.horizontal, DS.ModelTable.cellPaddingH)
             .frame(width: width, alignment: .leading)
-            .frame(minWidth: width == nil ? DS.ModelTable.translation : nil,
-                   maxWidth: width == nil ? .infinity : nil, alignment: .leading)
     }
 
     private func number(_ text: String) -> some View {

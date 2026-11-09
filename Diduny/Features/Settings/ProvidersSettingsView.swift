@@ -4,11 +4,16 @@ import SwiftUI
 /// Settings > Providers (design-spec 7.9; 03 1 to 3): the comparison table, the legend, and "Add ElevenLabs"
 /// only while no key is saved. The key itself is managed in the key popup. Per-mode engines live in Settings > Modes.
 struct ProvidersSettingsView: View {
-    @State private var hasKey = ProviderKeyStore.shared.hasKey(for: STTProviderID.elevenLabs)
+    @State private var hasKey: Bool
     @State private var addKey = AddKeyState(keyStore: ProviderKeyStore.shared, account: ElevenLabsAccountService.settings)
     @State private var showDefaultsSheet = false
 
     private let keyStore = ProviderKeyStore.shared
+
+    init(hasKey: Bool = ProviderKeyStore.shared.hasKey(for: STTProviderID.elevenLabs)) {
+        _hasKey = State(initialValue: hasKey)
+    }
+
     private static let dashboardURL = URL(string: "https://elevenlabs.io/app")!
 
     var body: some View {

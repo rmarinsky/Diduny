@@ -434,6 +434,7 @@
 		F5673AA35E4619FFC4D9AFA0 /* FileTranscriptionBatchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8D2B8A37BF978AE7F1A12A /* FileTranscriptionBatchService.swift */; };
 		F5E2A4BAF6E38A3FE3A1FE38 /* ShortcutsSettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95245467F6034D969106047B /* ShortcutsSettingsUITests.swift */; };
 		F64CD3B70A52B315B4110B8C /* CloudRealtimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001D5E66F362C783C621055C /* CloudRealtimeService.swift */; };
+		F65771854E8C66C34218D562 /* SettingsPageWidthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6D6EBF17BC6CAF61401BF66 /* SettingsPageWidthTests.swift */; };
 		F6597F7A3262A493D769B85B /* Errors.swift in Sources */ = {isa = PBXBuildFile; fileRef = BECAEC93BAEBC7FB0CE79126 /* Errors.swift */; };
 		F6977B2A592CE8E5F2964F40 /* LanguagesSettingsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16BFE0903EF698F090808CEE /* LanguagesSettingsModelTests.swift */; };
 		F72737E5FD578BC35A6E5E2F /* OnboardingParakeetOffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C12F43A7EBB4CB7DA630A0E /* OnboardingParakeetOffer.swift */; };
@@ -754,6 +755,7 @@
 		A50F242A21D9296A2CAB36DD /* ModeDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModeDefaults.swift; sourceTree = "<group>"; };
 		A5BD647AB1E7A57BC37921D0 /* CommandPanelUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPanelUITests.swift; sourceTree = "<group>"; };
 		A6878696CC8A55024F5FBA6E /* TestBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestBridge.swift; sourceTree = "<group>"; };
+		A6D6EBF17BC6CAF61401BF66 /* SettingsPageWidthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPageWidthTests.swift; sourceTree = "<group>"; };
 		A6D8F4C5FC5CDB3A9842F4F3 /* SettingsMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsMigration.swift; sourceTree = "<group>"; };
 		A71FCAF64D600F8EFA8B20A2 /* WhisperModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModelManager.swift; sourceTree = "<group>"; };
 		A90DC34399C728FB2BD9C292 /* AuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthServiceTests.swift; sourceTree = "<group>"; };
@@ -1667,6 +1669,7 @@
 				936C8B57F37C9D3F1CA03EA1 /* RunningMeetingPanelTests.swift */,
 				626B47A86043CBBE113B5E93 /* RunTimeRoutingTests.swift */,
 				0E803A5D7A1A995C62E26F75 /* SettingsMigrationTests.swift */,
+				A6D6EBF17BC6CAF61401BF66 /* SettingsPageWidthTests.swift */,
 				E06685A0367DD0430BCEE035 /* SettingsStorageProviderTests.swift */,
 				F0D815AAB43E5F3DA8510E34 /* ShortcutCaptureMachineTests.swift */,
 				32E8E73646C8551A1669BF15 /* ShortcutSettingTests.swift */,
@@ -2373,6 +2376,7 @@
 				2E4184C2773B0185CF8FF2E3 /* RunTimeRoutingTests.swift in Sources */,
 				56CE95548F78084B1AAE4757 /* RunningMeetingPanelTests.swift in Sources */,
 				3C82ADD11DF4654608E55E8F /* SettingsMigrationTests.swift in Sources */,
+				F65771854E8C66C34218D562 /* SettingsPageWidthTests.swift in Sources */,
 				4E980E04C373EE5FBF3D2DC6 /* SettingsStorageProviderTests.swift in Sources */,
 				5B8BC998AB52594C75E721C0 /* ShortcutCaptureMachineTests.swift in Sources */,
 				ACC5B249280BFACEA631D7C4 /* ShortcutSettingTests.swift in Sources */,

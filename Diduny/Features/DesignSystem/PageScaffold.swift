@@ -3,6 +3,11 @@ import SwiftUI
 /// Pinned header + leading-aligned content column (inner 840, outer 888 with 24 insets).
 /// Data screens use `scrolls: true` (default). Settings screens that host a native
 /// grouped `Form` pass `scrolls: false` because the Form scrolls itself.
+/// Receives a page's own content width, so a test can catch content wider than its column.
+extension EnvironmentValues {
+    @Entry var pageContentWidthProbe: ((CGFloat) -> Void)?
+}
+
 struct PageScaffold<Trailing: View, Content: View>: View {
     let title: LocalizedStringKey
     var subtitle: LocalizedStringKey?
@@ -15,6 +20,7 @@ struct PageScaffold<Trailing: View, Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
     @State private var scrolled = false
+    @Environment(\.pageContentWidthProbe) private var contentWidthProbe
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,8 +47,8 @@ struct PageScaffold<Trailing: View, Content: View>: View {
                     if isScrolled != scrolled { scrolled = isScrolled }
                 }
             } else {
-                content()
-                    .frame(maxWidth: DS.Layout.outerColumnMaxWidth, maxHeight: .infinity, alignment: .topLeading)
+                fittedContent
+                    .frame(minWidth: 0, maxWidth: DS.Layout.outerColumnMaxWidth, maxHeight: .infinity, alignment: .topLeading)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
@@ -83,11 +89,18 @@ struct PageScaffold<Trailing: View, Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var column: some View {
+    /// The column's width whatever the content asks for (`minWidth` 0): wider content cannot widen the page.
+    private var fittedContent: some View {
         content()
+            .onGeometryChange(for: CGFloat.self, of: \.size.width) { contentWidthProbe?($0) }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var column: some View {
+        fittedContent
             .padding(.horizontal, DS.Layout.pagePadding)
             .padding(.bottom, DS.Layout.pagePadding)
-            .frame(maxWidth: DS.Layout.outerColumnMaxWidth, alignment: .leading)
+            .frame(minWidth: 0, maxWidth: DS.Layout.outerColumnMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
