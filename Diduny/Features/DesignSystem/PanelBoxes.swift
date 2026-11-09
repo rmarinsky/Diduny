@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Live transcript (design-spec 4.18): `box` fill, radius 8, padding 10, 12.5 `text` at line
-/// height 18.1, paragraphs 6 apart, fixed height, content kept at the bottom as it grows.
+/// height 18.1, paragraphs 6 apart, fixed height. Text starts at the top; once the box is full it
+/// scrolls so the newest line stays visible.
 struct TranscriptBox<Content: View>: View {
     let height: CGFloat
     @ViewBuilder var content: () -> Content
@@ -12,7 +13,7 @@ struct TranscriptBox<Content: View>: View {
                 .font(DS.Font.content)
                 .foregroundStyle(DS.Palette.text)
                 .lineSpacing(DS.Font.LineSpacing.content)
-                .frame(maxWidth: .infinity, minHeight: height - DS.Size.boxPadding * 2, alignment: .bottomLeading)
+                .frame(maxWidth: .infinity, minHeight: height - DS.Size.boxPadding * 2, alignment: .topLeading)
                 .padding(DS.Size.boxPadding)
         }
         .defaultScrollAnchor(.bottom)

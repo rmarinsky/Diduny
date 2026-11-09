@@ -16,6 +16,7 @@
 		03BA270D9BB719167A7AA9B3 /* RealtimeTokenCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1297828B8BD8BEDBAFD9F235 /* RealtimeTokenCoalescer.swift */; };
 		03EBBAC2178925692C5B0F28 /* OnboardingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A7E2F21047194B8A5423BF5 /* OnboardingManager.swift */; };
 		04EE77582BB83CA8B7CEA843 /* SettingsStorage+ModeDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CA165A074BEB2E7692FCF39 /* SettingsStorage+ModeDefaults.swift */; };
+		0517D3E61E31D009FAC2810D /* TranscriptBoxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F5B9570418D2EFFDEA629D7 /* TranscriptBoxTests.swift */; };
 		05EA67FC325A37BAE6E105B1 /* files-diduny-cloud.plist in Resources */ = {isa = PBXBuildFile; fileRef = D13008019960E1F794767165 /* files-diduny-cloud.plist */; };
 		06EC92C9C8A576C70C340A1C /* BenchmarkRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0452A6DF247C342955ED9597 /* BenchmarkRunner.swift */; };
 		076DA9ECAA569742F70794BF /* FileTranscriptionBatchServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93C5FD49F98345A448E9EA7 /* FileTranscriptionBatchServiceTests.swift */; };
@@ -665,6 +666,7 @@
 		6EB0F0AB8260CD697B5816C9 /* WhisperOptionsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperOptionsSection.swift; sourceTree = "<group>"; };
 		6ECD47EAFC19CDD9D6561326 /* RecordingFeedbackSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingFeedbackSurface.swift; sourceTree = "<group>"; };
 		6F517E809D6F92F01144A329 /* UITestFakeParakeetDownload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestFakeParakeetDownload.swift; sourceTree = "<group>"; };
+		6F5B9570418D2EFFDEA629D7 /* TranscriptBoxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptBoxTests.swift; sourceTree = "<group>"; };
 		7074B6A737CE72D77BD9AE8F /* AccountSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSettingsView.swift; sourceTree = "<group>"; };
 		70DDD786E73A1532AE91FC20 /* SystemAudioCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioCaptureService.swift; sourceTree = "<group>"; };
 		7144FB4309E888B25A0048C8 /* ProtectedLexiconServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtectedLexiconServiceTests.swift; sourceTree = "<group>"; };
@@ -1676,6 +1678,7 @@
 				96A94A4425CFD487D68A7D37 /* SpeakerLabelsTests.swift */,
 				5F351D9CCDDB40C5C6B19484 /* StaticComponentMetricsTests.swift */,
 				D7B1036E8CBFA6D4FE455380 /* TimedTranscriptRendererTests.swift */,
+				6F5B9570418D2EFFDEA629D7 /* TranscriptBoxTests.swift */,
 				DCC34E52E29A97B99C122898 /* TranscriptCleanupServiceTests.swift */,
 				17DDE5421515DDFE13E751C6 /* TranscriptionBatchStorageTests.swift */,
 				5F347B5A60F1BC366BB37B1D /* TranslateMeetingPanelModelTests.swift */,
@@ -2383,6 +2386,7 @@
 				AE0D2ED6EB2450B3C2134B45 /* StaticComponentMetricsTests.swift in Sources */,
 				D809A0DA2B450067014C4E9C /* StubURLProtocol.swift in Sources */,
 				8DA776A254CC648D04E490BE /* TimedTranscriptRendererTests.swift in Sources */,
+				0517D3E61E31D009FAC2810D /* TranscriptBoxTests.swift in Sources */,
 				D9A94E2B88149920B8BA2B9E /* TranscriptCleanupServiceTests.swift in Sources */,
 				25EDCFE17C039B0D2ED31505 /* TranscriptionBatchStorageTests.swift in Sources */,
 				5330127C60919D8BCF0B701C /* TranslateMeetingPanelModelTests.swift in Sources */,
