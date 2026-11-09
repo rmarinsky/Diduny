@@ -56,8 +56,9 @@ final class InplaceTranslationFeedbackController {
         }
     }
 
-    /// 28pt badge plus room for the success burst.
-    private static let badgeSize = CGSize(width: 44, height: 44)
+    /// The badge's 44 pt layout (28 pt badge plus room for the success burst), shown at 1.5x.
+    static let badgeScale: CGFloat = 1.5
+    static let badgeSize = CGSize(width: 44 * badgeScale, height: 44 * badgeScale)
 
     private var badgePanel: NSPanel?
     private let badgeModel = InplaceBadgeModel()
@@ -237,7 +238,11 @@ private struct InplaceBadgeView: View {
         }
         .frame(width: 44, height: 44)
         .offset(x: shake)
-        .scaleEffect(scale)
+        .scaleEffect(scale * InplaceTranslationFeedbackController.badgeScale)
+        .frame(
+            width: InplaceTranslationFeedbackController.badgeSize.width,
+            height: InplaceTranslationFeedbackController.badgeSize.height
+        )
         .opacity(model.isVisible ? 1 : 0)
         .animation(appearAnimation, value: model.isVisible)
         .animation(reduceMotion ? nil : .bouncy(duration: 0.3, extraBounce: 0.15), value: model.state)
