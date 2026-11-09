@@ -17,7 +17,8 @@ struct ProvidersSettingsView: View {
     private static let dashboardURL = URL(string: "https://elevenlabs.io/app")!
 
     var body: some View {
-        PageScaffold(title: "Providers", subtitle: "What each engine does by itself, and what Diduny adds on top of it.") {
+        PageScaffold(title: "Providers", subtitle: "What each engine does by itself, and what Diduny adds on top of it.",
+                     columnMaxWidth: DS.Layout.wideColumnMaxWidth) {
             VStack(alignment: .leading, spacing: 0) {
                 ProviderComparisonTable(
                     model: ProviderTableModel.current(hasKey: hasKey),

@@ -111,7 +111,7 @@ struct RecordingsLibraryView: View {
     }
 
     var body: some View {
-        PageScaffold(title: "Recordings", scrolls: false) {
+        PageScaffold(title: "Recordings", scrolls: false, columnMaxWidth: DS.Layout.wideColumnMaxWidth) {
             headerActions
         } content: {
             VStack(alignment: .leading, spacing: DS.Space.lg) {

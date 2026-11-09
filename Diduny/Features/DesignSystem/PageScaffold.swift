@@ -5,15 +5,19 @@ extension EnvironmentValues {
     @Entry var pageContentWidthProbe: ((CGFloat) -> Void)?
 }
 
-/// Pinned header + leading-aligned content column (inner 840, outer 888 with 24 insets).
+/// Pinned header + leading-aligned content column (inner up to `columnMaxWidth`, plus 24 insets).
 /// Data screens use `scrolls: true` (default). Settings screens that host a native
 /// grouped `Form` pass `scrolls: false` because the Form scrolls itself.
 struct PageScaffold<Trailing: View, Content: View>: View {
     let title: LocalizedStringKey
     var subtitle: LocalizedStringKey?
     var scrolls = true
+    /// Inner column cap: reading width for text pages, `DS.Layout.wideColumnMaxWidth` for table pages.
+    var columnMaxWidth: CGFloat = DS.Layout.columnMaxWidth
     @ViewBuilder var trailing: () -> Trailing
     @ViewBuilder var content: () -> Content
+
+    private var outerColumnMaxWidth: CGFloat { columnMaxWidth + DS.Layout.pagePadding * 2 }
 
     static var titleTopPadding: CGFloat { 48 }
 
@@ -48,7 +52,7 @@ struct PageScaffold<Trailing: View, Content: View>: View {
                 }
             } else {
                 fittedContent
-                    .frame(minWidth: 0, maxWidth: DS.Layout.outerColumnMaxWidth, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(minWidth: 0, maxWidth: outerColumnMaxWidth, maxHeight: .infinity, alignment: .topLeading)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
@@ -85,7 +89,7 @@ struct PageScaffold<Trailing: View, Content: View>: View {
         .padding(.top, Self.titleTopPadding)
         // Lead to first block 14 (design-spec 3.5).
         .padding(.bottom, 14)
-        .frame(maxWidth: DS.Layout.outerColumnMaxWidth, alignment: .leading)
+        .frame(maxWidth: outerColumnMaxWidth, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -100,7 +104,7 @@ struct PageScaffold<Trailing: View, Content: View>: View {
         fittedContent
             .padding(.horizontal, DS.Layout.pagePadding)
             .padding(.bottom, DS.Layout.pagePadding)
-            .frame(minWidth: 0, maxWidth: DS.Layout.outerColumnMaxWidth, alignment: .leading)
+            .frame(minWidth: 0, maxWidth: outerColumnMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -110,9 +114,13 @@ extension PageScaffold where Trailing == EmptyView {
         title: LocalizedStringKey,
         subtitle: LocalizedStringKey? = nil,
         scrolls: Bool = true,
+        columnMaxWidth: CGFloat = DS.Layout.columnMaxWidth,
         @ViewBuilder content: @escaping () -> Content
     ) {
-        self.init(title: title, subtitle: subtitle, scrolls: scrolls, trailing: { EmptyView() }, content: content)
+        self.init(
+            title: title, subtitle: subtitle, scrolls: scrolls, columnMaxWidth: columnMaxWidth,
+            trailing: { EmptyView() }, content: content
+        )
     }
 }
 

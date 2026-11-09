@@ -71,21 +71,46 @@ final class MainWindowController {
 
     static let defaultContentSize = NSSize(width: 1000, height: 680)
     static let recordingInspectorWidth: CGFloat = 480
+    static let frameAutosaveName = "DidunyMainWindow"
 
-    /// The window has one fixed size; it widens only while a recording is open in the inspector.
+    /// How much the inspector grew the window; nil when it did not grow it.
+    private var inspectorGrowth: CGFloat?
+
+    /// Opening the inspector grows the window only when the user's size leaves no room for it, and never
+    /// past the screen; closing it gives back exactly what it took.
     func setRecordingInspectorExpanded(_ expanded: Bool) {
-        guard let window else { return }
-        var size = Self.defaultContentSize
-        if expanded { size.width += Self.recordingInspectorWidth }
-        let target = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
-        guard window.frame.size != target.size else { return }
-        var frame = window.frame
-        frame.origin.y += frame.height - target.height
-        frame.size = target.size
-        if let visible = window.screen?.visibleFrame, frame.maxX > visible.maxX {
-            frame.origin.x = max(visible.minX, visible.maxX - frame.width)
+        guard let window, !window.styleMask.contains(.fullScreen) else { return }
+        let contentWidth = window.contentRect(forFrameRect: window.frame).width
+        let targetContentWidth: CGFloat
+        if expanded {
+            guard inspectorGrowth == nil else { return }
+            let needed = Self.defaultContentSize.width + Self.recordingInspectorWidth
+            guard contentWidth < needed else { return }
+            inspectorGrowth = needed - contentWidth
+            targetContentWidth = needed
+        } else {
+            guard let growth = inspectorGrowth else { return }
+            inspectorGrowth = nil
+            targetContentWidth = max(Self.defaultContentSize.width, contentWidth - growth)
         }
+        let delta = targetContentWidth - contentWidth
+        var frame = window.frame
+        frame.size.width += delta
+        if let visible = window.screen?.visibleFrame {
+            frame = Self.clamp(frame, to: visible)
+        }
+        guard frame != window.frame else { return }
         window.setFrame(frame, display: true, animate: true)
+    }
+
+    /// Fits a frame inside the visible screen: no larger than it, moved left/down to stay on it.
+    static func clamp(_ frame: NSRect, to visible: NSRect) -> NSRect {
+        var frame = frame
+        frame.size.width = min(frame.width, visible.width)
+        frame.size.height = min(frame.height, visible.height)
+        frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+        frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+        return frame
     }
 
     func checkForUpdates() {
@@ -150,13 +175,13 @@ final class MainWindowController {
             .environment(appDelegate.audioDeviceManager)
 
         let hostingView = NSHostingView(rootView: view)
-        // Window size is owned by MainWindowController (fixed, widened for the recording inspector);
-        // without this the hosting view snaps the window back to its intrinsic width.
+        // The user owns the size; SwiftUI only sets the minimum. Without this the hosting view snaps
+        // the window back to its intrinsic width.
         hostingView.sizingOptions = [.minSize]
 
         let w = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultContentSize),
-            styleMask: [.titled, .closable, .miniaturizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -165,11 +190,19 @@ final class MainWindowController {
         configureUnifiedChrome(for: w)
         w.isReleasedWhenClosed = false
         w.collectionBehavior.insert(.moveToActiveSpace)
+        w.collectionBehavior.insert(.fullScreenPrimary)
+        w.contentMinSize = Self.defaultContentSize
         w.center()
+        // Restores the size the user last set (first open keeps the 1000 x 680 default), then fits it on screen.
+        w.setFrameAutosaveName(Self.frameAutosaveName)
+        if let visible = (w.screen ?? NSScreen.main)?.visibleFrame {
+            w.setFrame(Self.clamp(w.frame, to: visible), display: false)
+        }
 
         windowDelegate = MainWindowDelegate { [weak self] in
             self?.window = nil
             self?.windowDelegate = nil
+            self?.inspectorGrowth = nil
             self?.refreshActivationPolicy()
         }
         w.delegate = windowDelegate

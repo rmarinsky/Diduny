@@ -102,4 +102,23 @@ struct ProviderTableModelTests {
             if !hasKey { #expect(abs(label - 135.7) < 0.01) }
         }
     }
+
+    @Test("In a wider window every column scales and the table fills it")
+    @MainActor func tableWidthInAWideWindow() throws {
+        // 1600 window - 238 sidebar - 0.5 rule - 2 x 24 padding.
+        let width: CGFloat = 1313.5
+        for hasKey in [false, true] {
+            let model = try Self.model(hasKey: hasKey)
+            let ids = model.columns.map(\.id)
+            let label = ProviderComparisonTable.labelWidth(columns: ids, withKey: model.hasKeyColumn, tableWidth: width)
+            let total = ids.reduce(label) {
+                $0 + ProviderComparisonTable.width(of: $1, withKey: model.hasKeyColumn, tableWidth: width)
+            }
+            #expect(abs(total - width) < 0.01)
+            for id in ids {
+                #expect(ProviderComparisonTable.width(of: id, withKey: model.hasKeyColumn, tableWidth: width)
+                    > ProviderComparisonTable.width(of: id, withKey: model.hasKeyColumn))
+            }
+        }
+    }
 }

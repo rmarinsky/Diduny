@@ -11,7 +11,8 @@ struct OfflineModelsSettingsView: View {
     )
 
     var body: some View {
-        PageScaffold(title: "Local models", subtitle: "Run on this Mac. Audio never leaves it.") {
+        PageScaffold(title: "Local models", subtitle: "Run on this Mac. Audio never leaves it.",
+                     columnMaxWidth: DS.Layout.wideColumnMaxWidth) {
             VStack(alignment: .leading, spacing: 18) {
                 ModelTable(model: model)
                 WhisperOptionsSection()

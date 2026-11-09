@@ -143,6 +143,8 @@ enum DS {
         /// Inner content column; the outer box adds the 24 pt page insets on both sides.
         static let columnMaxWidth: CGFloat = 840
         static let outerColumnMaxWidth: CGFloat = columnMaxWidth + pagePadding * 2
+        /// Inner column for table pages (Providers, Local models, Recordings): the tables use a wider window.
+        static let wideColumnMaxWidth: CGFloat = 1200
         static let settingRowMinHeight: CGFloat = 44
     }
 

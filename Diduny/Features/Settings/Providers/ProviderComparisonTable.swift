@@ -10,7 +10,14 @@ struct ProviderComparisonTable: View {
     let openLocalModels: () -> Void
 
     /// Column widths measured in the prototype at 711 pt (design-spec 3.6); the label column is flexible.
-    static func width(of id: EngineID, withKey: Bool) -> CGFloat {
+    /// A wider window scales every column by the same factor, so the table fills its column.
+    static func width(of id: EngineID, withKey: Bool, tableWidth: CGFloat = tableWidth) -> CGFloat {
+        baseWidth(of: id, withKey: withKey) * scale(tableWidth)
+    }
+
+    private static func scale(_ width: CGFloat) -> CGFloat { max(1, width / tableWidth) }
+
+    private static func baseWidth(of id: EngineID, withKey: Bool) -> CGFloat {
         switch (id, withKey) {
         case (.didunyCloud, true): 148.0
         case (.elevenLabs, _): 111.0
@@ -29,9 +36,11 @@ struct ProviderComparisonTable: View {
 
     /// The label column takes what the engine columns leave (prototype 135.7 without a key). A fixed width
     /// keeps the table inside the column, so the page never pushes the sidebar out of the window.
-    static func labelWidth(columns: [EngineID], withKey: Bool) -> CGFloat {
-        tableWidth - columns.reduce(0) { $0 + width(of: $1, withKey: withKey) }
+    static func labelWidth(columns: [EngineID], withKey: Bool, tableWidth width: CGFloat = tableWidth) -> CGFloat {
+        max(width, tableWidth) - columns.reduce(0) { $0 + self.width(of: $1, withKey: withKey, tableWidth: width) }
     }
+
+    @State private var measuredWidth = Self.tableWidth
 
     private static let cellPadding: CGFloat = 8
     private static let groupRuleWidth: CGFloat = 2
@@ -78,7 +87,9 @@ struct ProviderComparisonTable: View {
             hairline
             actionRow
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // minWidth 0: the frame reports the column's width, not the grid's, so the measure cannot feed back.
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self, of: \.size.width) { measuredWidth = $0 }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("providers.table")
     }
@@ -216,7 +227,7 @@ struct ProviderComparisonTable: View {
             .foregroundStyle(DS.Palette.text)
             .fixedSize(horizontal: false, vertical: true)
             .padding(Self.cellPadding)
-            .frame(width: Self.labelWidth(columns: model.columns.map(\.id), withKey: model.hasKeyColumn), alignment: alignment)
+            .frame(width: Self.labelWidth(columns: model.columns.map(\.id), withKey: model.hasKeyColumn, tableWidth: measuredWidth), alignment: alignment)
             .frame(maxHeight: .infinity, alignment: alignment)
     }
 
@@ -237,7 +248,7 @@ struct ProviderComparisonTable: View {
             .padding(.leading, isFirstLocal ? Self.groupRuleWidth + Self.groupPadding : Self.cellPadding)
             .padding(.top, actionRow ? 10 : Self.cellPadding)
             .padding([.bottom, .trailing], Self.cellPadding)
-            .frame(width: Self.width(of: column.id, withKey: model.hasKeyColumn), alignment: .topLeading)
+            .frame(width: Self.width(of: column.id, withKey: model.hasKeyColumn, tableWidth: measuredWidth), alignment: .topLeading)
             .frame(maxHeight: .infinity, alignment: .top)
             .background(isTinted ? DS.Palette.tint : Color.clear, in: shape)
             .overlay(alignment: .leading) { if isFirstLocal { groupRule } }
