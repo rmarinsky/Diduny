@@ -1,3 +1,4 @@
+import AVFoundation
 @testable import Diduny
 import XCTest
 
@@ -420,6 +421,67 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         let row = try XCTUnwrap(storage.recordings.first(where: { $0.id == id }))
         XCTAssertEqual(row.status, .needsRecovery)
         XCTAssertEqual(row.statusDetail, "Could not recover meeting audio")
+    }
+
+    /// A session killed mid-recording: the audio is on disk, the WAV header says "no samples".
+    private func writeKilledChunk(to url: URL, seconds: Int) throws {
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 16000.0, AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+        do {
+            let file = try AVAudioFile(forWriting: url, settings: settings)
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 16000))
+            buffer.frameLength = 16000
+            for _ in 0 ..< seconds { try file.write(from: buffer) }
+        }
+        var bytes = try Data(contentsOf: url)
+        let dataTag = try XCTUnwrap(bytes.range(of: Data("data".utf8))).lowerBound
+        bytes.replaceSubrange(dataTag + 4 ..< dataTag + 8, with: Data(count: 4))
+        try bytes.write(to: url)
+        XCTAssertEqual(try AVAudioFile(forReading: url).length, 0, "Fixture must match a killed writer")
+    }
+
+    func test_recoveryOfKilledSession_savesPlayableAudioAndLeavesNeedsRecovery() async throws {
+        let id = UUID()
+        let inProgressStore = try InProgressRecordingStore(
+            baseDirectory: directory.appendingPathComponent("InProgressRecordings")
+        )
+        let recoveryService = MeetingRecoveryService(storage: storage, inProgressStore: inProgressStore)
+        XCTAssertEqual(storage.beginMeetingRecording(id: id, type: .meeting), id)
+        XCTAssertTrue(storage.markNeedsRecovery(id: id))
+        try writeKilledChunk(to: try await inProgressStore.chunkURL(for: id), seconds: 3)
+
+        let resolved = await recoveryService.resolve(recordingID: id, action: .saveAudioOnly)
+
+        XCTAssertTrue(resolved)
+        let row = try XCTUnwrap(storage.recordings.first(where: { $0.id == id }))
+        XCTAssertEqual(row.status, .unprocessed)
+        XCTAssertNil(row.statusDetail)
+        XCTAssertTrue(storage.hasPlayableAudio(for: row))
+        XCTAssertEqual(row.durationSeconds, 3, accuracy: 0.01)
+    }
+
+    func test_unrecoverableChunkIsKeptAndRowReportsTheFailure() async throws {
+        let id = UUID()
+        let inProgressStore = try InProgressRecordingStore(
+            baseDirectory: directory.appendingPathComponent("InProgressRecordings")
+        )
+        let recoveryService = MeetingRecoveryService(storage: storage, inProgressStore: inProgressStore)
+        XCTAssertEqual(storage.beginMeetingRecording(id: id, type: .meeting), id)
+        XCTAssertTrue(storage.markNeedsRecovery(id: id))
+        let chunk = try await inProgressStore.chunkURL(for: id)
+        let garbage = Data("not audio".utf8)
+        try garbage.write(to: chunk)
+
+        let resolved = await recoveryService.resolve(recordingID: id, action: .processNow)
+
+        XCTAssertFalse(resolved)
+        let row = try XCTUnwrap(storage.recordings.first(where: { $0.id == id }))
+        XCTAssertEqual(row.status, .needsRecovery)
+        XCTAssertEqual(row.statusDetail, "Could not recover meeting audio")
+        XCTAssertEqual(try Data(contentsOf: chunk), garbage, "The source chunk is never changed by a failed attempt")
     }
 
     func test_deleteRecording_removesRecoveryRowWithoutAttachedAudio() throws {

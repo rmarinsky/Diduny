@@ -868,7 +868,7 @@
 "This permanently deletes the recording, all source media and generated files, every transcript and translation version, and removes it from attached batches." = "Буде назавжди видалено запис, усі вихідні й створені файли, усі версії транскрипцій і перекладів. Запис також буде вилучено з пакетів.";
 "This permanently deletes the recording, stored media, transcript history, translations, and every batch reference." = "Буде назавжди видалено запис, медіафайли, історію транскрипцій, переклади й усі посилання з пакетів.";
 "This rental or DRM-protected video is not supported." = "Орендовані або захищені DRM відео не підтримуються.";
-"This session needs recovery before it can be played or transcribed. Resolve it from the recordings list." = "Перед відтворенням чи транскрипцією потрібно відновити цей сеанс. Відкрийте його у списку записів.";
+"This session needs recovery before it can be played or transcribed." = "Перед відтворенням чи транскрипцією потрібно відновити цей сеанс.";
 "This transcript was created for a different audio range. Its timestamps refer to that version." = "Цю транскрипцію створено для іншого фрагмента аудіо. Часові позначки стосуються тієї версії.";
 "Thunderbolt" = "Thunderbolt";
 "Time saved this month" = "Заощаджений час за місяць";

@@ -868,7 +868,7 @@
 "This permanently deletes the recording, all source media and generated files, every transcript and translation version, and removes it from attached batches." = "This permanently deletes the recording, all source media and generated files, every transcript and translation version, and removes it from attached batches.";
 "This permanently deletes the recording, stored media, transcript history, translations, and every batch reference." = "This permanently deletes the recording, stored media, transcript history, translations, and every batch reference.";
 "This rental or DRM-protected video is not supported." = "This rental or DRM-protected video is not supported.";
-"This session needs recovery before it can be played or transcribed. Resolve it from the recordings list." = "This session needs recovery before it can be played or transcribed. Resolve it from the recordings list.";
+"This session needs recovery before it can be played or transcribed." = "This session needs recovery before it can be played or transcribed.";
 "This transcript was created for a different audio range. Its timestamps refer to that version." = "This transcript was created for a different audio range. Its timestamps refer to that version.";
 "Thunderbolt" = "Thunderbolt";
 "Time saved this month" = "Time saved this month";

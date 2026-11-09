@@ -68,6 +68,55 @@ enum MeetingChunkStitcher {
         return try stitchMultiple(chunkURLs: chunkURLs, outputURL: outputURL)
     }
 
+    // MARK: - Interrupted Chunks
+
+    /// A process killed mid-write leaves the audio on disk but the WAV header claiming no
+    /// samples, so `AVAudioFile` reads length 0. Writes a corrected copy to `outputURL` and
+    /// returns true; returns false, writing nothing, when the header is already right or the
+    /// file has no recognisable WAV layout. The source file is never changed.
+    static func writeRepairedCopy(of chunkURL: URL, to outputURL: URL) throws -> Bool {
+        let bytes = try Data(contentsOf: chunkURL, options: .mappedIfSafe)
+        guard let layout = wavLayout(of: bytes) else { return false }
+        let available = bytes.count - layout.dataOffset
+        let audioBytes = available / layout.blockAlign * layout.blockAlign
+        // Up to one trailing pad byte is normal in a properly closed file.
+        guard layout.declaredDataSize < available - 1 || layout.declaredDataSize > available else { return false }
+
+        var repaired = Data(bytes.prefix(layout.dataOffset + audioBytes))
+        func patch(_ value: Int, at offset: Int) {
+            withUnsafeBytes(of: UInt32(value).littleEndian) {
+                repaired.replaceSubrange(offset ..< offset + 4, with: $0)
+            }
+        }
+        patch(repaired.count - 8, at: 4)
+        patch(audioBytes, at: layout.dataOffset - 4)
+        try? FileManager.default.removeItem(at: outputURL)
+        try repaired.write(to: outputURL)
+        return true
+    }
+
+    private static func wavLayout(of bytes: Data) -> (dataOffset: Int, declaredDataSize: Int, blockAlign: Int)? {
+        func tag(at offset: Int) -> String { String(decoding: bytes[offset ..< offset + 4], as: UTF8.self) }
+        func uint32(at offset: Int) -> Int {
+            (0 ..< 4).reduce(0) { $0 | Int(bytes[offset + $1]) << (8 * $1) }
+        }
+        guard bytes.count >= 12, tag(at: 0) == "RIFF", tag(at: 8) == "WAVE" else { return nil }
+        var offset = 12
+        var blockAlign: Int?
+        while offset + 8 <= bytes.count {
+            let size = uint32(at: offset + 4)
+            let id = tag(at: offset)
+            if id == "fmt ", offset + 22 <= bytes.count {
+                blockAlign = Int(bytes[offset + 20]) | Int(bytes[offset + 21]) << 8
+            } else if id == "data" {
+                guard let blockAlign, blockAlign > 0 else { return nil }
+                return (offset + 8, size, blockAlign)
+            }
+            offset += 8 + size + (size % 2)
+        }
+        return nil
+    }
+
     // MARK: - Single-Chunk Path
 
     private static func stitchSingleChunk(_ chunkURL: URL, outputURL: URL) throws -> Result {

@@ -23,6 +23,7 @@ struct RecordingDetailView: View {
     @State private var description: String
     @State private var showDeleteConfirmation = false
     @State private var operationErrorMessage: String?
+    @State private var isRecoveringAudio = false
 
     init(
         recording: Recording,
@@ -461,14 +462,12 @@ struct RecordingDetailView: View {
                 }
             }
 
-            if isInProgressCapture {
-                Text(
-                    currentRecording.status == .recording
-                        ? "Recording in progress — playback and transcription become available once it's finalized."
-                        : "This session needs recovery before it can be played or transcribed. Resolve it from the recordings list."
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if currentRecording.status == .needsRecovery {
+                recoverySection
+            } else if isInProgressCapture {
+                Text("Recording in progress — playback and transcription become available once it's finalized.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             } else {
                 HStack(spacing: 8) {
                     localTranscriptionButton
@@ -488,6 +487,38 @@ struct RecordingDetailView: View {
                 translationMenu
                     .disabled(trimEditor != nil)
             }
+        }
+    }
+
+    private var recoverySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("This session needs recovery before it can be played or transcribed.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button("Process Now") { recoverAudio(.processNow) }
+                    .help("Process recovery")
+                Button("Save Audio Only") { recoverAudio(.saveAudioOnly) }
+                    .help("Save audio only")
+                if isRecoveringAudio {
+                    ProgressView().controlSize(.small)
+                }
+            }
+            .disabled(isRecoveringAudio)
+            if let failure = currentRecording.statusDetail {
+                Label(failure, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private func recoverAudio(_ action: MeetingRecoveryService.RecoveryAction) {
+        isRecoveringAudio = true
+        Task { @MainActor in
+            // A failure is stored on the recording and shown in `recoverySection`.
+            await MeetingRecoveryService.shared.resolve(recordingID: currentRecording.id, action: action)
+            isRecoveringAudio = false
         }
     }
 

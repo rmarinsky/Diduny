@@ -56,10 +56,7 @@ final class MeetingRecoveryService {
 
         case .saveAudioOnly, .processNow:
             guard let stitched = await stitchInProgressAudio(for: recordingID) else {
-                storage.updateStatusDetail(
-                    id: recordingID,
-                    detail: "Could not recover meeting audio"
-                )
+                reportFailure(recordingID)
                 return false
             }
 
@@ -80,7 +77,10 @@ final class MeetingRecoveryService {
                 recoverySource: .orphanedSession,
                 forceSave: true
             )
-            guard ok else { return false }
+            guard ok else {
+                reportFailure(recordingID)
+                return false
+            }
 
             await storage.attachInProgressTracks(from: recordingID, to: recordingID)
             await cleanupInProgress(recordingID)
@@ -92,6 +92,14 @@ final class MeetingRecoveryService {
             }
             return true
         }
+    }
+
+    /// Stays on the row and in the detail, so a failed attempt is never silent.
+    private func reportFailure(_ recordingID: UUID) {
+        storage.updateStatusDetail(
+            id: recordingID,
+            detail: String(localized: "Could not recover meeting audio")
+        )
     }
 
     private struct StitchOutput {
@@ -130,8 +138,19 @@ final class MeetingRecoveryService {
             if FileManager.default.fileExists(atPath: target.path) {
                 try? FileManager.default.removeItem(at: target)
             }
+            let sources = chunkURLs
             let result = try await Task.detached(priority: .utility) {
-                try MeetingChunkStitcher.stitch(chunkURLs: chunkURLs, outputURL: target)
+                var repairedURLs: [URL] = []
+                defer { repairedURLs.forEach { try? FileManager.default.removeItem(at: $0) } }
+                // An interrupted chunk is read through a repaired copy; the original stays
+                // untouched until the recovered audio is safely in the library.
+                let readable = try sources.map { chunk -> URL in
+                    let copy = dir.appendingPathComponent("repaired-\(chunk.lastPathComponent)")
+                    guard try MeetingChunkStitcher.writeRepairedCopy(of: chunk, to: copy) else { return chunk }
+                    repairedURLs.append(copy)
+                    return copy
+                }
+                return try MeetingChunkStitcher.stitch(chunkURLs: readable, outputURL: target)
             }.value
             let compressed = await AudioCompressionService.compressToFLAC(wavURL: result.outputURL)
             return StitchOutput(url: compressed, durationSeconds: result.totalDurationSeconds)
