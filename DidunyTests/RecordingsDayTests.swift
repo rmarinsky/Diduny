@@ -281,4 +281,35 @@ struct RecordingsDayTests {
         #expect(!RecordingsInspectorSelection.recording(id, parentBatchID: nil).marksRow(id, isSelectionMode: true))
         #expect(!RecordingsInspectorSelection.event("k").opensRecording(id))
     }
+
+    @Test func theDayIsBuiltOncePerInputChangeNotPerRead() {
+        let many = (0 ..< 500).map { recording($0 % 3 == 0 ? .voice : .meeting, 8 + $0 % 12, $0 % 60) }
+        var cache = RecordingsDayCache()
+        let inputs = { (zoom: NotesZoom) in
+            RecordingsDayCache.Inputs(day: self.at(13, 0), recordings: many, events: [], groups: [], zoom: zoom)
+        }
+        cache.update(inputs(.halfHour))
+        cache.update(inputs(.halfHour))
+        #expect(cache.builds == 1, "Same inputs, no rebuild")
+        _ = cache.day; _ = cache.day
+        cache.update(inputs(.quarterHour))
+        #expect(cache.builds == 2, "One zoom step, one rebuild")
+    }
+
+    @Test func dstDayAndEventsCrossingMidnightStayOnTheirDay() {
+        // 2026-03-29 is 23 hours long in Kyiv (clocks go forward at 03:00).
+        let dst = calendar.date(from: DateComponents(year: 2026, month: 3, day: 29, hour: 22))!
+        let late = Recording(id: UUID(), createdAt: dst, type: .meeting, audioFileName: "a", durationSeconds: 60,
+                             fileSizeBytes: 1, status: .unprocessed, sourceDevice: nil)
+        let built = RecordingsDay.build(day: dst, recordings: [late], events: [], zoom: .halfHour, calendar: calendar)
+        #expect(built.items.count == 1)
+        #expect(built.items[0].startMinute == 22 * 60, "Wall clock, so the 22:00 label is right on a DST day")
+
+        let overnight = event("n", 23, 30, minutes: 60)
+        let today = build([], events: [overnight]).items
+        #expect(today.first?.endMinute == 24 * 60, "Clipped at midnight")
+        let tomorrow = RecordingsDay.build(day: at(12, 0, dayOffset: 1), recordings: [], events: [overnight],
+                                           zoom: .halfHour, calendar: calendar).items
+        #expect(tomorrow.first?.startMinute == 0, "Shows from 0:00 on the next day")
+    }
 }

@@ -58,6 +58,8 @@ struct RecordingsLibraryView: View {
     @State var zoom: NotesZoom = .halfHour
     @State var expandedNotes: Set<String> = []
     @State var dayEvents: [CalendarMeeting] = []
+    @State private var dayCache = RecordingsDayCache()
+    @State private var daysWithRecordings: Set<Date> = []
 
     enum RecordingTypeFilter: String, CaseIterable {
         case all = "All"
@@ -126,10 +128,13 @@ struct RecordingsLibraryView: View {
             .map { RecordingsDayGroupInput(id: $0.id, name: $0.name, recordingIDs: $0.recordingIDs) }
     }
 
-    var currentDay: RecordingsDay {
-        RecordingsDay.build(day: selectedDay, recordings: matchingRecordings,
-                            events: segment == .all || segment == .meetings ? dayEvents : [],
-                            groups: recordingGroups, zoom: zoom)
+    /// Built once per change of its inputs (`refreshDay`), never per read.
+    var currentDay: RecordingsDay { dayCache.day }
+
+    private func refreshDay() {
+        dayCache.update(.init(day: selectedDay, recordings: matchingRecordings,
+                              events: segment == .all || segment == .meetings ? dayEvents : [],
+                              groups: recordingGroups, zoom: zoom))
     }
 
     private func rebuildSearchIndex() {
@@ -179,9 +184,19 @@ struct RecordingsLibraryView: View {
         .onAppear {
             batchLoadErrorMessage = batchStorage.loadErrorMessage
             rebuildSearchIndex()
+            daysWithRecordings = RecordingsWeek.daysWithRecordings(storage.recordings)
+            refreshDay()
             openRequestedRecordingIfAvailable()
             openRequestedBatchComposerIfAvailable()
         }
+        .onChange(of: selectedDay) { refreshDay() }
+        .onChange(of: zoom) { refreshDay() }
+        .onChange(of: searchText) { refreshDay() }
+        .onChange(of: dayEvents) { refreshDay() }
+        .onChange(of: segment) { refreshDay() }
+        .onChange(of: listFilter) { refreshDay() }
+        .onChange(of: selectedCalendarIDs) { refreshDay() }
+        .onChange(of: batchStorage.batches) { refreshDay() }
         .task(id: Calendar.current.startOfDay(for: selectedDay)) { await loadDayEvents() }
         .onChange(of: MainWindowController.shared.requestedRecordingID) {
             openRequestedRecordingIfAvailable()
@@ -189,6 +204,8 @@ struct RecordingsLibraryView: View {
         .onChange(of: storage.recordings) {
             openRequestedRecordingIfAvailable()
             rebuildSearchIndex()
+            daysWithRecordings = RecordingsWeek.daysWithRecordings(storage.recordings)
+            refreshDay()
         }
         .onChange(of: MainWindowController.shared.requestedBatchComposer) {
             openRequestedBatchComposerIfAvailable()
@@ -265,7 +282,7 @@ struct RecordingsLibraryView: View {
             RecordingsDayView(
                 day: currentDay,
                 selectedDay: $selectedDay,
-                daysWithRecordings: RecordingsWeek.daysWithRecordings(storage.recordings),
+                daysWithRecordings: daysWithRecordings,
                 zoom: $zoom,
                 expandedNotes: $expandedNotes,
                 openSelection: inspectorSelection,
@@ -285,7 +302,6 @@ struct RecordingsLibraryView: View {
             openNotes: { requestInspectorSelection(.notes($0)) },
             openGroup: { requestInspectorSelection(.group($0)) },
             attach: { attach($0, to: $1) },
-            detach: { detach($0) },
             toggleSelection: { toggleSelection($0) }
         )
     }

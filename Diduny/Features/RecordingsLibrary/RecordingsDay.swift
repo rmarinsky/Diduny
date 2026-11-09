@@ -157,7 +157,13 @@ struct RecordingsDay: Equatable {
         guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else {
             return RecordingsDay(items: [], files: [])
         }
-        let minute = { (date: Date) in Int(date.timeIntervalSince(dayStart) / 60) }
+        // Wall-clock minutes, so hour labels stay right on a 23- or 25-hour DST day; outside the day, real time.
+        let minute = { (date: Date) -> Int in
+            if date < dayStart { return Int(date.timeIntervalSince(dayStart) / 60) }
+            if date >= dayEnd { return 24 * 60 + Int(date.timeIntervalSince(dayEnd) / 60) }
+            let parts = calendar.dateComponents([.hour, .minute], from: date)
+            return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        }
         let dayRecordings = recordings
             .filter { $0.createdAt >= dayStart && $0.createdAt < dayEnd }
             .sorted { $0.createdAt < $1.createdAt }
@@ -433,4 +439,30 @@ extension Recording {
 extension Recording.RecordingType {
     /// Meetings and voice notes can be attached to a calendar event; imported files cannot.
     var canAttachCalendarEvent: Bool { self != .fileTranscription }
+}
+
+/// Holds the built day so redraws and inspector reads never rebuild it; only a change of input does.
+struct RecordingsDayCache {
+    struct Inputs: Equatable {
+        let day: Date
+        let recordings: [Recording]
+        let events: [CalendarMeeting]
+        let groups: [RecordingsDayGroupInput]
+        let zoom: NotesZoom
+    }
+
+    private(set) var inputs: Inputs?
+    private(set) var day = RecordingsDay(items: [], files: [])
+    /// How many times the day was built (tests).
+    private(set) var builds = 0
+
+    mutating func update(_ next: Inputs, calendar: Calendar = .current) {
+        let normalized = Inputs(day: calendar.startOfDay(for: next.day), recordings: next.recordings,
+                                events: next.events, groups: next.groups, zoom: next.zoom)
+        guard normalized != inputs else { return }
+        inputs = normalized
+        day = RecordingsDay.build(day: normalized.day, recordings: normalized.recordings, events: normalized.events,
+                                  groups: normalized.groups, zoom: normalized.zoom, calendar: calendar)
+        builds += 1
+    }
 }

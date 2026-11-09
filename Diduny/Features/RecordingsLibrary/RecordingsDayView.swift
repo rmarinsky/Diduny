@@ -8,7 +8,6 @@ struct RecordingsDayActions {
     var openNotes: (String) -> Void
     var openGroup: (UUID) -> Void
     var attach: (UUID, CalendarMeeting) -> Void
-    var detach: (UUID) -> Void
     var toggleSelection: (UUID) -> Void
 }
 
@@ -171,13 +170,8 @@ struct RecordingsDayView<FileRow: View>: View {
             }
         }
         .frame(width: width, height: placement.height, alignment: .topLeading)
-        .contentShape(Rectangle())
-        // A recording dragged out of an event onto empty space is detached.
-        .dropDestination(for: String.self) { ids, _ in
-            guard let id = ids.first.flatMap(UUID.init(uuidString:)) else { return false }
-            actions.detach(id)
-            return true
-        }
+        // A drop on empty space does nothing and the item springs back: only the explicit Detach detaches
+        // (a near-miss drag must never mark a recording "no event").
         .padding(.top, 8)
         .animation(DS.Motion.easeOut(0.18), value: zoom)
     }
@@ -239,6 +233,7 @@ struct RecordingsDayView<FileRow: View>: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { actions.openEvent(event.key) }
+        .accessibilityAction { actions.openEvent(event.key) }
         .dropDestination(for: String.self) { ids, _ in
             guard let id = ids.first.flatMap(UUID.init(uuidString:)) else { return false }
             actions.attach(id, event.meeting)
@@ -248,6 +243,7 @@ struct RecordingsDayView<FileRow: View>: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Calendar event: \(event.meeting.title)"))
+        .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("recordings.day.event")
     }
 
@@ -265,6 +261,7 @@ struct RecordingsDayView<FileRow: View>: View {
         .background(isOn ? DS.Palette.accentFill : DS.Palette.card, in: RoundedRectangle(cornerRadius: 5))
         .contentShape(Rectangle())
         .onTapGesture { tapRecording(recording.id) }
+        .accessibilityAction { tapRecording(recording.id) }
         .draggable(recording.id.uuidString)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
         .accessibilityIdentifier("recordings.day.attached")
@@ -318,6 +315,8 @@ struct RecordingsDayView<FileRow: View>: View {
                 actions.openNotes(group.key)
             }
         }
+        .accessibilityAction { actions.openNotes(group.key) }
+        .accessibilityLabel(Text("\(group.recordings.count) voice notes"))
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .accessibilityIdentifier("recordings.day.notes")
@@ -340,6 +339,7 @@ struct RecordingsDayView<FileRow: View>: View {
         .background(isOn ? DS.Palette.accentFill : DS.Palette.box, in: RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
         .onTapGesture { actions.openGroup(group.id) }
+        .accessibilityAction { actions.openGroup(group.id) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("recordings.day.group")
     }
@@ -376,9 +376,10 @@ struct RecordingsDayView<FileRow: View>: View {
         .overlay { if !isOn { RoundedRectangle(cornerRadius: 6).strokeBorder(DS.Palette.line, lineWidth: 1) } }
         .contentShape(Rectangle())
         .onTapGesture { tapRecording(recording.id) }
+        .accessibilityAction { tapRecording(recording.id) }
         .draggable(recording.id.uuidString)
         .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
+        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
         .accessibilityIdentifier("recordings.day.recording")
     }
 
