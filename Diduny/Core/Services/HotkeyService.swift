@@ -93,8 +93,10 @@ final class HotkeyService {
 
     // MARK: - Mode hotkeys
 
+    // Long chords: a mode shortcut always fires on one press (Roman, 2026-11-09).
+
     func registerRecordingHotkey(handler: @escaping () -> Void) {
-        register(.toggleRecording, pressCount: { [settings] in settings.recordingHotkeyPressCount }, handler: handler)
+        register(.toggleRecording, pressCount: { 1 }, handler: handler)
     }
 
     func unregisterRecordingHotkey() {
@@ -102,7 +104,7 @@ final class HotkeyService {
     }
 
     func registerMeetingHotkey(handler: @escaping () -> Void) {
-        register(.toggleMeetingRecording, pressCount: { [settings] in settings.meetingHotkeyPressCount }, handler: handler)
+        register(.toggleMeetingRecording, pressCount: { 1 }, handler: handler)
     }
 
     func unregisterMeetingHotkey() {
@@ -112,7 +114,7 @@ final class HotkeyService {
     func registerMeetingTranslationHotkey(handler: @escaping () -> Void) {
         register(
             .toggleMeetingTranslation,
-            pressCount: { [settings] in settings.meetingTranslationHotkeyPressCount },
+            pressCount: { 1 },
             handler: handler
         )
     }
@@ -122,7 +124,7 @@ final class HotkeyService {
     }
 
     func registerTranslationHotkey(handler: @escaping () -> Void) {
-        register(.toggleTranslation, pressCount: { [settings] in settings.translationHotkeyPressCount }, handler: handler)
+        register(.toggleTranslation, pressCount: { 1 }, handler: handler)
     }
 
     func unregisterTranslationHotkey() {

@@ -23,7 +23,6 @@ struct ModesViewModelTests {
             .dictationTranslation: ModePushToTalk(key: .rightOption, toggleEnabled: true, tapCount: 2, holdEnabled: false, holdDelaySeconds: 1.2),
         ]
         var silences: [STTJob: ModeSilence] = [:]
-        var counts: [STTJob: Int] = [:]
 
         func engine(for job: STTJob) -> EngineID { engines[job] ?? .didunyCloud }
         func setEngine(_ engine: EngineID, for job: STTJob) { engines[job] = engine }
@@ -36,8 +35,6 @@ struct ModesViewModelTests {
             silences[job] ?? ModeSilence(enabled: true, seconds: job == .meeting || job == .meetingTranslation ? 60 : 5)
         }
         func setSilence(_ value: ModeSilence, for job: STTJob) { silences[job] = value }
-        func pressCount(for job: STTJob) -> Int { counts[job] ?? 1 }
-        func setPressCount(_ count: Int, for job: STTJob) { counts[job] = count }
     }
 
     static func allCaps() throws -> [EngineCapabilities] {
@@ -163,7 +160,6 @@ struct ModesViewModelTests {
         #expect(modes.betweenValue == "EN ↔ UK")
         #expect(modes.engine(for: .file) == .parakeet)
         #expect(modes.engineName(.whisper) == "Whisper")
-        #expect(ModesViewModel.jobs.allSatisfy { modes.pressCount(for: $0) == 1 })
     }
 
     // MARK: Second pickers

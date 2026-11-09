@@ -50,8 +50,6 @@ protocol ModesSettingsSource: AnyObject {
     func setSilence(_ value: ModeSilence, for job: STTJob)
 
     /// 1...3; every mode except `.file`.
-    func pressCount(for job: STTJob) -> Int
-    func setPressCount(_ count: Int, for job: STTJob)
 }
 
 /// The mode x engine rules (05 2.1.1 and section 3), backed by WP-13's `ModeEngineRules` (ADR-0012 D3).

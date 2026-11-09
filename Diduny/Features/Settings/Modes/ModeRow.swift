@@ -22,7 +22,7 @@ enum ModesGrid {
     }
 }
 
-/// One mode row (design-spec 4.11): name, engine field with caption, second choice, shortcut and count, expander.
+/// One mode row (design-spec 4.11): name, engine field with caption, second choice, shortcut, expander.
 struct ModeRow<Second: View>: View {
     let job: STTJob
     let title: String
@@ -30,7 +30,7 @@ struct ModeRow<Second: View>: View {
     let widths: (engine: CGFloat, second: CGFloat)
     @Bindable var model: ModesViewModel
     let shortcut: KeyboardShortcuts.Name?
-    /// Files and URLs: "⇧⌘B", a fixed menu command, shown disabled with no count (05 2.1).
+    /// Files and URLs: "⇧⌘B", a fixed menu command, shown disabled (05 2.1).
     var fixedShortcut: String?
     @ViewBuilder var second: () -> Second
 
@@ -102,17 +102,10 @@ struct ModeRow<Second: View>: View {
                 .disabled(true)
                 .accessibilityIdentifier("\(id).shortcut")
         } else if let shortcut {
-            HStack(spacing: 6) {
-                ModeShortcutRecorder(name: shortcut, rowLabel: title)
-                    // The keys take their full width; the 162 column fits the widest cell (build-vs-prototype).
-                    .fixedSize(horizontal: true, vertical: false)
-                    .accessibilityIdentifier("\(id).shortcut")
-                ShortcutPressCountPicker(selection: Binding(
-                    get: { model.pressCount(for: job) },
-                    set: { model.setPressCount($0, for: job) }
-                ))
-                .accessibilityIdentifier("\(id).pressCount")
-            }
+            ModeShortcutRecorder(name: shortcut, rowLabel: title)
+                // The keys take their full width; the 162 column fits the widest cell (build-vs-prototype).
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityIdentifier("\(id).shortcut")
         }
     }
 }

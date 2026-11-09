@@ -146,15 +146,10 @@ struct ModesSettingsView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 22) {
-            Text("1×, 2×, 3× is how many times you press the shortcut.")
-                .font(DS.Font.callout)
-                .foregroundStyle(DS.Palette.secondary)
-            InlineLink(title: "Compare engines in Providers") {
-                MainWindowController.shared.showWindow(section: .providers)
-            }
-            .font(DS.Font.callout)
-            .accessibilityIdentifier("modes.footer.providers")
+        InlineLink(title: "Compare engines in Providers") {
+            MainWindowController.shared.showWindow(section: .providers)
         }
+        .font(DS.Font.callout)
+        .accessibilityIdentifier("modes.footer.providers")
     }
 }

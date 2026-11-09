@@ -139,24 +139,4 @@ final class LiveModesSettingsSource: ModesSettingsSource {
             storage.meetingTranslationSilenceAutoStopSeconds = value.seconds
         }
     }
-
-    func pressCount(for job: STTJob) -> Int {
-        switch job {
-        case .dictation: storage.recordingHotkeyPressCount
-        case .dictationTranslation: storage.translationHotkeyPressCount
-        case .meeting: storage.meetingHotkeyPressCount
-        case .meetingTranslation: storage.meetingTranslationHotkeyPressCount
-        case .file: 1
-        }
-    }
-
-    func setPressCount(_ count: Int, for job: STTJob) {
-        switch job {
-        case .dictation: storage.recordingHotkeyPressCount = count
-        case .dictationTranslation: storage.translationHotkeyPressCount = count
-        case .meeting: storage.meetingHotkeyPressCount = count
-        case .meetingTranslation: storage.meetingTranslationHotkeyPressCount = count
-        case .file: break
-        }
-    }
 }

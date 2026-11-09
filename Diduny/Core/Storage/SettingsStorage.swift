@@ -146,10 +146,6 @@ final class SettingsStorage {
         case translationPushToTalkToggleTapCount
         case translationPushToTalkHoldStartDelaySeconds
         case handsFreeModeEnabled
-        case recordingHotkeyPressCount
-        case translationHotkeyPressCount
-        case meetingHotkeyPressCount
-        case meetingTranslationHotkeyPressCount
         case translateSelectedTextHotkeyPressCount
         case transcriptionProvider
         case selectedWhisperModel
@@ -221,8 +217,6 @@ final class SettingsStorage {
             .translationPushToTalkHoldStartDelaySeconds: 1.2,
             .pushToTalkToggleTapCount: 2,
             .translationPushToTalkToggleTapCount: 2,
-            .meetingHotkeyPressCount: 1,
-            .meetingTranslationHotkeyPressCount: 1,
             .autoPaste: false,
             .transcriptionProvider: TranscriptionProvider.cloud.rawValue,
             .playSoundOnCompletion: true,
@@ -647,58 +641,6 @@ final class SettingsStorage {
     // MARK: - Hands-Free Mode (Multi-Tap Toggle)
 
     // MARK: - Global Hotkey Press Counts
-
-    var recordingHotkeyPressCount: Int {
-        get {
-            let stored = defaults.object(forKey: Key.recordingHotkeyPressCount.rawValue) as? Int ?? 1
-            return Self.sanitizedPressCount(stored, fallback: 1)
-        }
-        set {
-            defaults.set(
-                Self.sanitizedPressCount(newValue, fallback: 1),
-                forKey: Key.recordingHotkeyPressCount.rawValue
-            )
-        }
-    }
-
-    var translationHotkeyPressCount: Int {
-        get {
-            let stored = defaults.object(forKey: Key.translationHotkeyPressCount.rawValue) as? Int ?? 1
-            return Self.sanitizedPressCount(stored, fallback: 1)
-        }
-        set {
-            defaults.set(
-                Self.sanitizedPressCount(newValue, fallback: 1),
-                forKey: Key.translationHotkeyPressCount.rawValue
-            )
-        }
-    }
-
-    var meetingHotkeyPressCount: Int {
-        get {
-            let stored = defaults.object(forKey: Key.meetingHotkeyPressCount.rawValue) as? Int ?? 1
-            return Self.sanitizedPressCount(stored, fallback: 1)
-        }
-        set {
-            defaults.set(
-                Self.sanitizedPressCount(newValue, fallback: 1),
-                forKey: Key.meetingHotkeyPressCount.rawValue
-            )
-        }
-    }
-
-    var meetingTranslationHotkeyPressCount: Int {
-        get {
-            let stored = defaults.object(forKey: Key.meetingTranslationHotkeyPressCount.rawValue) as? Int ?? 1
-            return Self.sanitizedPressCount(stored, fallback: 1)
-        }
-        set {
-            defaults.set(
-                Self.sanitizedPressCount(newValue, fallback: 1),
-                forKey: Key.meetingTranslationHotkeyPressCount.rawValue
-            )
-        }
-    }
 
     var translateSelectedTextHotkeyPressCount: Int {
         get {

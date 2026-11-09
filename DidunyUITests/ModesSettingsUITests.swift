@@ -29,9 +29,10 @@ final class ModesSettingsUITests: DidunyUITestCase {
         waitForElement(element("modes.dictationTranslation.into"))
         waitForElement(element("modes.meeting.startsIn"))
         waitForElement(element("modes.meetingTranslation.between"))
-        XCTAssertFalse(element("modes.file.pressCount").exists)
+        for job in ["dictation", "dictationTranslation", "meeting", "meetingTranslation", "file"] {
+            XCTAssertFalse(element("modes.\(job).pressCount").exists)
+        }
         XCTAssertFalse(element("modes.file.expand").exists)
-        waitForElement(modes.staticTexts["1×, 2×, 3× is how many times you press the shortcut."])
     }
 
     /// T5-MD-27 (menu part).

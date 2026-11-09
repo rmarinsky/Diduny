@@ -171,7 +171,7 @@ final class LiveDictationOverlayStore {
             ) {
                 return modifierHint
             }
-            return actionShortcutHint(.toggleRecording, pressCount: settings.recordingHotkeyPressCount)
+            return actionShortcutHint(.toggleRecording, pressCount: 1)
         case .translation:
             if let modifierHint = modifierToggleHint(
                 key: settings.translationPushToTalkKey,
@@ -182,17 +182,17 @@ final class LiveDictationOverlayStore {
             }
             return actionShortcutHint(
                 .toggleTranslation,
-                pressCount: settings.translationHotkeyPressCount
+                pressCount: 1
             )
         case .meeting:
             return actionShortcutHint(
                 .toggleMeetingRecording,
-                pressCount: settings.meetingHotkeyPressCount
+                pressCount: 1
             )
         case .meetingTranslation:
             return actionShortcutHint(
                 .toggleMeetingTranslation,
-                pressCount: settings.meetingTranslationHotkeyPressCount
+                pressCount: 1
             )
         case .fileTranscription:
             return nil

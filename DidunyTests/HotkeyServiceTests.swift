@@ -46,18 +46,10 @@ final class HotkeyServiceTests {
             #expect(calls == [expected], "\(name.rawValue)")
         }
 
-        settings.recordingHotkeyPressCount = 1
+        // A stored 2x from an older version is ignored: one press fires.
+        settings.defaults.set(2, forKey: "recordingHotkeyPressCount")
         calls = []
         clock.advance(by: 1)
-        registrar.fire(.toggleRecording)
-        #expect(calls == ["dictation"])
-
-        settings.recordingHotkeyPressCount = 2
-        calls = []
-        clock.advance(by: 1)
-        registrar.fire(.toggleRecording)
-        #expect(calls.isEmpty, "2x needs a second press")
-        clock.advance(by: 0.2)
         registrar.fire(.toggleRecording)
         #expect(calls == ["dictation"])
     }

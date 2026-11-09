@@ -137,8 +137,6 @@ final class SettingsStorageProviderTests: XCTestCase {
             "translationPushToTalkHoldStartDelaySeconds",
             "pushToTalkToggleTapCount",
             "translationPushToTalkToggleTapCount",
-            "meetingHotkeyPressCount",
-            "meetingTranslationHotkeyPressCount",
             "autoPaste",
             "transcriptionProvider",
             "playSoundOnCompletion",
@@ -159,8 +157,6 @@ final class SettingsStorageProviderTests: XCTestCase {
         SettingsStorage.shared.pushToTalkKey = .rightOption
         SettingsStorage.shared.pushToTalkHoldEnabled = false
         SettingsStorage.shared.translationPushToTalkKey = .leftOption
-        SettingsStorage.shared.meetingHotkeyPressCount = 3
-        SettingsStorage.shared.meetingTranslationHotkeyPressCount = 3
         SettingsStorage.shared.autoPaste = true
         SettingsStorage.shared.transcriptionProvider = .local
         SettingsStorage.shared.typingSpeedWordsPerMinute = 85
@@ -173,8 +169,6 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertTrue(SettingsStorage.shared.autoPaste)
         XCTAssertEqual(SettingsStorage.shared.transcriptionProvider, .local)
         XCTAssertEqual(SettingsStorage.shared.typingSpeedWordsPerMinute, 85)
-        XCTAssertEqual(SettingsStorage.shared.meetingHotkeyPressCount, 3)
-        XCTAssertEqual(SettingsStorage.shared.meetingTranslationHotkeyPressCount, 3)
     }
 
     func test_newUserDefaults_fillMissingCloudCopyOnlyDictationSettings() {
@@ -210,22 +204,6 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(SettingsStorage.shared.translationPushToTalkToggleTapCount, 2)
         XCTAssertFalse(SettingsStorage.shared.autoPaste)
         XCTAssertEqual(SettingsStorage.shared.transcriptionProvider, .cloud)
-    }
-
-    func test_newUserDefaults_fillMissingMeetingHotkeysWithSinglePress() {
-        let defaults = UserDefaults.standard
-        let keys = ["meetingHotkeyPressCount", "meetingTranslationHotkeyPressCount"]
-        let storedValues = keys.map { defaults.object(forKey: $0) }
-        defer {
-            zip(keys, storedValues).forEach { restore($0.1, key: $0.0) }
-        }
-
-        keys.forEach { defaults.removeObject(forKey: $0) }
-
-        SettingsStorage.shared.applyNewUserDefaultsIfMissing()
-
-        XCTAssertEqual(SettingsStorage.shared.meetingHotkeyPressCount, 1)
-        XCTAssertEqual(SettingsStorage.shared.meetingTranslationHotkeyPressCount, 1)
     }
 
     override func setUp() {

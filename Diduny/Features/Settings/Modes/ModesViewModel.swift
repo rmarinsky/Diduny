@@ -358,15 +358,6 @@ final class ModesViewModel {
         return base.contains(stored) ? base : (base + [stored]).sorted()
     }
 
-    func pressCount(for job: STTJob) -> Int {
-        _ = revision
-        return source.pressCount(for: job)
-    }
-
-    func setPressCount(_ count: Int, for job: STTJob) {
-        write { source.setPressCount(count, for: job) }
-    }
-
     var meetingSuggestionsEnabled: Bool {
         get { _ = revision; return source.meetingSuggestionsEnabled }
         set { write { source.meetingSuggestionsEnabled = newValue } }

@@ -34,14 +34,10 @@ final class LiveDictationOverlayStoreHintTests {
         #expect(makeStore(.voice).stopShortcutHint == "⇧ ×2")
 
         settings.pushToTalkToggleEnabled = false
-        settings.recordingHotkeyPressCount = 1
         #expect(makeStore(.voice).stopShortcutHint == text(.toggleRecording))
-        settings.recordingHotkeyPressCount = 2
-        #expect(makeStore(.voice).stopShortcutHint == "\(text(.toggleRecording)) ×2")
 
         settings.translationPushToTalkToggleEnabled = false
-        settings.translationHotkeyPressCount = 3
-        #expect(makeStore(.translation()).stopShortcutHint == "\(text(.toggleTranslation)) ×3")
+        #expect(makeStore(.translation()).stopShortcutHint == text(.toggleTranslation))
         #expect(makeStore(.meeting).stopShortcutHint == text(.toggleMeetingRecording))
         #expect(makeStore(.meetingTranslation).stopShortcutHint == text(.toggleMeetingTranslation))
         #expect(makeStore(.fileTranscription).stopShortcutHint == nil)

@@ -51,20 +51,12 @@ final class ShortcutSettingTests {
     @Test("T5-MIG-24 custom press counts survive")
     func customPressCountsSurvive() {
         let values = [
-            "recordingHotkeyPressCount": 2,
-            "translationHotkeyPressCount": 3,
-            "meetingHotkeyPressCount": 2,
-            "meetingTranslationHotkeyPressCount": 3,
             "translateSelectedTextHotkeyPressCount": 2
         ]
         for (key, value) in values {
             defaults.set(value, forKey: key)
         }
         let reloaded = SettingsStorage(defaults: defaults)
-        #expect(reloaded.recordingHotkeyPressCount == 2)
-        #expect(reloaded.translationHotkeyPressCount == 3)
-        #expect(reloaded.meetingHotkeyPressCount == 2)
-        #expect(reloaded.meetingTranslationHotkeyPressCount == 3)
         #expect(reloaded.translateSelectedTextHotkeyPressCount == 2)
         #expect(reloaded.shortcutSetting(for: .translateSelectedText).pressCount == 2)
     }
