@@ -4,8 +4,13 @@ import XCTest
 /// Meeting live panel (test-plan T1-MT-20, T1-MT-26, T1-A11Y-01; WP-31), opened with
 /// `--ui-testing-open=livePanel.meeting` on profile `P-STD`; CI only.
 final class MeetingLivePanelUITests: DidunyUITestCase {
-    private func open(_ target: String, profile: LaunchProfile = .standard) -> XCUIApplication {
-        launchApp(onboardingCompleted: true, profile: profile, open: target)
+    private func open(_ target: String, profile: LaunchProfile = .standard, arguments: [String] = []) -> XCUIApplication {
+        launchApp(onboardingCompleted: true, profile: profile, open: target, arguments: arguments)
+    }
+
+    /// A transcript line's text; macOS may expose it as label or as value.
+    private func text(_ element: XCUIElement) -> String {
+        "\(element.label) \(element.value as? String ?? "")"
     }
 
     /// T1-MT-20
@@ -25,7 +30,8 @@ final class MeetingLivePanelUITests: DidunyUITestCase {
 
     /// T1-MT-26
     func testNoBatteryWarningOutsideThisMac() {
-        let app = open("livePanel.meeting", profile: .battery)
+        // No text: the calm box. With text, Record only keeps the transcript (design decision, 2026-11-09).
+        let app = open("livePanel.meeting", profile: .battery, arguments: ["--ui-testing-transcript-emit=0"])
         waitForElement(app.buttons["livePanel.segment.cloudLive"])
         XCTAssertFalse(app.descendants(matching: .any)["livePanel.batteryWarning"].exists)
         app.buttons["livePanel.segment.recordOnly"].click()
@@ -56,7 +62,7 @@ final class MeetingLivePanelUITests: DidunyUITestCase {
         let app = open("livePanel.meeting")
         app.buttons["livePanel.segment.localLive"].click()
         waitForElement(app.staticTexts["livePanel.marker"])
-        XCTAssertTrue(app.staticTexts["livePanel.marker"].label.hasSuffix("switched to Local"))
+        XCTAssertTrue(text(app.staticTexts["livePanel.marker"]).contains("switched to Local"))
         waitForText("Live text (preview) · no speaker labels", identifier: "livePanel.caption", in: app)
         bridge("clock.advance", ["seconds": 5])
         app.buttons["livePanel.segment.recordOnly"].click()
@@ -81,7 +87,7 @@ final class MeetingLivePanelUITests: DidunyUITestCase {
         apple.click()
         waitForText("Live text · no speaker labels", identifier: "livePanel.caption", in: app)
         waitForElement(app.staticTexts["livePanel.marker"])
-        XCTAssertTrue(app.staticTexts["livePanel.marker"].label.hasSuffix("switched to Apple Speech"))
+        XCTAssertTrue(text(app.staticTexts["livePanel.marker"]).contains("switched to Apple Speech"))
     }
 
     /// T1-MT-24
@@ -93,7 +99,7 @@ final class MeetingLivePanelUITests: DidunyUITestCase {
         waitForElement(row)
         row.click()
         waitForText("Live text · no speaker labels", identifier: "livePanel.caption", in: app)
-        XCTAssertTrue(waitForElement(app.staticTexts["livePanel.marker"]).label.hasSuffix("switched to ElevenLabs"))
+        XCTAssertTrue(text(waitForElement(app.staticTexts["livePanel.marker"])).contains("switched to ElevenLabs"))
     }
 
     /// T1-MT-25
@@ -102,7 +108,7 @@ final class MeetingLivePanelUITests: DidunyUITestCase {
         waitForElement(app.descendants(matching: .any)["livePanel.batteryWarning"])
         let link = app.descendants(matching: .any)["livePanel.useCloud"]
         waitForElement(link)
-        link.click()
+        bridge("meeting.useCloud")
         waitForElement(app.buttons["livePanel.segment.cloudLive"], toMatch: "isSelected == true")
         XCTAssertFalse(app.descendants(matching: .any)["livePanel.batteryWarning"].exists)
         app.buttons["livePanel.segment.localLive"].click()
@@ -127,7 +133,7 @@ final class MeetingLivePanelUITests: DidunyUITestCase {
         let app = open("livePanel.meeting")
         app.buttons["livePanel.segment.recordOnly"].click()
         let marker = waitForElement(app.staticTexts["livePanel.marker"])
-        XCTAssertTrue(marker.label.contains("switched to Record only"))
+        XCTAssertTrue(text(marker).contains("switched to Record only"), text(marker))
     }
 
     func test_markerStaysOutOfCopy() {

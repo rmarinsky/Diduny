@@ -53,6 +53,9 @@
                 UITestHarness.manualClock?.advance(by: number("seconds"))
                 let store = DictationOverlayController.shared.store
                 if let ended = store.endedAt { store.endedAt = ended.addingTimeInterval(number("seconds")) }
+            case "meeting.useCloud":
+                // The battery link's action: its sentence link has no frame of its own for a synthetic click.
+                DictationOverlayController.shared.store.pickMeetingSegment(.cloud)
             case "power":
                 UITestHarness.powerSource?.set(args["source"] as? String ?? "ac")
             case "meeting.detected":

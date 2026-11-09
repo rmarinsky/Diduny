@@ -130,7 +130,12 @@ struct MeetingEngineReadiness: EngineReadinessSource {
     static func live(checksQuota: Bool = true) -> MeetingEngineReadiness {
         MeetingEngineReadiness(
             base: LiveEngineReadinessSource(),
-            hasWhisperModel: { WhisperModelManager.shared.selectedModel() != nil },
+            hasWhisperModel: {
+                #if TEST_BUILD
+                    if UITestHarness.value(of: "--ui-testing-whisper-models") != nil { return true }
+                #endif
+                return WhisperModelManager.shared.selectedModel() != nil
+            },
             signedIn: { AuthService.hasStoredSession },
             hasQuota: {
                 !checksQuota || UsageService.canOfferCloudTranscription(

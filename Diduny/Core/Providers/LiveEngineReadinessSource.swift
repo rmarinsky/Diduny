@@ -7,7 +7,12 @@ struct LiveEngineReadinessSource: EngineReadinessSource {
     var hasKey: (String) -> Bool = { ProviderKeyStore.shared.hasKey(for: $0) }
     var isAppleSilicon: () -> Bool = { ParakeetModelStore.isSupportedHardware }
     var isParakeetDownloaded: () -> Bool = { ParakeetModelStore.isDownloaded }
-    var appleSpeechOnThisMac: () -> Bool = { AppleBenchmarkEngine().availability() == .ready }
+    var appleSpeechOnThisMac: () -> Bool = {
+        #if TEST_BUILD
+            if let flag = UITestHarness.value(of: "--ui-testing-apple-speech") { return flag == "available" }
+        #endif
+        return AppleBenchmarkEngine().availability() == .ready
+    }
 
     func readiness(of engine: EngineID) -> EngineReadiness {
         guard let module = ProviderRegistry.shared.module(id: engine.rawValue) else { return .unavailable }

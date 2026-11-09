@@ -26,7 +26,8 @@
         }()
 
         private static func argumentValue(_ prefix: String) -> String? {
-            ProcessInfo.processInfo.arguments.first { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }
+            // The last wins, as in `UITestHarness` and `LaunchProfile.adding`.
+            ProcessInfo.processInfo.arguments.last { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }
         }
     }
 
