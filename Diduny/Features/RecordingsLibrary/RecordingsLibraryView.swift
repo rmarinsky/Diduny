@@ -635,11 +635,11 @@ struct RecordingsLibraryView: View {
         action: MeetingRecoveryService.RecoveryAction
     ) {
         Task { @MainActor in
-            let ok = await MeetingRecoveryService.shared.resolve(
+            let outcome = await MeetingRecoveryService.shared.resolve(
                 recordingID: recording.id,
                 action: action
             )
-            if !ok, action != .discard {
+            if outcome == .failed, action != .discard {
                 DictationOverlayController.shared.showInfo(
                     message: String(localized: "Could not recover meeting audio"),
                     duration: 3

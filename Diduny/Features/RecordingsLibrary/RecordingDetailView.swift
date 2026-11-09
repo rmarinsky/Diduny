@@ -505,7 +505,7 @@ struct RecordingDetailView: View {
                 }
             }
             .disabled(isRecoveringAudio)
-            if let failure = currentRecording.statusDetail {
+            if let failure = currentRecording.recoveryFailureMessage {
                 Label(failure, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.red)

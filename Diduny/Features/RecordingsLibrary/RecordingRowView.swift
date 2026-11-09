@@ -335,7 +335,7 @@ struct RecordingRowView: View {
             return recording.statusDetail ?? String(localized: "Recording…")
         }
         if recording.status == .needsRecovery {
-            return recording.statusDetail ?? String(localized: "Needs processing — recover audio from this session")
+            return recording.recoveryFailureMessage ?? String(localized: "Needs processing — recover audio from this session")
         }
         if recording.status == .processing {
             return queueService.isQueued(recording.id)
@@ -352,7 +352,7 @@ struct RecordingRowView: View {
     }
 
     private var previewColor: Color {
-        recording.status == .failed || (recording.status == .needsRecovery && recording.statusDetail != nil)
+        recording.status == .failed || recording.recoveryFailureMessage != nil
             ? .red
             : .secondary
     }

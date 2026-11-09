@@ -417,7 +417,7 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
             action: .saveAudioOnly
         )
 
-        XCTAssertFalse(resolved)
+        XCTAssertEqual(resolved, .failed)
         let row = try XCTUnwrap(storage.recordings.first(where: { $0.id == id }))
         XCTAssertEqual(row.status, .needsRecovery)
         XCTAssertEqual(row.statusDetail, "Could not recover meeting audio")
@@ -455,7 +455,7 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
 
         let resolved = await recoveryService.resolve(recordingID: id, action: .saveAudioOnly)
 
-        XCTAssertTrue(resolved)
+        XCTAssertEqual(resolved, .completed)
         let row = try XCTUnwrap(storage.recordings.first(where: { $0.id == id }))
         XCTAssertEqual(row.status, .unprocessed)
         XCTAssertNil(row.statusDetail)
@@ -463,25 +463,211 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertEqual(row.durationSeconds, 3, accuracy: 0.01)
     }
 
-    func test_unrecoverableChunkIsKeptAndRowReportsTheFailure() async throws {
+    // MARK: - Recovery never loses a source chunk
+
+    private func recoveryFixture(
+        stitch: (@Sendable ([URL], URL) throws -> MeetingChunkStitcher.Result)? = nil,
+        frameCount: (@Sendable (URL) -> AVAudioFramePosition?)? = nil
+    ) async throws -> (id: UUID, service: MeetingRecoveryService, store: InProgressRecordingStore, dir: URL) {
         let id = UUID()
-        let inProgressStore = try InProgressRecordingStore(
-            baseDirectory: directory.appendingPathComponent("InProgressRecordings")
+        let store = try InProgressRecordingStore(
+            baseDirectory: directory.appendingPathComponent("InProgressRecordings-\(id.uuidString)")
         )
-        let recoveryService = MeetingRecoveryService(storage: storage, inProgressStore: inProgressStore)
+        let service = MeetingRecoveryService(
+            storage: storage,
+            inProgressStore: store,
+            stitch: stitch ?? MeetingRecoveryService.defaultStitch,
+            frameCount: frameCount ?? MeetingRecoveryService.defaultFrameCount
+        )
         XCTAssertEqual(storage.beginMeetingRecording(id: id, type: .meeting), id)
         XCTAssertTrue(storage.markNeedsRecovery(id: id))
-        let chunk = try await inProgressStore.chunkURL(for: id)
+        return (id, service, store, try await store.directoryURL(for: id))
+    }
+
+    private func assertFailedAndKept(_ id: UUID, chunks: [URL], file: StaticString = #filePath, line: UInt = #line) throws {
+        let row = try XCTUnwrap(storage.recordings.first(where: { $0.id == id }), file: file, line: line)
+        XCTAssertEqual(row.status, .needsRecovery, file: file, line: line)
+        XCTAssertEqual(row.recoveryFailureMessage, "Could not recover meeting audio", file: file, line: line)
+        for chunk in chunks {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: chunk.path), chunk.lastPathComponent, file: file, line: line)
+        }
+    }
+
+    func test_garbageOnlyChunkFailsWithoutAttachingAudioAndStaysByteIdentical() async throws {
+        let fixture = try await recoveryFixture()
+        let chunk = try await fixture.store.chunkURL(for: fixture.id)
         let garbage = Data("not audio".utf8)
         try garbage.write(to: chunk)
 
-        let resolved = await recoveryService.resolve(recordingID: id, action: .processNow)
+        let outcome = await fixture.service.resolve(recordingID: fixture.id, action: .processNow)
 
-        XCTAssertFalse(resolved)
-        let row = try XCTUnwrap(storage.recordings.first(where: { $0.id == id }))
-        XCTAssertEqual(row.status, .needsRecovery)
-        XCTAssertEqual(row.statusDetail, "Could not recover meeting audio")
-        XCTAssertEqual(try Data(contentsOf: chunk), garbage, "The source chunk is never changed by a failed attempt")
+        XCTAssertEqual(outcome, .failed)
+        try assertFailedAndKept(fixture.id, chunks: [chunk])
+        XCTAssertEqual(try Data(contentsOf: chunk), garbage)
+        XCTAssertEqual(storage.recordings.first(where: { $0.id == fixture.id })?.audioFileName, "")
+    }
+
+    func test_partialStitchWithOneBadChunkFailsAndKeepsEveryChunk() async throws {
+        let fixture = try await recoveryFixture()
+        let good = try await fixture.store.chunkURL(for: fixture.id, index: 1)
+        let bad = try await fixture.store.chunkURL(for: fixture.id, index: 2)
+        try writeKilledChunk(to: good, seconds: 1)
+        try Data("not audio".utf8).write(to: bad)
+
+        let outcome = await fixture.service.resolve(recordingID: fixture.id, action: .saveAudioOnly)
+
+        XCTAssertEqual(outcome, .failed)
+        try assertFailedAndKept(fixture.id, chunks: [good, bad])
+    }
+
+    func test_writeErrorReportedAsSkippedChunkFailsAndKeepsEveryChunk() async throws {
+        let fixture = try await recoveryFixture(stitch: { urls, output in
+            // What a full disk produces: the stitcher logs the write error and skips the chunk.
+            let result = try MeetingRecoveryService.defaultStitch([urls[0]], output)
+            return MeetingChunkStitcher.Result(
+                outputURL: output, totalDurationSeconds: result.totalDurationSeconds,
+                skippedChunks: [2], appendedChunkCount: 1
+            )
+        })
+        let chunks = [
+            try await fixture.store.chunkURL(for: fixture.id, index: 1),
+            try await fixture.store.chunkURL(for: fixture.id, index: 2)
+        ]
+        for chunk in chunks { try writeKilledChunk(to: chunk, seconds: 1) }
+
+        let outcome = await fixture.service.resolve(recordingID: fixture.id, action: .saveAudioOnly)
+
+        XCTAssertEqual(outcome, .failed)
+        try assertFailedAndKept(fixture.id, chunks: chunks)
+    }
+
+    func test_shortOutputWithNothingSkippedFailsAndKeepsEveryChunk() async throws {
+        let fixture = try await recoveryFixture(stitch: { urls, output in
+            try MeetingRecoveryService.defaultStitch([urls[0]], output)
+        })
+        let chunks = [
+            try await fixture.store.chunkURL(for: fixture.id, index: 1),
+            try await fixture.store.chunkURL(for: fixture.id, index: 2)
+        ]
+        for chunk in chunks { try writeKilledChunk(to: chunk, seconds: 1) }
+
+        let outcome = await fixture.service.resolve(recordingID: fixture.id, action: .saveAudioOnly)
+
+        XCTAssertEqual(outcome, .failed)
+        try assertFailedAndKept(fixture.id, chunks: chunks)
+    }
+
+    func test_zeroFramesFailsAndKeepsTheChunk() async throws {
+        let fixture = try await recoveryFixture(frameCount: { _ in 0 })
+        let chunk = try await fixture.store.chunkURL(for: fixture.id)
+        try writeKilledChunk(to: chunk, seconds: 1)
+
+        let outcome = await fixture.service.resolve(recordingID: fixture.id, action: .saveAudioOnly)
+
+        XCTAssertEqual(outcome, .failed)
+        try assertFailedAndKept(fixture.id, chunks: [chunk])
+    }
+
+    func test_libraryFileWithWrongFramesFailsAndKeepsTheChunk() async throws {
+        let recordings = directory.appendingPathComponent("Recordings").path
+        let fixture = try await recoveryFixture(frameCount: { url in
+            url.path.hasPrefix(recordings) ? 1 : MeetingRecoveryService.defaultFrameCount(url)
+        })
+        let chunk = try await fixture.store.chunkURL(for: fixture.id)
+        try writeKilledChunk(to: chunk, seconds: 1)
+
+        let outcome = await fixture.service.resolve(recordingID: fixture.id, action: .saveAudioOnly)
+
+        XCTAssertEqual(outcome, .failed)
+        try assertFailedAndKept(fixture.id, chunks: [chunk])
+    }
+
+    func test_chunkMissingFromManifestIsRecoveredInOrder() async throws {
+        let fixture = try await recoveryFixture()
+        for index in 1 ... 2 {
+            try writeKilledChunk(to: try await fixture.store.chunkURL(for: fixture.id, index: index), seconds: index)
+        }
+        let manifest = InProgressRecordingManifest(
+            id: fixture.id, schemaVersion: 1, type: .meeting, startedAt: Date(), sourceDevice: nil,
+            audioConfig: .init(sampleRate: 16000, channels: 1, bitDepth: 16),
+            chunks: [.init(index: 1, filename: "chunk_001.wav", byteCount: 0, durationSeconds: 0, closedAt: nil)],
+            lastWriteAt: Date(), recordingInterruptedBySleep: false
+        )
+        try await fixture.store.writeManifest(manifest, for: fixture.id)
+        XCTAssertEqual(
+            MeetingRecoveryService.chunkURLs(in: fixture.dir, manifest: manifest).map(\.lastPathComponent),
+            ["chunk_001.wav", "chunk_002.wav"]
+        )
+
+        let outcome = await fixture.service.resolve(recordingID: fixture.id, action: .saveAudioOnly)
+
+        XCTAssertEqual(outcome, .completed)
+        let row = try XCTUnwrap(storage.recordings.first(where: { $0.id == fixture.id }))
+        XCTAssertEqual(row.durationSeconds, 3, accuracy: 0.01)
+    }
+
+    func test_chunkOrderIsNumericBeyondThreeDigits() throws {
+        let dir = directory.appendingPathComponent("order")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for name in ["chunk_1000.wav", "chunk_999.wav", "repaired-chunk_001.wav", "stitched-recovery.wav"] {
+            try Data().write(to: dir.appendingPathComponent(name))
+        }
+        XCTAssertEqual(
+            MeetingRecoveryService.chunkURLs(in: dir, manifest: nil).map(\.lastPathComponent),
+            ["chunk_999.wav", "chunk_1000.wav"]
+        )
+    }
+
+    func test_chunkWithNoAudioBytesDoesNotBlockRecovery() async throws {
+        let fixture = try await recoveryFixture()
+        try writeKilledChunk(to: try await fixture.store.chunkURL(for: fixture.id, index: 1), seconds: 2)
+        try Data().write(to: try await fixture.store.chunkURL(for: fixture.id, index: 2))
+
+        let outcome = await fixture.service.resolve(recordingID: fixture.id, action: .saveAudioOnly)
+
+        XCTAssertEqual(outcome, .completed)
+        XCTAssertEqual(try XCTUnwrap(storage.recordings.first(where: { $0.id == fixture.id })).durationSeconds, 2, accuracy: 0.01)
+    }
+
+    func test_chunkTooLargeToRepairFailsWithoutLeavingATempCopy() async throws {
+        let fixture = try await recoveryFixture()
+        let chunk = try await fixture.store.chunkURL(for: fixture.id)
+        try writeKilledChunk(to: chunk, seconds: 1)
+        let handle = try FileHandle(forUpdating: chunk)
+        try handle.truncate(atOffset: UInt64(UInt32.max) + 4096)
+        try handle.close()
+
+        let outcome = await fixture.service.resolve(recordingID: fixture.id, action: .saveAudioOnly)
+
+        XCTAssertEqual(outcome, .failed)
+        try assertFailedAndKept(fixture.id, chunks: [chunk])
+        let names = try FileManager.default.contentsOfDirectory(atPath: fixture.dir.path)
+        XCTAssertFalse(names.contains { $0.hasPrefix("repaired-") })
+    }
+
+    func test_duplicateRequestIsAlreadyRunningNotFailure() async throws {
+        let fixture = try await recoveryFixture()
+        try writeKilledChunk(to: try await fixture.store.chunkURL(for: fixture.id), seconds: 1)
+
+        async let first = fixture.service.resolve(recordingID: fixture.id, action: .saveAudioOnly)
+        async let second = fixture.service.resolve(recordingID: fixture.id, action: .saveAudioOnly)
+        let outcomes = await [first, second]
+
+        XCTAssertTrue(outcomes.contains(.completed))
+        XCTAssertTrue(outcomes.contains(.alreadyRunning))
+    }
+
+    func test_recoveryFailureMessageIsShownOnlyWhileRecoveryIsPending() throws {
+        let id = UUID()
+        XCTAssertEqual(storage.beginMeetingRecording(id: id, type: .meeting), id)
+        storage.updateStatusDetail(id: id, detail: "Reconnecting")
+        XCTAssertNil(try XCTUnwrap(storage.recordings.first { $0.id == id }).recoveryFailureMessage,
+                     "A live recording's detail is not a recovery failure")
+        XCTAssertTrue(storage.markNeedsRecovery(id: id))
+        XCTAssertNil(try XCTUnwrap(storage.recordings.first { $0.id == id }).recoveryFailureMessage)
+        storage.updateStatusDetail(id: id, detail: "Could not recover meeting audio")
+        XCTAssertEqual(try XCTUnwrap(storage.recordings.first { $0.id == id }).recoveryFailureMessage,
+                       "Could not recover meeting audio")
     }
 
     func test_openRecordingIsMarkedOutsideSelectionModeOnly() {
