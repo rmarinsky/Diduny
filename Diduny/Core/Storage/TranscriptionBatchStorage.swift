@@ -14,6 +14,9 @@ struct TranscriptionBatch: Codable, Equatable, Identifiable {
     var isProcessingClosed: Bool
     var recordingIDs: [UUID]
     var workItems: [BatchTranscriptionItem]?
+    /// A group made in Recordings from existing recordings: grouping only, the recordings stay as they are.
+    /// Optional so libraries saved before it decode unchanged.
+    var isRecordingGroup: Bool? = nil
 
     init(
         id: UUID = UUID(),
@@ -243,6 +246,35 @@ final class TranscriptionBatchStorage {
             batches.insert(batch, at: 0)
         }
         return batch
+    }
+
+    /// Groups existing recordings without touching them (Recordings "Group").
+    @discardableResult
+    func createRecordingGroup(name: String, recordingIDs: [UUID], createdAt: Date = Date()) throws -> TranscriptionBatch {
+        var group = TranscriptionBatch(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Self.defaultName(for: createdAt) : name,
+            createdAt: createdAt,
+            isProcessingClosed: true,
+            recordingIDs: unique(recordingIDs)
+        )
+        group.isRecordingGroup = true
+        try mutateAndSave { batches.insert(group, at: 0) }
+        return group
+    }
+
+    /// Removes only the group entry. Never deletes a recording, never touches other batches, never removes files
+    /// (unlike `delete(batchID:)` and `RecordingsLibraryStorage.deleteBatch`).
+    func ungroup(batchID: UUID) throws {
+        guard batches.contains(where: { $0.id == batchID && $0.isRecordingGroup == true }) else {
+            throw StorageError.batchNotFound
+        }
+        try mutateAndSave { batches.removeAll { $0.id == batchID } }
+    }
+
+    /// Puts a group back after "Ungroup" is undone.
+    func restoreGroup(_ group: TranscriptionBatch) throws {
+        guard group.isRecordingGroup == true, !batches.contains(where: { $0.id == group.id }) else { return }
+        try mutateAndSave { batches.insert(group, at: 0) }
     }
 
     func update(batchID: UUID, name: String, description: String) throws {

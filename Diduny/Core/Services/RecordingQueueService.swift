@@ -31,6 +31,8 @@ final class RecordingQueueService {
         var engineOverride: EngineID? = nil
         /// The meeting's live text, saved if this run fails, so a failed redo never leaves nothing.
         var textIfItFails: String? = nil
+        /// Local speaker labels for this run only; nil follows Settings > Audio (the global default stays as it is).
+        var speakerLabels: Bool? = nil
     }
 
     private var processingTask: Task<Void, Never>?
@@ -76,7 +78,8 @@ final class RecordingQueueService {
         targetLanguage: String? = nil,
         localFallbackOnUsageLimit: Bool = false,
         engineOverride: EngineID? = nil,
-        textIfItFails: String? = nil
+        textIfItFails: String? = nil,
+        speakerLabels: Bool? = nil
     ) -> Bool {
         guard !ids.isEmpty else { return false }
 
@@ -89,7 +92,8 @@ final class RecordingQueueService {
                 targetLanguage: targetLanguage,
                 localFallbackOnUsageLimit: localFallbackOnUsageLimit,
                 engineOverride: engineOverride,
-                textIfItFails: textIfItFails
+                textIfItFails: textIfItFails,
+                speakerLabels: speakerLabels
             )
         }
         guard !newItems.isEmpty else { return false }
@@ -328,12 +332,13 @@ final class RecordingQueueService {
                 return // Handled above.
             }
 
-            if provider == .local, status == .transcribed {
+            if provider == .local, status == .transcribed, item.speakerLabels != false {
                 transcript = await LocalSpeakerLabelService.label(
                     transcript,
                     recording: recording,
                     tracksURL: storage.tracksFileURL(for: item.id),
-                    audioURL: audioURL
+                    audioURL: audioURL,
+                    voiceDetection: item.speakerLabels
                 ) {
                     publishProgress(
                         QueueProgress(stage: .identifyingSpeakers, provider: provider, totalSeconds: totalSeconds),
@@ -660,7 +665,8 @@ final class RecordingQueueService {
         targetLanguage: String?,
         localFallbackOnUsageLimit: Bool,
         engineOverride: EngineID?,
-        textIfItFails: String?
+        textIfItFails: String?,
+        speakerLabels: Bool? = nil
     ) -> QueueItem? {
         guard currentItem?.id != id else {
             Log.app.info("Queue skipped duplicate active recording \(id)")
@@ -680,7 +686,8 @@ final class RecordingQueueService {
             targetLanguage: targetLanguage,
             localFallbackOnUsageLimit: localFallbackOnUsageLimit,
             engineOverride: engineOverride,
-            textIfItFails: textIfItFails
+            textIfItFails: textIfItFails,
+            speakerLabels: speakerLabels
         )
     }
 

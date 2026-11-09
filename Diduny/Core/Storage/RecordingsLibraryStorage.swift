@@ -838,6 +838,33 @@ final class RecordingsLibraryStorage {
         return true
     }
 
+    /// A recording's calendar link as a whole, so attach and detach on the Recordings day can be undone exactly.
+    struct CalendarLinkState: Equatable {
+        var meeting: CalendarMeeting?
+        var candidates: [CalendarMeeting]?
+        var declined: Bool?
+    }
+
+    func calendarLinkState(id: UUID) -> CalendarLinkState? {
+        recordings.first(where: { $0.id == id }).map {
+            CalendarLinkState(meeting: $0.calendarMeeting, candidates: $0.calendarCandidates, declined: $0.calendarLinkDeclined)
+        }
+    }
+
+    /// Attach, detach or undo from the Recordings day. Unlike `chooseCalendarMeeting`, voice notes may attach;
+    /// imported files never. Automatic matching (`applyCalendarMatches`) still touches meetings only.
+    @discardableResult
+    func setCalendarLink(id: UUID, _ state: CalendarLinkState) -> Bool {
+        guard allowsLibraryMutation(), let index = recordings.firstIndex(where: { $0.id == id }),
+              recordings[index].type.canAttachCalendarEvent else { return false }
+        let previous = recordings[index]
+        recordings[index].calendarMeeting = state.meeting
+        recordings[index].calendarCandidates = state.candidates
+        recordings[index].calendarLinkDeclined = state.declined
+        guard saveMetadataSynchronously() else { recordings[index] = previous; return false }
+        return true
+    }
+
     /// Events found by "Find calendar event" for the person to choose from.
     @discardableResult
     func setCalendarCandidates(id: UUID, candidates: [CalendarMeeting]) -> Bool {
