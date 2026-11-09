@@ -384,7 +384,9 @@ final class RecordingQueueService {
                 action: item.action,
                 providerOverride: .local,
                 whisperModelOverride: item.whisperModelOverride,
-                targetLanguage: item.targetLanguage
+                targetLanguage: item.targetLanguage,
+                // A named engine stays named, so the retry is Whisper through the same runner.
+                engineOverride: item.engineOverride == nil ? nil : .whisper
             )
             pendingItems.insert(localItem, at: 0)
             currentJobStatus = nil

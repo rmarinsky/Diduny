@@ -427,7 +427,8 @@ struct MeetingQueueSeamTests {
         let queue = RecordingQueueService(storage: storage, localModelIsAvailable: { _ in true }, hasSession: { true }, makeRunner: { _ in fake })
         #expect(queue.enqueue([id], action: .transcribeDiarize, localFallbackOnUsageLimit: true, engineOverride: .didunyCloud))
         await waitUntilDone(queue)
-        #expect(storage.recordings.first { $0.id == id }?.status != .failed)
+        #expect(calls.engines == ["whisper"])
+        #expect(storage.recordings.first { $0.id == id }?.status == .transcribed)
     }
 
     @Test("Parts keep live text, translate only the ranges, and save as translated")
