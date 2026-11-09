@@ -126,7 +126,10 @@ class DidunyUITestCase: XCTestCase {
     ) {
         waitForElement(element, file: file, line: line)
         guard !element.isHittable else { return }
-        container.scroll(byDeltaX: 0, deltaY: container.frame.midY - element.frame.midY)
+        // Aim at the upper quarter, not the middle: on the 768 pt CI screen the window's lower part sits
+        // behind the Dock, so an element scrolled to the container's middle can still be covered.
+        let target = container.frame.minY + container.frame.height / 4
+        container.scroll(byDeltaX: 0, deltaY: target - element.frame.midY)
         waitForElement(element, toMatch: "isHittable == true", file: file, line: line)
     }
 

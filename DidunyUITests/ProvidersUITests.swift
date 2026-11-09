@@ -60,7 +60,7 @@ final class ProvidersUITests: DidunyUITestCase {
             "parakeet-v3": "25 languages", "apple-speech": "Set in macOS"
         ]
         for (id, subtitle) in expected {
-            // The language row can sit below the 680 pt window on a CI runner (seen at y 721).
+            // The language row sits behind the Dock on the 768 pt CI screen (seen at y 721).
             let button = element("providers.languages.\(id)")
             scrollIntoView(button, in: window.scrollViews.firstMatch)
             button.click()
