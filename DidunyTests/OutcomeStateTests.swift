@@ -116,3 +116,27 @@ struct OutcomeStateTests {
             == .meetingTranslation(pair: "→ UK"))
     }
 }
+
+@Suite("Settings and panel details from Roman's DEV feedback")
+struct DevFeedbackDetailTests {
+    @Test func normalSpeechReachesWellUpTheMeter() {
+        func level(db: Float) -> Float { (db + 60) / 60 }
+        #expect(LiveAudioMeter.displayLevel(level(db: -58)) == 0)
+        #expect(LiveAudioMeter.displayLevel(level(db: -30)) == 0.5)
+        #expect(LiveAudioMeter.displayLevel(level(db: -20)) > 0.8)
+        #expect(LiveAudioMeter.displayLevel(level(db: 0)) == 1)
+    }
+
+    /// Fixed columns plus flexible columns fill the row exactly, so every chevron is at the same x.
+    @Test(arguments: [713.5, 840] as [CGFloat])
+    func modeRowColumnsFillTheRow(total: CGFloat) {
+        let widths = ModesGrid.flexibleWidths(total: total)
+        let sum = ModesGrid.modeColumn + widths.engine + widths.second + ModesGrid.shortcutColumn
+            + DS.Size.expander + ModesGrid.gap * 4
+        #expect(abs(sum - total) < 0.01)
+    }
+
+    @MainActor @Test func inPlaceBadgeIsOneAndAHalfTimesBigger() {
+        #expect(InplaceTranslationFeedbackController.badgeSize == CGSize(width: 66, height: 66))
+    }
+}

@@ -34,10 +34,18 @@ struct LiveWaveformCircle: View {
     }
 }
 
-/// Five bars driven by the real input level (today's meter, kept as is).
+/// Five bars driven by the real input level.
 struct LiveAudioMeter: View {
     let level: Float
     let color: Color
+
+    /// The level spans -60 to 0 dB, but speech close to a mic sits near -30 dB, which lit only 2-3 bars.
+    /// The bars now cover -45 dB (quiet room, all dim) to -15 dB (loud speech, all lit).
+    static func displayLevel(_ level: Float) -> Float {
+        max(0, min((level - 0.25) / 0.5, 1))
+    }
+
+    private var shown: Float { Self.displayLevel(level) }
 
     var body: some View {
         HStack(alignment: .center, spacing: 3) {
@@ -52,13 +60,13 @@ struct LiveAudioMeter: View {
 
     private func height(for index: Int) -> CGFloat {
         let baseline: [CGFloat] = [8, 13, 18, 13, 8]
-        let scaled = CGFloat(max(0.08, min(level, 1))) * baseline[index]
+        let scaled = CGFloat(max(0.08, shown)) * baseline[index]
         return max(4, scaled)
     }
 
     private func opacity(for index: Int) -> Double {
         let threshold = Float(index + 1) / 6
-        return level >= threshold ? 1 : 0.35
+        return shown >= threshold ? 1 : 0.35
     }
 }
 
