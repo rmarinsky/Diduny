@@ -46,4 +46,25 @@ struct QueueEngineRunner {
         }
         return GeneratedTranscript(text: step.text)
     }
+
+    /// Joins kept live text and translated ranges, in order. Stops at the first failure and returns what is ready.
+    static func translateParts(
+        _ parts: [TranslatePart],
+        translate: (AudioTrimRange?, EngineID) async throws -> String
+    ) async -> (text: String, error: Error?) {
+        var texts: [String] = []
+        for part in parts {
+            switch part {
+            case let .live(text):
+                texts.append(text)
+            case let .afterStop(range, engine):
+                do {
+                    texts.append(try await translate(range, engine))
+                } catch {
+                    return (texts.joined(separator: "\n\n"), error)
+                }
+            }
+        }
+        return (texts.joined(separator: "\n\n"), nil)
+    }
 }

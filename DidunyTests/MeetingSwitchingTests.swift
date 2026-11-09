@@ -1,4 +1,5 @@
 @testable import Diduny
+import Foundation
 import Testing
 
 /// ADR-0013 D8: the switching rules, without audio, sockets or a clock.
@@ -335,5 +336,120 @@ struct TranslatePlanTests {
         let spans = [MeetingEngineSpan(target: .afterStopOnly(.whisper), startFrame: 0),
                      MeetingEngineSpan(target: .live(.didunyCloud), startFrame: 0)]
         #expect(plan(spans, texts: [1: "a"]) == [.live(text: "a")])
+    }
+}
+
+/// C10, C16, C22 and the parts action through the real queue, with fake engines.
+@MainActor
+struct MeetingQueueSeamTests {
+    private final class Calls { var engines: [String] = []; var diarize: [Bool] = [] }
+    private enum Failure: Error { case boom }
+
+    private func storage() throws -> RecordingsLibraryStorage {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MeetingQueueSeam-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return RecordingsLibraryStorage(baseDirectory: directory, batchStorage: try TranscriptionBatchStorage(baseDirectory: directory))
+    }
+
+    private func runner(_ calls: Calls, whisper: @escaping () throws -> String = { "whisper text" }) -> QueueEngineRunner {
+        QueueEngineRunner(
+            cloud: { config in
+                calls.engines.append("cloud")
+                calls.diarize.append(config["enable_speaker_diarization"] as? Bool ?? false)
+                return GeneratedTranscript(text: "cloud text")
+            },
+            whisper: { calls.engines.append("whisper"); return try GeneratedTranscript(text: whisper()) },
+            whisperTranslateToEnglish: { "" },
+            onDevice: { calls.engines.append($0); return "device text" },
+            elevenLabs: { diarize in
+                calls.engines.append("elevenlabs")
+                calls.diarize.append(diarize)
+                return GeneratedTranscript(text: "el text")
+            },
+            translator: PassthroughTranslator()
+        )
+    }
+
+    private struct PassthroughTranslator: TextTranslationProtocol {
+        func translate(text: String, targetLanguage: String, sourceLanguage: String?, context: String?) async throws -> String {
+            "\(text) [\(targetLanguage)]"
+        }
+    }
+
+    private func waitUntilDone(_ queue: RecordingQueueService) async {
+        for _ in 0 ..< 400 where queue.isProcessing {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    @Test("The runner sends each engine to itself", arguments: EngineID.allCases)
+    func runnerRoutes(engine: EngineID) async throws {
+        let calls = Calls()
+        _ = try await runner(calls).transcribe(engine, diarize: true, hints: [])
+        let expected = switch engine {
+        case .didunyCloud: "cloud"
+        case .elevenLabs: "elevenlabs"
+        case .whisper: "whisper"
+        case .parakeet, .appleSpeech: engine.rawValue
+        }
+        #expect(calls.engines == [expected])
+    }
+
+    @Test("C22: signed out, a named Whisper transcribes through the runner")
+    func signedOutWhisper() async throws {
+        let storage = try storage()
+        let id = try #require(storage.saveRecording(audioData: Data("RIFF....WAVEfmt ".utf8), type: .meeting, duration: 42, forceSave: true))
+        let calls = Calls()
+        let queue = RecordingQueueService(storage: storage, localModelIsAvailable: { _ in true }, hasSession: { false }, makeRunner: { _ in runner(calls) })
+        #expect(queue.enqueue([id], action: .transcribeDiarize, engineOverride: .whisper))
+        await waitUntilDone(queue)
+        #expect(calls.engines == ["whisper"])
+        #expect(storage.recordings.first { $0.id == id }?.status == .transcribed)
+    }
+
+    @Test("Signed out, a named Diduny Cloud still refuses")
+    func signedOutCloud() throws {
+        let storage = try storage()
+        let id = try #require(storage.saveRecording(audioData: Data("RIFF....WAVEfmt ".utf8), type: .meeting, duration: 42, forceSave: true))
+        let queue = RecordingQueueService(storage: storage, startsAutomatically: false, localModelIsAvailable: { _ in true }, hasSession: { false })
+        #expect(!queue.enqueue([id], action: .transcribeDiarize, engineOverride: .didunyCloud))
+        #expect(storage.recordings.first { $0.id == id }?.status == .failed)
+    }
+
+    @Test("C16: Diduny out of quota retries on this Mac")
+    func quotaFallback() async throws {
+        let storage = try storage()
+        let id = try #require(storage.saveRecording(audioData: Data("RIFF....WAVEfmt ".utf8), type: .meeting, duration: 42, forceSave: true))
+        let calls = Calls()
+        var base = runner(calls)
+        base.cloud = { _ in throw TranscriptionError.usageLimitExceeded(usedHours: 5, limitHours: 5) }
+        let fake = base
+        let queue = RecordingQueueService(storage: storage, localModelIsAvailable: { _ in true }, hasSession: { true }, makeRunner: { _ in fake })
+        #expect(queue.enqueue([id], action: .transcribeDiarize, localFallbackOnUsageLimit: true, engineOverride: .didunyCloud))
+        await waitUntilDone(queue)
+        #expect(storage.recordings.first { $0.id == id }?.status != .failed)
+    }
+
+    @Test("Parts keep live text, translate only the ranges, and save as translated")
+    func parts() async throws {
+        let storage = try storage()
+        let id = try #require(storage.saveRecording(audioData: Data("RIFF....WAVEfmt ".utf8), type: .meetingTranslation, duration: 42, forceSave: true))
+        let calls = Calls()
+        let queue = RecordingQueueService(storage: storage, localModelIsAvailable: { _ in true }, hasSession: { true }, makeRunner: { _ in runner(calls) })
+        #expect(queue.enqueue([id], action: .translateParts([.live(text: "kept"), .afterStop(range: nil, engine: .parakeet)], target: "uk")))
+        await waitUntilDone(queue)
+        let saved = try #require(storage.recordings.first { $0.id == id })
+        #expect(saved.status == .translated)
+        #expect(saved.transcriptionText?.contains("kept") == true)
+        #expect(saved.transcriptionText?.contains("device text [uk]") == true)
+    }
+
+    @Test("A failed part keeps what is ready, marks it failed, and stops")
+    func failedPart() async {
+        let result = await QueueEngineRunner.translateParts([
+            .live(text: "kept"), .afterStop(range: nil, engine: .parakeet), .live(text: "later"),
+        ]) { _, _ in throw Failure.boom }
+        #expect(result.text == "kept")
+        #expect(result.error is Failure)
     }
 }

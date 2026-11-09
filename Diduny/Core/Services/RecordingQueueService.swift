@@ -9,6 +9,8 @@ final class RecordingQueueService {
         case transcribe
         case transcribeDiarize
         case translate
+        /// Translate meeting after a switch (ADR-0013 D4): kept live text and translated ranges, in time order.
+        case translateParts([TranslatePart], target: String)
     }
 
     private(set) var isProcessing = false
@@ -39,16 +41,20 @@ final class RecordingQueueService {
     private let startsAutomatically: Bool
     private let hasSession: () -> Bool
     private let localModelIsAvailable: (String) -> Bool
+    /// Tests replace the engines.
+    private let makeRunner: (@MainActor (URL) -> QueueEngineRunner)?
 
     init(
         storage: RecordingsLibraryStorage? = nil,
         startsAutomatically: Bool = true,
         localModelIsAvailable: ((String) -> Bool)? = nil,
-        hasSession: @escaping () -> Bool = { AuthService.hasStoredSession }
+        hasSession: @escaping () -> Bool = { AuthService.hasStoredSession },
+        makeRunner: (@MainActor (URL) -> QueueEngineRunner)? = nil
     ) {
         self.storage = storage ?? .shared
         self.startsAutomatically = startsAutomatically
         self.hasSession = hasSession
+        self.makeRunner = makeRunner
         self.localModelIsAvailable = localModelIsAvailable ?? { modelName in
             guard let model = WhisperModelManager.availableModels.first(where: { $0.name == modelName }) else {
                 return false
@@ -168,6 +174,11 @@ final class RecordingQueueService {
             return
         }
 
+        if case let .translateParts(parts, target) = item.action {
+            await processTranslateParts(parts, target: target, item: item, recording: recording, audioURL: originalAudioURL)
+            return
+        }
+
         do {
             let audioURL = try await AudioTrimService.prepareAudio(
                 fileURL: originalAudioURL,
@@ -203,7 +214,8 @@ final class RecordingQueueService {
                 }
             }
 
-            let runner = makeEngineRunner(service: service, audioURL: audioURL, recording: recording, itemID: item.id)
+            let runner = makeRunner?(audioURL)
+                ?? makeEngineRunner(service: service, audioURL: audioURL, recording: recording, itemID: item.id)
             let whisperModel = item.whisperModelOverride ?? SettingsStorage.shared.selectedWhisperModel
             var transcript: GeneratedTranscript
             let status: Recording.ProcessingStatus
@@ -212,7 +224,9 @@ final class RecordingQueueService {
             let sourceLanguageCode: String?
             switch item.action {
             case .transcribe:
-                if let onDevice {
+                if let engine = item.engineOverride {
+                    transcript = try await runner.transcribe(engine, diarize: false, hints: SettingsStorage.shared.speechLanguageHints)
+                } else if let onDevice {
                     let language = SettingsStorage.shared.speechLanguageHints.first ?? BenchmarkRunner.defaultLanguage
                     transcript = try await GeneratedTranscript(text: onDevice.transcribe(audioURL, language: language).text)
                 } else if provider == .cloud {
@@ -232,7 +246,10 @@ final class RecordingQueueService {
                 historyKind = provider == .local || onDevice != nil ? .local : .cloud
                 sourceLanguageCode = nil
             case .transcribeDiarize:
-                if let onDevice {
+                // C10: a named engine runs itself; ElevenLabs must not go to Diduny jobs.
+                if let engine = item.engineOverride {
+                    transcript = try await runner.transcribe(engine, diarize: true, hints: SettingsStorage.shared.speechLanguageHints)
+                } else if let onDevice {
                     let language = SettingsStorage.shared.speechLanguageHints.first ?? BenchmarkRunner.defaultLanguage
                     transcript = try await GeneratedTranscript(text: onDevice.transcribe(audioURL, language: language).text)
                 } else if provider == .cloud {
@@ -303,6 +320,8 @@ final class RecordingQueueService {
                 translationTargetLanguageCode = targetLanguage
                 historyKind = .translation
                 sourceLanguageCode = pair.languageA
+            case .translateParts:
+                return // Handled above.
             }
 
             if provider == .local, status == .transcribed {
@@ -374,6 +393,39 @@ final class RecordingQueueService {
             storage.updateRecording(id: item.id, status: .failed, error: error.localizedDescription)
             currentJobStatus = nil
             Log.app.error("Queue failed for recording \(item.id): \(error.localizedDescription)")
+        }
+    }
+
+    /// Translates only the ranges without live text and joins them with the kept live text. A failed range keeps
+    /// what is ready, with `.failed` and the error; the audio stays, so a whole translation can still run.
+    private func processTranslateParts(
+        _ parts: [TranslatePart], target: String, item: QueueItem, recording: Recording, audioURL: URL
+    ) async {
+        let whisperModel = item.whisperModelOverride ?? SettingsStorage.shared.selectedWhisperModel
+        let result = await QueueEngineRunner.translateParts(parts) { [self] range, engine in
+            let partURL = try await AudioTrimService.prepareAudio(fileURL: audioURL, range: range)
+            defer { if partURL != audioURL { try? FileManager.default.removeItem(at: partURL) } }
+            let runner = makeRunner?(partURL) ?? makeEngineRunner(
+                service: createTranscriptionService(
+                    for: engine == .didunyCloud || engine == .elevenLabs ? .cloud : .local,
+                    whisperModelOverride: item.whisperModelOverride
+                ),
+                audioURL: partURL, recording: recording, itemID: item.id
+            )
+            return try await runner.translate(engine, target: target, whisperModel: whisperModel).text
+        }
+        if result.error is CancellationError {
+            storage.updateRecording(id: item.id, status: .unprocessed, error: nil)
+        } else if let error = result.error {
+            storage.updateRecording(id: item.id, status: .failed, text: result.text.isEmpty ? nil : result.text,
+                                    error: error.localizedDescription)
+            Log.app.error("Queue failed a translate part for recording \(item.id): \(error.localizedDescription)")
+        } else {
+            storage.completeTranscription(
+                id: item.id, status: .translated,
+                text: ClipboardService.preparedMessageText(result.text, recordingType: recording.type), segments: nil,
+                translationTargetLanguageCode: target, kind: .translation, provider: TranscriptionProvider.cloud.rawValue
+            )
         }
     }
 
@@ -675,6 +727,7 @@ final class RecordingQueueService {
     }
 
     private func preflightError(for item: QueueItem) -> String? {
+        if case .translateParts = item.action { return nil } // Each part reports its own failure.
         // Same rule as processRecording: an on-device engine skips the Whisper/cloud checks.
         if let recording = storage.recordings.first(where: { $0.id == item.id }) {
             let onDeviceID = item.action == .translate
@@ -698,7 +751,10 @@ final class RecordingQueueService {
             }
             return nil
         }
-        guard hasCloudCredentials else { return String(localized: "Sign in to use Diduny transcription.") }
+        // C22: an engine named for this run that works on this Mac needs no Diduny session.
+        guard hasCloudCredentials || (item.engineOverride != nil && provider == .local) else {
+            return String(localized: "Sign in to use Diduny transcription.")
+        }
         switch provider {
         case .cloud:
             return nil
