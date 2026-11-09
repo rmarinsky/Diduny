@@ -372,7 +372,7 @@ enum RecordingsWeek {
     }
 }
 
-enum NotesListFilter: Equatable {
+enum NotesListFilter: Hashable {
     case all
     case withoutTranscript
 
