@@ -10,6 +10,7 @@ struct RecordingRowView: View {
     var isSelectionMode = false
     var isSelected = false
     var onToggleSelection: (() -> Void)?
+    var isOpenInDetail = false
 
     @State private var playbackService = AudioPlaybackService.shared
     @State private var queueService = RecordingQueueService.shared
@@ -50,8 +51,10 @@ struct RecordingRowView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 11)
+        .background(isOpenInDetail ? DS.Palette.tint : Color.clear)
         .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isOpenInDetail ? .isSelected : [])
     }
 
     // MARK: - Subviews

@@ -484,6 +484,15 @@ final class MeetingLiveLibraryRowTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: chunk), garbage, "The source chunk is never changed by a failed attempt")
     }
 
+    func test_openRecordingIsMarkedOutsideSelectionModeOnly() {
+        let id = UUID()
+        let open = RecordingsInspectorSelection.recording(id, parentBatchID: nil)
+        XCTAssertTrue(open.marksRow(id, isSelectionMode: false))
+        XCTAssertFalse(open.marksRow(UUID(), isSelectionMode: false))
+        XCTAssertFalse(open.marksRow(id, isSelectionMode: true))
+        XCTAssertFalse(RecordingsInspectorSelection.batch(id).marksRow(id, isSelectionMode: false))
+    }
+
     func test_deleteRecording_removesRecoveryRowWithoutAttachedAudio() throws {
         let id = UUID()
         _ = storage.beginMeetingRecording(id: id, type: .meeting)

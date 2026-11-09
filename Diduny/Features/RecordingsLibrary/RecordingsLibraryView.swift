@@ -10,6 +10,12 @@ enum RecordingsInspectorSelection: Equatable {
         return parentBatchID
     }
 
+    /// The list marks the recording open in the detail; selection mode has its own checkboxes.
+    func marksRow(_ recordingID: UUID, isSelectionMode: Bool) -> Bool {
+        guard !isSelectionMode, case let .recording(id, _) = self else { return false }
+        return id == recordingID
+    }
+
     var backDestination: Self? {
         parentBatchID.map(Self.batch)
     }
@@ -414,7 +420,8 @@ struct RecordingsLibraryView: View {
                             : nil,
                         isSelectionMode: isSelectionMode,
                         isSelected: selectedRecordingIds.contains(recording.id),
-                        onToggleSelection: { toggleSelection(for: recording) }
+                        onToggleSelection: { toggleSelection(for: recording) },
+                        isOpenInDetail: inspectorSelection?.marksRow(recording.id, isSelectionMode: isSelectionMode) ?? false
                     )
                     .contextMenu { recordingContextMenu(for: recording) }
                     if index < recordings.count - 1 {
