@@ -70,38 +70,7 @@ final class MainWindowController {
     }
 
     static let defaultContentSize = NSSize(width: 1000, height: 680)
-    static let recordingInspectorWidth: CGFloat = 480
     static let frameAutosaveName = "DidunyMainWindow"
-
-    /// How much the inspector grew the window; nil when it did not grow it.
-    private var inspectorGrowth: CGFloat?
-
-    /// Opening the inspector grows the window only when the user's size leaves no room for it, and never
-    /// past the screen; closing it gives back exactly what it took.
-    func setRecordingInspectorExpanded(_ expanded: Bool) {
-        guard let window, !window.styleMask.contains(.fullScreen) else { return }
-        let contentWidth = window.contentRect(forFrameRect: window.frame).width
-        let targetContentWidth: CGFloat
-        if expanded {
-            guard inspectorGrowth == nil else { return }
-            let needed = Self.defaultContentSize.width + Self.recordingInspectorWidth
-            guard contentWidth < needed else { return }
-            inspectorGrowth = needed - contentWidth
-            targetContentWidth = needed
-        } else {
-            guard let growth = inspectorGrowth else { return }
-            inspectorGrowth = nil
-            targetContentWidth = max(Self.defaultContentSize.width, contentWidth - growth)
-        }
-        let delta = targetContentWidth - contentWidth
-        var frame = window.frame
-        frame.size.width += delta
-        if let visible = window.screen?.visibleFrame {
-            frame = Self.clamp(frame, to: visible)
-        }
-        guard frame != window.frame else { return }
-        window.setFrame(frame, display: true, animate: true)
-    }
 
     /// Fits a frame inside the visible screen: no larger than it, moved left/down to stay on it.
     static func clamp(_ frame: NSRect, to visible: NSRect) -> NSRect {
@@ -202,7 +171,6 @@ final class MainWindowController {
         windowDelegate = MainWindowDelegate { [weak self] in
             self?.window = nil
             self?.windowDelegate = nil
-            self?.inspectorGrowth = nil
             self?.refreshActivationPolicy()
         }
         w.delegate = windowDelegate
