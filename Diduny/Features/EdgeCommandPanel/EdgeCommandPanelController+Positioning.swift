@@ -77,7 +77,11 @@ extension EdgeCommandPanelController {
     /// A recording's start: the whole panel, drawn before this returns. The microphone starts on the main
     /// thread right after this, and a stuck device holds that thread for 10 s; a morph would freeze there as
     /// an empty skeleton or a half-transparent window.
-    func presentLiveImmediately(_ panel: NSPanel, presentation: EdgeCommandPanelPresentation) {
+    func presentLiveImmediately(
+        _ panel: NSPanel,
+        presentation: EdgeCommandPanelPresentation,
+        entrance: EdgeCommandPanelLiveEntrance = .immediate
+    ) {
         guard dragCursorOffset == nil else { return }
         let screen = dock == nil ? activeScreen() : panel.screen ?? activeScreen()
         let visibleFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
@@ -103,7 +107,7 @@ extension EdgeCommandPanelController {
         panel.contentView?.layoutSubtreeIfNeeded()
         panel.displayIfNeeded()
         CATransaction.flush()
-        if let content = panelContentView {
+        if EdgeCommandPanelLogoEntrance.plays(for: entrance), let content = panelContentView {
             EdgeCommandPanelLogoEntrance.play(on: content, cornerRadius: EdgeCommandPanelPlacement.expandedCornerRadius)
             CATransaction.flush()
         }

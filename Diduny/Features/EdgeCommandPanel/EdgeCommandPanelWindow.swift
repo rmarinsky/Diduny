@@ -73,6 +73,7 @@ final class EdgeCommandPanelContentView: NSView {
 
     override func layout() {
         super.layout()
+        if tabHostingView.frame.size != bounds.size { EdgeCommandPanelLogoEntrance.end(on: self) }
         tabHostingView.frame = bounds
         expandedHostingView.frame = bounds
     }

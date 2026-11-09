@@ -8,6 +8,21 @@ enum EdgeCommandPanelLogoEntrance {
     static let duration: TimeInterval = 0.24
     static let logoFade: TimeInterval = 0.14
     static let logoDisc: CGFloat = 28
+    private static let logoName = "logoEntrance.logo"
+
+    /// Only a recording's start opens from the logo: not a restore from the tab (it morphs),
+    /// not an update of a panel already live. Notch mode never shows the live panel.
+    static func plays(for entrance: EdgeCommandPanelLiveEntrance) -> Bool {
+        entrance == .immediate
+    }
+
+    /// Ends the entrance at once (a resize or a hide): the mask fits the start bounds only.
+    @MainActor
+    static func end(on view: NSView) {
+        guard let layer = view.layer else { return }
+        if layer.mask?.name == logoName { layer.mask = nil }
+        layer.sublayers?.filter { $0.name == logoName }.forEach { $0.removeFromSuperlayer() }
+    }
 
     /// The disc's start (view coordinates, bottom-left origin): over the header icon tile.
     static func startDisc(in bounds: CGRect) -> CGRect {
@@ -40,6 +55,7 @@ enum EdgeCommandPanelLogoEntrance {
         let curve = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1) // DS.Motion.easeOut
 
         let mask = CAShapeLayer()
+        mask.name = logoName
         mask.frame = bounds
         let from = CGPath(ellipseIn: start, transform: nil)
         let to = CGPath(roundedRect: bounds, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
@@ -53,6 +69,7 @@ enum EdgeCommandPanelLogoEntrance {
 
         let logo = logoLayer(frame: start, appearance: view.effectiveAppearance)
         logo.opacity = 0
+        logo.name = logoName
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 1
         fade.toValue = 0

@@ -199,7 +199,7 @@ final class EdgeCommandPanelController: NSObject {
         model?.isLiveFeedbackMinimized = false
         model?.isShowingLiveFeedback = true
         if entrance == .immediate {
-            presentLiveImmediately(panel, presentation: .live(mode))
+            presentLiveImmediately(panel, presentation: .live(mode), entrance: entrance)
             return
         }
         let shouldMorph = entrance == .morph
@@ -422,6 +422,7 @@ final class EdgeCommandPanelController: NSObject {
 
     func dismissLiveFeedback() {
         guard model?.isShowingLiveFeedback == true || model?.isLiveFeedbackMinimized == true else { return }
+        if let panelContentView { EdgeCommandPanelLogoEntrance.end(on: panelContentView) }
         // Clear minimized first so showCollapsed proceeds to the idle ribbon tab.
         liveFeedbackRestoredByUser = false
         let store = DictationOverlayController.shared.store
