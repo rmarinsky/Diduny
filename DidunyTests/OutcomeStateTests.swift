@@ -15,6 +15,12 @@ struct OutcomeStateTests {
         #expect(DictationOverlayController.outcomeAutoHideDelay(autoPaste: false) == nil)
     }
 
+    @Test func onlyRestoringFromTheTabMorphs() {
+        #expect(EdgeCommandPanelLiveEntrance.make(alreadyLive: false, restoredByUser: false) == .immediate)
+        #expect(EdgeCommandPanelLiveEntrance.make(alreadyLive: false, restoredByUser: true) == .morph)
+        #expect(EdgeCommandPanelLiveEntrance.make(alreadyLive: true, restoredByUser: false) == .update)
+    }
+
     // T2-ST-01
     @Test func dictationSubtitle() {
         let outcome = EdgeCommandOutcome(flow: .dictation, durationSeconds: 7)

@@ -195,9 +195,14 @@ final class EdgeCommandPanelController: NSObject {
         // re-enter here while live, so only the first call animates.
         dismissTask?.cancel()
         let alreadyLive = model?.isShowingLiveFeedback == true && model?.isLiveFeedbackMinimized != true
-        let shouldMorph = !alreadyLive
+        let entrance = EdgeCommandPanelLiveEntrance.make(alreadyLive: alreadyLive, restoredByUser: liveFeedbackRestoredByUser)
         model?.isLiveFeedbackMinimized = false
         model?.isShowingLiveFeedback = true
+        if entrance == .immediate {
+            presentLiveImmediately(panel, presentation: .live(mode))
+            return
+        }
+        let shouldMorph = entrance == .morph
         position(panel, presentation: .live(mode), morphFromTab: shouldMorph)
         if !shouldMorph { revealPanelIfConcealed() }
         panel.orderFrontRegardless()

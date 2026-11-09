@@ -74,6 +74,37 @@ extension EdgeCommandPanelController {
         }
     }
 
+    /// A recording's start: the whole panel, drawn before this returns. The microphone starts on the main
+    /// thread right after this, and a stuck device holds that thread for 10 s; a morph would freeze there as
+    /// an empty skeleton or a half-transparent window.
+    func presentLiveImmediately(_ panel: NSPanel, presentation: EdgeCommandPanelPresentation) {
+        guard dragCursorOffset == nil else { return }
+        let screen = dock == nil ? activeScreen() : panel.screen ?? activeScreen()
+        let visibleFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let resolvedDock = dock
+            ?? EdgeCommandPanelDock(
+                rawEdge: SettingsStorage.shared.edgePanelDockEdge,
+                offset: SettingsStorage.shared.edgePanelDockOffset
+            )
+            ?? EdgeCommandPanelDock(edge: .right, offset: visibleFrame.midY)
+        dock = resolvedDock
+        model?.dockEdge = resolvedDock.edge
+        model?.isExpanded = true
+        DictationOverlayController.shared.store.contentRevealed = true
+        panelContentView?.setExpanded(true, animated: false)
+        panelContentView?.applyCornerMask(EdgeCommandPanelPlacement.expandedCornerRadius)
+        panel.setFrame(
+            EdgeCommandPanelPlacement.frame(in: visibleFrame, dock: resolvedDock, presentation: presentation),
+            display: false
+        )
+        panel.ignoresMouseEvents = false
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+        panel.contentView?.layoutSubtreeIfNeeded()
+        panel.displayIfNeeded()
+        CATransaction.flush()
+    }
+
     /// Fresh appearance: the window grows out of the edge tab's frame while a
     /// static skeleton fills it; live content cascades in once the morph lands.
     private func morphPanel(_ panel: NSPanel, from tabFrame: NSRect, to frame: NSRect) {

@@ -217,3 +217,14 @@ enum EdgeCommandPanelMinimizedLivePolicy {
         !isLiveFeedbackMinimized
     }
 }
+
+/// How the live panel comes on screen. Only a click on the minimized tab morphs: at a recording's start
+/// the main thread may be held by the microphone, and an animation would freeze half way.
+enum EdgeCommandPanelLiveEntrance: Equatable {
+    case update, morph, immediate
+
+    static func make(alreadyLive: Bool, restoredByUser: Bool) -> Self {
+        if alreadyLive { return .update }
+        return restoredByUser ? .morph : .immediate
+    }
+}
