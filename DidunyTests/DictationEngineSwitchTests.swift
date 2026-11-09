@@ -266,4 +266,74 @@ struct DictationEngineSwitchTests {
         stereo[22] = 2 // Channels: not the layout the cut counts in.
         #expect(DictationSwitchPlan.slice(wav: stereo, from: 0, to: nil) == nil)
     }
+
+    // MARK: - Review fixes
+
+    private static let marker = "[failed]"
+    private static let threeSpans = MeetingEngineHistory(spans: [
+        .init(target: .live(.didunyCloud), startFrame: 0),
+        .init(target: .afterStopOnly(.parakeet), startFrame: 4),
+        .init(target: .live(.appleSpeech), startFrame: 8),
+    ])
+
+    @Test("A part that fails becomes a marker; the parts with text are kept")
+    func failedPartKeepsTheRest() async {
+        let texts = await DictationSwitchPlan.collect(
+            history: Self.threeSpans,
+            liveTexts: [0: .init(text: "one", translated: false), 2: .init(text: "three", translated: false)],
+            audio: Data(), failedMarker: Self.marker, slice: { _, _, _ in Data([1]) }
+        ) { _, _ in throw URLError(.timedOut) }
+        #expect(DictationSwitchPlan.compose(texts.map(\.text)) == "one [failed] three")
+        #expect(texts[1].translated) // The marker is never sent for translation.
+    }
+
+    @Test("A first engine that never connected is transcribed from 0 to the cut by its own engine")
+    func emptyStartIsRescued() async {
+        var calls: [(EngineID, Int, Int?)] = []
+        var ranges: [(Int, Int?)] = []
+        let texts = await DictationSwitchPlan.collect(
+            history: Self.threeSpans,
+            liveTexts: [0: .init(text: "", translated: false), 2: .init(text: "three", translated: false)],
+            audio: Data(), failedMarker: Self.marker,
+            slice: { _, from, to in ranges.append((from, to)); return Data([UInt8(from)]) }
+        ) { engine, audio in
+            calls.append((engine, Int(audio[0]), nil))
+            return engine == .didunyCloud ? "one" : "two"
+        }
+        #expect(calls.map(\.0) == [.didunyCloud, .parakeet])
+        #expect(ranges.first.map { $0.0 == 0 && $0.1 == 4 } == true)
+        #expect(DictationSwitchPlan.compose(texts.map(\.text)) == "one two three")
+    }
+
+    @Test("Audio that cannot be ranged is never sent to the cloud when a local engine was used")
+    func unrangeableStaysLocal() async {
+        var engines: [EngineID] = []
+        let history = MeetingEngineHistory(spans: [
+            .init(target: .afterStopOnly(.parakeet), startFrame: 0),
+            .init(target: .live(.didunyCloud), startFrame: 4),
+        ])
+        let texts = await DictationSwitchPlan.collect(
+            history: history, liveTexts: [1: .init(text: "two", translated: false)],
+            audio: Data(), failedMarker: Self.marker, slice: { _, _, _ in nil }
+        ) { engine, _ in engines.append(engine); return "whole" }
+        #expect(engines == [.parakeet])
+        #expect(texts.map(\.text) == ["whole"])
+        #expect(DictationSwitchPlan.wholeFallbackEngine(used: [.whisper, .didunyCloud], preferred: .didunyCloud) == .whisper)
+        #expect(DictationSwitchPlan.wholeFallbackEngine(used: [.didunyCloud, .elevenLabs], preferred: .elevenLabs) == .elevenLabs)
+        #expect(DictationSwitchPlan.wholeFallbackEngine(used: [.appleSpeech, .didunyCloud], preferred: .parakeet) == .parakeet)
+    }
+
+    @Test("The cut frame equals exactly what the old consumer received, under concurrent delivery")
+    func cutIsExact() async {
+        let fanOut = MeetingAudioFanOut()
+        let old = OSAllocatedUnfairLock(initialState: 0)
+        fanOut.setConsumer { data in old.withLock { $0 += data.count } }
+        let feeder = Task.detached {
+            for _ in 0 ..< 20000 { fanOut.deliver(Data(count: 320)) }
+        }
+        try? await Task.sleep(for: .milliseconds(2))
+        let cut = fanOut.setConsumer({ _ in }, readFrame: { fanOut.deliveredFrames })
+        await feeder.value
+        #expect(old.withLock { $0 } == cut * 2)
+    }
 }

@@ -49,6 +49,53 @@ enum DictationSwitchPlan {
             .joined(separator: " ")
     }
 
+    /// The engine for a whole-recording fallback: `preferred`, unless a local engine was used and `preferred` is not
+    /// local; then that local engine, so audio captured under a local engine is never uploaded.
+    static func wholeFallbackEngine(used: [EngineID], preferred: EngineID) -> EngineID {
+        guard !runsLocally(preferred), let local = used.first(where: runsLocally) else { return preferred }
+        return local
+    }
+
+    /// The text of every part, in order. Span 0 that produced nothing live (its connect failed) is transcribed
+    /// from its own audio by its own engine. A part that fails becomes `failedMarker`; the others are kept.
+    /// `slice` nil (a layout the cut cannot range): the whole recording, by `wholeFallbackEngine`.
+    static func collect(
+        history: MeetingEngineHistory,
+        liveTexts: [Int: SpanText],
+        audio: Data,
+        failedMarker: String,
+        slice: (Data, Int, Int?) -> Data? = { slice(wav: $0, from: $1, to: $2) },
+        transcribe: (EngineID, Data) async throws -> String
+    ) async -> [SpanText] {
+        var texts: [SpanText] = []
+        let engines = history.spans.map(\.target.engine)
+        for part in parts(history) {
+            var part = part
+            if case .live(span: 0) = part, (liveTexts[0]?.text ?? "").isEmpty {
+                let end = history.spans.count > 1 ? history.spans[1].startFrame : nil
+                part = .afterStop(span: 0, engine: engines[0], startFrame: 0, endFrame: end)
+            }
+            switch part {
+            case let .live(span):
+                texts.append(liveTexts[span] ?? .init(text: "", translated: false))
+            case let .afterStop(_, engine, from, to):
+                if let to, to <= from { continue }
+                guard let audioPart = slice(audio, from, to) else {
+                    let whole = wholeFallbackEngine(used: engines, preferred: engines.last ?? engine)
+                    let text = try? await transcribe(whole, audio)
+                    return [text.map { .init(text: $0, translated: false) } ?? .init(text: failedMarker, translated: true)]
+                }
+                do {
+                    texts.append(.init(text: try await transcribe(engine, audioPart), translated: false))
+                } catch {
+                    // Not translated later: the marker stays as it is.
+                    texts.append(.init(text: failedMarker, translated: true))
+                }
+            }
+        }
+        return texts
+    }
+
     /// Engines whose audio never leaves this Mac.
     static func runsLocally(_ engine: EngineID) -> Bool {
         switch engine {

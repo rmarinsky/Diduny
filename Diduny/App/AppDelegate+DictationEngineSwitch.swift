@@ -139,32 +139,20 @@ extension AppDelegate {
     /// by Diduny. Nil without a switch.
     func dictationSwitchResult(
         audioData: Data, start: RealtimeSessionStopResult, translateInto target: String?
-    ) async throws -> RealtimeSessionStopResult? {
+    ) async -> RealtimeSessionStopResult? {
         guard let switcher = dictationEngineSwitch, switcher.didSwitch else { return nil }
         let startText = target != nil && switcher.start == .live(.didunyCloud) && translationByokPlan == nil
             ? DictationSwitchPlan.SpanText(text: start.text, translated: true)
             : DictationSwitchPlan.SpanText(text: target == nil ? start.text : start.originalText, translated: false)
-        let later = switcher.laterSpanTexts
-        var texts: [DictationSwitchPlan.SpanText] = []
-        parts: for part in DictationSwitchPlan.parts(switcher.history) {
-            switch part {
-            case .live(span: 0):
-                texts.append(startText)
-            case let .live(span):
-                texts.append(later[span] ?? .init(text: "", translated: false))
-            case let .afterStop(_, engine, from, to):
-                if let to, to <= from { continue }
-                guard let slice = DictationSwitchPlan.slice(wav: audioData, from: from, to: to) else {
-                    // Not a layout the cut can range: the whole recording with the last engine, replacing the text.
-                    Log.app.notice("Dictation switch: audio not rangeable, transcribing the whole recording")
-                    let last = switcher.engines.last ?? engine
-                    texts = [.init(text: try await transcribeSwitchPart(last, audio: audioData, translating: target != nil),
-                                   translated: false)]
-                    break parts
-                }
-                texts.append(.init(text: try await transcribeSwitchPart(engine, audio: slice, translating: target != nil),
-                                   translated: false))
-            }
+        var live = switcher.laterSpanTexts
+        live[0] = startText
+        let translating = target != nil
+        var texts = await DictationSwitchPlan.collect(
+            history: switcher.history, liveTexts: live, audio: audioData,
+            failedMarker: String(localized: "[part not transcribed]")
+        ) { [weak self] engine, audio in
+            guard let self else { return "" }
+            return try await transcribeSwitchPart(engine, audio: audio, translating: translating)
         }
         if let target {
             for index in texts.indices where !texts[index].translated && !texts[index].text.isEmpty {
@@ -174,7 +162,8 @@ extension AppDelegate {
             }
         }
         let text = DictationSwitchPlan.compose(texts.map(\.text))
-        Log.app.info("Dictation switch: \(texts.count) parts, \(text.count) chars")
+        let failed = texts.filter { $0.translated && $0.text == String(localized: "[part not transcribed]") }.count
+        Log.app.info("Dictation switch: \(texts.count) parts, \(failed) failed, \(text.count) chars")
         return RealtimeSessionStopResult(
             text: text, preFinalizeText: text, optimisticCleanedText: nil, finalizeResult: start.finalizeResult)
     }

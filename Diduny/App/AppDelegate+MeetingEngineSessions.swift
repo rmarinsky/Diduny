@@ -312,8 +312,12 @@ extension AppDelegate {
         } ?? []
         guard (history?.spans.count ?? 1) > 1 || parts.contains(where: { if case .live = $0 { true } else { false } }), !parts.isEmpty else {
             if (history?.spans.count ?? 1) > 1 { Log.app.notice("Translate meeting: offsets unusable, translating the whole recording") }
-            // The engine picked last, not the one the meeting started on.
-            switch resolve?(afterStopEngine) ?? resolveAfterStopEngine(afterStopEngine) {
+            // The engine picked last, not the one the meeting started on; never a cloud engine over audio
+            // captured under a local one (WP-64 review).
+            let used = (history?.spans.map(\.target.engine) ?? []) + [afterStopEngine]
+            let wholeEngine = DictationSwitchPlan.wholeFallbackEngine(used: used, preferred: afterStopEngine)
+            if wholeEngine != afterStopEngine { Log.app.notice("Translate meeting: whole-recording fallback kept on this Mac") }
+            switch resolve?(wholeEngine) ?? resolveAfterStopEngine(wholeEngine) {
             case let .engine(engine, _), let .fallback(engine, _, _):
                 return queue.enqueue([id], action: .translate, targetLanguage: target, engineOverride: engine)
             case .none:

@@ -497,7 +497,7 @@ extension AppDelegate {
             var realtimeResult = await realtimeStopTask.value
             // After an engine switch every part is already in the target language, or kept when that failed.
             let switchedOwnEngine = dictationSwitchUsedOwnEngine
-            let combined = try await dictationSwitchResult(audioData: audioData, start: realtimeResult, translateInto: targetLanguage)
+            let combined = await dictationSwitchResult(audioData: audioData, start: realtimeResult, translateInto: targetLanguage)
             if let combined { realtimeResult = combined }
             dictationEngineSwitch = nil
             let switchedText: String?

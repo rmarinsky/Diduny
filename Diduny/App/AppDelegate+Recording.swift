@@ -565,7 +565,7 @@ extension AppDelegate {
             var realtimeResult = await realtimeStopTask.value
             // A recording that changed engine keeps audio local and skips server cleanup if any part did.
             let ownEngine = dictationUsesOwnEngine || dictationSwitchUsedOwnEngine
-            if let combined = try await dictationSwitchResult(audioData: audioData, start: realtimeResult, translateInto: nil) {
+            if let combined = await dictationSwitchResult(audioData: audioData, start: realtimeResult, translateInto: nil) {
                 realtimeResult = combined
             }
             dictationEngineSwitch = nil
