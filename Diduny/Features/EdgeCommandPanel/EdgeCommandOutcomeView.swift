@@ -63,7 +63,7 @@ struct EdgeCommandOutcomeView: View {
 
 #Preview("Dictation") {
     EdgeCommandOutcomeView(outcome: EdgeCommandOutcome(
-        flow: .dictation, durationSeconds: 7, delivery: .pasted(appName: "Notes"),
+        flow: .dictation, durationSeconds: 7, delivery: .pasted,
         resultText: "Yes, by the way, I want to refresh the window view now."
     ))
     .padding(12).frame(width: 300).background(DS.Palette.panel)

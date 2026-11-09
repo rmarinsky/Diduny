@@ -159,16 +159,15 @@ final class DictationOverlayController {
         ))
     }
 
-    /// "Pasted into <app>" only for a paste of this recording; auto-paste off or a failed or
-    /// older paste is "Copied".
+    /// Pasted only for a paste of this recording; auto-paste off or a failed or older paste is copied.
     nonisolated static func delivery(
         autoPaste: Bool,
-        lastPaste: ClipboardService.PasteRecord?,
+        lastPaste: Date?,
         stoppedAt: Date?
     ) -> EdgeCommandOutcome.Delivery {
         guard autoPaste, let lastPaste else { return .copied }
-        if let stoppedAt, lastPaste.at < stoppedAt { return .copied }
-        return .pasted(appName: lastPaste.appName)
+        if let stoppedAt, lastPaste < stoppedAt { return .copied }
+        return .pasted
     }
 
     func showError(message: String) {

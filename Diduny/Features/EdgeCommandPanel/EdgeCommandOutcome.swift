@@ -21,8 +21,8 @@ struct EdgeCommandOutcome: Equatable, Identifiable {
 
     /// Where the text went (default 8, risk in WP-42).
     enum Delivery: Equatable {
-        /// Auto-paste posted ⌘V; `appName` nil when unknown or Diduny itself was frontmost.
-        case pasted(appName: String?)
+        /// Auto-paste posted ⌘V.
+        case pasted
         /// Auto-paste off or the paste failed: the text is only on the clipboard.
         case copied
     }
@@ -44,14 +44,12 @@ struct EdgeCommandOutcome: Equatable, Identifiable {
     }
 
     var title: String {
-        if flow.isMeeting { return String(localized: "Meeting saved") }
-        switch delivery {
-        case let .pasted(appName?):
-            return String(format: String(localized: "Pasted into %@"), appName)
-        case .pasted(nil):
-            return String(localized: "Pasted")
-        case .copied:
-            return String(localized: "Copied")
+        switch (flow, delivery) {
+        case (.dictation, .pasted): String(localized: "Dictated and pasted")
+        case (.dictationTranslation, .pasted): String(localized: "Translated and pasted")
+        case (.meeting, .pasted), (.meetingTranslation, .pasted): String(localized: "Meeting ended and pasted")
+        case (.meeting, .copied), (.meetingTranslation, .copied): String(localized: "Meeting saved")
+        case (.dictation, .copied), (.dictationTranslation, .copied): String(localized: "Copied")
         }
     }
 

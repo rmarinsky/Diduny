@@ -1800,8 +1800,6 @@
 "Not on this Mac" = "Not on this Mac";
 
 /* Panels redesign WP-42 */
-"Pasted into %@" = "Pasted into %@";
-"Pasted" = "Pasted";
 "%lld s · also in Recordings" = "%lld s · also in Recordings";
 "Translated into %@ · %lld s" = "Translated into %@ · %lld s";
 "New recording" = "New recording";
@@ -2036,3 +2034,8 @@
 "Parakeet V3 is in Settings > Local models whenever you want it." = "Parakeet V3 is in Settings > Local models whenever you want it.";
 "Downloading Parakeet V3" = "Downloading Parakeet V3";
 "Parakeet V3 download failed" = "Parakeet V3 download failed";
+
+/* Dev feedback 2026-11-09: outcome titles */
+"Dictated and pasted" = "Dictated and pasted";
+"Translated and pasted" = "Translated and pasted";
+"Meeting ended and pasted" = "Meeting ended and pasted";

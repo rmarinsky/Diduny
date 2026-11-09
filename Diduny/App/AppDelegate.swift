@@ -172,7 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// "Stop after silence" for voice dictation / voice translation (they share `audioRecorder`).
     var dictationSilenceMonitor: SilenceAutoStopMonitor?
     var meetingSilenceMonitor: SilenceAutoStopMonitor?
-    lazy var clipboardService = ClipboardService()
+    lazy var clipboardService = ClipboardService.shared
     lazy var hotkeyService = HotkeyService()
     lazy var pushToTalkService = PushToTalkService()
     lazy var translationPushToTalkService = PushToTalkService()

@@ -1800,8 +1800,6 @@
 "Not on this Mac" = "Недоступно на цьому Mac";
 
 /* Panels redesign WP-42 */
-"Pasted into %@" = "Вставлено в %@";
-"Pasted" = "Вставлено";
 "%lld s · also in Recordings" = "%lld с · також у Записах";
 "Translated into %@ · %lld s" = "Перекладено: %@ · %lld с";
 "New recording" = "Новий запис";
@@ -2036,3 +2034,8 @@
 "Parakeet V3 is in Settings > Local models whenever you want it." = "Parakeet V3 чекає в Налаштуваннях > Локальні моделі, коли знадобиться.";
 "Downloading Parakeet V3" = "Завантаження Parakeet V3";
 "Parakeet V3 download failed" = "Не вдалося завантажити Parakeet V3";
+
+/* Dev feedback 2026-11-09: outcome titles */
+"Dictated and pasted" = "Надиктовано і вставлено";
+"Translated and pasted" = "Перекладено і вставлено";
+"Meeting ended and pasted" = "Зустріч завершено і вставлено";

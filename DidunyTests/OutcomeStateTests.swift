@@ -44,24 +44,29 @@ struct OutcomeStateTests {
         #expect(EdgeCommandOutcome.meetingDuration(42) == "42 s")
     }
 
-    // T2-ST-02 and default 8
-    @Test func titleNamesThePasteTarget() {
-        #expect(EdgeCommandOutcome(flow: .dictation, durationSeconds: 7, delivery: .pasted(appName: "Notes")).title == "Pasted into Notes")
-        #expect(EdgeCommandOutcome(flow: .dictation, durationSeconds: 7, delivery: .pasted(appName: nil)).title == "Pasted")
-        #expect(EdgeCommandOutcome(flow: .dictation, durationSeconds: 7, delivery: .copied).title == "Copied")
+    // T2-ST-02, Roman 2026-11-09
+    @Test func titleSaysWhatHappened() {
+        func title(_ flow: EdgeCommandOutcome.Flow, _ delivery: EdgeCommandOutcome.Delivery) -> String {
+            EdgeCommandOutcome(flow: flow, durationSeconds: 7, delivery: delivery).title
+        }
+        #expect(title(.dictation, .pasted) == "Dictated and pasted")
+        #expect(title(.dictationTranslation(languageName: "English"), .pasted) == "Translated and pasted")
+        #expect(title(.meeting, .pasted) == "Meeting ended and pasted")
+        #expect(title(.meetingTranslation(pair: "EN ↔ UK"), .pasted) == "Meeting ended and pasted")
+        #expect(title(.dictation, .copied) == "Copied")
+        #expect(title(.dictationTranslation(languageName: "English"), .copied) == "Copied")
+        #expect(title(.meeting, .copied) == "Meeting saved")
     }
 
-    @Test func pasteTargetSkipsDidunyItself() {
-        #expect(ClipboardService.pasteTargetName(localizedName: "Notes", bundleIdentifier: "com.apple.Notes", ownBundleIdentifier: "ua.com.rmarinsky.diduny") == "Notes")
-        #expect(ClipboardService.pasteTargetName(localizedName: "Diduny", bundleIdentifier: "ua.com.rmarinsky.diduny", ownBundleIdentifier: "ua.com.rmarinsky.diduny") == nil)
-        #expect(ClipboardService.pasteTargetName(localizedName: nil, bundleIdentifier: nil, ownBundleIdentifier: "x") == nil)
+    @MainActor @Test func theAppPastesThroughTheInstanceTheOutcomeReads() {
+        #expect(AppDelegate().clipboardService === ClipboardService.shared)
     }
 
     @Test func deliveryUsesOnlyAPasteOfThisRecording() {
         let stop = Date(timeIntervalSince1970: 1000)
-        let fresh = ClipboardService.PasteRecord(appName: "Notes", at: stop.addingTimeInterval(1))
-        let stale = ClipboardService.PasteRecord(appName: "Mail", at: stop.addingTimeInterval(-60))
-        #expect(DictationOverlayController.delivery(autoPaste: true, lastPaste: fresh, stoppedAt: stop) == .pasted(appName: "Notes"))
+        let fresh = stop.addingTimeInterval(1)
+        let stale = stop.addingTimeInterval(-60)
+        #expect(DictationOverlayController.delivery(autoPaste: true, lastPaste: fresh, stoppedAt: stop) == .pasted)
         #expect(DictationOverlayController.delivery(autoPaste: true, lastPaste: stale, stoppedAt: stop) == .copied)
         #expect(DictationOverlayController.delivery(autoPaste: true, lastPaste: nil, stoppedAt: stop) == .copied)
         #expect(DictationOverlayController.delivery(autoPaste: false, lastPaste: fresh, stoppedAt: stop) == .copied)
