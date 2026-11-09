@@ -58,7 +58,6 @@ final class DictationEngineSwitcher {
 
     let start: MeetingEngineTarget
     let fanOut = MeetingAudioFanOut()
-    private let frames = OSAllocatedUnfairLock(initialState: 0)
     private let env: Environment
     private let startSession: StartSession
     private var startConsumer: (@Sendable (Data) -> Void)?
@@ -83,14 +82,11 @@ final class DictationEngineSwitcher {
         }
         self.startConsumer = consumer
         fanOut.setConsumer(consumer)
-        let frames = frames, fanOut = fanOut
-        return { data in
-            frames.withLock { $0 += data.count / 2 }
-            fanOut.deliver(data)
-        }
+        let fanOut = fanOut
+        return { data in fanOut.deliver(data) }
     }
 
-    var capturedFrames: Int { frames.withLock { $0 } }
+    var capturedFrames: Int { fanOut.deliveredFrames }
 
     var didSwitch: Bool { (controller?.machine.history.spans.count ?? 1) > 1 }
 
@@ -115,7 +111,7 @@ final class DictationEngineSwitcher {
         let controller = MeetingEngineController(
             start: start, afterStopEngine: start.engine, fanOut: fanOut,
             environment: .init(
-                readFrame: { [frames] in frames.withLock { $0 } },
+                readFrame: { [fanOut] in fanOut.deliveredFrames },
                 elapsed: { 0 },
                 turns: { 0 },
                 finalText: { "" },
