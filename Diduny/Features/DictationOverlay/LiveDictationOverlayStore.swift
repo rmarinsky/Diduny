@@ -111,7 +111,7 @@ final class LiveDictationOverlayStore {
         if selectedOutput == .original {
             return spokenText
         }
-        guard let convertedPreview, convertedPreview.output == selectedOutput else { return spokenText }
+        guard isShowingConvertedPreview, let convertedPreview else { return spokenText }
         return convertedPreview.text
     }
 
@@ -123,10 +123,18 @@ final class LiveDictationOverlayStore {
         return text.isEmpty ? nil : text
     }
 
+    /// The GET endpoint carries the text in the URL. Past this the preview cannot refresh, so the panel
+    /// goes back to the spoken words instead of freezing on an old translation; Stop translates the final text.
+    static let maxPreviewSourceBytes = 1500
+
+    var isPreviewable: Bool {
+        (outputSourceText?.utf8.count ?? 0) <= Self.maxPreviewSourceBytes
+    }
+
     /// True while the panel shows the text-translated preview instead of the spoken words.
     var isShowingConvertedPreview: Bool {
         phase != .pasted && selectedOutput != nativeOutput && selectedOutput != .original
-            && convertedPreview?.output == selectedOutput
+            && convertedPreview?.output == selectedOutput && isPreviewable
     }
 
     private var spokenFinalText: String {
