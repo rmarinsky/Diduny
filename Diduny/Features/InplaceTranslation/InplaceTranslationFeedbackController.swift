@@ -33,6 +33,7 @@ final class InplaceBadgeModel: ObservableObject {
     enum State { case translating, success, error }
     @Published var state: State = .translating
     @Published var isVisible = false
+    @Published var pulses = 0
 }
 
 @MainActor
@@ -56,9 +57,11 @@ final class InplaceTranslationFeedbackController {
         }
     }
 
-    /// The badge's 44 pt layout (28 pt badge plus room for the success burst), shown at 1.5x.
-    static let badgeScale: CGFloat = 1.5
-    static let badgeSize = CGSize(width: 44 * badgeScale, height: 44 * badgeScale)
+    /// The 42 pt logo disc plus room for the 1.15 pulse (stop animation: one size for every mode).
+    static let badgeSize = CGSize(
+        width: PasteMarkPlan.disc + 2 * PasteMarkPlan.panelMargin,
+        height: PasteMarkPlan.disc + 2 * PasteMarkPlan.panelMargin
+    )
 
     private var badgePanel: NSPanel?
     private let badgeModel = InplaceBadgeModel()
@@ -77,7 +80,7 @@ final class InplaceTranslationFeedbackController {
             badgePanel = makePanel(rootView: InplaceBadgeView(model: badgeModel), size: Self.badgeSize)
         }
         badgeModel.state = .translating
-        position(badgePanel, size: Self.badgeSize, selectionEnd: selectionEnd)
+        badgePanel?.setFrame(badgeFrame(selectionEnd: selectionEnd), display: false)
         badgePanel?.orderFrontRegardless()
         badgeModel.isVisible = true
         announce(String(localized: "Translating"))
@@ -86,7 +89,7 @@ final class InplaceTranslationFeedbackController {
     /// Glides the badge from its provisional (mouse) anchor to the selection end.
     func moveBadge(selectionEnd: CGRect?) {
         guard let panel = badgePanel, isBadgeShown, selectionEnd != nil else { return }
-        let target = frame(size: Self.badgeSize, selectionEnd: selectionEnd)
+        let target = badgeFrame(selectionEnd: selectionEnd)
         guard target != panel.frame else { return }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             panel.setFrame(target, display: true)
@@ -103,18 +106,28 @@ final class InplaceTranslationFeedbackController {
         badgePanel?.isVisible == true
     }
 
-    /// Plays the end state. Success holds 380 ms (runs alongside the paste), error holds 0.7 s.
+    /// Plays the end state alongside the paste. Success: the ring closes, one pulse at 220 ms,
+    /// held until the 680 ms fade (stop animation). Error holds 0.7 s.
     func finishBadge(success: Bool) async {
         guard isBadgeShown else { return }
         badgeModel.state = success ? .success : .error
         announce(success ? String(localized: "Translated") : String(localized: "Translation failed"))
-        try? await Task.sleep(for: .milliseconds(success ? 380 : 700))
+        guard success else {
+            try? await Task.sleep(for: .milliseconds(700))
+            return
+        }
+        let timeline = PasteMarkPlan.timeline(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        if timeline.pulse > 0 {
+            try? await Task.sleep(for: .seconds(timeline.pulseStart))
+            badgeModel.pulses += 1
+        }
+        try? await Task.sleep(for: .seconds(timeline.fadeStart - (timeline.pulse > 0 ? timeline.pulseStart : 0)))
     }
 
     func dismissBadge() async {
         guard isBadgeShown else { return }
         badgeModel.isVisible = false
-        try? await Task.sleep(for: .milliseconds(200))
+        try? await Task.sleep(for: .seconds(PasteMarkPlan.timeline(reduceMotion: false).fade))
         badgePanel?.orderOut(nil)
     }
 
@@ -172,6 +185,13 @@ final class InplaceTranslationFeedbackController {
         panel?.setFrame(frame(size: size, selectionEnd: selectionEnd), display: false)
     }
 
+    /// The disc sits `gap` from the text; the panel adds the pulse margin around it.
+    private func badgeFrame(selectionEnd: CGRect?) -> CGRect {
+        let disc = CGSize(width: PasteMarkPlan.disc, height: PasteMarkPlan.disc)
+        return frame(size: disc, selectionEnd: selectionEnd)
+            .insetBy(dx: -PasteMarkPlan.panelMargin, dy: -PasteMarkPlan.panelMargin)
+    }
+
     private func frame(size: CGSize, selectionEnd: CGRect?) -> CGRect {
         let screens = NSScreen.screens.map {
             InplaceTranslationAnchor.ScreenInfo(frame: $0.frame, visibleFrame: $0.visibleFrame)
@@ -195,137 +215,35 @@ final class InplaceTranslationFeedbackController {
 
 // MARK: - Views
 
-/// Timeline: pop-in (spring overshoot) → thinking loop (spinning arc, orbiting dots,
-/// breathing logo with a tilt) → success (check pop + burst) or error (shake).
+/// The app logo on its disc (stop animation): the rim arc while translating, then the ring closes
+/// and pulses once. An error keeps the red ring and the shake.
 private struct InplaceBadgeView: View {
     @ObservedObject var model: InplaceBadgeModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var breathing = false
     @State private var shake: CGFloat = 0
-    @State private var burst = false
 
-    private var ringColor: Color {
-        if model.state == .error { return .red }
-        return colorScheme == .dark ? Color("BrandTintSoft").opacity(0.9) : Color("BrandAccentDeep")
-    }
-
-    private var isThinking: Bool {
-        model.isVisible && model.state == .translating && !reduceMotion
+    private var phase: LogoBadgePhase {
+        switch model.state {
+        case .translating: .waiting
+        case .success: .done
+        case .error: .error
+        }
     }
 
     var body: some View {
-        ZStack {
-            if model.state == .success, !reduceMotion { burstView }
-            ZStack {
-                Circle().fill(.regularMaterial)
-                Circle().stroke(Color("BrandTintBorder"), lineWidth: 0.5)
-                // Paused (no frames) whenever the badge is not thinking.
-                TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isThinking)) { timeline in
-                    thinking(t: timeline.date.timeIntervalSinceReferenceDate)
-                }
-                ring
-                if model.state == .success {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, ringColor)
-                        .offset(x: 9, y: 9)
-                        .transition(reduceMotion ? .opacity : .scale(scale: 0.2).combined(with: .opacity))
+        LogoBadge(phase: phase, isVisible: model.isVisible, pulseTrigger: model.pulses)
+            .offset(x: shake)
+            .frame(
+                width: InplaceTranslationFeedbackController.badgeSize.width,
+                height: InplaceTranslationFeedbackController.badgeSize.height
+            )
+            .task(id: model.state) {
+                guard model.state == .error, !reduceMotion else { return }
+                for offset: CGFloat in [3, -3, 3, -3, 0] {
+                    withAnimation(.linear(duration: 0.06)) { shake = offset }
+                    try? await Task.sleep(for: .milliseconds(60))
                 }
             }
-            .frame(width: 28, height: 28)
-        }
-        .frame(width: 44, height: 44)
-        .offset(x: shake)
-        .scaleEffect(scale * InplaceTranslationFeedbackController.badgeScale)
-        .frame(
-            width: InplaceTranslationFeedbackController.badgeSize.width,
-            height: InplaceTranslationFeedbackController.badgeSize.height
-        )
-        .opacity(model.isVisible ? 1 : 0)
-        .animation(appearAnimation, value: model.isVisible)
-        .animation(reduceMotion ? nil : .bouncy(duration: 0.3, extraBounce: 0.15), value: model.state)
-        .accessibilityHidden(true)
-        .onAppear {
-            guard reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { breathing = true }
-        }
-        .task(id: model.state) { await runStateEffects() }
-    }
-
-    /// Logo + orbiting dots, driven by the timeline clock (60 fps cap).
-    private func thinking(t: Double) -> some View {
-        let animate = model.state == .translating && !reduceMotion
-        let phase = t.truncatingRemainder(dividingBy: 0.9) / 0.9 // one orbit per 0.9 s
-        let pulse = animate ? (sin(t * 2 * .pi / 0.9) + 1) / 2 : 0
-        return ZStack {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 18, height: 18)
-                .scaleEffect(1 + 0.08 * pulse)
-                .rotationEffect(.degrees(animate ? sin(t * 2 * .pi / 1.8) * 6 : 0))
-                .opacity(reduceMotion && model.state == .translating ? (breathing ? 0.6 : 1.0) : 1)
-            if animate {
-                ForEach(0..<3, id: \.self) { i in
-                    let angle = (phase - Double(i) * 0.08) * 2 * .pi
-                    Circle()
-                        .fill(ringColor)
-                        .frame(width: 3.5 - Double(i), height: 3.5 - Double(i))
-                        .opacity(1 - Double(i) * 0.3)
-                        .offset(x: cos(angle) * 14, y: sin(angle) * 14)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var ring: some View {
-        if reduceMotion {
-            if model.state == .error { Circle().stroke(ringColor, lineWidth: 1.5) }
-        } else if model.state != .translating {
-            Circle().stroke(ringColor, lineWidth: 1.5)
-                .transition(.opacity)
-        }
-    }
-
-    /// Six sparks that fly out and fade when the paste lands.
-    private var burstView: some View {
-        ForEach(0..<6, id: \.self) { i in
-            let angle = Double(i) / 6 * 2 * .pi
-            Circle()
-                .fill(ringColor)
-                .frame(width: 3, height: 3)
-                .offset(x: cos(angle) * (burst ? 20 : 12), y: sin(angle) * (burst ? 20 : 12))
-                .opacity(burst ? 0 : 1)
-        }
-    }
-
-    private var scale: CGFloat {
-        if reduceMotion { return 1 }
-        if !model.isVisible { return 0.4 }
-        return model.state == .success ? 1.15 : 1
-    }
-
-    private var appearAnimation: Animation {
-        if reduceMotion { return .easeInOut(duration: 0.15) }
-        return model.isVisible ? .bouncy(duration: 0.28, extraBounce: 0.2) : .easeIn(duration: 0.15)
-    }
-
-    private func runStateEffects() async {
-        burst = false
-        guard !reduceMotion else { return }
-        switch model.state {
-        case .translating:
-            return
-        case .success:
-            withAnimation(.easeOut(duration: 0.35)) { burst = true }
-        case .error:
-            for offset: CGFloat in [3, -3, 3, -3, 0] {
-                withAnimation(.linear(duration: 0.06)) { shake = offset }
-                try? await Task.sleep(for: .milliseconds(60))
-            }
-        }
     }
 }
 
