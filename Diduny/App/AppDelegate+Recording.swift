@@ -150,6 +150,7 @@ extension AppDelegate {
         audioLevelCancellable = nil
 
         // Stop realtime transcription session (if active)
+        await cancelDictationEngineSwitch()
         _ = await stopVoiceRealtimeSession(finalize: false)
 
         // Deactivate escape cancel handler
@@ -405,6 +406,7 @@ extension AppDelegate {
             // Set up realtime callback BEFORE starting recorder (AudioRecorderService
             // snapshots onRealtimeAudioData at start time). WebSocket connects in background.
             setupVoiceRealtimeTranscriptionIfNeeded()
+            installDictationEngineSwitch(job: .dictation, translateInto: nil)
             startDictationSilenceMonitor(job: .dictation, pushToTalk: pushToTalkService) { [weak self] in
                 await self?.stopRecordingIfRecording()
             }
@@ -433,6 +435,7 @@ extension AppDelegate {
                 appState.recordingStartTime = Date()
                 handleRecordingStateChange(.recording)
                 configureRecordingFeedbackOutput(native: .original, provider: voiceTranscriptionProvider)
+                connectDictationEngineSwitchToPanel(job: .dictation)
 
                 // Pipe audio level to the selected recording feedback surface.
                 audioLevelCancellable = audioRecorder.$audioLevel
@@ -547,7 +550,7 @@ extension AppDelegate {
         let recordingId = UUID()
         let sourceDevice = audioRecorder.currentRecordingDeviceInfo
         let realtimeStopTask = Task { @MainActor in
-            await self.stopVoiceRealtimeSession(finalize: true)
+            await self.stopDictationEngines(translating: false)
         }
 
         do {
@@ -559,7 +562,13 @@ extension AppDelegate {
             originalWAVData = audioData
             capturedAudioData = audioData
 
-            let realtimeResult = await realtimeStopTask.value
+            var realtimeResult = await realtimeStopTask.value
+            // A recording that changed engine keeps audio local and skips server cleanup if any part did.
+            let ownEngine = dictationUsesOwnEngine || dictationSwitchUsedOwnEngine
+            if let combined = try await dictationSwitchResult(audioData: audioData, start: realtimeResult, translateInto: nil) {
+                realtimeResult = combined
+            }
+            dictationEngineSwitch = nil
             let switchedText: String?
             let producedOutput: DictationOutput
             if let voiceCommand = await voiceTranslationCommand(in: realtimeResult.text) {
@@ -575,7 +584,7 @@ extension AppDelegate {
                     originalText: realtimeResult.text,
                     audioData: audioData,
                     languageHints: SettingsStorage.shared.speechLanguageHints,
-                    allowAudioUpload: !dictationUsesOwnEngine
+                    allowAudioUpload: !ownEngine
                 )
                 producedOutput = switchedText == nil ? .original : output
             }
@@ -604,13 +613,13 @@ extension AppDelegate {
                     rawText,
                     realtimeResult: realtimeResult,
                     logPrefix: "Dictation",
-                    serverCleanup: !dictationUsesOwnEngine
+                    serverCleanup: !ownEngine
                 )
             } else {
                 await TranscriptCleanupService.shared.clean(
                     rawText,
                     fillerWords: SettingsStorage.shared.fillerWords,
-                    serverCleanup: !dictationUsesOwnEngine
+                    serverCleanup: !ownEngine
                 )
             }
             let text = try requireNonemptyVoiceDictation(
@@ -1055,7 +1064,7 @@ extension AppDelegate {
         }
     }
 
-    private func stopVoiceRealtimeSession(finalize: Bool) async -> RealtimeSessionStopResult {
+    func stopVoiceRealtimeSession(finalize: Bool) async -> RealtimeSessionStopResult {
         if !finalize {
             audioRecorder.onRealtimeAudioData = nil
         }

@@ -190,6 +190,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set at translation start when the translation engine is ElevenLabs (transcribe, then Diduny text translation).
     var translationByokPlan: ExecutionPlan?
     var translationRealtimeService: RealtimeTranscriptionProtocol?
+    /// WP-64: engine switching for the running dictation or translation; one at a time, like the recordings.
+    var dictationEngineSwitch: DictationEngineSwitcher?
     /// BYOK realtime engine for the current meeting; nil = `realtimeTranscriptionService`.
     var meetingRealtimeService: (any RealtimeTranscriptionProtocol)?
     /// Last ElevenLabs failure in the current meeting, offered with a Diduny Cloud re-run after Stop.
