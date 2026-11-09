@@ -78,10 +78,17 @@ final class MeetingEngineController {
     /// The first engine: fed from now on and connecting in the background, because a recording never waits for
     /// the network (the service buffers until its socket is up). Returns when the connect has finished only with `wait`.
     func startInitial(wait: Bool = false) async {
-        guard let id = machine.runningID else { return }
+        let task = beginInitial()
+        if wait { await task?.value }
+    }
+
+    /// `startInitial` without waiting, callable where no `await` is possible (a dictation's first pick).
+    @discardableResult
+    func beginInitial() -> Task<Void, Never>? {
+        guard let id = machine.runningID else { return nil }
         guard let session = env.makeSession(machine.running, callbacks(for: id)) else {
             markFailedRunning(id)
-            return
+            return nil
         }
         sessions[id] = session
         spanOfSession[id] = 0
@@ -98,7 +105,7 @@ final class MeetingEngineController {
             }
         }
         connectTasks[id] = task
-        if wait { await task.value }
+        return task
     }
 
     // MARK: - Input
