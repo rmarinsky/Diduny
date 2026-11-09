@@ -10,6 +10,11 @@ final class EdgeCommandPanel: NSPanel {
     override var canBecomeMain: Bool {
         false
     }
+
+    override func sendEvent(_ event: NSEvent) {
+        KeyboardFocusRing.shared.note(event)
+        super.sendEvent(event)
+    }
 }
 
 /// The panel is a non-activating panel of a usually-inactive app (the user is

@@ -3,6 +3,11 @@ import SwiftUI
 
 private final class CalendarReminderWindow: NSPanel {
     override var canBecomeKey: Bool { true }
+
+    override func sendEvent(_ event: NSEvent) {
+        KeyboardFocusRing.shared.note(event)
+        super.sendEvent(event)
+    }
 }
 
 @MainActor final class CalendarReminderController {
@@ -84,7 +89,8 @@ private final class CalendarReminderWindow: NSPanel {
             dismiss: { [weak self] in early ? self?.dismiss() : self?.dismissByUser(connection: connection) },
             close: { [weak self] in self?.dismiss() },
             snooze: { [weak self] minutes in self?.snooze(minutes: minutes, connection: connection) },
-            join: { [weak self] meeting, record, local in self?.join(meeting, record: record, local: local, connection: connection) }))
+            join: { [weak self] meeting, record, local in self?.join(meeting, record: record, local: local, connection: connection) }
+        ).focusRingOnlyAfterTab())
         panel.contentView = content
         if early { panel.setContentSize(NSSize(width: frame.width, height: content.fittingSize.height)) }
         if fullScreen {
@@ -102,6 +108,7 @@ private final class CalendarReminderWindow: NSPanel {
             panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.midX - size.width / 2, y: screen.visibleFrame.midY - size.height / 2))
         }
         window = panel
+        KeyboardFocusRing.shared.hide()
         // The heads-up must not take the keys of whatever the person is typing in.
         if !early { panel.makeKeyAndOrderFront(nil) }
         panel.orderFrontRegardless()
@@ -131,7 +138,8 @@ private final class CalendarReminderWindow: NSPanel {
         let content = NSHostingView(rootView: MeetingEndedView(
             title: title, message: message,
             stop: { [weak self] in self?.closeMeetingEnded(); stop() },
-            keep: { [weak self] in self?.closeMeetingEnded() }))
+            keep: { [weak self] in self?.closeMeetingEnded() }
+        ).focusRingOnlyAfterTab())
         panel.contentView = content
         panel.setContentSize(content.fittingSize)
         if let screen = Self.activeScreen() {

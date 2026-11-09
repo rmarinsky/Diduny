@@ -59,6 +59,7 @@ final class FloatingSurfacePanel: NSPanel {
     }
 
     override func sendEvent(_ event: NSEvent) {
+        KeyboardFocusRing.shared.note(event)
         if isClosing, event.type == .keyDown || event.type == .keyUp { return }
         if event.type == .keyDown,
            !isComposingText,

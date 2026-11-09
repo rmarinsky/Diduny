@@ -36,6 +36,9 @@ struct EdgeCommandTabView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Mouse only: it must never take the key view or show a ring.
+        .focusable(false)
+        .focusEffectDisabled()
         .gesture(dragGesture)
         .accessibilityIdentifier("commandPanel.tab")
         .accessibilityLabel(

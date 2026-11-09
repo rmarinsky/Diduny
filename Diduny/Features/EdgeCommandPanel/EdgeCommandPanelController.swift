@@ -160,6 +160,7 @@ final class EdgeCommandPanelController: NSObject {
         ) else { return }
         collapseTask?.cancel()
         cancelTabAutoHide()
+        KeyboardFocusRing.shared.hide()
         refreshModel()
         let panel = panel ?? makePanel()
         self.panel = panel
@@ -171,8 +172,6 @@ final class EdgeCommandPanelController: NSObject {
     }
 
     func showLiveFeedback(mode: RecordingMode) {
-        // A tile start already consumed its pick; any other start (hotkey) clears a pending one (02 Q14).
-        model?.clearPick()
         // Phase updates keep calling this while recording. If the user hid the
         // live panel, leave it collapsed until they restore it intentionally.
         if model?.isLiveFeedbackMinimized == true {
@@ -195,6 +194,7 @@ final class EdgeCommandPanelController: NSObject {
         // re-enter here while live, so only the first call animates.
         dismissTask?.cancel()
         let alreadyLive = model?.isShowingLiveFeedback == true && model?.isLiveFeedbackMinimized != true
+        if !alreadyLive { KeyboardFocusRing.shared.hide() }
         let entrance = EdgeCommandPanelLiveEntrance.make(alreadyLive: alreadyLive, restoredByUser: liveFeedbackRestoredByUser)
         model?.isLiveFeedbackMinimized = false
         model?.isShowingLiveFeedback = true
@@ -262,6 +262,7 @@ final class EdgeCommandPanelController: NSObject {
             cloudAvailable: cloudAvailable
         )
         model?.presentMeetingSuggestion(suggestion)
+        KeyboardFocusRing.shared.hide()
         model?.isShowingLiveFeedback = false
         let panel = panel ?? makePanel()
         self.panel = panel

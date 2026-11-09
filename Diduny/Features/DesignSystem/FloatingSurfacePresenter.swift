@@ -345,6 +345,7 @@ private struct FloatingSurfaceContainer: View {
 
     var body: some View {
         content
+            .focusRingOnlyAfterTab()
             .scaleEffect(transition.isShown ? 1 : transition.hiddenScale, anchor: transition.scaleAnchor)
             .opacity(transition.isShown ? 1 : 0)
             .onAppear { transition.show() }
