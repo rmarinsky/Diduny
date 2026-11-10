@@ -318,6 +318,7 @@
 		ACC5B249280BFACEA631D7C4 /* ShortcutSettingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32E8E73646C8551A1669BF15 /* ShortcutSettingTests.swift */; };
 		AE0D2ED6EB2450B3C2134B45 /* StaticComponentMetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F351D9CCDDB40C5C6B19484 /* StaticComponentMetricsTests.swift */; };
 		AE2D7E5716CC64C1EB0B5A82 /* RecordingsLibraryView+Actions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 993652FDA221E2EFF6402702 /* RecordingsLibraryView+Actions.swift */; };
+		AEC22A281707D1015042E0BF /* PasteMarkTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA92FDE845533B2EE9DB7D5 /* PasteMarkTrace.swift */; };
 		AECDBA6060A09F503FC3F304 /* MeetingLiveContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF92D015B12F247DC828EBE1 /* MeetingLiveContent.swift */; };
 		AF357666693E34C1478A4B85 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB47383A0059A74CA8DEA1AB /* MainWindowView.swift */; };
 		B0ECE96DC1E91DE4B2319E5E /* MeetingJoinMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C51B7D0DA1E1D7A2E828FC /* MeetingJoinMonitor.swift */; };
@@ -945,6 +946,7 @@
 		ED5D0986CF6B0E61EFF9FE45 /* ForceSubmitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForceSubmitService.swift; sourceTree = "<group>"; };
 		EDF37D140C6180E76B832711 /* AppleSpeechProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechProvider.swift; sourceTree = "<group>"; };
 		EDF40894A493C54FD30164D7 /* AppleLiveTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleLiveTranscriptionService.swift; sourceTree = "<group>"; };
+		EEA92FDE845533B2EE9DB7D5 /* PasteMarkTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteMarkTrace.swift; sourceTree = "<group>"; };
 		EEC992BFDB13513B605F270C /* TranscribeChooserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscribeChooserView.swift; sourceTree = "<group>"; };
 		EECB96B392865A78942E963E /* AppDelegate+MeetingEngineSessions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+MeetingEngineSessions.swift"; sourceTree = "<group>"; };
 		EED41A85ABE10582EF485F5D /* HistoryPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPaletteView.swift; sourceTree = "<group>"; };
@@ -1172,6 +1174,7 @@
 				5BB82C6AA65CCAE741DEE523 /* LogoBadgeView.swift */,
 				905F1223757CC7BC305D4A19 /* PasteMarkController.swift */,
 				9316442BF447ACE4BF44EEF1 /* PasteMarkPlan.swift */,
+				EEA92FDE845533B2EE9DB7D5 /* PasteMarkTrace.swift */,
 			);
 			path = PasteMark;
 			sourceTree = "<group>";
@@ -2271,6 +2274,7 @@
 				508CBE565638EE0EC4A86F21 /* ParakeetProvider.swift in Sources */,
 				38C1BEDA7D493CF814DC9B2E /* PasteMarkController.swift in Sources */,
 				51D5C0EE28A1F3A6E0153009 /* PasteMarkPlan.swift in Sources */,
+				AEC22A281707D1015042E0BF /* PasteMarkTrace.swift in Sources */,
 				3857104F9A2310C3DA6E8290 /* PermissionManager.swift in Sources */,
 				CAA3AF319715F9DD611CCC8B /* PermissionsSettingsView.swift in Sources */,
 				8E71E10D63EF1D7E9804FC5E /* PickerField.swift in Sources */,
