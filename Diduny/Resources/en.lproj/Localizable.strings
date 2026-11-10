@@ -1786,7 +1786,6 @@
 
 /* Panels redesign WP-41 */
 "Engine, this session" = "Engine, this session";
-"Engine, as in Settings" = "Engine, as in Settings";
 "As in Settings" = "As in Settings";
 "Each mode uses its own default" = "Each mode uses its own default";
 "Providers..." = "Providers...";
@@ -1868,7 +1867,6 @@
 "The languages you speak and the ones you translate into." = "The languages you speak and the ones you translate into.";
 "Languages you speak" = "Languages you speak";
 "Detect the language" = "Detect the language";
-"Sent to the engine as a hint. Suggested from your keyboard layouts. With none chosen the engine detects the language." = "Sent to the engine as a hint. Suggested from your keyboard layouts. With none chosen the engine detects the language.";
 "Shown first and in crimson in every Translate into menu and language list." = "Shown first and in crimson in every Translate into menu and language list.";
 "Translate into, by default" = "Translate into, by default";
 "For dictation and the translation window. One language." = "For dictation and the translation window. One language.";
@@ -1880,7 +1878,6 @@
 "At the start and end" = "At the start and end";
 "At the end" = "At the end";
 "Languages you can ask for" = "Languages you can ask for";
-"A hint for the engine. Choose none to detect" = "A hint for the engine. Choose none to detect";
 "Shown first everywhere you pick a language" = "Shown first everywhere you pick a language";
 "Chosen" = "Chosen";
 "Add a second language to Your languages" = "Add a second language to Your languages";
@@ -2226,3 +2223,7 @@
 "Go to today, at the current time (⌘T)" = "Go to today, at the current time (⌘T)";
 "%lld dictation notes" = "%lld dictation notes";
 "%lld more at this time" = "%lld more at this time";
+
+/* Speech hints from Your languages */
+"Sent to every engine as a hint, in this order. With none chosen the engine detects the language." = "Sent to every engine as a hint, in this order. With none chosen the engine detects the language.";
+"A hint for every engine: Your languages, in order" = "A hint for every engine: Your languages, in order";

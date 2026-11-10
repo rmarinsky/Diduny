@@ -458,16 +458,11 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(SettingsStorage.shared.defaultTranslationLanguagePair.displayLabel, "EN ⇄ UK")
     }
 
-    func test_speechHints_mergeDetectedManualAndDisabledLanguages() {
-        resetLanguageDefaults()
-        SettingsStorage.shared.manualSpeechLanguageHints = ["fr", "EN", "invalid"]
-        SettingsStorage.shared.disabledDetectedSpeechLanguageHints = ["pl"]
+    func test_speechHints_areYourLanguagesInOrder() throws {
+        let (_, storage) = try isolatedStorage()
+        storage.yourLanguages = ["fr", "EN", "invalid"]
 
-        let hints = SettingsStorage.shared.effectiveSpeechLanguageHints(
-            detectedCodes: ["uk-UA", "pl-PL", "uk"]
-        )
-
-        XCTAssertEqual(hints, ["uk", "fr", "en"])
+        XCTAssertEqual(storage.speechLanguageHints, ["fr", "en"])
     }
 
     func test_translationPairResolver_usesKeyboardDefaultLastUsedAndFallbacks() throws {
@@ -507,13 +502,12 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(storage.translationPair, germanFrench)
     }
 
-    func test_translationLanguageHints_includeSpeechHintsAndPairLanguages() {
-        resetLanguageDefaults()
-        SettingsStorage.shared.manualSpeechLanguageHints = ["pl"]
-        SettingsStorage.shared.disabledDetectedSpeechLanguageHints = KeyboardLanguageDetector.detectedLanguageCodes()
+    func test_translationLanguageHints_includeSpeechHintsAndPairLanguages() throws {
+        let (_, storage) = try isolatedStorage()
+        storage.yourLanguages = ["pl"]
         let pair = TranslationLanguagePair(languageA: "en", languageB: "uk")
 
-        let hints = SettingsStorage.shared.translationLanguageHints(for: pair)
+        let hints = storage.translationLanguageHints(for: pair)
 
         XCTAssertEqual(hints, ["pl", "en", "uk"])
     }
@@ -646,7 +640,10 @@ final class SettingsStorageProviderTests: XCTestCase {
         let name = "SettingsStorageProviderTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
         addTeardownBlock { defaults.removePersistentDomain(forName: name) }
-        return (defaults, SettingsStorage(defaults: defaults))
+        return (defaults, SettingsStorage(
+            defaults: defaults,
+            migrationEnvironment: .init(hasProviderKey: { _ in false }, isAppleSilicon: true)
+        ))
     }
 
     private func resetLanguageDefaults() {

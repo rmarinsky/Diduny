@@ -7,14 +7,7 @@ import Testing
 struct CloudTranscriptionConfigTests {
     @Test("T5-LA-23: no languages → no hints, strict off")
     func emptyLanguagesSendNoHint() throws {
-        let suite = "CloudTranscriptionConfigTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let storage = SettingsStorage(defaults: defaults)
-        storage.manualSpeechLanguageHints = [] // "Languages you speak" changed to none
-        let hints = storage.effectiveSpeechLanguageHints(detectedCodes: [])
-        #expect(hints.isEmpty)
-
+        let hints: [String] = []
         let config = RecordingQueueService.buildCloudTranscriptionConfig(hints: hints, enableSpeakerDiarization: false)
         #expect(config["language_hints"] == nil)
         #expect((config["language_hints_strict"] as? Bool ?? false) == false)

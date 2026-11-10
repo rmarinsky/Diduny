@@ -12,40 +12,27 @@ final class LanguagesSettingsModelTests {
         defaults = try #require(UserDefaults(suiteName: suiteName))
     }
 
+    /// No keyboard layouts, so the one-time seed of Your languages does not depend on this Mac.
+    static let noLayouts = SettingsMigration.Environment(hasProviderKey: { _ in false }, isAppleSilicon: true)
+
     deinit {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
-    private func model(detected: [String] = []) -> (LanguagesSettingsModel, SettingsStorage) {
-        let store = SettingsStorage(defaults: defaults)
-        return (LanguagesSettingsModel(store: store, detectedCodes: { detected }), store)
+    private func model() -> (LanguagesSettingsModel, SettingsStorage) {
+        let store = SettingsStorage(defaults: defaults, migrationEnvironment: Self.noLayouts)
+        return (LanguagesSettingsModel(store: store), store)
     }
 
-    @Test("T5-LA-05 empty Languages you speak reads Detect the language and sends no hint")
-    func emptySpeakSendsNoHint() {
-        let (model, store) = model(detected: ["uk"])
-        store.manualSpeechLanguageHints = []
+    @Test("Languages you speak shows the hints, which are Your languages")
+    func speakIsYourLanguages() {
+        let (model, store) = model()
+        store.yourLanguages = ["uk"]
         model.reload()
         #expect(model.speak == ["uk"])
-        model.toggle("uk", in: .speak)
-        #expect(model.speak.isEmpty)
-        #expect(store.disabledDetectedSpeechLanguageHints.contains("uk"))
-        #expect(store.effectiveSpeechLanguageHints(detectedCodes: ["uk"]).isEmpty)
-        #expect(LanguagesSettingsModel.listText(model.speak) == String(localized: "Detect the language"))
-    }
-
-    @Test("T5-LA-05 ticks keep their order; a detected language is switched back on")
-    func speakOrder() {
-        let (model, store) = model(detected: ["uk"])
-        store.manualSpeechLanguageHints = []
-        model.toggle("uk", in: .speak)
-        model.toggle("pl", in: .speak)
-        model.toggle("de", in: .speak)
-        #expect(store.manualSpeechLanguageHints == ["pl", "de"])
-        model.toggle("uk", in: .speak)
-        #expect(model.speak == ["uk", "pl", "de"])
-        model.toggle("pl", in: .speak)
-        #expect(store.manualSpeechLanguageHints == ["de"])
+        model.toggle("en", in: .speak)
+        #expect(store.yourLanguages == ["uk", "en"])
+        #expect(model.speak == ["uk", "en"])
     }
 
     @Test("T5-LA-21 ticking Polish adds it to Your languages and its pairs")
@@ -59,16 +46,16 @@ final class LanguagesSettingsModelTests {
         #expect(model.targetOptions == ["en", "uk", "pl"])
     }
 
-    @Test("T5-LA-22 the last of Your languages cannot be unticked")
-    func lastLanguageStays() {
+    @Test("T5-LA-05 the last language can be unticked: Detect the language, no hint")
+    func lastLanguageUnticks() {
         let (model, store) = model()
         store.yourLanguages = ["en"]
         model.reload()
-        #expect(!model.canToggle("en", in: .yourLanguages))
-        model.toggle("en", in: .yourLanguages)
-        #expect(store.yourLanguages == ["en"])
-        #expect(model.pair == nil)
         #expect(model.canToggle("en", in: .speak))
+        model.toggle("en", in: .speak)
+        #expect(store.yourLanguages.isEmpty)
+        #expect(model.speak.isEmpty)
+        #expect(LanguagesSettingsModel.listText(model.speak) == String(localized: "Detect the language"))
     }
 
     @Test("T5-LA-24 and T5-LA-25 default target and pair are written to the store")

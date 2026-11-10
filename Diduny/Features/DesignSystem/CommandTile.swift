@@ -7,6 +7,8 @@ struct CommandTile: View {
     let symbol: String
     let title: LocalizedStringKey
     let caption: LocalizedStringKey
+    /// Appended as " · name"; never truncated, the caption before it gives way instead.
+    var captionEngine: String?
     let action: () -> Void
 
     @Environment(\.isEnabled) private var isEnabled
@@ -30,10 +32,18 @@ struct CommandTile: View {
                         .foregroundStyle(DS.Palette.text)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(caption)
-                        .font(DS.Font.caption)
-                        .foregroundStyle(DS.Palette.secondary)
-                        .lineLimit(1)
+                    HStack(spacing: 0) {
+                        Text(caption)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        if let captionEngine {
+                            Text(verbatim: " · \(captionEngine)")
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                    }
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Palette.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -50,6 +60,7 @@ struct CommandTile: View {
         .buttonStyle(PressScaleButtonStyle(scale: DS.Motion.pressScale))
         .opacity(isEnabled ? 1 : 0.5)
         .onHover { isHovered = $0 }
-        .accessibilityLabel(Text(title) + Text(verbatim: ", ") + Text(caption))
+        .accessibilityLabel(Text(title) + Text(verbatim: ", ") + Text(caption)
+            + Text(verbatim: captionEngine.map { " · \($0)" } ?? ""))
     }
 }

@@ -38,13 +38,15 @@ struct EdgeCommandHomeTests {
 
         #expect(CommandHome.tiles.map(home.engine(for:)) == [.parakeet, .appleSpeech, .whisper, .didunyCloud])
         #expect(home.tileStart(.meeting, caps: Self.caps).segment == .thisMac)
-        #expect(home.engineFieldLabel == String(localized: "Engine, as in Settings"))
-        #expect(home.engineFieldValue == String(localized: "Different per mode"))
+        #expect(home.engineFieldLabel == String(localized: "Engine"))
+        #expect(home.engineFieldValue == "Parakeet V3")
+        #expect(CommandHome.tiles.map(home.captionEngine(for:)) == [nil, "Apple Speech", "Whisper", "Diduny Cloud"])
     }
 
-    @Test("As in Settings names the engine when all four modes share it")
-    func engineFieldNamesSharedEngine() {
+    @Test("As in Settings names the Transcribe engine; matching tiles do not repeat it")
+    func engineFieldNamesDictationEngine() {
         #expect(model().engineFieldValue == "Diduny Cloud")
+        #expect(CommandHome.tiles.compactMap(model().captionEngine(for:)).isEmpty)
     }
 
     @Test("T2-EN-02 A pick applies to all four tiles")
@@ -56,6 +58,7 @@ struct EdgeCommandHomeTests {
         #expect(CommandHome.tiles.map(home.engine(for:)) == Array(repeating: .whisper, count: 4))
         #expect(home.engineFieldLabel == String(localized: "Engine, this session"))
         #expect(home.engineFieldValue == "Whisper")
+        #expect(CommandHome.tiles.compactMap(home.captionEngine(for:)).isEmpty)
     }
 
     @Test("T2-EN-03 The pick lasts until As in Settings")

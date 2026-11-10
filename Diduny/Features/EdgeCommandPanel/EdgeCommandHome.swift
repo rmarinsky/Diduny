@@ -114,12 +114,6 @@ enum CommandHome {
         start.isPick ? ModeEngineRules.selection(engine: start.engine, job: job) : nil
     }
 
-    /// The one engine all four tiles use on "As in Settings", or nil when the modes differ.
-    static func sharedEngine(_ defaults: CommandHomeDefaults) -> EngineID? {
-        let engines = Set(tiles.map { engine(for: $0, pick: nil, defaults: defaults) })
-        return engines.count == 1 ? engines.first : nil
-    }
-
     // MARK: Captions (02 section 5)
 
     static func caption(
