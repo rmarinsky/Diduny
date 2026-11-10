@@ -1,8 +1,32 @@
 import SwiftUI
 
-private enum MainWindowLayout {
+enum MainWindowLayout {
     static let sidebarWidth: CGFloat = DS.Layout.sidebarWidth
     static let sidebarTopInset: CGFloat = 34
+}
+
+/// Sidebar and page side by side. The page takes exactly what the sidebar leaves: a `minWidth` of 0 keeps
+/// a too-wide page from widening the row, which would centre it and push the sidebar off the window.
+struct MainWindowColumns<Sidebar: View, Detail: View>: View {
+    @ViewBuilder var sidebar: () -> Sidebar
+    @ViewBuilder var detail: () -> Detail
+
+    var body: some View {
+        HStack(spacing: 0) {
+            sidebar()
+                .frame(width: MainWindowLayout.sidebarWidth)
+                .background(DS.Palette.sidebar)
+
+            Rectangle()
+                .fill(Color(.separatorColor).opacity(0.35))
+                .frame(width: 0.5)
+
+            detail()
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .clipped()
+                .background(DS.Palette.window)
+        }
+    }
 }
 
 struct MainWindowView: View {
@@ -15,7 +39,7 @@ struct MainWindowView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        MainWindowColumns {
             SidebarView(
                 selectedSection: Binding(
                     get: { selectedSection },
@@ -23,20 +47,12 @@ struct MainWindowView: View {
                 ),
                 topInset: MainWindowLayout.sidebarTopInset
             )
-            .frame(width: MainWindowLayout.sidebarWidth)
-            .background(.bar)
-
-            Rectangle()
-                .fill(Color(.separatorColor).opacity(0.35))
-                .frame(width: 0.5)
-
+        } detail: {
             detailView
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("section.\(selectedSection.rawValue)")
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(Color(.windowBackgroundColor))
         }
-        .background(Color(.windowBackgroundColor))
+        .background(DS.Palette.window)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
         .frame(minWidth: 1000, minHeight: 680)
         .onAppear {
@@ -82,8 +98,12 @@ struct MainWindowView: View {
             MeetingSettingsView()
         case .general:
             GeneralSettingsView()
+        case .modes:
+            ModesSettingsView()
+        case .languages:
+            LanguagesSettingsView()
         case .audioDictation:
-            AudioDictationSettingsView()
+            AudioSettingsView()
                 .environment(audioDeviceManager)
         case .models:
             OfflineModelsSettingsView()

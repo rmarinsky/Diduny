@@ -21,6 +21,7 @@ final class HistoryPaletteWindowController: NSObject, NSWindowDelegate {
     }
 
     func showWindow() {
+        KeyboardFocusRing.shared.hide()
         if let panel {
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -28,9 +29,9 @@ final class HistoryPaletteWindowController: NSObject, NSWindowDelegate {
         }
 
         let view = HistoryPaletteView()
-        let hostingView = NSHostingView(rootView: view)
+        let hostingView = NSHostingView(rootView: view.focusRingOnlyAfterTab())
 
-        let panel = NSPanel(
+        let panel = FocusRingPanel(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 360),
             styleMask: [.titled, .closable, .hudWindow, .utilityWindow, .nonactivatingPanel],
             backing: .buffered,

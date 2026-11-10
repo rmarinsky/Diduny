@@ -231,6 +231,11 @@ struct Recording: Identifiable, Codable, Equatable {
     }
 
     /// True when a durable audio file name has been attached (playable once on disk).
+    /// Why the last recovery attempt failed, for the list row and the detail.
+    var recoveryFailureMessage: String? {
+        status == .needsRecovery ? statusDetail : nil
+    }
+
     var hasAttachedAudio: Bool {
         !audioFileName.isEmpty
     }

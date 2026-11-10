@@ -23,16 +23,21 @@ final class MainWindowUITests: DidunyUITestCase {
         waitForElement(section("overview"))
 
         // Sidebar label → section id and an element only that section shows.
+        // T5-SB-02: sidebar label → section id and an element only that section shows.
         let sections: [(label: String, id: String, marker: (XCUIElement) -> XCUIElement)] = [
-            ("Recordings", "recordings", { $0.staticTexts["No Recordings Yet"] }),
-            ("Typing test", "typingTest", { $0.staticTexts["Typing Speed Test"] }),
-            ("General", "general", { $0.staticTexts["Behavior"] }),
-            ("Audio & dictation", "audioDictation", { $0.staticTexts["Test Recording"] }),
+            ("General", "general", { $0.staticTexts["After a recording"] }),
+            ("Modes", "modes", { $0.staticTexts["Use one engine for everything"] }),
+            ("Languages", "languages", { $0.staticTexts["Your languages"] }),
+            ("Audio", "audioDictation", { $0.staticTexts["Test the microphone"] }),
             ("Calendar & meetings", "meetings", { $0.staticTexts["Calendars"] }),
-            ("Local models", "models", { $0.staticTexts["Whisper Models"] }),
-            ("Shortcuts", "shortcuts", { $0.staticTexts["Action hotkeys"] }),
-            ("About", "about", { $0.staticTexts["Author"] }),
+            ("Local models", "models", { $0.descendants(matching: .any)["models.table"] }),
+            ("Providers", "providers", { $0.staticTexts["In Diduny"] }),
+            ("Shortcuts", "shortcuts", { $0.staticTexts["While recording"] }),
             ("Account", "account", { $0.textFields["account.email"] }),
+            ("About", "about", { $0.staticTexts["Author"] }),
+            ("Benchmark", "benchmark", { $0.staticTexts["Benchmark"] }),
+            ("Typing test", "typingTest", { $0.staticTexts["Typing Speed Test"] }),
+            ("Recordings", "recordings", { $0.staticTexts["No Recordings Yet"] }),
             ("Overview", "overview", { $0.staticTexts["Overview"] }),
         ]
 
@@ -49,6 +54,41 @@ final class MainWindowUITests: DidunyUITestCase {
                 waitForElement(mainWindow.buttons["Sidebar \(previous.label)"], toMatch: "value != 'Selected'")
             }
             previous = (entry.label, entry.id)
+        }
+    }
+
+    /// T5-SB-03 (value part). The click-to-dictate part needs the P-STD harness
+    /// (stub engines, probe); it is added once that harness lands.
+    func test_sidebarStartRecordingShowsTheDictationShortcut() {
+        launchApp(onboardingCompleted: true)
+        let start = waitForElement(mainWindow.buttons["Start Recording"])
+        waitForElement(start, toMatch: "value == '⌥⌘D'")
+    }
+
+    /// T5-HK-16
+    func test_commandCommaOpensGeneralSettings() {
+        launchApp(onboardingCompleted: true)
+        waitForElement(section("overview"))
+        mainWindow.typeKey(",", modifierFlags: .command)
+        waitForElement(section("general"), "⌘, did not open Settings > General")
+    }
+
+    /// T5-HK-15. No `batchComposer` identifier exists yet, so this checks that
+    /// ⇧⌘B lands on Recordings, where the composer opens.
+    func test_shiftCommandBOpensFilesAndURLs() {
+        launchApp(onboardingCompleted: true)
+        waitForElement(section("overview"))
+        mainWindow.typeKey("b", modifierFlags: [.command, .shift])
+        waitForElement(section("recordings"), "⇧⌘B did not open Files and URLs")
+    }
+
+    /// T5-HK-43 (menu bar access unverified, test-plan 2.6).
+    func test_menuBarItemsAreReachable() {
+        launchApp(onboardingCompleted: true)
+        app.statusItems.firstMatch.click()
+        for title in ["Dictation", "Translation", "Meeting", "Meeting Translation"] {
+            waitForElement(app.menuItems.containing(NSPredicate(format: "title CONTAINS %@", title)).firstMatch,
+                           "Menu bar item \(title) is missing")
         }
     }
 }

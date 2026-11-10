@@ -4,72 +4,6 @@ import Testing
 
 @MainActor
 struct EdgeCommandPanelModelTests {
-    @Test("Translation actions use the language pair selected in the edge panel")
-    func selectedPairDrivesTranslationActions() {
-        let english = TranslationLanguagePair(languageA: "uk", languageB: "en")
-        let polish = TranslationLanguagePair(languageA: "uk", languageB: "pl")
-        let model = EdgeCommandPanelModel(pairs: [english, polish], selectedPair: english)
-
-        model.select(polish)
-
-        #expect(model.selectedPair == polish)
-        #expect(EdgeCommandAction.translate.usesLanguagePair)
-        #expect(EdgeCommandAction.translateMeeting.usesLanguagePair)
-        #expect(!EdgeCommandAction.transcribe.usesLanguagePair)
-    }
-
-    @Test("Refreshing configured pairs keeps a valid selected target")
-    func refreshReplacesPairsWithoutLeavingAStaleSelection() {
-        let english = TranslationLanguagePair(languageA: "uk", languageB: "en")
-        let polish = TranslationLanguagePair(languageA: "uk", languageB: "pl")
-        let model = EdgeCommandPanelModel(pairs: [english], selectedPair: english)
-
-        model.refresh(pairs: [polish], selectedPair: polish)
-
-        #expect(model.pairs == [polish])
-        #expect(model.selectedPair == polish)
-    }
-
-    @Test("Local mode exposes only transcription and meeting capture")
-    func localModeHidesCloudActions() {
-        let model = EdgeCommandPanelModel(
-            pairs: [.defaultPair],
-            selectedPair: .defaultPair,
-            provider: .local,
-            isSignedIn: true
-        )
-
-        #expect(model.availableActions == [.transcribe, .meeting])
-        #expect(!model.showsTranslationControls)
-    }
-
-    @Test("Cloud mode adds translation actions and target language")
-    func cloudModeAddsTranslationActions() {
-        let model = EdgeCommandPanelModel(
-            pairs: [.defaultPair],
-            selectedPair: .defaultPair,
-            provider: .local,
-            isSignedIn: true
-        )
-
-        #expect(model.selectProvider(.cloud))
-        #expect(model.availableActions == [.transcribe, .translate, .meeting, .translateMeeting])
-        #expect(model.showsTranslationControls)
-    }
-
-    @Test("Cloud mode requires an authenticated session")
-    func signedOutUserCannotSelectCloud() {
-        let model = EdgeCommandPanelModel(
-            pairs: [.defaultPair],
-            selectedPair: .defaultPair,
-            provider: .local,
-            isSignedIn: false
-        )
-
-        #expect(!model.selectProvider(.cloud))
-        #expect(model.provider == .local)
-    }
-
     @Test("A dragged panel snaps to the nearest screen edge")
     func draggedPanelSnapsToNearestEdge() {
         let visibleFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
@@ -105,7 +39,7 @@ struct EdgeCommandPanelModelTests {
             dock: rightDock,
             presentation: .commands(isCloud: true)
         )
-            == NSRect(x: 1154, y: 287, width: 286, height: 326))
+            == NSRect(x: 1140, y: 287, width: 300, height: 326))
         #expect(EdgeCommandPanelPlacement.frame(in: visibleFrame, dock: bottomDock, presentation: .collapsed)
             == NSRect(x: 688, y: 0, width: 64, height: 14))
         #expect(EdgeCommandPanelPlacement.frame(
@@ -113,17 +47,17 @@ struct EdgeCommandPanelModelTests {
             dock: bottomDock,
             presentation: .commands(isCloud: true)
         )
-            == NSRect(x: 577, y: 0, width: 286, height: 326))
+            == NSRect(x: 570, y: 0, width: 300, height: 326))
     }
 
     @Test("Expanded panels keep rounded corners when docked")
     func expandedPanelsKeepRoundedCorners() {
-        #expect(EdgeCommandPanelPlacement.expandedCornerRadius == 15)
+        #expect(EdgeCommandPanelPlacement.expandedCornerRadius == 12)
     }
 
     @Test("Live controls have a comfortable click target")
     func liveControlsHaveComfortableClickTarget() {
-        #expect(EdgeCommandPanelPlacement.liveControlHitTargetHeight >= 44)
+        #expect(EdgeCommandPanelPlacement.liveControlHitTargetHeight == 38)
     }
 
     @Test("Meeting feedback grows beyond the compact dictation panel")
@@ -141,8 +75,48 @@ struct EdgeCommandPanelModelTests {
             presentation: .live(.meeting)
         )
 
-        #expect(dictation == NSRect(x: 1130, y: 295, width: 310, height: 310))
-        #expect(meeting == NSRect(x: 1080, y: 240, width: 360, height: 420))
+        #expect(dictation == NSRect(x: 1140, y: 294, width: 300, height: 312))
+        #expect(meeting == NSRect(x: 1140, y: 241.5, width: 300, height: 417))
+    }
+
+    @Test("Every expanded state is 300 wide and takes the content's fitting height")
+    func expandedStatesShareWidthAndFitContent() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let presentations: [EdgeCommandPanelPresentation] = [
+            .commands(isCloud: true), .commands(isCloud: false), .live(.voice), .live(.meeting), .meetingSuggestion
+        ]
+        for edge in [EdgeCommandPanelDockEdge.left, .right, .top, .bottom] {
+            let dock = EdgeCommandPanelDock(edge: edge, offset: 450)
+            for presentation in presentations {
+                let frame = EdgeCommandPanelPlacement.frame(
+                    in: visibleFrame, dock: dock, presentation: presentation, contentHeight: 287
+                )
+                #expect(frame.width == EdgeCommandPanelPlacement.panelWidth)
+                #expect(frame.height == 287)
+            }
+        }
+        #expect(EdgeCommandPanelPlacement.panelWidth == 300)
+    }
+
+    @Test("Height change keeps the docked edge fixed")
+    func heightChangeKeepsDockedEdge() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let top = EdgeCommandPanelDock(edge: .top, offset: 720)
+        let bottom = EdgeCommandPanelDock(edge: .bottom, offset: 720)
+        let short = EdgeCommandPanelPlacement.frame(
+            in: visibleFrame, dock: top, presentation: .commands(isCloud: true), contentHeight: 200
+        )
+        let tall = EdgeCommandPanelPlacement.frame(
+            in: visibleFrame, dock: top, presentation: .commands(isCloud: true), contentHeight: 400
+        )
+        #expect(short.maxY == tall.maxY)
+        let shortBottom = EdgeCommandPanelPlacement.frame(
+            in: visibleFrame, dock: bottom, presentation: .meetingSuggestion, contentHeight: 200
+        )
+        let tallBottom = EdgeCommandPanelPlacement.frame(
+            in: visibleFrame, dock: bottom, presentation: .meetingSuggestion, contentHeight: 400
+        )
+        #expect(shortBottom.minY == tallBottom.minY)
     }
 
     @Test("Meeting suggestion is actionable for notch and compact-panel configurations")
@@ -152,7 +126,7 @@ struct EdgeCommandPanelModelTests {
 
         for surface in [RecordingFeedbackSurface.notch, .compactPanel] {
             SettingsStorage.shared.recordingFeedbackSurface = surface
-            let controller = EdgeCommandPanelController(meetingRecordingStarter: { _ in })
+            let controller = EdgeCommandPanelController(meetingPromptDefaults: { .standard }, meetingRecordingStarter: { _ in })
             let meeting = DetectedMeeting(id: UUID(), client: .zoom)
 
             controller.showMeetingSuggestion(meeting)
@@ -165,35 +139,104 @@ struct EdgeCommandPanelModelTests {
 
     @Test("Meeting suggestion controller starts recording only once")
     func meetingSuggestionControllerStartsOnce() {
-        var startedProviders: [TranscriptionProvider] = []
-        let controller = EdgeCommandPanelController { provider in
-            startedProviders.append(provider)
+        var starts: [MeetingPromptStart] = []
+        let controller = EdgeCommandPanelController(meetingPromptDefaults: { .standard }) { start in
+            starts.append(start)
         }
         let meeting = DetectedMeeting(id: UUID(), client: .zoom)
 
         controller.showMeetingSuggestion(meeting)
-        controller.selectMeetingSuggestionProvider(.local)
+        controller.selectMeetingSuggestionSegment(.thisMac)
         controller.startMeetingRecording(fromSuggestionID: meeting.id)
         controller.startMeetingRecording(fromSuggestionID: meeting.id)
 
-        #expect(startedProviders == [.local])
+        #expect(starts == [MeetingPromptStart(segment: .thisMac, engine: .whisper)])
     }
 
-    @Test("Meeting suggestion falls back to Local when Cloud is unavailable")
-    func unavailableCloudFallsBackToLocal() {
-        let model = EdgeCommandPanelModel(pairs: [.defaultPair], selectedPair: .defaultPair)
+    @Test("T2-PR-01: the prompt is preset from Modes Starts in", arguments: [
+        (MeetingSegment.thisMac, EngineID.whisper, "Whisper", false),
+        (.cloud, .didunyCloud, "Diduny Cloud", false),
+        (.recordOnly, .parakeet, "Parakeet V3", true),
+    ])
+    func promptPresetFromModes(segment: MeetingSegment, engine: EngineID, name: String, afterStop: Bool) {
+        var defaults = MeetingPromptDefaults.standard
+        defaults.startsIn = segment
         let suggestion = MeetingSuggestion.resolve(
-            meeting: DetectedMeeting(id: UUID(), client: .googleMeet),
-            preferredProvider: .cloud,
-            cloudAvailable: false,
-            hasLocalModel: true
+            meeting: DetectedMeeting(id: UUID(), client: .zoom),
+            defaults: defaults,
+            cloudAvailable: true
         )
 
-        model.presentMeetingSuggestion(suggestion)
+        #expect(suggestion.selectedSegment == segment)
+        #expect(suggestion.engine == engine)
+        #expect(suggestion.isEngineAfterStop == afterStop)
+        #expect(suggestion.engineName == name)
+    }
 
-        #expect(model.meetingSuggestion?.selectedProvider == .local)
-        #expect(model.meetingSuggestion?.processingMode == .local)
-        #expect(!model.selectMeetingSuggestionProvider(.cloud))
+    @Test("T2-PR-02: a segment click applies to this meeting only")
+    func promptSegmentClickScope() {
+        let model = EdgeCommandPanelModel()
+        var defaults = MeetingPromptDefaults.standard
+        defaults.startsIn = .cloud
+        model.presentMeetingSuggestion(.resolve(
+            meeting: DetectedMeeting(id: UUID(), client: .zoom),
+            defaults: defaults,
+            cloudAvailable: true
+        ))
+
+        #expect(model.selectMeetingSuggestionSegment(.recordOnly))
+
+        #expect(model.meetingSuggestion?.selectedSegment == .recordOnly)
+        #expect(model.meetingSuggestion?.engine == .parakeet)
+        #expect(model.meetingSuggestion?.defaults.startsIn == .cloud)
+    }
+
+    @Test("T2-PR-03: Keep suggesting is the Settings value and posts one change")
+    func keepSuggestingIsTheSameSetting() {
+        let key = "meetingSuggestionsEnabled"
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let saved { UserDefaults.standard.set(saved, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        SettingsStorage.shared.meetingSuggestionsEnabled = true
+        var posts = 0
+        let token = NotificationCenter.default.addObserver(
+            forName: .meetingSuggestionsEnabledChanged, object: nil, queue: nil
+        ) { _ in posts += 1 }
+        defer { NotificationCenter.default.removeObserver(token) }
+        let controller = EdgeCommandPanelController(meetingPromptDefaults: { .standard }) { _ in }
+
+        controller.setMeetingSuggestionsEnabled(false)
+
+        #expect(!SettingsStorage.shared.meetingSuggestionsEnabled)
+        #expect(posts == 1)
+    }
+
+    @Test("T2-PR-04: Start uses the prompt's segment and its default engine")
+    func startUsesPromptSegmentAndEngine() {
+        var starts: [MeetingPromptStart] = []
+        let controller = EdgeCommandPanelController(meetingPromptDefaults: { .standard }) { starts.append($0) }
+        let meeting = DetectedMeeting(id: UUID(), client: .teams)
+
+        controller.showMeetingSuggestion(meeting)
+        controller.selectMeetingSuggestionSegment(.recordOnly)
+        controller.startMeetingRecording(fromSuggestionID: meeting.id)
+
+        #expect(starts == [MeetingPromptStart(segment: .recordOnly, engine: .parakeet)])
+    }
+
+    @Test("Cloud unavailable: the prompt opens on This Mac and Cloud cannot be chosen")
+    func unavailableCloudOpensOnThisMac() {
+        let model = EdgeCommandPanelModel()
+        model.presentMeetingSuggestion(.resolve(
+            meeting: DetectedMeeting(id: UUID(), client: .googleMeet),
+            defaults: .standard,
+            cloudAvailable: false
+        ))
+
+        #expect(model.meetingSuggestion?.selectedSegment == .thisMac)
+        #expect(!model.selectMeetingSuggestionSegment(.cloud))
+        #expect(model.selectMeetingSuggestionSegment(.recordOnly))
     }
 
     @Test("Paid Pro access works without a whitelist and without remaining free hours")
@@ -244,12 +287,11 @@ struct EdgeCommandPanelModelTests {
 
     @Test("Disabling future suggestions keeps the current meeting suggestion open")
     func disablingTrackingDoesNotDismissCurrentSuggestion() {
-        let model = EdgeCommandPanelModel(pairs: [.defaultPair], selectedPair: .defaultPair)
-        let suggestion = MeetingSuggestion(
+        let model = EdgeCommandPanelModel()
+        let suggestion = MeetingSuggestion.resolve(
             meeting: DetectedMeeting(id: UUID(), client: .teams),
-            selectedProvider: .cloud,
-            isCloudAvailable: true,
-            hasLocalModel: true
+            defaults: .standard,
+            cloudAvailable: true
         )
 
         model.presentMeetingSuggestion(suggestion)
@@ -260,17 +302,7 @@ struct EdgeCommandPanelModelTests {
 
     @Test("Meeting suggestion controls meet the minimum pointer target")
     func meetingSuggestionControlsMeetMinimumTarget() {
-        #expect(EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight >= 44)
-    }
-
-    @Test("Meeting suggestion describes the actual processing path")
-    func meetingSuggestionProcessingModeMatchesRuntimeReadiness() {
-        #expect(MeetingSuggestionProcessingMode.resolve(cloudEnabled: true, hasLocalModel: false) == .cloud)
-        #expect(MeetingSuggestionProcessingMode.resolve(cloudEnabled: false, hasLocalModel: true) == .local)
-        #expect(
-            MeetingSuggestionProcessingMode.resolve(cloudEnabled: false, hasLocalModel: false)
-                == .recordingOnly
-        )
+        #expect(EdgeCommandPanelPlacement.meetingSuggestionControlHitTargetHeight == 38)
     }
 
     @Test("Auto-hide only collapses after the pointer leaves the panel")
@@ -414,7 +446,8 @@ struct EdgeCommandPanelLiveTextTests {
         store.phase = .recording
 
         #expect(store.stopShortcutHint == "⇧ ×2")
-        #expect(store.cancelShortcutHint == "Esc ×3")
+        // WP-15: the hint names the configured Cancel shortcut, no longer a fixed "Esc".
+        #expect(store.cancelShortcutHint == "⌘A ×3")
 
         settings.escapeCancelEnabled = false
         #expect(store.cancelShortcutHint == nil)

@@ -739,14 +739,6 @@ enum BrowserSessionStore {
     }
 }
 
-enum ChromeProfileStore {
-    static func discover(
-        in userDataDirectory: URL = BrowserSessionStore.defaultUserDataDirectory
-    ) -> [ChromeProfile] {
-        BrowserSessionStore.discoverChromium(browser: .chrome, in: userDataDirectory)
-    }
-}
-
 struct RemoteDownloadedAudio {
     let fileURL: URL
     let temporaryDirectory: URL

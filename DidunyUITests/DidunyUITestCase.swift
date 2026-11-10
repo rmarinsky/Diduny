@@ -8,6 +8,8 @@ class DidunyUITestCase: XCTestCase {
     static let defaultTimeout: TimeInterval = 15
 
     private(set) var app: XCUIApplication!
+    /// Last bridge command number (`bridge(_:_:)`).
+    var bridgeSequence = 0
 
     override func setUpWithError() throws {
         // UI tests take over the screen, so they run only on CI (`DIDUNY_UI_TESTS=1`).
@@ -33,7 +35,11 @@ class DidunyUITestCase: XCTestCase {
         freshInstall: Bool = true,
         onboardingCompleted: Bool = false,
         proxyURL: String = DidunyUITestCase.unreachableProxyURL,
-        appearance: String? = nil
+        appearance: String? = nil,
+        profile: LaunchProfile? = nil,
+        open target: String? = nil,
+        arguments: [String] = [],
+        environment: [String: String] = [:]
     ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -52,6 +58,15 @@ class DidunyUITestCase: XCTestCase {
         if let appearance {
             app.launchArguments += ["-AppleInterfaceStyle", appearance]
         }
+        if let profile {
+            app.launchArguments += profile.flags
+            app.launchEnvironment["DIDUNY_UI_TEST_SEED"] = profile.seedJSON
+        }
+        if let target {
+            app.launchArguments.append("--ui-testing-open=\(target)")
+        }
+        app.launchArguments += arguments
+        app.launchEnvironment.merge(environment) { _, new in new }
         app.launch()
         self.app = app
         return app
@@ -101,11 +116,41 @@ class DidunyUITestCase: XCTestCase {
         waitForElement(element, toMatch: "exists == false", timeout: timeout, file: file, line: line)
     }
 
+    /// Scrolls the scroll view under `container` by the distance between their centres, then waits
+    /// until `element` is hittable. One computed scroll, no retry loop.
+    func scrollIntoView(
+        _ element: XCUIElement,
+        in container: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        waitForElement(element, file: file, line: line)
+        guard !element.isHittable else { return }
+        // Aim at the upper quarter, not the middle: on the 768 pt CI screen the window's lower part sits
+        // behind the Dock, so an element scrolled to the container's middle can still be covered.
+        let target = container.frame.minY + container.frame.height / 4
+        container.scroll(byDeltaX: 0, deltaY: target - element.frame.midY)
+        waitForElement(element, toMatch: "isHittable == true", file: file, line: line)
+    }
+
     /// The static text with `identifier` showing `text`. SwiftUI on macOS exposes
     /// a Text's string as the element's value, not its label.
     func text(_ text: String, identifier: String, in container: XCUIElement) -> XCUIElement {
         container.staticTexts
             .matching(NSPredicate(format: "identifier == %@ AND value == %@", identifier, text))
             .firstMatch
+    }
+
+    /// Waits until the element with `identifier` shows `text`. A header (panel title) carries its
+    /// string as the label, other SwiftUI text as the value.
+    func waitForText(
+        _ text: String,
+        identifier: String,
+        in container: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let element = container.descendants(matching: .any)[identifier]
+        waitForElement(element, toMatch: "label == '\(text)' OR value == '\(text)'", file: file, line: line)
     }
 }

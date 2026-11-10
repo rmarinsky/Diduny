@@ -42,13 +42,14 @@ enum LocalSpeakerLabelService {
         recording: Recording,
         tracksURL: URL?,
         audioURL: URL,
+        voiceDetection: Bool? = nil,
         onIdentifyingSpeakers: () -> Void
     ) async -> GeneratedTranscript {
         guard [.meeting, .fileTranscription].contains(recording.type), !transcript.segments.isEmpty else {
             return transcript
         }
 
-        let useVoice = voiceDetectionReady()
+        let useVoice = voiceDetectionReady(requested: voiceDetection)
         let workDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("speaker-labels-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: workDirectory) }
@@ -95,8 +96,9 @@ enum LocalSpeakerLabelService {
     /// Sum of squared samples below which a channel counts as silent.
     private static let silenceEnergy: Float = 1
 
-    private static func voiceDetectionReady() -> Bool {
-        guard LocalSpeakerDiarizer.isSupported, SettingsStorage.shared.speakerIdentificationEnabled else {
+    /// `requested` is the per-run choice in Recordings; nil reads the global setting.
+    private static func voiceDetectionReady(requested: Bool? = nil) -> Bool {
+        guard LocalSpeakerDiarizer.isSupported, requested ?? SettingsStorage.shared.speakerIdentificationEnabled else {
             return false
         }
         guard LocalSpeakerDiarizer.modelsDownloaded else {

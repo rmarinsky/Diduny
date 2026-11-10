@@ -18,6 +18,27 @@ final class WhisperModelManager: NSObject {
 
         var id: String { name }
 
+        static let recommendedName = "ggml-large-v3-turbo"
+
+        /// Large v3 Turbo is the model the menus recommend.
+        var isRecommended: Bool { name == Self.recommendedName }
+
+        /// Whisper translates only into English, and only multilingual non-Turbo models do:
+        /// OpenAI says Turbo is not trained for translation (`translation-support.md` bug 1).
+        var translatesToEnglish: Bool { !isEnglishOnly && !name.contains("turbo") }
+
+        /// `sizeDescription` in bytes, decimal units as the catalog prints them ("547 MB", "1.5 GB"); 0 if unreadable.
+        var sizeBytes: Int64 {
+            let parts = sizeDescription.split(separator: " ")
+            guard parts.count == 2, let value = Double(parts[0]) else { return 0 }
+            let unit: Double = switch parts[1] {
+            case "GB": 1_000_000_000
+            case "MB": 1_000_000
+            default: 0
+            }
+            return Int64((value * unit).rounded())
+        }
+
         var filename: String { "\(name).bin" }
 
         var downloadURL: URL {
@@ -153,6 +174,8 @@ final class WhisperModelManager: NSObject {
     var downloadProgress: [String: Double] = [:]
     var isDownloading: [String: Bool] = [:]
     var downloadedModels: Set<String> = []
+    /// Last download error per model name; cleared when a download starts or the model is deleted.
+    var downloadErrors: [String: String] = [:]
 
     private var activeTasks: [String: URLSessionDownloadTask] = [:]
     private var progressObservations: [String: NSKeyValueObservation] = [:]
@@ -186,20 +209,13 @@ final class WhisperModelManager: NSObject {
         return isModelDownloaded(model) ? model : nil
     }
 
-    func diskUsage(for model: WhisperModel) -> String? {
-        let path = modelPath(for: model)
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-              let size = attrs[.size] as? UInt64
-        else { return nil }
-        return ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
-    }
-
     func downloadModel(_ model: WhisperModel) {
         guard activeTasks[model.name] == nil else { return }
 
         Log.whisper.info("Starting download: \(model.displayName)")
         isDownloading[model.name] = true
         downloadProgress[model.name] = 0
+        downloadErrors[model.name] = nil
 
         let task = URLSession.shared.downloadTask(with: model.downloadURL) { [weak self] tempURL, response, error in
             let statusCode = (response as? HTTPURLResponse)?.statusCode
@@ -235,6 +251,7 @@ final class WhisperModelManager: NSObject {
         let path = modelPath(for: model)
         try? FileManager.default.removeItem(atPath: path)
         downloadedModels.remove(model.name)
+        downloadErrors[model.name] = nil
 
         // If deleted model was selected, clear selection
         if SettingsStorage.shared.selectedWhisperModel == model.name {
@@ -262,6 +279,7 @@ final class WhisperModelManager: NSObject {
         if let error {
             if (error as NSError).code == NSURLErrorCancelled { return }
             Log.whisper.error("Download failed for \(model.displayName): \(error.localizedDescription)")
+            downloadErrors[model.name] = error.localizedDescription
             return
         }
 
@@ -285,6 +303,7 @@ final class WhisperModelManager: NSObject {
             Log.whisper.info("Download complete: \(model.displayName)")
         } catch {
             Log.whisper.error("Failed to save model \(model.displayName): \(error.localizedDescription)")
+            downloadErrors[model.name] = error.localizedDescription
         }
     }
 

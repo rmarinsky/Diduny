@@ -1,18 +1,30 @@
 import SwiftUI
 
-/// Pinned header + leading-aligned content column (inner 840, outer 888 with 24 insets).
+/// Receives a page's own content width, so a test can catch content wider than its column.
+extension EnvironmentValues {
+    @Entry var pageContentWidthProbe: ((CGFloat) -> Void)?
+}
+
+/// Pinned header + leading-aligned content column (inner up to `columnMaxWidth`, plus 24 insets).
 /// Data screens use `scrolls: true` (default). Settings screens that host a native
 /// grouped `Form` pass `scrolls: false` because the Form scrolls itself.
 struct PageScaffold<Trailing: View, Content: View>: View {
     let title: LocalizedStringKey
     var subtitle: LocalizedStringKey?
     var scrolls = true
+    /// Inner column cap: reading width for text pages, `DS.Layout.wideColumnMaxWidth` for table pages.
+    var columnMaxWidth: CGFloat = DS.Layout.columnMaxWidth
     @ViewBuilder var trailing: () -> Trailing
     @ViewBuilder var content: () -> Content
+
+    private var outerColumnMaxWidth: CGFloat { columnMaxWidth + DS.Layout.pagePadding * 2 }
+
+    static var titleTopPadding: CGFloat { 48 }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
     @State private var scrolled = false
+    @Environment(\.pageContentWidthProbe) private var contentWidthProbe
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,8 +51,8 @@ struct PageScaffold<Trailing: View, Content: View>: View {
                     if isScrolled != scrolled { scrolled = isScrolled }
                 }
             } else {
-                content()
-                    .frame(maxWidth: DS.Layout.outerColumnMaxWidth, maxHeight: .infinity, alignment: .topLeading)
+                fittedContent
+                    .frame(minWidth: 0, maxWidth: outerColumnMaxWidth, maxHeight: .infinity, alignment: .topLeading)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
@@ -57,12 +69,13 @@ struct PageScaffold<Trailing: View, Content: View>: View {
         HStack(alignment: .center, spacing: DS.Space.lg) {
             VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text(title)
-                    .font(DS.Font.pageTitle)
+                    .font(DS.Font.settingsTitle)
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
                 if let subtitle {
                     Text(subtitle)
-                        .font(DS.Font.callout)
+                        .font(DS.Font.body)
+                        .lineSpacing(DS.Font.LineSpacing.lead)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -71,17 +84,27 @@ struct PageScaffold<Trailing: View, Content: View>: View {
             trailing()
         }
         .padding(.horizontal, DS.Layout.pagePadding)
-        .padding(.top, DS.Layout.pagePadding)
-        .padding(.bottom, DS.Space.lg)
-        .frame(maxWidth: DS.Layout.outerColumnMaxWidth, alignment: .leading)
+        // The window draws under its 34 pt title bar (full-size content), so the title starts at 50
+        // (design-spec 3.5): 48 of padding plus the title font's ~2 pt leading.
+        .padding(.top, Self.titleTopPadding)
+        // Lead to first block 14 (design-spec 3.5).
+        .padding(.bottom, 14)
+        .frame(maxWidth: outerColumnMaxWidth, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var column: some View {
+    /// The column's width whatever the content asks for (`minWidth` 0): wider content cannot widen the page.
+    private var fittedContent: some View {
         content()
+            .onGeometryChange(for: CGFloat.self, of: \.size.width) { contentWidthProbe?($0) }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var column: some View {
+        fittedContent
             .padding(.horizontal, DS.Layout.pagePadding)
             .padding(.bottom, DS.Layout.pagePadding)
-            .frame(maxWidth: DS.Layout.outerColumnMaxWidth, alignment: .leading)
+            .frame(minWidth: 0, maxWidth: outerColumnMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -91,9 +114,13 @@ extension PageScaffold where Trailing == EmptyView {
         title: LocalizedStringKey,
         subtitle: LocalizedStringKey? = nil,
         scrolls: Bool = true,
+        columnMaxWidth: CGFloat = DS.Layout.columnMaxWidth,
         @ViewBuilder content: @escaping () -> Content
     ) {
-        self.init(title: title, subtitle: subtitle, scrolls: scrolls, trailing: { EmptyView() }, content: content)
+        self.init(
+            title: title, subtitle: subtitle, scrolls: scrolls, columnMaxWidth: columnMaxWidth,
+            trailing: { EmptyView() }, content: content
+        )
     }
 }
 

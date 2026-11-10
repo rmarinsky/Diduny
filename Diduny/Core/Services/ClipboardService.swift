@@ -11,10 +11,6 @@ enum MessageFormattingMode: String, CaseIterable, Identifiable {
         rawValue
     }
 
-    var displayName: String {
-        self == .normal ? "Normal" : "For chat"
-    }
-
     func format(_ text: String) -> String {
         var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard self == .chat, result.count <= 280,
@@ -63,12 +59,15 @@ enum ClipboardError: LocalizedError {
     }
 }
 
-final class ClipboardService: ClipboardServiceProtocol {
+final class ClipboardService {
     static let shared = ClipboardService()
     static let pasteReadinessDelayNanoseconds: UInt64 = 15_000_000
     static let shortcutKeyHoldMicroseconds: useconds_t = 12000
 
     private let pasteboard = NSPasteboard.general
+
+    /// Set when ⌘V is posted; cleared when a paste starts, so a failed paste leaves nil.
+    private(set) var lastPaste: Date?
 
     static func preparedText(_ text: String, behavior: ClipboardCopyBehavior = .cleaned) -> String {
         switch behavior {
@@ -109,18 +108,21 @@ final class ClipboardService: ClipboardServiceProtocol {
         AXIsProcessTrusted()
     }
 
-    /// Request accessibility permission (opens System Settings)
-    static func requestAccessibilityPermission() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        AXIsProcessTrustedWithOptions(options)
-    }
-
     /// - Parameter expectedProcessIdentifier: when set, ⌘V is posted only if that app is still frontmost after the delay.
     func paste() async throws {
         try await paste(expectedProcessIdentifier: nil)
     }
 
     func paste(expectedProcessIdentifier: pid_t?) async throws {
+        lastPaste = nil
+        #if TEST_BUILD
+            // `--ui-testing-stub-paste`: record instead of posting ⌘V.
+            if UITestHarness.stubsPaste {
+                UITestProbeCounters.recordPaste()
+                lastPaste = Date()
+                return
+            }
+        #endif
         // Check accessibility permission first
         let isGranted = ClipboardService.isAccessibilityGranted()
         Log.app.info("Accessibility permission check: \(isGranted)")
@@ -139,12 +141,16 @@ final class ClipboardService: ClipboardServiceProtocol {
         }
 
         try await postCommandShortcut(keyCode: CGKeyCode(9), error: .pasteEventFailed)
+        lastPaste = Date()
 
         Log.app.info("Paste event sent successfully to frontmost app")
     }
 
     /// Captures selected text from the frontmost app by simulating Cmd+C.
     func captureSelectedText() async throws -> String {
+        #if TEST_BUILD
+            if let text = UITestHarness.stubbedSelection.withLock({ $0 }) { return text }
+        #endif
         let isGranted = ClipboardService.isAccessibilityGranted()
         Log.app.info("Accessibility permission check (copy): \(isGranted)")
 
@@ -172,12 +178,14 @@ final class ClipboardService: ClipboardServiceProtocol {
         throw ClipboardError.captureSelectionFailed
     }
 
-    func getContent() -> String? {
-        pasteboard.string(forType: .string)
-    }
-
     /// Sends the given shortcut to the frontmost app (used by Force submit after a successful paste).
     func sendShortcut(keyCode: CGKeyCode, flags: CGEventFlags) async throws {
+        #if TEST_BUILD
+            if UITestHarness.stubsPaste {
+                UITestProbeCounters.recordSubmit()
+                return
+            }
+        #endif
         guard ClipboardService.isAccessibilityGranted() else {
             throw ClipboardError.accessibilityNotGranted
         }

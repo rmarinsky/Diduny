@@ -16,10 +16,6 @@ struct OverviewView: View {
         case month = "Month"
         case year = "Year"
 
-        var calendarComponent: Calendar.Component {
-            switch self { case .week: .weekOfYear; case .month: .month; case .year: .year }
-        }
-
         var daysBack: Int {
             switch self { case .week: 7; case .month: 30; case .year: 365 }
         }

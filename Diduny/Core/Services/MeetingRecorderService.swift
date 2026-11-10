@@ -3,7 +3,7 @@ import Foundation
 import os
 import ScreenCaptureKit
 
-final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
+final class MeetingRecorderService: NSObject {
     // MARK: - Properties
 
     private var systemAudioService: SystemAudioCaptureService?
@@ -21,10 +21,6 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
 
     private(set) var isRecording = false
 
-    var systemAudioCaptureService: SystemAudioCaptureService? {
-        systemAudioService
-    }
-
     var currentRecordingPath: String? {
         outputURL?.path
     }
@@ -39,6 +35,12 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
             systemAudioService?.onRawAudioData = onRealtimeAudioData
         }
     }
+
+    /// What the last stopped recording holds: Translate meeting's offsets depend on it (ADR-0013 D4).
+    private(set) var lastRecordingStats = (totalFrames: 0, skippedChunks: 0)
+
+    /// Frames the saved audio holds so far; 0 before capture starts.
+    var writtenFrames: Int { systemAudioService?.writtenFrames ?? 0 }
 
     var onMixedSamples: (([Float]) -> Void)? {
         didSet {
@@ -212,7 +214,9 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         let capturedChunkURLs = chunkURLs
         let capturedDirectoryURL = inProgressDirectoryURL
         _ = try await systemAudioService?.stopCapture()
+        lastRecordingStats = (systemAudioService?.writtenFrames ?? 0, 0)
         systemAudioService = nil
+        onRealtimeAudioData = nil // Only now: capture has stopped (ADR-0013 D1).
         isRecording = false
 
         let stopTime = Date()
@@ -236,6 +240,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
             do {
                 let result = try MeetingChunkStitcher.stitch(chunkURLs: capturedChunkURLs, outputURL: target)
                 stitchResult = result
+                lastRecordingStats.skippedChunks = result.skippedChunks.count
                 stitchedURL = result.outputURL
                 Log.recording.info(
                     "Stitch ok: appended=\(result.appendedChunkCount) skipped=\(result.skippedChunks) totalDur=\(String(format: "%.2f", result.totalDurationSeconds))s"
@@ -243,6 +248,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
             } catch {
                 Log.recording.error("Stitch FAILED: \(error.localizedDescription) — falling back to last chunk only")
                 stitchResult = nil
+                lastRecordingStats.skippedChunks = max(capturedChunkURLs.count - 1, 1)
                 stitchedURL = capturedChunkURLs.last
             }
         } else {
@@ -328,6 +334,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         let recordingId = currentRecordingId
         _ = try? await systemAudioService?.stopCapture()
         systemAudioService = nil
+        onRealtimeAudioData = nil // Only now: capture has stopped (ADR-0013 D1).
         outputURL = nil
         isRecording = false
         startTime = nil
@@ -348,6 +355,7 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
         let capturedRecordingId = currentRecordingId
         _ = try? await systemAudioService?.stopCapture()
         systemAudioService = nil
+        onRealtimeAudioData = nil // Only now: capture has stopped (ADR-0013 D1).
         outputURL = nil
         isRecording = false
         startTime = nil
@@ -431,11 +439,6 @@ final class MeetingRecorderService: NSObject, MeetingRecorderServiceProtocol {
     static let tracksFilename = "tracks.wav"
 
     // MARK: - Get Recording Data
-
-    func getRecordingData() throws -> Data? {
-        guard let url = outputURL else { return nil }
-        return try Data(contentsOf: url)
-    }
 }
 
 // MARK: - Errors

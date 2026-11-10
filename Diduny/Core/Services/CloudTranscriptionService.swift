@@ -7,15 +7,9 @@ struct CloudLanguageConfig: Equatable {
 }
 
 final class CloudTranscriptionService: TranscriptionServiceProtocol {
-    private static let defaultModel = "stt-async-v4"
-
     private var proxyTranscriptionsURL: String {
         let proxyBase = SettingsStorage.shared.proxyBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         return "\(proxyBase)/api/v1/transcriptions"
-    }
-
-    private var model: String {
-        RemoteConfigService.shared.sttModel(default: Self.defaultModel)
     }
 
     private let longRunningSessionBodyThresholdBytes = 10 * 1024 * 1024
@@ -43,16 +37,6 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
         guard !text.isEmpty else { throw TranscriptionError.emptyTranscription }
 
         return text
-    }
-
-    /// Benchmark: Diduny text before server cleanup (tokens joined) next to the cleaned text.
-    func transcribeRawAndCleaned(audioData: Data, language: String?) async throws -> (raw: String, cleaned: String) {
-        let config = Self.makeTranscriptionConfig(languageConfig: Self.resolveLanguageConfig(explicitLanguage: language))
-        let response = try await proxyTranscribe(audioData: audioData, config: config)
-        let raw = response.tokens.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleaned = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty || !cleaned.isEmpty else { throw TranscriptionError.emptyTranscription }
-        return (raw.isEmpty ? cleaned : raw, cleaned)
     }
 
     /// Transcribe meeting audio with speaker diarization

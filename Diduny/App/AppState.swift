@@ -24,8 +24,24 @@ enum RecordingState: Equatable, CustomStringConvertible {
 @MainActor
 final class AppState {
     var billingSelection: BillingSelection?
+    /// The command panel's pick for the recording a tile started, by job. Set at the tile start and dropped
+    /// when that recording ends, so hotkey starts keep following Settings > Modes.
+    var panelEngines: [STTJob: JobProviderSelection] = [:]
+
+    /// After a tile start returns: a refused start never left idle, and a later hotkey start must not inherit the pick.
+    func dropPanelEngineIfIdle(_ job: STTJob) {
+        let state: RecordingState = switch job {
+        case .dictation: recordingState
+        case .dictationTranslation: translationRecordingState
+        case .meetingTranslation: meetingTranslationRecordingState
+        default: .recording
+        }
+        if state == .idle { panelEngines[job] = nil }
+    }
+
     var recordingState: RecordingState = .idle {
         didSet {
+            if recordingState == .idle { panelEngines[.dictation] = nil }
             Log.app.debug("recordingState changed: \(oldValue.description) -> \(self.recordingState.description)")
         }
     }
@@ -79,6 +95,7 @@ final class AppState {
     // Meeting translation (system audio -> Ukrainian)
     var meetingTranslationRecordingState: RecordingState = .idle {
         didSet {
+            if meetingTranslationRecordingState == .idle { panelEngines[.meetingTranslation] = nil }
             Log.app.debug(
                 "meetingTranslationRecordingState changed: \(oldValue.description) -> \(self.meetingTranslationRecordingState.description)"
             )
@@ -90,6 +107,7 @@ final class AppState {
     // Translation recording (EN <-> UK)
     var translationRecordingState: RecordingState = .idle {
         didSet {
+            if translationRecordingState == .idle { panelEngines[.dictationTranslation] = nil }
             Log.app
                 .debug(
                     "translationRecordingState changed: \(oldValue.description) -> \(self.translationRecordingState.description)"
@@ -98,26 +116,6 @@ final class AppState {
     }
 
     var translationRecordingStartTime: Date?
-
-    var recordingDuration: TimeInterval {
-        guard let startTime = recordingStartTime else { return 0 }
-        return Date().timeIntervalSince(startTime)
-    }
-
-    var meetingRecordingDuration: TimeInterval {
-        guard let startTime = meetingRecordingStartTime else { return 0 }
-        return Date().timeIntervalSince(startTime)
-    }
-
-    var translationRecordingDuration: TimeInterval {
-        guard let startTime = translationRecordingStartTime else { return 0 }
-        return Date().timeIntervalSince(startTime)
-    }
-
-    var meetingTranslationRecordingDuration: TimeInterval {
-        guard let startTime = meetingTranslationRecordingStartTime else { return 0 }
-        return Date().timeIntervalSince(startTime)
-    }
 
     init() {
         #if DEBUG || TEST_BUILD

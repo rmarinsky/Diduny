@@ -70,60 +70,6 @@ final class AsyncTranscriptionJobService {
 
     // MARK: - Submit Job
 
-    func submitJob(
-        audioData: Data,
-        config: [String: Any],
-        source: String = "unknown",
-        sourceDurationSeconds: TimeInterval? = nil
-    ) async throws -> JobSubmission {
-        guard let url = URL(string: "\(proxyBase)/api/v1/jobs") else {
-            throw TranscriptionError.invalidURL
-        }
-
-        try await ensureSpeechDetected(audioData, context: "submitJob")
-
-        let preparedUpload = await prepareUploadPayload(audioData)
-        let diagnostics = BatchUploadDiagnostics(
-            source: source,
-            sourceDurationSeconds: sourceDurationSeconds,
-            originalBytes: audioData.count,
-            preparedBytes: preparedUpload.data.count,
-            filename: preparedUpload.filename,
-            contentType: preparedUpload.contentType
-        )
-        let boundary = UUID().uuidString
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-
-        let configData = try JSONSerialization.data(withJSONObject: config)
-        let configString = String(data: configData, encoding: .utf8) ?? "{}"
-
-        var body = Data()
-        body.append(Data("--\(boundary)\r\n".utf8))
-        body.append(
-            Data(
-                "Content-Disposition: form-data; name=\"audio\"; filename=\"\(preparedUpload.filename)\"\r\n".utf8
-            )
-        )
-        body.append(Data("Content-Type: \(preparedUpload.contentType)\r\n\r\n".utf8))
-        body.append(preparedUpload.data)
-        body.append(Data("\r\n".utf8))
-        body.append(Data("--\(boundary)\r\n".utf8))
-        body.append(Data("Content-Disposition: form-data; name=\"config\"\r\n".utf8))
-        body.append(Data("Content-Type: text/plain\r\n\r\n".utf8))
-        body.append(Data(configString.utf8))
-        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
-
-        request.httpBody = body
-
-        Log.transcription.notice("submitJob upload diagnostics: \(diagnostics.message, privacy: .public)")
-
-        let (data, httpResponse) = try await performDataRequest(request)
-
-        return try decodeSubmissionResponse(data: data, httpResponse: httpResponse, diagnostics: diagnostics)
-    }
-
     /// Submits an already prepared audio file without decoding or duplicating it in memory.
     func submitJob(
         audioFileURL: URL,
@@ -197,12 +143,6 @@ final class AsyncTranscriptionJobService {
 
     // MARK: - Stream Job Result (SSE)
 
-    func streamJobResult(jobId: String, onUpdate: @escaping (JobStatus) -> Void) async throws -> JobResult {
-        try await streamJobResult(jobId: jobId) { update in
-            onUpdate(update.status)
-        }
-    }
-
     private func streamJobResult(
         jobId: String,
         onProgressUpdate: @escaping (JobProgressUpdate) -> Void
@@ -272,86 +212,6 @@ final class AsyncTranscriptionJobService {
     }
 
     // MARK: - Retry-aware transcription
-
-    func transcribeMeetingWithRetry(
-        audioData: Data,
-        config: [String: Any],
-        source: String = "unknown",
-        sourceDurationSeconds: TimeInterval? = nil,
-        onUpdate: @escaping (JobStatus) -> Void
-    ) async throws -> String {
-        try await transcribeWithRetry(
-            audioData: audioData,
-            config: config,
-            source: source,
-            sourceDurationSeconds: sourceDurationSeconds,
-            onUpdate: onUpdate
-        )
-    }
-
-    func transcribeWithRetry(
-        audioData: Data,
-        config: [String: Any],
-        source: String = "unknown",
-        sourceDurationSeconds: TimeInterval? = nil,
-        onUpdate: @escaping (JobStatus) -> Void
-    ) async throws -> String {
-        try await transcribeWithRetry(
-            audioData: audioData,
-            config: config,
-            source: source,
-            sourceDurationSeconds: sourceDurationSeconds
-        ) { update in
-            onUpdate(update.status)
-        }
-    }
-
-    private func transcribeWithRetry(
-        audioData: Data,
-        config: [String: Any],
-        source: String = "unknown",
-        sourceDurationSeconds: TimeInterval? = nil,
-        onProgressUpdate: @escaping (JobProgressUpdate) -> Void
-    ) async throws -> String {
-        try Task.checkCancellation()
-        let preferSpeakerDiarization = shouldPreferSpeakerDiarization(config: config)
-        let submission = try await submitJob(
-            audioData: audioData,
-            config: config,
-            source: source,
-            sourceDurationSeconds: sourceDurationSeconds
-        )
-        return try await waitForResult(
-            submission: submission,
-            preferSpeakerDiarization: preferSpeakerDiarization,
-            onProgressUpdate: onProgressUpdate
-        ).text
-    }
-
-    func transcribeFileWithRetry(
-        audioFileURL: URL,
-        config: [String: Any],
-        onUpdate: @escaping (JobStatus) -> Void
-    ) async throws -> String {
-        try await transcribeFileWithRetry(
-            audioFileURL: audioFileURL,
-            config: config
-        ) { update in
-            onUpdate(update.status)
-        }
-    }
-
-    func transcribeFileWithRetry(
-        audioFileURL: URL,
-        config: [String: Any],
-        onProgressUpdate: @escaping (JobProgressUpdate) -> Void
-    ) async throws -> String {
-        try await transcribeFileDetailedWithRetry(
-            audioFileURL: audioFileURL,
-            config: config,
-            onProgressUpdate: onProgressUpdate
-        ).text
-    }
 
     func transcribeFileDetailedWithRetry(
         audioFileURL: URL,
@@ -474,94 +334,6 @@ final class AsyncTranscriptionJobService {
         return nil
     }
 
-    // MARK: - Upload Preparation
-
-    private struct PreparedUpload {
-        let data: Data
-        let filename: String
-        let contentType: String
-    }
-
-    private func prepareUploadPayload(_ audioData: Data) async -> PreparedUpload {
-        let optimizedData = await optimizeAudioForUpload(audioData)
-        let (filename, contentType) = detectAudioFormat(optimizedData)
-        return PreparedUpload(data: optimizedData, filename: filename, contentType: contentType)
-    }
-
-    /// Mirror the cloud sync path so jobs get the same smaller uploads and broader format support.
-    private func optimizeAudioForUpload(_ audioData: Data) async -> Data {
-        let startTime = ContinuousClock.now
-        let downsampledData = await downsampleToSoniox(audioData)
-        let compressedData = await AudioCompressionService.compressToFLAC(audioData: downsampledData)
-
-        let elapsed = ContinuousClock.now - startTime
-        let ratio = audioData.count > 0 ? Double(compressedData.count) / Double(audioData.count) * 100 : 100
-        Log.transcription.info(
-            "submitJob: optimized audio \(audioData.count) → \(compressedData.count) bytes (\(String(format: "%.1f%%", ratio))) in \(elapsed)"
-        )
-
-        return compressedData
-    }
-
-    private func downsampleToSoniox(_ audioData: Data) async -> Data {
-        let tempDir = FileManager.default.temporaryDirectory
-        let inputURL = tempDir.appendingPathComponent(UUID().uuidString + ".wav")
-        let outputURL = tempDir.appendingPathComponent(UUID().uuidString + "_16k.wav")
-
-        defer {
-            try? FileManager.default.removeItem(at: inputURL)
-            try? FileManager.default.removeItem(at: outputURL)
-        }
-
-        do {
-            try audioData.write(to: inputURL)
-
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
-            process.arguments = [
-                "-f", "WAVE",
-                "-d", "LEI16",
-                "-c", "1",
-                "-r", "16000",
-                inputURL.path,
-                outputURL.path
-            ]
-
-            let errorPipe = Pipe()
-            process.standardError = errorPipe
-
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                process.terminationHandler = { proc in
-                    if proc.terminationStatus == 0 {
-                        continuation.resume()
-                    } else {
-                        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                        let msg = String(data: errorData, encoding: .utf8) ?? "exit \(proc.terminationStatus)"
-                        continuation.resume(
-                            throwing: NSError(
-                                domain: "afconvert",
-                                code: Int(proc.terminationStatus),
-                                userInfo: [NSLocalizedDescriptionKey: msg]
-                            )
-                        )
-                    }
-                }
-                do {
-                    try process.run()
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
-
-            let downsampledData = try Data(contentsOf: outputURL)
-            Log.transcription.info("submitJob: downsampled \(audioData.count) → \(downsampledData.count) bytes")
-            return downsampledData
-        } catch {
-            Log.transcription.warning("submitJob: downsample failed, using original - \(error.localizedDescription)")
-            return audioData
-        }
-    }
-
     // MARK: - Speech Pre-check
 
     private func ensureSpeechDetected(_ audioData: Data, context: String) async throws {
@@ -632,40 +404,6 @@ final class AsyncTranscriptionJobService {
         let submission = try JSONDecoder().decode(JobSubmission.self, from: data)
         Log.transcription.info("submitJob: jobId=\(submission.jobId), status=\(submission.status)")
         return submission
-    }
-
-    private func detectAudioFormat(_ data: Data) -> (filename: String, contentType: String) {
-        guard data.count >= 12 else {
-            return ("recording.wav", "audio/wav")
-        }
-
-        let bytes = [UInt8](data.prefix(12))
-
-        if bytes[0] == 0x52, bytes[1] == 0x49, bytes[2] == 0x46, bytes[3] == 0x46,
-           bytes[8] == 0x57, bytes[9] == 0x41, bytes[10] == 0x56, bytes[11] == 0x45
-        {
-            return ("recording.wav", "audio/wav")
-        }
-
-        if bytes[4] == 0x66, bytes[5] == 0x74, bytes[6] == 0x79, bytes[7] == 0x70 {
-            return ("recording.m4a", "audio/mp4")
-        }
-
-        if (bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) ||
-            (bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0)
-        {
-            return ("recording.mp3", "audio/mpeg")
-        }
-
-        if bytes[0] == 0x66, bytes[1] == 0x4C, bytes[2] == 0x61, bytes[3] == 0x43 {
-            return ("recording.flac", "audio/flac")
-        }
-
-        if bytes[0] == 0x4F, bytes[1] == 0x67, bytes[2] == 0x67, bytes[3] == 0x53 {
-            return ("recording.ogg", "audio/ogg")
-        }
-
-        return ("recording.wav", "audio/wav")
     }
 
     // MARK: - HTTP Helpers

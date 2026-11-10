@@ -336,5 +336,5 @@ enum OnDeviceEngines {
         return engine
     }
 
-    static let notReadyMessage = String(localized: "The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Providers.")
+    static let notReadyMessage = String(localized: "The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Modes.")
 }

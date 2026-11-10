@@ -492,6 +492,82 @@ final class FileTranscriptionBatchServiceTests: XCTestCase {
         XCTAssertEqual(FileTranscriptionSettingsSnapshot.current().provider, .local)
     }
 
+    // MARK: WP-60 Files engine on this Mac (T5-MD-27, T5-MIG-16, T4-RES-01)
+
+    @MainActor
+    private func fileSnapshot(
+        stored: JobProviderSelection? = nil,
+        readiness: [EngineID: EngineReadiness] = [:],
+        downloaded: Set<String> = [],
+        selected: String? = nil
+    ) -> FileTranscriptionSettingsSnapshot {
+        let suite = "diduny.files-engine.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let modes = ModeDefaults(defaults: defaults)
+        if let stored { modes.apply([.engine(.file, stored)]) }
+        return .resolve(defaults: modes, readiness: FakeEngineReadinessSource(readiness),
+                        whisper: .init(downloaded: downloaded, selected: selected),
+                        languageHints: ["uk"], selectedWhisperModel: selected ?? "ggml-base")
+    }
+
+    @MainActor
+    func test_filesDefaultToParakeetV3OnANewInstall() {
+        let snapshot = fileSnapshot()
+        XCTAssertEqual(snapshot.onDeviceEngineID, STTProviderID.parakeet)
+        XCTAssertEqual(snapshot.provider, .local)
+        XCTAssertNil(snapshot.unavailableMessage)
+    }
+
+    @MainActor
+    func test_filesFallBackToLargeV3TurboWhenParakeetIsNotDownloaded() {
+        let turbo = WhisperModelManager.WhisperModel.recommendedName
+        let snapshot = fileSnapshot(readiness: [.parakeet: .notDownloaded(bytes: 480_000_000)],
+                                    downloaded: ["ggml-base", turbo], selected: "ggml-base")
+        XCTAssertNil(snapshot.onDeviceEngineID)
+        XCTAssertEqual(snapshot.provider, .local)
+        XCTAssertEqual(snapshot.localModelName, turbo)
+    }
+
+    @MainActor
+    func test_filesFallBackToSelectedWhisperModelWhenTurboIsAbsent() {
+        let snapshot = fileSnapshot(readiness: [.parakeet: .notDownloaded(bytes: 1)],
+                                    downloaded: ["ggml-small"], selected: "ggml-small")
+        XCTAssertNil(snapshot.onDeviceEngineID)
+        XCTAssertEqual(snapshot.localModelName, "ggml-small")
+        XCTAssertNil(snapshot.unavailableMessage)
+    }
+
+    @MainActor
+    func test_filesFallBackToAppleSpeechWhenNoWhisperModelIsDownloaded() {
+        let snapshot = fileSnapshot(readiness: [.parakeet: .notDownloaded(bytes: 1)])
+        XCTAssertEqual(snapshot.onDeviceEngineID, STTProviderID.appleSpeech)
+        XCTAssertNil(snapshot.unavailableMessage)
+    }
+
+    @MainActor
+    func test_filesRefuseWhenNothingOnThisMacCanRun() {
+        let snapshot = fileSnapshot(readiness: [.parakeet: .notDownloaded(bytes: 1), .appleSpeech: .unavailable])
+        XCTAssertEqual(snapshot.unavailableMessage, FileTranscriptionSettingsSnapshot.nothingReadyMessage)
+    }
+
+    @MainActor
+    func test_storedCloudEnginesRunWhisperForFiles() {
+        for stored in [JobProviderSelection.didunyCloud, JobProviderSelection(providerID: STTProviderID.elevenLabs, modelID: nil)] {
+            let snapshot = fileSnapshot(stored: stored, downloaded: ["ggml-small"], selected: "ggml-small")
+            XCTAssertNil(snapshot.onDeviceEngineID, stored.providerID)
+            XCTAssertEqual(snapshot.provider, .local, stored.providerID)
+            XCTAssertEqual(snapshot.localModelName, "ggml-small", stored.providerID)
+            XCTAssertNil(snapshot.unavailableMessage, stored.providerID)
+        }
+    }
+
+    @MainActor
+    func test_storedOnDeviceFilesEngineIsKept() {
+        let snapshot = fileSnapshot(stored: JobProviderSelection(providerID: STTProviderID.appleSpeech, modelID: nil))
+        XCTAssertEqual(snapshot.onDeviceEngineID, STTProviderID.appleSpeech)
+    }
+
     func test_add_skipsDuplicateURLsWithinActiveBatch() {
         let service = FileTranscriptionBatchService(
             preparer: BatchTestPreparer(),

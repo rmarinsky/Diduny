@@ -43,18 +43,13 @@
 "%lld versions" = "Версій: %lld";
 "%lld%%" = "%lld%%";
 "%lld-day streak" = "Днів поспіль: %lld";
-"1 Minute" = "1 хвилина";
 "1 hour before" = "За годину";
 "1 month" = "1 місяць";
 "1 year" = "1 рік";
-"10 Minutes" = "10 хвилин";
 "12 months" = "12 місяців";
 "15 minutes before" = "За 15 хвилин";
-"2 Minutes" = "2 хвилини";
 "2 months free" = "2 місяці безкоштовно";
-"30 Seconds" = "30 секунд";
 "30 days" = "30 днів";
-"5 Minutes" = "5 хвилин";
 "5 minutes before" = "За 5 хвилин";
 "7 days" = "7 днів";
 "90 days" = "90 днів";
@@ -384,7 +379,6 @@
 "Failed to simulate paste keyboard event" = "Не вдалося виконати клавіатурне вставлення";
 "Failed to start recording" = "Не вдалося почати запис";
 "Features" = "Можливості";
-"Fidelity" = "Якість звуку";
 "File Transcription" = "Транскрипція файлу";
 "File — %@" = "Файл - %@";
 "Files" = "Файли";
@@ -397,7 +391,6 @@
 "Firefox" = "Firefox";
 "Fix highlighted characters before saving." = "Виправте виділені символи перед збереженням.";
 "Fix time" = "Час виправлень";
-"Floating modal" = "Плавуче вікно";
 "Floating modal shows the live transcript. Turn the toggle off to start on the edge tab (red dot); click the tab to open the window. Minus hides it again." = "Плавуче вікно показує транскрипцію наживо. Вимкніть перемикач, щоб починати з бічної вкладки з червоною крапкою. Натисніть вкладку, щоб відкрити вікно. Кнопка мінуса згортає його.";
 "For chat applies to dictation and translated messages up to 280 characters and 50 words on one line. It always lowercases the first word, including names and acronyms, and omits the final period. Internal punctuation, question marks, exclamation marks and ellipses are preserved. Meeting transcripts are unchanged." = "Стиль «Для чату» застосовується до диктування й перекладених повідомлень до 280 символів і 50 слів в одному рядку. Перше слово завжди починається з малої літери, навіть імена й абревіатури, а кінцева крапка прибирається. Внутрішні розділові знаки, знаки питання, оклику й трикрапки зберігаються. Транскрипції зустрічей не змінюються.";
 "Forever" = "Назавжди";
@@ -437,7 +430,6 @@
 "Invalid response from server" = "Некоректна відповідь сервера";
 "Invalid server response" = "Некоректна відповідь сервера";
 "Join" = "Приєднатися";
-"Keep Loaded" = "Не вивантажувати";
 "Keep editing" = "Продовжити редагування";
 "Keep your train of thought" = "Не втрачайте думку";
 "Language" = "Мова";
@@ -458,12 +450,10 @@
 "Live preview during recording" = "Попередній перегляд під час запису";
 "Loading subscription…" = "Завантаження підписки…";
 "Local" = "Локально";
-"Local (Whisper)" = "Локально (Whisper)";
 "Local - transcription on this Mac" = "Локально - транскрипція на цьому Mac";
 "Local Whisper Translation" = "Локальний переклад Whisper";
 "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English." = "Локальний Whisper перекладає лише англійською. Виберіть хмарний переклад або англійську мову.";
 "Local Whisper can translate to English only. Switch Translation Provider to Cloud or choose English. Target: %@." = "Локальний Whisper перекладає лише англійською. Виберіть хмарний переклад або англійську мову. Цільова мова: %@.";
-"Local Whisper translates to English only." = "Локальна модель Whisper перекладає лише англійською.";
 "Local mode transcribes on this Mac after stop when a model is ready. Without one, saved audio stays unprocessed in Recordings." = "Локальний режим транскрибує на цьому Mac після зупинки, якщо модель готова. Без неї збережене аудіо лишається необробленим у «Записах».";
 "Local models stay free without an hourly limit, with two free cloud hours per calendar month." = "Локальні моделі залишаються безкоштовними без обмеження часу. Щомісяця доступні дві безкоштовні години хмари.";
 "Local transcription failed" = "Не вдалося виконати локальну транскрипцію";
@@ -478,8 +468,6 @@
 "Made in Ukraine · © 2024–2026 Roman Marinsky" = "Створено в Україні · © 2024–2026 Роман Марінський";
 "Make conversations useful" = "Зберігайте користь від розмов";
 "Make default" = "Використовувати за замовчуванням";
-"Manage..." = "Керувати…";
-"Manual" = "Вручну";
 "Meet Diduny" = "Знайомтеся — Diduny";
 "Meeting" = "Зустріч";
 "Meeting Provider" = "Спосіб обробки зустрічей";
@@ -552,7 +540,6 @@
 "No transcriptions yet" = "Транскрипцій ще немає";
 "No upcoming meetings" = "Немає майбутніх зустрічей";
 "No upcoming timed events in the selected calendars." = "У вибраних календарях немає майбутніх подій із визначеним часом.";
-"Noise" = "Шум";
 "None" = "Немає";
 "None of the recorded chunks could be read." = "Не вдалося прочитати жоден записаний фрагмент.";
 "Not Now" = "Не зараз";
@@ -648,7 +635,6 @@
 "Quit" = "Завершити роботу";
 "RECORDING IN PROGRESS" = "ТРИВАЄ ЗАПИС";
 "RECORDINGS" = "ЗАПИСИ";
-"Re-enable Screen Recording prompt" = "Знову запитувати дозвіл на запис екрана";
 "Read a calendar from a browser" = "Читати календар із браузера";
 "Read now" = "Прочитати зараз";
 "Read this browser calendar" = "Читати календар цього браузера";
@@ -780,7 +766,6 @@
 "Sign in to view subscription prices and upgrade." = "Увійдіть, щоб переглянути ціни й оформити підписку.";
 "Sign in with an email code for local and cloud features. Local models stay free; cloud includes two free hours each month." = "Увійдіть за кодом з електронного листа для локальних і хмарних функцій. Локальні моделі безкоштовні; хмара включає дві безкоштовні години щомісяця.";
 "Signing in" = "Вхід";
-"Skip" = "Пропустити";
 "Skip meeting recording prompt" = "Пропустити пропозицію запису зустрічі";
 "Slack Huddle" = "Slack Huddle";
 "Sort by" = "Сортувати за";
@@ -883,7 +868,7 @@
 "This permanently deletes the recording, all source media and generated files, every transcript and translation version, and removes it from attached batches." = "Буде назавжди видалено запис, усі вихідні й створені файли, усі версії транскрипцій і перекладів. Запис також буде вилучено з пакетів.";
 "This permanently deletes the recording, stored media, transcript history, translations, and every batch reference." = "Буде назавжди видалено запис, медіафайли, історію транскрипцій, переклади й усі посилання з пакетів.";
 "This rental or DRM-protected video is not supported." = "Орендовані або захищені DRM відео не підтримуються.";
-"This session needs recovery before it can be played or transcribed. Resolve it from the recordings list." = "Перед відтворенням чи транскрипцією потрібно відновити цей сеанс. Відкрийте його у списку записів.";
+"This session needs recovery before it can be played or transcribed." = "Перед відтворенням чи транскрипцією потрібно відновити цей сеанс.";
 "This transcript was created for a different audio range. Its timestamps refer to that version." = "Цю транскрипцію створено для іншого фрагмента аудіо. Часові позначки стосуються тієї версії.";
 "Thunderbolt" = "Thunderbolt";
 "Time saved this month" = "Заощаджений час за місяць";
@@ -920,7 +905,6 @@
 "Translate Selected Text" = "Перекласти виділений текст";
 "Translate automatically" = "Автоматично перекласти";
 "Translate meeting" = "Перекладати зустріч";
-"Translate speech between" = "Перекладати мовлення між";
 "Translate to" = "Перекласти мовою";
 "Translate: %@ → %@" = "Перекласти: %@ → %@";
 "Translated" = "Перекладено";
@@ -930,7 +914,6 @@
 "Translating..." = "Переклад…";
 "Translation" = "Переклад";
 "Translation %@" = "Переклад %@";
-"Translation Pair" = "Мовна пара";
 "Translation Pairs" = "Мовні пари";
 "Translation direction: %@ → %@" = "Напрямок перекладу: %@ → %@";
 "Translation failed: %@" = "Не вдалося перекласти: %@";
@@ -1399,8 +1382,6 @@
 "A small window in the middle of the screen with the meeting's details." = "Невелике вікно посередині екрана з подробицями зустрічі.";
 "Transcribe calendar recordings" = "Транскрибувати календарні записи";
 "On this Mac, after the meeting" = "На цьому Mac, після зустрічі";
-"Live, in the cloud" = "Наживо, у хмарі";
-"On this Mac, only audio is recorded during the call and the transcript is made in the background when you stop. You can turn on a live transcript during the meeting. Without a downloaded model the audio is saved; it is never uploaded silently. To keep reminders running after login, use Launch at Login in General." = "На цьому Mac під час дзвінка записується лише аудіо, а транскрипція створюється у фоні після зупинки. Під час зустрічі можна увімкнути живу транскрипцію. Без завантаженої моделі аудіо зберігається й ніколи непомітно не вивантажується. Щоб нагадування працювали після входу в систему, увімкніть «Запускати під час входу в систему» в розділі «Загальні».";
 "Records with a live transcript in the cloud" = "Запис із живою транскрипцією у хмарі";
 "Records on this Mac · transcribed after the meeting" = "Запис на цьому Mac · транскрипція після зустрічі";
 "Records audio only · download a model to transcribe" = "Лише запис аудіо · завантажте модель для транскрипції";
@@ -1409,9 +1390,7 @@
 "Applies to this meeting only" = "Лише для цієї зустрічі";
 "Download model" = "Завантажити модель";
 "Recording only. The transcript will be ready after the meeting, made on this Mac." = "Лише запис. Транскрипція буде готова після зустрічі, на цьому Mac.";
-"Turn on live transcript" = "Увімкнути живу транскрипцію";
 "Live view from now, in the cloud. The final transcript is still made on this Mac." = "Наживо відтепер, у хмарі. Остаточна транскрипція все одно створюється на цьому Mac.";
-"Sign in to Diduny with minutes left to turn on the live transcript." = "Щоб увімкнути живу транскрипцію, увійдіть у Diduny з доступними хвилинами.";
 "Looks like the call ended" = "Схоже, дзвінок завершився";
 "%@ stopped. Diduny is still recording. If you rejoin, recording just continues." = "%@ зупинився. Diduny досі записує. Якщо ви повернетеся, запис просто продовжиться.";
 "Back in the call — still recording" = "Знову в дзвінку — запис триває";
@@ -1454,19 +1433,47 @@
 "Translation uses Diduny quota, which is used up. Upgrade to enable it. Transcription with your own provider still works." = "Переклад витрачає квоту Diduny, яку вичерпано. Оновіть тариф, щоб увімкнути його. Транскрибування через ваш провайдер працює й без цього.";
 "Translation uses Diduny. Sign in to enable it. Transcription with your own provider still works." = "Переклад іде через Diduny. Увійдіть, щоб увімкнути його. Транскрибування через ваш провайдер працює й без цього.";
 "Upgrade" = "Оновити тариф";
-"%@, not available" = "%@, недоступно";
 "Live" = "Наживо";
 "After Stop" = "Після Stop";
-"Speaker labels · up to %lld" = "Мітки спікерів · до %lld";
-"Speaker labels" = "Мітки спікерів";
 "No speaker labels" = "Без міток спікерів";
-"English only" = "Лише англійська";
-"Translation via Diduny" = "Переклад через Diduny";
+/* Engine captions and language data (WP-11) */
+"Text as you speak" = "Текст під час мовлення";
+"Text as you speak (preview)" = "Текст під час мовлення (чернетка)";
+"Text after Stop" = "Текст після Stop";
+"Live translation" = "Переклад наживо";
+"By Diduny" = "Перекладає Diduny";
+"By Diduny, after Stop" = "Перекладає Diduny, після Stop";
+"Live text" = "Текст наживо";
+"Live text (preview)" = "Текст наживо (чернетка)";
+"Live preview" = "Попередній перегляд наживо";
+"After Stop, on this Mac" = "Після Stop, на цьому Mac";
+"After Stop, in the cloud" = "Після Stop, у хмарі";
+"%@, speaker labels" = "%@, мітки спікерів";
+"No live text · %@" = "Без тексту наживо · %@";
+"your key" = "ваш ключ";
+"Your key" = "Ваш ключ";
+"Live, both directions, speaker labels" = "Наживо, в обидва боки, мітки спікерів";
+"After Stop, by Diduny, into one language" = "Після Stop, Diduny перекладає однією мовою";
+"You see your words. The translation by Diduny is pasted after Stop" = "Ви бачите свої слова. Переклад від Diduny вставляється після Stop";
+"Text and translation by Diduny after Stop" = "Текст і переклад від Diduny після Stop";
+"recommended" = "рекомендовано";
+"%@, recommended" = "%@, рекомендовано";
+"Not downloaded, %@" = "Не завантажено, %@";
+"Live text made on this Mac" = "Текст наживо створюється на цьому Mac";
+"Live text from the cloud" = "Текст наживо з хмари";
+"Record only" = "Лише запис";
+"No live text. Transcript after Stop" = "Без тексту наживо. Транскрипція після Stop";
+"%lld languages" = "мов: %lld";
+"macOS languages" = "мови macOS";
+"After Stop, up to %lld" = "Після Stop, до %lld";
+"Excellent accuracy" = "Відмінна точність";
+"High accuracy" = "Висока точність";
+"Good accuracy" = "Добра точність";
+"Moderate accuracy" = "Помірна точність";
 "Your recording is saved." = "Запис збережено.";
 "Use Diduny Cloud for this recording" = "Використати Diduny Cloud для цього запису";
 "Sign in to use Diduny Cloud" = "Увійдіть, щоб використати Diduny Cloud";
 "Uses your Diduny quota for this recording only. Your defaults don't change." = "Витрачає квоту Diduny лише для цього запису. Ваші налаштування за замовчуванням не змінюються.";
-"Open Providers" = "Відкрити Провайдери";
 "Open ElevenLabs dashboard" = "Відкрити панель ElevenLabs";
 "The key was removed. %@ now use Diduny Cloud." = "Ключ видалено. %@ тепер використовують Diduny Cloud.";
 "File transcription" = "Транскрибування файлів";
@@ -1525,8 +1532,6 @@
 
 "Translation failed. Original text kept." = "Переклад не вдався. Збережено оригінал.";
 "Stop after silence" = "Зупиняти після тиші";
-"Stop After Silence" = "Зупинка після тиші";
-"Silence" = "Тиша";
 "Stopping in %llds" = "Зупинка через %lld с";
 "%lld s" = "%lld с";
 "%lld min" = "%lld хв";
@@ -1554,6 +1559,8 @@
 "Voice commands need Cloud translation. Local Whisper translates to English only." = "Голосові команди працюють лише з хмарним перекладом. Локальний Whisper перекладає тільки англійською.";
 "Start and end" = "На початку й у кінці";
 "End only" = "Лише в кінці";
+"Anywhere" = "Будь-де";
+"%@ ↔ %@" = "%@ ↔ %@";
 "Any supported language" = "Будь-яка підтримувана мова";
 "Only my translation pairs" = "Лише мої мовні пари";
 "by voice" = "голосом";
@@ -1647,7 +1654,6 @@
 "%lld clips excluded" = "Виключено записів: %lld";
 "Apple speech recognition doesn't support this language." = "Розпізнавання мовлення Apple не підтримує цю мову.";
 "Allow Speech Recognition for Diduny in System Settings › Privacy & Security." = "Дозволь Diduny розпізнавання мовлення в Системних параметрах › Приватність і безпека.";
-"The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Providers." = "Вибраний локальний рушій не готовий на цьому Mac. Завантаж його в «Локальних моделях» або обери інший рушій у Налаштуваннях › Способи обробки.";
 "Runs on this Mac. Text appears while you speak." = "Працює на цьому Mac. Текст з'являється, поки ти говориш.";
 "Translation failed. Try again from the recording." = "Не вдалося перекласти. Спробуй ще раз із запису.";
 
@@ -1704,3 +1710,520 @@
 "Language Diduny detected for this recording" = "Мова, яку Diduny розпізнав для цього запису";
 "Mostly different from Reference" = "Здебільшого відрізняється від еталона";
 "What’s new in this release, animated" = "Що нового в цьому релізі, анімація";
+
+/* Picker menus and popups (panels redesign WP-20) */
+"Search" = "Пошук";
+"Nothing found" = "Нічого не знайдено";
+"Your languages" = "Ваші мови";
+"All languages" = "Усі мови";
+"Opens a list" = "Відкриває список";
+/* Panels redesign: static components (WP-21) */
+"Transcript mode" = "Режим транскрипції";
+"Yes" = "Так";
+"No" = "Ні";
+"Press keys..." = "Натисніть клавіші...";
+"%@ shortcut" = "Комбінація: %@";
+"Press count" = "Кількість натискань";
+"Floating panel" = "Плавуча панель";
+/* Shortcut field key names, spoken (WP-21) */
+"Command" = "Command";
+"Option" = "Option";
+"Control" = "Control";
+"Shift" = "Shift";
+"Return" = "Return";
+"Escape" = "Escape";
+"Tab" = "Tab";
+"Delete key" = "Delete";
+"Space" = "Пробіл";
+"Left Arrow" = "Стрілка вліво";
+"Right Arrow" = "Стрілка вправо";
+"Up Arrow" = "Стрілка вгору";
+"Down Arrow" = "Стрілка вниз";
+/* WP-15: cancel repeat hint names the stored cancel key */
+"Press %@ 1 more time to cancel" = "Натисніть %@ ще 1 раз, щоб скасувати";
+"Press %@ %lld more times to cancel" = "Натисніть %@ ще %lld рази, щоб скасувати";
+
+/* Panels redesign WP-30 */
+"Dictating" = "Диктування";
+"Recording · no live text" = "Запис · без живого тексту";
+"No live text with %@. The text is pasted after Stop." = "%@ не показує текст наживо. Текст вставиться після «Стоп».";
+"Saving the recording..." = "Зберігаємо запис...";
+"Finishing the last words..." = "Дописуємо останні слова...";
+"Translate into: your languages" = "Перекласти: ваші мови";
+"Your words, no translation" = "Ваші слова, без перекладу";
+"Cancel: %@" = "Скасувати: %@";
+"%@ also stops" = "%@ теж зупиняє";
+"%@ cancels" = "%@ скасовує";
+"Set by voice ·" = "Задано голосом ·";
+"Audio level" = "Рівень звуку";
+"Output" = "Результат";
+
+/* Panels redesign WP-31 */
+"On battery, live text on this Mac drains it fast." = "Від батареї живий текст на цьому Mac швидко її розряджає.";
+"Use Cloud" = "Перейти на Хмару";
+"Recording without live text" = "Запис без живого тексту";
+"Parakeet V3 is not downloaded. Until it is, Whisper Large v3 Turbo makes the transcript." = "Parakeet V3 не завантажено. Доки його немає, транскрипт робить Whisper Large v3 Turbo.";
+"Download %@" = "Завантажити %@";
+"On this Mac, recommended" = "На цьому Mac, рекомендовано";
+"Transcript after Stop" = "Транскрипт після зупинки";
+"Recording, no live text" = "Запис, без живого тексту";
+"Sign in to record." = "Увійдіть, щоб записувати.";
+
+/* Panels redesign WP-32 */
+"Live · both directions · speaker labels" = "Наживо · в обидва боки · мітки мовців";
+"After Stop · everything into %@ · no speaker labels" = "Після зупинки · усе мовою: %@ · без міток мовців";
+"No live text with %@. It transcribes on this Mac after Stop, then Diduny translates all of it into %@. Both directions need Diduny Cloud." = "%@ не дає живого тексту. Він розпізнає на цьому Mac після зупинки, а потім Diduny перекладає все мовою: %@. Для обох напрямків потрібен Diduny Cloud.";
+"No live text with %@. It transcribes after Stop, then Diduny translates all of it into %@. Both directions need Diduny Cloud." = "%@ не дає живого тексту. Він розпізнає після зупинки, а потім Diduny перекладає все мовою: %@. Для обох напрямків потрібен Diduny Cloud.";
+"Live · %@" = "Наживо · %@";
+"After Stop → %@" = "Після зупинки → %@";
+"Speaker %@" = "Мовець %@";
+"Both directions, between your languages" = "В обидва боки, між вашими мовами";
+"Other languages..." = "Інші мови...";
+"Add them to Your languages in Settings" = "Додайте їх до «Ваших мов» у Налаштуваннях";
+"Between" = "Між";
+"Show original text" = "Показати оригінал";
+"Hide original text" = "Сховати оригінал";
+
+/* Panels redesign WP-41 */
+"Engine, this session" = "Рушій, цей сеанс";
+"As in Settings" = "Як у Налаштуваннях";
+"Each mode uses its own default" = "Кожен режим має свій типовий";
+"Providers..." = "Провайдери...";
+"Compare engines, add a key" = "Порівняти рушії, додати ключ";
+"Translate into" = "Перекласти на";
+"Voice → %@" = "Голос → %@";
+"After Stop · %@" = "Після Stop · %@";
+"Not on this Mac" = "Недоступно на цьому Mac";
+
+/* Panels redesign WP-42 */
+"%lld s · also in Recordings" = "%lld с · також у Записах";
+"Translated into %@ · %lld s" = "Перекладено: %@ · %lld с";
+"New recording" = "Новий запис";
+"Meeting saved" = "Зустріч збережено";
+"%@ · making the transcript..." = "%@ · готуємо транскрипт...";
+"%@ · transcript ready" = "%@ · транскрипт готовий";
+"%@ · transcript ready, translated %@" = "%@ · транскрипт готовий, переклад %@";
+"Open recording" = "Відкрити запис";
+
+/* Panels redesign WP-43 */
+"Record it?" = "Записати її?";
+"Keep suggesting when a meeting starts" = "Пропонувати запис, коли починається зустріч";
+
+/* Panels redesign WP-50 */
+"Modes" = "Режими";
+"Languages" = "Мови";
+"Audio" = "Аудіо";
+
+/* Panels redesign WP-51 */
+"What runs each mode by default, and how you start it." = "Що працює в кожному режимі за замовчуванням і як його запустити.";
+"You are signed out. Recording and translation by Diduny need an account." = "Ви не ввійшли. Для запису й перекладу від Diduny потрібен обліковий запис.";
+"Use one engine for everything" = "Один рушій для всього";
+"Different per mode" = "Різний для кожного режиму";
+"Mode" = "Режим";
+"Files and URLs" = "Файли й посилання";
+"Into" = "Мовою";
+"Starts in" = "Починати в";
+"%@ options" = "Параметри: %@";
+"Compare engines in Providers" = "Порівняти рушії в Провайдерах";
+"Key to hold or tap" = "Клавіша для утримання або натискання";
+"Tap to start and stop" = "Натискання для старту й зупинки";
+"Hold to record" = "Утримувати для запису";
+"Hold for" = "Утримувати";
+"How long you hold the key before recording starts." = "Скільки тримати клавішу, перш ніж почнеться запис.";
+"Local engine" = "Локальний рушій";
+"Live text made on this Mac." = "Живий текст створюється на цьому Mac.";
+"Engine in Cloud" = "Рушій у хмарі";
+"Live text from the cloud." = "Живий текст із хмари.";
+"Transcript for Record only" = "Транскрипт для «Лише запис»";
+"Made after Stop. Engines on this Mac are recommended; speaker labels come with Diduny Cloud." = "Створюється після зупинки. Радимо рушії на цьому Mac; мітки мовців дає Diduny Cloud.";
+"Calendar meetings" = "Зустрічі з календаря";
+"Start the same way" = "Починаються так само";
+"A meeting started from the calendar uses \"Starts in\" and these engines." = "Зустріч, запущена з календаря, використовує «Починати в» і ці рушії.";
+"Only with an engine that returns both texts." = "Лише з рушієм, що повертає обидва тексти.";
+
+/* Panels redesign WP-52 */
+"How the app behaves, whatever the mode." = "Як поводиться застосунок у будь-якому режимі.";
+"After a recording" = "Після запису";
+"Paste the text where I was typing" = "Вставляти текст туди, де я друкував";
+"Off: the text is only copied." = "Вимкнено: текст лише копіюється.";
+"Play a sound when done" = "Грати звук після завершення";
+"Normal" = "Звичайний";
+"For chat" = "Для чату";
+"While recording" = "Під час запису";
+"Show the recording in" = "Показувати запис у";
+"Pick how a recording looks on screen." = "Виберіть, як запис виглядає на екрані.";
+"Open the panel when a recording starts" = "Відкривати панель, коли починається запис";
+"Keep dictation and translation" = "Зберігати диктування й переклад";
+"Keep meeting recordings" = "Зберігати записи зустрічей";
+"Expired history" = "Застаріла історія";
+"Delete now" = "Видалити зараз";
+"Setup guide" = "Посібник із налаштування";
+"Open" = "Відкрити";
+"Permission to record system audio" = "Дозвіл на запис системного звуку";
+"Ask again" = "Запитати знову";
+"You said no to Screen Recording earlier. Meetings need it to record the other side." = "Раніше ви відмовили в записі екрана. Він потрібен, щоб записувати співрозмовників на зустрічах.";
+
+/* Panels redesign WP-53 */
+"The languages you speak and the ones you translate into." = "Мови, якими ви говорите, і мови, на які перекладаєте.";
+"Languages you speak" = "Мови, якими ви говорите";
+"Detect the language" = "Визначати мову";
+"Shown first and in crimson in every Translate into menu and language list." = "Показуються першими й малиновим у кожному меню «Перекласти на» та списку мов.";
+"Translate into, by default" = "Перекладати на, типово";
+"For dictation and the translation window. One language." = "Для диктування й вікна перекладу. Одна мова.";
+"Pair for both directions" = "Пара для обох напрямків";
+"For Translate meeting and Translate in place: each language is translated into the other." = "Для перекладу зустрічі й перекладу на місці: кожна мова перекладається на іншу.";
+"Voice commands" = "Голосові команди";
+"Say \"translate into Polish\" while you dictate. Diduny Cloud only." = "Скажіть «переклади на польську» під час диктування. Лише Diduny Cloud.";
+"Listen for the command" = "Слухати команду";
+"At the start and end" = "На початку й у кінці";
+"At the end" = "У кінці";
+"Languages you can ask for" = "Мови, які можна назвати";
+"Shown first everywhere you pick a language" = "Показуються першими скрізь, де ви вибираєте мову";
+"Chosen" = "Вибрані";
+"Add a second language to Your languages" = "Додайте другу мову до «Ваших мов»";
+
+/* Panels redesign WP-54 */
+"Devices and levels." = "Пристрої та рівні.";
+"Test the microphone" = "Перевірити мікрофон";
+"Input level" = "Рівень входу";
+"System audio only" = "Лише системний звук";
+"Microphone level" = "Рівень мікрофона";
+"System audio level" = "Рівень системного звуку";
+"Test system audio" = "Перевірити системний звук";
+"Capture" = "Записати";
+"Speaker labels on this Mac" = "Мітки мовців на цьому Mac";
+"Identify speakers" = "Розпізнавати мовців";
+"After Stop, Diduny tells the voices apart on this Mac when the engine cannot." = "Після зупинки Diduny розрізняє голоси на цьому Mac, якщо рушій цього не вміє.";
+"Ready to use." = "Готово до роботи.";
+"My voice profile" = "Мій голосовий профіль";
+"Re-record" = "Перезаписати";
+"Labels your own voice as you." = "Позначає ваш голос як ваш.";
+"Set up" = "Налаштувати";
+
+/* Panels redesign WP-55 */
+"Each one has its keys, how many times you press them, and a switch. Shortcuts that start a mode are in Modes." = "У кожного є клавіші, кількість натискань і перемикач. Скорочення, що запускають режим, — у «Режимах».";
+"Keep the audio when cancelled" = "Зберігати аудіо після скасування";
+"Stop, paste and send" = "Зупинити, вставити й надіслати";
+"Stops, pastes, then presses ⌘↩." = "Зупиняє, вставляє, потім натискає ⌘↩.";
+"Add a meeting chapter" = "Додати розділ зустрічі";
+"Text" = "Текст";
+"Translate selected text" = "Перекласти виділений текст";
+"Opens the translation window with the selection." = "Відкриває вікно перекладу з виділеним текстом.";
+"Translate the selection in place" = "Перекласти виділене на місці";
+"Replaces the selected text with its translation." = "Замінює виділений текст його перекладом.";
+"Translate in place between" = "Перекладати на місці між";
+"Works in both directions: the direction follows the language of the selected text." = "Працює в обидва боки: напрям залежить від мови виділеного тексту.";
+"App" = "Застосунок";
+"History palette" = "Палітра історії";
+"Open Settings" = "Відкрити налаштування";
+"The standard macOS shortcut. It cannot be changed." = "Стандартне скорочення macOS. Його не можна змінити.";
+
+/* Panels redesign WP-56 */
+"Dictation, text as you speak" = "Диктування, текст під час мовлення";
+"Dictation, after Stop" = "Диктування, після зупинки";
+"Meeting, live transcript" = "Зустріч, живий транскрипт";
+"Meeting speaker labels" = "Мітки мовців на зустрічі";
+"Needs" = "Потрібно";
+"In macOS" = "У macOS";
+"Itself: only into English" = "Сам: лише англійською";
+"Into any language" = "Будь-якою мовою";
+"After Stop only" = "Лише після зупинки";
+"Files run on this Mac" = "Файли обробляються на цьому Mac";
+"Set in macOS" = "Налаштовано в macOS";
+"Diduny account" = "Обліковий запис Diduny";
+"API key, ElevenLabs billing" = "Ключ API, оплата ElevenLabs";
+"About %@, Apple silicon" = "Близько %@, Apple silicon";
+"%@ to %@" = "Від %@ до %@";
+"Nothing" = "Нічого";
+"Live, any of %lld languages" = "Наживо, будь-якою з %lld мов";
+"Testing..." = "Перевірка...";
+"Works" = "Працює";
+"%@ credits" = "Кредитів: %@";
+"%@ of %@ credits" = "%@ з %@ кредитів";
+"Your languages are in crimson. " = "Ваші мови позначено малиновим. ";
+"Transcription and translation, any language into any other." = "Транскрипція та переклад з будь-якої мови на будь-яку.";
+"Transcription only. Accuracy groups are the ones ElevenLabs publishes." = "Лише транскрипція. Групи точності — ті, що публікує ElevenLabs.";
+"Accuracy differs a lot between languages. English-only models do English alone. Cantonese needs a Large v3 model." = "Точність дуже різниться між мовами. Англомовні моделі працюють лише з англійською. Для кантонської потрібна модель Large v3.";
+"European languages. Transcription only." = "Європейські мови. Лише транскрипція.";
+"Apple Speech uses the dictation languages installed in macOS System Settings, so the list depends on this Mac." = "Apple Speech використовує мови диктування, встановлені в системних параметрах macOS, тож список залежить від цього Mac.";
+"%@ languages" = "Мови %@";
+"ElevenLabs key" = "Ключ ElevenLabs";
+"Used this month" = "Використано цього місяця";
+"ElevenLabs dashboard" = "Панель ElevenLabs";
+"Remove the key" = "Видалити ключ";
+"Keep" = "Залишити";
+"Modes that use ElevenLabs go back to Diduny Cloud." = "Режими з ElevenLabs повернуться до Diduny Cloud.";
+"ElevenLabs transcribes with your key and bills you. Audio and the key are not sent to Diduny. Translation is done by Diduny on the text." = "ElevenLabs транскрибує з вашим ключем і виставляє рахунок вам. Аудіо та ключ не надсилаються до Diduny. Переклад тексту робить Diduny.";
+"Key" = "Ключ";
+"ElevenLabs API key" = "Ключ API ElevenLabs";
+"Connection" = "З’єднання";
+"Test" = "Перевірити";
+"What each engine does by itself, and what Diduny adds on top of it." = "Що кожен рушій робить сам і що додає Diduny.";
+"Manage local models" = "Керувати локальними моделями";
+"Cloud providers" = "Хмарні провайдери";
+"Local models, on this Mac" = "Локальні моделі, на цьому Mac";
+"In Diduny" = "У Diduny";
+"Opens the ElevenLabs key" = "Відкриває ключ ElevenLabs";
+"Opens the list" = "Відкриває список";
+"The engine does it" = "Рушій робить це сам";
+"By Diduny: the engine makes the text, Diduny translates it into any of 60 languages. Needs a Diduny account and uses its quota" = "Від Diduny: рушій створює текст, Diduny перекладає його будь-якою з 60 мов. Потрібен обліковий запис Diduny, витрачає його квоту";
+"Add ElevenLabs" = "Додати ElevenLabs";
+"Checking..." = "Перевірка...";
+"ElevenLabs transcribes with your key and bills you. Audio and the key are not sent to Diduny." = "ElevenLabs транскрибує з вашим ключем і виставляє рахунок вам. Аудіо та ключ не надсилаються до Diduny.";
+
+/* Panels redesign WP-57 */
+"Run on this Mac. Audio never leaves it." = "Працюють на цьому Mac. Аудіо нікуди не передається.";
+"Show models that can" = "Показати моделі, які можуть";
+"do anything" = "що завгодно";
+"show text live" = "показувати текст наживо";
+"translate into English without Diduny" = "перекладати англійською без Diduny";
+"in" = "мовою";
+"any language" = "будь-якою";
+"Model" = "Модель";
+"Size" = "Розмір";
+"Recommended" = "Рекомендовано";
+"Itself: English only" = "Сама: лише англійською";
+"Any language" = "Будь-якою мовою";
+"macOS" = "macOS";
+"Fastest" = "Найшвидша";
+"about %@" = "близько %@";
+"Use" = "Вибрати";
+"Active" = "Активна";
+"Delete %@" = "Видалити %@";
+"No local model does this. Diduny Cloud translates between 60 languages, live." = "Жодна локальна модель цього не вміє. Diduny Cloud перекладає між 60 мовами наживо.";
+"No local model labels speakers. Diduny labels them on this Mac after Stop; see Audio." = "Жодна локальна модель не розрізняє мовців. Diduny позначає їх на цьому Mac після зупинки; див. Аудіо.";
+"Whisper options" = "Параметри Whisper";
+"Used by Whisper only." = "Лише для Whisper.";
+"Initial prompt" = "Початкова підказка";
+"Edit" = "Змінити";
+"Names and terms Whisper should expect." = "Імена й терміни, які Whisper має очікувати.";
+"Unload the model after" = "Вивантажувати модель через";
+"30 seconds" = "30 секунд";
+"2 minutes" = "2 хвилини";
+"10 minutes" = "10 хвилин";
+"Keep loaded" = "Не вивантажувати";
+"Frees memory when you are not recording." = "Звільняє пам'ять, коли ви не записуєте.";
+"%1$@. Memory: %2$@" = "%1$@. Пам'ять: %2$@";
+"Sort" = "Сортування";
+
+/* Panels redesign fix queue */
+"Choose the engine, audio sources and recording levels in Modes." = "Рушій, джерела звуку й рівні запису налаштовуються в розділі «Режими».";
+
+/* Panels redesign WP-62 */
+"Open Modes" = "Відкрити Режими";
+"Calendar meetings follow Settings › Modes › Meeting." = "Зустрічі з календаря йдуть за Налаштування › Режими › Зустріч.";
+
+/* Panels redesign WP-60 */
+"The selected on-device engine isn't ready on this Mac. Download it in Local Models or pick another engine in Settings › Modes." = "Вибраний локальний рушій не готовий на цьому Mac. Завантаж його в «Локальних моделях» або обери інший рушій у Налаштуваннях › Режими.";
+"No on-device engine is ready for files. Download Parakeet V3 or a Whisper model in Settings › Local models." = "Жоден локальний рушій не готовий для файлів. Завантаж Parakeet V3 або модель Whisper у Налаштуваннях › Локальні моделі.";
+
+/* Panels redesign WP-81 */
+"Download Parakeet V3, the fastest local model" = "Завантаж Parakeet V3, найшвидшу локальну модель";
+"Runs on this Mac, so audio never leaves it. 25 European languages, including Ukrainian. Diduny uses it for files, links and meetings recorded without live text." = "Працює на цьому Mac, тож аудіо нікуди не передається. 25 європейських мов, зокрема українська. Diduny використовує її для файлів, посилань і зустрічей, записаних без живого тексту.";
+"You can open Diduny now. The download continues in the background." = "Можеш уже відкрити Diduny. Завантаження триває у фоні.";
+"Download failed. Try again, or download it later in Settings > Local models." = "Не вдалося завантажити. Спробуй ще раз або завантаж пізніше в Налаштуваннях > Локальні моделі.";
+"Parakeet V3 is ready" = "Parakeet V3 готова";
+"It runs on this Mac. Choose where Diduny uses it in Settings > Modes." = "Вона працює на цьому Mac. Обери, де Diduny її використовує, у Налаштуваннях > Режими.";
+"Parakeet V3 is in Settings > Local models whenever you want it." = "Parakeet V3 чекає в Налаштуваннях > Локальні моделі, коли знадобиться.";
+"Downloading Parakeet V3" = "Завантаження Parakeet V3";
+"Parakeet V3 download failed" = "Не вдалося завантажити Parakeet V3";
+
+/* Dev feedback 2026-11-09: outcome titles */
+"Dictated and pasted" = "Надиктовано і вставлено";
+"Translated and pasted" = "Перекладено і вставлено";
+"Meeting ended and pasted" = "Зустріч завершено і вставлено";
+
+/* Dev feedback 2026-11-09: preview past its limit */
+"Translation after Stop" = "Переклад після Stop";
+
+/* Panels redesign WP-63 */
+"Recording · connecting..." = "Запис · підключення...";
+"Pick Local or Cloud to see text from now on." = "Вибери Локально або Хмару, щоб бачити текст відтепер.";
+"%@ · switched to %@" = "%@ · перемкнено: %@";
+"%@ · now %@" = "%@ · тепер %@";
+"No text here until you switch back. All of it goes into the transcript after Stop." = "Тут не буде тексту, поки не перемкнеш назад. Усе це увійде в транскрипт після зупинки.";
+"No live text for %@. It goes into the transcript after Stop." = "Без тексту наживо: %@. Це увійде в транскрипт після зупинки.";
+"No internet. Still recording without live text." = "Немає інтернету. Запис триває без тексту наживо.";
+"No internet. Still on %@." = "Немає інтернету, режим лишається: %@.";
+"Whisper has no model yet. Still on %@." = "Whisper ще не має моделі, режим лишається: %@.";
+"Use Apple Speech" = "Перейти на Apple Speech";
+"Diduny quota used up. Still on %@." = "Квоту Diduny вичерпано, режим лишається: %@.";
+"Use ElevenLabs" = "Перейти на ElevenLabs";
+"Sign in to use Diduny Cloud. Still on %@." = "Увійди, щоб користуватися Diduny Cloud. Режим лишається: %@.";
+"Check your ElevenLabs key. Still on %@." = "Перевір ключ ElevenLabs. Режим лишається: %@.";
+"Couldn't switch. Still on %@." = "Не вдалося перемкнути. Режим лишається: %@.";
+"Diduny quota used up. Recording continues without live text." = "Квоту Diduny вичерпано. Запис триває без тексту наживо.";
+"No internet. Recording continues." = "Немає інтернету. Запис триває.";
+"Use Local" = "Перейти на Локально";
+"Text so far comes back with Diduny Cloud. What is said now is translated into %@ after Stop." = "Текст, що вже є, повернеться з Diduny Cloud. Те, що кажуть зараз, перекладемо на %@ після зупинки.";
+"The whole recording is saved. No engine on this Mac can make the transcript yet. Download a model in Local models." = "Весь запис збережено. На цьому Mac поки нема рушія для транскрипту. Завантаж модель у Локальних моделях.";
+"The engine changed during this meeting, so %@ makes one transcript from the whole recording, on this Mac. It replaces the live text." = "Під час зустрічі рушій змінювався, тому %@ робить один транскрипт з усього запису, на цьому Mac. Він замінить текст наживо.";
+"The engine changed during this meeting, so %@ makes one transcript from the whole recording, in the cloud. It replaces the live text." = "Під час зустрічі рушій змінювався, тому %@ робить один транскрипт з усього запису, у хмарі. Він замінить текст наживо.";
+"The live text was a preview from %@. %@ is making the transcript of the whole meeting, on this Mac. It replaces the live text." = "Текст наживо був чернеткою від %@. %@ робить транскрипт усієї зустрічі, на цьому Mac. Він замінить текст наживо.";
+"The live text was a preview from %@. %@ is making the transcript of the whole meeting, in the cloud. It replaces the live text." = "Текст наживо був чернеткою від %@. %@ робить транскрипт усієї зустрічі, у хмарі. Він замінить текст наживо.";
+"%@ is making the transcript of the whole meeting, on this Mac." = "%@ робить транскрипт усієї зустрічі, на цьому Mac.";
+"%@ is making the transcript of the whole meeting, in the cloud." = "%@ робить транскрипт усієї зустрічі, у хмарі.";
+
+/* Panels redesign WP-64 */
+"Connecting to %@..." = "Підключення до %@...";
+"The rest of the text comes after Stop." = "Решта тексту з'явиться після «Стоп».";
+"The rest is translated after Stop." = "Решту буде перекладено після «Стоп».";
+"[part not transcribed]" = "[частину не розпізнано]";
+
+/* WP-63: last mode decides the transcript */
+"You ended on %@, so %@ makes one transcript from the whole recording, on this Mac. It replaces the live text." = "Останній режим: %@, тому %@ робить один транскрипт з усього запису, на цьому Mac. Він замінить текст наживо.";
+"You ended on %@, so %@ makes one transcript from the whole recording, in the cloud. It replaces the live text." = "Останній режим: %@, тому %@ робить один транскрипт з усього запису, у хмарі. Він замінить текст наживо.";
+
+/* Recordings redesign B */
+"Notes" = "Нотатки";
+"Files and links" = "Файли й посилання";
+"Voice note %@" = "Нотатка %@";
+"Recording %@" = "Запис %@";
+"%lld voice notes" = "Голосових нотаток: %lld";
+"%lld more, all of them are in the inspector" = "Ще %lld, усі в інспекторі";
+"Part %lld" = "Частина %lld";
+"Attach to %@" = "Привʼязати до %@";
+"Calendar event: %@" = "Подія календаря: %@";
+"Needs recovery" = "Потрібне відновлення";
+"Transcript ready" = "Транскрипт готовий";
+"Not transcribed yet" = "Ще без транскрипту";
+"Attach" = "Привʼязати";
+"Detach" = "Відвʼязати";
+"Files and links added this day" = "Файли й посилання, додані цього дня";
+"Next week" = "Наступний тиждень";
+"Previous week" = "Попередній тиждень";
+"No recordings or events on this day." = "Цього дня немає ні записів, ні подій.";
+"Zoom in: smaller groups, down to single notes" = "Збільшити: менші групи, аж до окремих нотаток";
+"Zoom out: group notes by half hour" = "Зменшити: нотатки групуються за пів години";
+"not recorded" = "без запису";
+"Select several" = "Вибрати кілька";
+"Show" = "Показати";
+"Has translation" = "Є переклад";
+"Start a meeting with Option Command M, or add files and links with the plus button." = "Почни зустріч через Option Command M або додай файли й посилання кнопкою плюс.";
+"Add files and links" = "Додати файли й посилання";
+"Add files and links (⇧⌘B)" = "Додати файли й посилання (⇧⌘B)";
+"More filters" = "Більше фільтрів";
+"Delete…" = "Видалити…";
+"Delete this recording?" = "Видалити цей запис?";
+"Delete %lld recordings?" = "Видалити записи (%lld)?";
+"Delete %lld" = "Видалити %lld";
+"These are deleted with their audio, transcripts and translations. This cannot be undone." = "Видаляються разом з аудіо, транскриптами й перекладами. Це не можна скасувати.";
+"Attached to %@." = "Привʼязано до %@.";
+"Detached from %@." = "Відвʼязано від %@.";
+"Group" = "Згрупувати";
+"Create group" = "Створити групу";
+"Group: one item on the day. The recordings stay as they are, and you can ungroup at any time." = "Група: один елемент на дні. Записи лишаються як є, розгрупувати можна будь-коли.";
+"Grouped %lld recordings." = "Згруповано записів: %lld.";
+"Ungrouped. The recordings are kept." = "Розгруповано. Записи лишились.";
+"The group could not be saved." = "Не вдалося зберегти групу.";
+"The group could not be removed." = "Не вдалося прибрати групу.";
+"The recordings and their files were left unchanged." = "Записи та їхні файли не змінено.";
+"Calendar event. %@, %@" = "Подія календаря. %@, %@";
+"At the same time, not attached" = "У той самий час, не привʼязані";
+"Not recorded. No recording is attached to this event." = "Без запису. До цієї події не привʼязано жодного запису.";
+"To attach a recording, drag it onto the event, or use Attach in the recording." = "Щоб привʼязати запис, перетягни його на подію або натисни Привʼязати в записі.";
+"%lld recordings, %@ in total" = "Записів: %lld, разом %@";
+"Ungroup, keep recordings" = "Розгрупувати, записи лишаться";
+"Delete all %lld recordings…" = "Видалити всі записи (%lld)…";
+"Transcribe all again" = "Транскрибувати всі знову";
+"Transcribe %lld without transcript" = "Транскрибувати без транскрипту: %lld";
+"Copy all" = "Копіювати все";
+"Transcript" = "Транскрипт";
+"Not transcribed yet." = "Ще без транскрипту.";
+"The recordings stay as they are. Ungroup at any time; nothing is lost." = "Записи лишаються як є. Розгрупувати можна будь-коли, нічого не втрачається.";
+"More" = "Ще";
+"%@, %@ in total" = "%@, разом %@";
+"All %lld" = "Усі %lld";
+"Without transcript %lld" = "Без транскрипту %lld";
+"Notes are grouped by clock time. Zoom in on the day for smaller groups. A group of one shows the note itself." = "Нотатки групуються за часом годинника. Збільш день, щоб групи стали меншими. Група з однієї нотатки показує саму нотатку.";
+"Make a transcript" = "Зробити транскрипт";
+"In the cloud" = "У хмарі";
+"Imported files and YouTube audio are transcribed on this Mac." = "Імпортовані файли й аудіо YouTube транскрибуються на цьому Mac.";
+"Adds a new version. Earlier transcripts stay." = "Додає нову версію. Попередні транскрипти лишаються.";
+"Parakeet V3 needs Apple silicon. Choose Whisper, or transcribe in the cloud." = "Parakeet V3 потребує Apple silicon. Обери Whisper або транскрибуй у хмарі.";
+"Apple Speech is not available on this Mac. Choose another model, or transcribe in the cloud." = "Apple Speech недоступний на цьому Mac. Обери іншу модель або транскрибуй у хмарі.";
+"%@ needs a download, %@." = "%@ треба завантажити, %@.";
+"%@ of %@" = "%@ з %@";
+"Download %lld MB" = "Завантажити %lld МБ";
+"Or turn speaker labels off to use Parakeet." = "Або вимкни мітки спікерів, тоді Parakeet.";
+"Speaker labels" = "Мітки спікерів";
+"Speaker labels on this Mac are Me and Others only. Telling voices apart needs Apple silicon and macOS 15. For Speaker 1, Speaker 2, choose Diduny Cloud." = "Мітки на цьому Mac лише Я та Інші. Щоб розрізняти голоси, потрібні Apple silicon і macOS 15. Для Спікер 1, Спікер 2 обери Diduny Cloud.";
+"You can transcribe now with Me and Others only. The speaker model tells voices apart." = "Можна транскрибувати зараз, буде лише Я та Інші. Модель спікерів розрізняє голоси.";
+"Downloading the speaker model…" = "Завантажую модель спікерів…";
+"Needs Apple silicon" = "Потрібен Apple silicon";
+"Built into macOS" = "Вбудований у macOS";
+"Speaker labels." = "Мітки спікерів.";
+"No speaker labels." = "Без міток спікерів.";
+"Your Diduny plan. Speaker labels." = "Твій план Diduny. Мітки спікерів.";
+"Your own key, billed by ElevenLabs. Speaker labels, up to 32 people." = "Твій ключ, оплата в ElevenLabs. Мітки спікерів, до 32 людей.";
+"Transcribe on this Mac" = "Транскрибувати на цьому Mac";
+"Transcribe with %@" = "Транскрибувати через %@";
+"Audio stays on your Mac." = "Аудіо лишається на твоєму Mac.";
+"About %@ on an M1 Pro" = "Приблизно %@ на M1 Pro";
+", then a step to tell voices apart." = ", потім ще крок, щоб розрізнити голоси.";
+"Time not measured yet." = "Час ще не виміряний.";
+"Audio is uploaded to Diduny. Uses %lld min of your plan." = "Аудіо завантажується в Diduny. Витрачає %lld хв твого плану.";
+"Audio is uploaded to ElevenLabs with your key and billed there. Time not measured yet." = "Аудіо завантажується в ElevenLabs з твоїм ключем і оплачується там. Час ще не виміряний.";
+"Who said what: Speaker 1, Speaker 2. Diduny Cloud does this." = "Хто що сказав: Спікер 1, Спікер 2. Це робить Diduny Cloud.";
+"Who said what, up to 32 people. ElevenLabs does this." = "Хто що сказав, до 32 людей. Це робить ElevenLabs.";
+"%@ can not tell voices apart. Turning this on switches to Whisper Large v3 Turbo." = "%@ не розрізняє голоси. Якщо увімкнути, модель зміниться на Whisper Large v3 Turbo.";
+"Me and Others only." = "Лише Я та Інші.";
+"Who said what: Me, Speaker 2 (remote). Done on this Mac after the transcript." = "Хто що сказав: Я, Спікер 2 (віддалено). Робиться на цьому Mac після транскрипту.";
+"Model changed to Whisper Large v3 Turbo, which can tell voices apart." = "Модель змінено на Whisper Large v3 Turbo, вона розрізняє голоси.";
+"Speaker labels turned off: this model can not tell voices apart." = "Мітки спікерів вимкнено: ця модель не розрізняє голоси.";
+"Text goes to Diduny." = "Текст іде в Diduny.";
+"Transcript language" = "Мова транскрипту";
+"Hide previous versions" = "Сховати попередні версії";
+"Previous versions (%lld)" = "Попередні версії (%lld)";
+" (current)" = " (поточна)";
+" (done, redo)" = " (є, зробити знову)";
+"Transcribe again" = "Транскрибувати знову";
+"The transcript could not be translated. Very long transcripts can not be translated yet. The transcript was not changed." = "Не вдалося перекласти транскрипт. Дуже довгі транскрипти поки не перекладаються. Транскрипт не змінено.";
+"Translated from: %@. %@" = "Перекладено з: %@. %@";
+"Cloud transcript" = "Транскрипт у хмарі";
+"On this Mac, %@" = "На цьому Mac, %@";
+"You are reading an earlier version. Copy takes this version." = "Це попередня версія. Копіювання візьме саме її.";
+"Back to current" = "До поточної";
+"Event title:" = "Назва події:";
+"Suggested from the transcript:" = "Пропозиція з транскрипту:";
+". Recovered from an interrupted session" = ". Відновлено з перерваної сесії";
+"Event: %@, %@." = "Подія: %@, %@.";
+"At the same time: %@." = "У той самий час: %@.";
+"No calendar event." = "Немає події календаря.";
+"Find one" = "Знайти";
+"Edit description" = "Змінити опис";
+"Add description" = "Додати опис";
+"Save transcript as TXT…" = "Зберегти транскрипт як TXT…";
+"Detach from event" = "Відвʼязати від події";
+"Delete recording…" = "Видалити запис…";
+"Click to rename" = "Клікни, щоб перейменувати";
+"Discard this recording?" = "Відкинути цей запис?";
+"Discard…" = "Відкинути…";
+"The saved pieces of audio are deleted. This cannot be undone." = "Збережені шматки аудіо буде видалено. Це не можна скасувати.";
+"You can leave this screen." = "Можна вийти з цього екрана.";
+"This recording was interrupted" = "Цей запис перервано";
+"Could not recover the audio" = "Не вдалося відновити аудіо";
+"Diduny saved about %@ of audio in pieces. Put them back together first, then you can listen and transcribe." = "Diduny зберіг приблизно %@ аудіо шматками. Спочатку треба їх зібрати, тоді можна слухати й транскрибувати.";
+"The saved pieces stay on this Mac. Nothing was deleted. Try again, or contact support if it keeps failing." = "Збережені шматки лишаються на цьому Mac. Нічого не видалено. Спробуй ще раз або напиши в підтримку, якщо не допоможе.";
+"Recover the audio" = "Відновити аудіо";
+"Choose how to transcribe" = "Вибрати, як транскрибувати";
+"Recover audio" = "Відновити аудіо";
+"Recovering audio..." = "Відновлюю аудіо...";
+"Recover and transcribe now" = "Відновити й одразу транскрибувати";
+"Delete “%@”?" = "Видалити «%@»?";
+"The recordings were deleted, but the empty group could not be removed." = "Записи видалено, але порожню групу не вдалося прибрати.";
+"“%@” is already in a group. Ungroup it first." = "«%@» уже в групі. Спершу розгрупуй її.";
+
+/* Stop animation: meeting end */
+"Meeting stopped" = "Зустріч зупинено";
+"Current transcript, until the new one is ready" = "Поточний транскрипт, доки не буде нового";
+"%@ of audio. The transcript appears here when it is ready. You can leave this screen." = "Аудіо: %@. Транскрипт зʼявиться тут, щойно буде готовий. Можна вийти з цього екрана.";
+"Who was it with? Notes" = "З ким це було? Нотатки";
+"Release to detach from the event" = "Відпусти, щоб відвʼязати від події";
+"Go to today, at the current time (⌘T)" = "До сьогодні, на поточний час (⌘T)";
+"%lld dictation notes" = "Нотатки диктування: %lld";
+"%lld more at this time" = "Ще %lld у цей час";
+
+/* Speech hints from Your languages */
+"Sent to every engine as a hint, in this order. With none chosen the engine detects the language." = "Передаються кожному рушію як підказка, у цьому порядку. Якщо нічого не вибрано, рушій сам визначає мову.";
+"A hint for every engine: Your languages, in order" = "Підказка для кожного рушія: ваші мови, по порядку";

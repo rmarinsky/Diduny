@@ -1,0 +1,66 @@
+import SwiftUI
+
+/// Command panel tile (design-spec 4.6): `card` fill, 16 pt accent symbol spanning both lines,
+/// title (up to 2 lines) over a one-line caption. 47 high with a one-line title, 62 with two;
+/// it fills the height its grid row gives it, so both tiles in a row match the taller one.
+struct CommandTile: View {
+    let symbol: String
+    let title: LocalizedStringKey
+    let caption: LocalizedStringKey
+    /// Appended as " · name"; never truncated, the caption before it gives way instead.
+    var captionEngine: String?
+    let action: () -> Void
+
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: DS.Space.sm) {
+                // Scaled to fit 16 x 16 so wide symbols (`person.2`) keep the 16 pt column and
+                // the text column stays 89 pt in a 133 pt tile (spec 4.6).
+                Image(systemName: symbol)
+                    .resizable()
+                    .fontWeight(.medium)
+                    .scaledToFit()
+                    .frame(width: DS.Size.symbolTile, height: DS.Size.symbolTile)
+                    .foregroundStyle(DS.Palette.accent)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(DS.Font.contentStrong)
+                        .foregroundStyle(DS.Palette.text)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 0) {
+                        Text(caption)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        if let captionEngine {
+                            Text(verbatim: " · \(captionEngine)")
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                    }
+                    .font(DS.Font.caption)
+                    .foregroundStyle(DS.Palette.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.vertical, 9)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .background(
+                isHovered && isEnabled ? DS.Palette.tint : DS.Palette.card,
+                in: RoundedRectangle(cornerRadius: DS.Radius.tile, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: DS.Radius.tile, style: .continuous))
+            .animation(DS.Motion.easeOut(DS.Motion.m12TileHover.duration), value: isHovered)
+        }
+        .buttonStyle(PressScaleButtonStyle(scale: DS.Motion.pressScale))
+        .opacity(isEnabled ? 1 : 0.5)
+        .onHover { isHovered = $0 }
+        .accessibilityLabel(Text(title) + Text(verbatim: ", ") + Text(caption)
+            + Text(verbatim: captionEngine.map { " · \($0)" } ?? ""))
+    }
+}

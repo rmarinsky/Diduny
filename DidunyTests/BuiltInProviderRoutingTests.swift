@@ -5,50 +5,66 @@ final class BuiltInProviderRoutingTests: XCTestCase {
     private let signedIn = RoutingContext(providersWithKey: [], didunyTranslationAvailable: true)
     private let signedOut = RoutingContext(providersWithKey: [], didunyTranslationAvailable: false)
 
-    private func engine(
+    @MainActor
+    private func route(
         _ job: STTJob,
-        _ selection: JobProviderSelection,
-        legacy: TranscriptionProvider,
-        context: RoutingContext? = nil
-    ) -> TranscriptionProvider {
-        ProviderEngineRouting.engine(
-            for: job,
-            selection: selection,
-            legacy: legacy,
-            context: context ?? signedIn
-        )
+        _ defaults: UserDefaults,
+        segment: MeetingSegment? = nil,
+        readiness: FakeEngineReadinessSource? = nil,
+        signedIn: Bool = true
+    ) -> RunTimeRoute {
+        RunTimeRouting.route(job: job, segment: segment, defaults: ModeDefaults(defaults: defaults), readiness: readiness ?? FakeEngineReadinessSource(),
+                             whisper: .init(downloaded: [], selected: nil), signedIn: signedIn)
     }
 
-    // MARK: Default routing equals current behaviour
+    private func freshDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "BuiltInProviderRoutingTests.\(UUID().uuidString)")!
+    }
 
-    func testDefaultSelectionKeepsLegacyProviderForEveryJob() {
-        for job in STTJob.allCases {
-            for legacy in [TranscriptionProvider.cloud, .local] {
-                XCTAssertEqual(engine(job, .didunyCloud, legacy: legacy), legacy, "\(job) \(legacy)")
-                XCTAssertEqual(engine(job, .didunyCloud, legacy: legacy, context: signedOut), legacy)
-            }
+    // MARK: Routing reads ModeDefaults (WP-17, T5-MIG-34)
+
+    @MainActor
+    func testFreshInstallRoutesTheNewInstallDefaults() {
+        let defaults = freshDefaults()
+        for job in [STTJob.dictation, .dictationTranslation, .meetingTranslation, .meeting] {
+            XCTAssertEqual(route(job, defaults).engine, .didunyCloud, "\(job)")
+            XCTAssertEqual(route(job, defaults).baseProvider, .cloud, "\(job)")
+            // Today's rule: Diduny Cloud signed out runs Local.
+            XCTAssertEqual(route(job, defaults, signedIn: false).baseProvider, .local, "\(job)")
+        }
+        XCTAssertEqual(route(.file, defaults).engine, .parakeet)
+        XCTAssertEqual(route(.meeting, defaults, segment: .thisMac).engine, .whisper)
+    }
+
+    @MainActor
+    func testRetiredLegacyKeysNoLongerRoute() {
+        let defaults = freshDefaults()
+        ModeDefaults(defaults: defaults).apply([.engine(.dictation, JobProviderSelection(providerID: "diduny-cloud"))])
+        for value in [TranscriptionProvider.local, .cloud] {
+            defaults.set(value.rawValue, forKey: "transcriptionProvider")
+            defaults.set(value.rawValue, forKey: "translationProvider")
+            defaults.set(value == .cloud, forKey: "meetingRealtimeTranscriptionEnabled")
+            XCTAssertEqual(route(.dictation, defaults).baseProvider, .cloud)
+            XCTAssertEqual(route(.dictationTranslation, defaults).baseProvider, .cloud)
+            XCTAssertEqual(route(.meeting, defaults).engine, .didunyCloud)
         }
     }
 
-    func testFreshDefaultsStoreRoutesExactlyLikeLegacy() {
-        let defaults = UserDefaults(suiteName: "BuiltInProviderRoutingTests.\(UUID().uuidString)")!
-        let store = ProviderDefaultsStore(defaults: defaults)
-        for job in STTJob.allCases {
-            XCTAssertEqual(engine(job, store.selection(for: job), legacy: .cloud), .cloud)
-            XCTAssertEqual(engine(job, store.selection(for: job), legacy: .local), .local)
-        }
+    @MainActor
+    func testUnknownProviderSelectionReadsTheModeDefault() {
+        let defaults = freshDefaults()
+        ProviderDefaultsStore(defaults: defaults).setSelection(JobProviderSelection(providerID: "foo"), for: .dictation)
+        XCTAssertEqual(route(.dictation, defaults).engine, .didunyCloud)
     }
 
-    func testUnknownProviderSelectionKeepsLegacy() {
-        let selection = JobProviderSelection(providerID: "elevenlabs", modelID: "scribe_v2")
-        XCTAssertEqual(engine(.dictation, selection, legacy: .cloud), .cloud)
-    }
-
+    @MainActor
     func testExplicitLocalWhisperSelectionRoutesLocal() {
-        let selection = JobProviderSelection(providerID: STTProviderID.localWhisper, modelID: nil)
-        XCTAssertEqual(engine(.dictation, selection, legacy: .cloud), .local)
-        XCTAssertEqual(engine(.meeting, selection, legacy: .cloud), .local)
-        XCTAssertEqual(engine(.file, selection, legacy: .cloud), .local)
+        let defaults = freshDefaults()
+        let whisper = JobProviderSelection(providerID: STTProviderID.localWhisper, modelID: nil)
+        ModeDefaults(defaults: defaults).apply([.engine(.dictation, whisper), .segmentEngine(.cloud, whisper)])
+        XCTAssertEqual(route(.dictation, defaults).baseProvider, .local)
+        XCTAssertEqual(route(.dictation, defaults, signedIn: false).baseProvider, .local)
+        XCTAssertEqual(route(.meeting, defaults).baseProvider, .local)
     }
 
     // MARK: Registry + capabilities
@@ -59,6 +75,22 @@ final class BuiltInProviderRoutingTests: XCTestCase {
         XCTAssertNotNil(registry.module(id: STTProviderID.localWhisper))
         XCTAssertFalse(registry.module(id: STTProviderID.didunyCloud)!.requiresKey)
         XCTAssertFalse(registry.module(id: STTProviderID.localWhisper)!.requiresKey)
+        // ADR-0012 D1: five modules, one per engine; Parakeet V3 and Apple Speech need no key.
+        XCTAssertEqual(registry.modules.count, 5)
+        XCTAssertEqual(Set(registry.modules.map(\.id)), Set(EngineID.allCases.map(\.rawValue)))
+        XCTAssertFalse(try XCTUnwrap(registry.module(id: STTProviderID.parakeet)).requiresKey)
+        XCTAssertFalse(try XCTUnwrap(registry.module(id: STTProviderID.appleSpeech)).requiresKey)
+        XCTAssertEqual(registry.providerIDs, Set(EngineID.allCases.map(\.rawValue)))
+    }
+
+    /// Parakeet V3 and Apple Speech run on this Mac through `OnDeviceEngines`, never through the Cloud flow.
+    @MainActor
+    func testOnDeviceSelectionsRouteToOnDeviceEngines() {
+        for engine in [EngineID.parakeet, .appleSpeech] {
+            let defaults = freshDefaults()
+            ModeDefaults(defaults: defaults).apply([.engine(.dictation, JobProviderSelection(providerID: engine.rawValue))])
+            XCTAssertEqual(route(.dictation, defaults).onDeviceEngineID, engine.rawValue)
+        }
     }
 
     func testCloudPlansMatchCurrentFlows() throws {

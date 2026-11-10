@@ -63,17 +63,51 @@ struct FileTranscriptionSettingsSnapshot {
     let localModelName: String
     /// Parakeet / Apple picked for files; transcribes on this Mac instead of Whisper.
     var onDeviceEngineID: String? = nil
+    /// Nothing on this Mac can run the Files engine; the batch refuses with this message (plan default 16).
+    var unavailableMessage: String? = nil
+
+    static let nothingReadyMessage = String(localized: "No on-device engine is ready for files. Download Parakeet V3 or a Whisper model in Settings › Local models.")
 
     @MainActor
     static func current() -> Self {
         let settings = SettingsStorage.shared
-        let fileEngine = settings.providerDefaults.selection(for: .file).providerID
-        return Self(
-            provider: .local,
+        let whisper = WhisperModelManager.shared
+        return resolve(
+            defaults: settings.modeDefaults,
+            readiness: LiveEngineReadinessSource(),
+            whisper: .init(downloaded: whisper.downloadedModels, selected: whisper.selectedModel()?.name),
             languageHints: settings.speechLanguageHints,
-            localModelName: settings.selectedWhisperModel,
-            onDeviceEngineID: STTProviderID.onDeviceEngines.contains(fileEngine) ? fileEngine : nil
+            selectedWhisperModel: settings.selectedWhisperModel
         )
+    }
+
+    /// Files and URLs run on this Mac only (decision 3): the Files engine (default Parakeet V3) with its
+    /// fallback; a stored cloud engine runs Whisper. Audio never leaves the Mac.
+    @MainActor
+    static func resolve(
+        defaults: ModeDefaults,
+        readiness: any EngineReadinessSource,
+        whisper: EffectiveEngineResolver.WhisperState,
+        languageHints: [String],
+        selectedWhisperModel: String
+    ) -> Self {
+        let stored = defaults.selection(for: .file)
+        let onThisMac: Set<EngineID> = [.whisper, .parakeet, .appleSpeech]
+        let override = EngineID(rawValue: stored.providerID).map(onThisMac.contains) == true
+            ? nil : JobProviderSelection(providerID: EngineID.whisper.rawValue, modelID: nil)
+        var snapshot = Self(provider: .local, languageHints: languageHints, localModelName: selectedWhisperModel)
+        switch EffectiveEngineResolver.resolve(job: .file, override: override, defaults: defaults,
+                                               readiness: readiness, whisper: whisper) {
+        case let .engine(engine, model), let .fallback(engine, model, _):
+            if STTProviderID.onDeviceEngines.contains(engine.rawValue) {
+                snapshot.onDeviceEngineID = engine.rawValue
+            } else if let model {
+                snapshot = Self(provider: .local, languageHints: languageHints, localModelName: model)
+            }
+        case .none:
+            snapshot.unavailableMessage = nothingReadyMessage
+        }
+        return snapshot
     }
 }
 
@@ -168,11 +202,6 @@ struct BatchTranscriptionItem: Codable, Identifiable, Equatable {
     var displayName: String {
         remoteMetadata?.source.title
             ?? (remoteSource == nil ? sourceURL.lastPathComponent : sourceURL.absoluteString)
-    }
-
-    func elapsedTime(at date: Date) -> TimeInterval? {
-        guard let startedAt else { return nil }
-        return max(0, (finishedAt ?? date).timeIntervalSince(startedAt))
     }
 }
 
@@ -330,7 +359,7 @@ final class FileTranscriptionBatchService {
         settingsSnapshot: { .current() },
         playCompletionSound: {
             guard SettingsStorage.shared.playSoundOnCompletion else { return }
-            NSSound(named: .init("Funk"))?.play()
+            CompletionSound.play()
         }
     )
 
@@ -355,21 +384,9 @@ final class FileTranscriptionBatchService {
         items.count(where: { $0.status == .failed })
     }
 
-    var partialResultCount: Int {
-        items.count(where: { $0.status == .partialResult })
-    }
-
-    var isAuthorizationPaused: Bool {
-        items.contains(where: { $0.status == .authorizationPaused })
-    }
-
     var progress: Double {
         guard !items.isEmpty else { return 0 }
         return Double(finishedCount) / Double(items.count)
-    }
-
-    var activeCount: Int {
-        activeItemIDs.count
     }
 
     var activeBatchID: UUID? {
@@ -814,16 +831,6 @@ final class FileTranscriptionBatchService {
         }
         processingTask?.cancel()
         wakeScheduler()
-    }
-
-    func clearFinished() {
-        guard !isProcessing else { return }
-        items.removeAll(where: { $0.status.isTerminal })
-        batchError = nil
-        if items.isEmpty {
-            activeSettingsSnapshot = nil
-            hasPlayedCompletionSound = false
-        }
     }
 
     private func processQueuedItems(settings: FileTranscriptionSettingsSnapshot) async {
@@ -1539,6 +1546,7 @@ final class FileTranscriptionBatchService {
 
 private final class LiveFileTranscriptionBatchTranscriber: FileTranscriptionBatchTranscribing {
     func preflightError(for settings: FileTranscriptionSettingsSnapshot) -> String? {
+        if let message = settings.unavailableMessage { return message }
         if settings.onDeviceEngineID != nil {
             return OnDeviceEngines.engine(id: settings.onDeviceEngineID) == nil ? OnDeviceEngines.notReadyMessage : nil
         }
@@ -1568,7 +1576,7 @@ private final class LiveFileTranscriptionBatchTranscriber: FileTranscriptionBatc
     ) async throws -> GeneratedTranscript {
         if let engine = OnDeviceEngines.engine(id: settings.onDeviceEngineID) {
             onUpdate(JobProgressUpdate(status: .processing))
-            let language = settings.languageHints.first ?? BenchmarkRunner.defaultLanguage
+            let language = OnDeviceLanguage.engineArgument(hints: settings.languageHints)
             return GeneratedTranscript(text: try await engine.transcribe(audioFileURL, language: language).text)
         }
         switch settings.provider {

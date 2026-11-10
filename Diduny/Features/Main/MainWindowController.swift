@@ -11,7 +11,8 @@ final class MainWindowController {
     var requestedSection: MainSection?
     var requestedRecordingID: UUID?
     var requestedBatchComposer = false
-    var showsMeetingAudioSettings = false
+    /// Modes opens with this expander open (Calendar & meetings link, WP-51).
+    var requestedModesExpander: STTJob?
 
     private var window: NSWindow?
     private var windowDelegate: MainWindowDelegate?
@@ -68,27 +69,17 @@ final class MainWindowController {
         appDelegate?.toggleRecording()
     }
 
-    func toggleMeetingRecording() {
-        appDelegate?.toggleMeetingRecording()
-    }
-
     static let defaultContentSize = NSSize(width: 1000, height: 680)
-    static let recordingInspectorWidth: CGFloat = 480
+    static let frameAutosaveName = "DidunyMainWindow"
 
-    /// The window has one fixed size; it widens only while a recording is open in the inspector.
-    func setRecordingInspectorExpanded(_ expanded: Bool) {
-        guard let window else { return }
-        var size = Self.defaultContentSize
-        if expanded { size.width += Self.recordingInspectorWidth }
-        let target = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
-        guard window.frame.size != target.size else { return }
-        var frame = window.frame
-        frame.origin.y += frame.height - target.height
-        frame.size = target.size
-        if let visible = window.screen?.visibleFrame, frame.maxX > visible.maxX {
-            frame.origin.x = max(visible.minX, visible.maxX - frame.width)
-        }
-        window.setFrame(frame, display: true, animate: true)
+    /// Fits a frame inside the visible screen: no larger than it, moved left/down to stay on it.
+    static func clamp(_ frame: NSRect, to visible: NSRect) -> NSRect {
+        var frame = frame
+        frame.size.width = min(frame.width, visible.width)
+        frame.size.height = min(frame.height, visible.height)
+        frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+        frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+        return frame
     }
 
     func checkForUpdates() {
@@ -153,13 +144,13 @@ final class MainWindowController {
             .environment(appDelegate.audioDeviceManager)
 
         let hostingView = NSHostingView(rootView: view)
-        // Window size is owned by MainWindowController (fixed, widened for the recording inspector);
-        // without this the hosting view snaps the window back to its intrinsic width.
+        // The user owns the size; SwiftUI only sets the minimum. Without this the hosting view snaps
+        // the window back to its intrinsic width.
         hostingView.sizingOptions = [.minSize]
 
         let w = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultContentSize),
-            styleMask: [.titled, .closable, .miniaturizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -168,7 +159,14 @@ final class MainWindowController {
         configureUnifiedChrome(for: w)
         w.isReleasedWhenClosed = false
         w.collectionBehavior.insert(.moveToActiveSpace)
+        w.collectionBehavior.insert(.fullScreenPrimary)
+        w.contentMinSize = Self.defaultContentSize
         w.center()
+        // Restores the size the user last set (first open keeps the 1000 x 680 default), then fits it on screen.
+        w.setFrameAutosaveName(Self.frameAutosaveName)
+        if let visible = (w.screen ?? NSScreen.main)?.visibleFrame {
+            w.setFrame(Self.clamp(w.frame, to: visible), display: false)
+        }
 
         windowDelegate = MainWindowDelegate { [weak self] in
             self?.window = nil

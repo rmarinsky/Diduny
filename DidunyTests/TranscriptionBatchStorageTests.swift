@@ -23,6 +23,36 @@ final class TranscriptionBatchStorageTests: XCTestCase {
         )
     }
 
+    func test_recordingGroupUngroupRemovesOnlyTheGroupAndUndoRestoresIt() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TranscriptionBatchStorageTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let a = UUID(), b = UUID()
+        let store = try TranscriptionBatchStorage(baseDirectory: directory)
+        let batch = try store.create(name: "Files", recordingIDs: [a])
+        let group = try store.createRecordingGroup(name: "Campaign", recordingIDs: [a, b, a])
+        XCTAssertEqual(group.recordingIDs, [a, b])
+        XCTAssertEqual(group.isRecordingGroup, true)
+        XCTAssertThrowsError(try store.ungroup(batchID: batch.id), "Ungroup never touches a batch")
+
+        try store.ungroup(batchID: group.id)
+        let reloaded = try TranscriptionBatchStorage(baseDirectory: directory)
+        XCTAssertEqual(reloaded.batches.map(\.id), [batch.id])
+        XCTAssertEqual(reloaded.batches.first?.recordingIDs, [a], "Other batches keep their recordings")
+
+        try reloaded.restoreGroup(group)
+        XCTAssertEqual(reloaded.batches.first?.id, group.id)
+        XCTAssertEqual(reloaded.batches.first?.recordingIDs, [a, b])
+    }
+
+    func test_batchesSavedBeforeGroupsDecodeAsNotGroups() throws {
+        let json = #"[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Old","description":"","createdAt":"2026-01-01T00:00:00Z","isProcessingClosed":false,"recordingIDs":[]}]"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let batches = try decoder.decode([TranscriptionBatch].self, from: Data(json.utf8))
+        XCTAssertNil(batches.first?.isRecordingGroup)
+    }
+
     func test_storeRoundTripPreservesOrderedMembershipAndEditableMetadata() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("TranscriptionBatchStorageTests-\(UUID())")

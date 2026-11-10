@@ -8,7 +8,7 @@ final class LocalWhisperStreamingServiceTests: XCTestCase {
         let delegate = AppDelegate()
         EdgeCommandPanelController.shared.configure(appDelegate: delegate)
 
-        let store = await delegate.setupMeetingLiveTranscription(cloudModeEnabled: false)
+        let store = await delegate.setupMeetingLiveTranscription(cloudModeEnabled: false, localPreview: true)
 
         XCTAssertTrue(store.isActive)
         XCTAssertEqual(store.connectionStatus, .connected)
@@ -17,7 +17,7 @@ final class LocalWhisperStreamingServiceTests: XCTestCase {
 
         DictationOverlayController.shared.startRecording(mode: .meeting)
         let flowPanel = NSApp.windows.first {
-            $0.identifier?.rawValue == "ua.com.rmarinsky.diduny.edge-command-panel"
+            $0.identifier?.rawValue == "commandPanel"
         }
         XCTAssertEqual(flowPanel?.isVisible, true)
         XCTAssertEqual(flowPanel?.level, .floating)
@@ -28,7 +28,8 @@ final class LocalWhisperStreamingServiceTests: XCTestCase {
         await delegate.stopMeetingLiveTranscription()
 
         XCTAssertNil(delegate.localMeetingStreamingService)
-        XCTAssertNil(delegate.meetingRecorderService.onRealtimeAudioData)
+        // The fan-out stays until capture stops (ADR-0013 D1); it has no consumer now.
+        XCTAssertNotNil(delegate.meetingRecorderService.onRealtimeAudioData)
     }
 
     func testWhisperSegmentTimestampsConvertToMilliseconds() {

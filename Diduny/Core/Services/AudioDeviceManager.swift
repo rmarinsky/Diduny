@@ -4,7 +4,7 @@ import Foundation
 import Observation
 
 @Observable
-final class AudioDeviceManager: AudioDeviceManagerProtocol {
+final class AudioDeviceManager {
     private(set) var availableDevices: [AudioDevice] = [] {
         didSet {
             onDevicesChanged?(availableDevices)
@@ -30,6 +30,13 @@ final class AudioDeviceManager: AudioDeviceManagerProtocol {
     // MARK: - Public Methods
 
     func refreshDevices() {
+        #if TEST_BUILD
+            if let fake = UITestHarness.fakeInputDevices() {
+                availableDevices = fake
+                defaultDevice = fake.first
+                return
+            }
+        #endif
         availableDevices = getInputDevices()
         defaultDevice = availableDevices.first { $0.isDefault }
     }

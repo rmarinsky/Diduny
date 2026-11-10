@@ -110,7 +110,7 @@ enum OnboardingScreen: Int, CaseIterable {
     }
 }
 
-private enum OnboardingTheme {
+enum OnboardingTheme {
     static let accent = Color(red: 1, green: 0.36, blue: 0.49)
     static let card = Color(nsColor: .controlBackgroundColor)
     static let background = Color(nsColor: .windowBackgroundColor)
@@ -121,7 +121,7 @@ private struct OnboardingFlowView: View {
     let appDelegate: AppDelegate
     let onDismiss: () -> Void
 
-    @State private var screen: OnboardingScreen = .welcome
+    @State private var screen: OnboardingScreen = Self.initialScreen
     @State private var onboarding = OnboardingManager.shared
     @State private var auth = AuthService.shared
     @State private var billing = BillingService()
@@ -131,6 +131,14 @@ private struct OnboardingFlowView: View {
     @State private var screenRecordingGranted = false
     @State private var permissionInFlight: PermissionType?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// `--ui-testing-open=onboarding.ready` (Test build) opens the Ready screen.
+    private static var initialScreen: OnboardingScreen {
+        #if TEST_BUILD
+            if UITestHarness.openTarget == "onboarding.ready" { return .ready }
+        #endif
+        return .welcome
+    }
 
     private var allPermissionsGranted: Bool {
         microphoneGranted && accessibilityGranted && screenRecordingGranted
@@ -346,6 +354,7 @@ private struct OnboardingFlowView: View {
             )
             OnboardingShortcutBadge(keys: "⇧  ⇧", title: "Double Shift", subtitle: "Start dictation")
             OnboardingShortcutBadge(keys: "⌥  ⌥", title: "Double Option", subtitle: "Translate automatically")
+            OnboardingParakeetOffer()
         }
         .accessibilityElement(children: .contain)
     }
@@ -670,12 +679,10 @@ private struct OnboardingProductionPanelPreview: View {
     @MainActor
     init(onAction: @escaping () -> Void) {
         self.onAction = onAction
-        let pair = SettingsStorage.shared.resolveTranslationLanguagePair()
         _model = State(initialValue: EdgeCommandPanelModel(
-            pairs: [pair],
-            selectedPair: pair,
-            provider: .local,
-            isSignedIn: false
+            pair: SettingsStorage.shared.resolveTranslationLanguagePair(),
+            // Signed in, so the preview's tiles stay clickable as before (signed out disables them).
+            isSignedIn: true
         ))
     }
 
@@ -684,7 +691,12 @@ private struct OnboardingProductionPanelPreview: View {
             model: model,
             liveStore: DictationOverlayController.shared.store,
             onAction: { _ in onAction() },
-            onProvider: { _ in onAction() },
+            capabilities: EdgeCommandPanelController.engineCapabilities,
+            readiness: EdgeCommandPanelController.engineReadiness,
+            onEngineRow: { _ in onAction() },
+            onTarget: { _ in },
+            onRecordings: onAction,
+            onSettings: onAction,
             onSignIn: onAction,
             onCopy: {},
             onStop: {},

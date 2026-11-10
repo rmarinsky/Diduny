@@ -127,11 +127,12 @@ final class InplaceTranslationService {
             }
             ClipboardService.shared.copy(text: translated)
             lastFlowChangeCount = NSPasteboard.general.changeCount
-            // Success pop lands with the paste.
-            async let pop: Void = feedback.finishBadge(success: true)
             try await ClipboardService.shared.paste(expectedProcessIdentifier: targetPID)
-            await pop
-            Task { await feedback.dismissBadge() }
+            // The badge plays on its own; the clipboard restore below must not wait for it.
+            Task {
+                await feedback.finishBadge(success: true)
+                await feedback.dismissBadge()
+            }
 
             // Give the target app time to read the pasteboard before restoring it.
             try? await Task.sleep(for: Self.clipboardRestoreDelay)

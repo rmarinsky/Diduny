@@ -3,6 +3,11 @@ import SwiftUI
 
 private final class CalendarReminderWindow: NSPanel {
     override var canBecomeKey: Bool { true }
+
+    override func sendEvent(_ event: NSEvent) {
+        KeyboardFocusRing.shared.note(event)
+        super.sendEvent(event)
+    }
 }
 
 @MainActor final class CalendarReminderController {
@@ -84,7 +89,8 @@ private final class CalendarReminderWindow: NSPanel {
             dismiss: { [weak self] in early ? self?.dismiss() : self?.dismissByUser(connection: connection) },
             close: { [weak self] in self?.dismiss() },
             snooze: { [weak self] minutes in self?.snooze(minutes: minutes, connection: connection) },
-            join: { [weak self] meeting, record, local in self?.join(meeting, record: record, local: local, connection: connection) }))
+            join: { [weak self] meeting, record, local in self?.join(meeting, record: record, local: local, connection: connection) }
+        ).focusRingOnlyAfterTab())
         panel.contentView = content
         if early { panel.setContentSize(NSSize(width: frame.width, height: content.fittingSize.height)) }
         if fullScreen {
@@ -102,6 +108,7 @@ private final class CalendarReminderWindow: NSPanel {
             panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.midX - size.width / 2, y: screen.visibleFrame.midY - size.height / 2))
         }
         window = panel
+        KeyboardFocusRing.shared.hide()
         // The heads-up must not take the keys of whatever the person is typing in.
         if !early { panel.makeKeyAndOrderFront(nil) }
         panel.orderFrontRegardless()
@@ -119,6 +126,7 @@ private final class CalendarReminderWindow: NSPanel {
     /// A small floating prompt: the meeting being recorded has ended. One at a time; a newer one replaces it.
     func showMeetingEnded(title: String, message: String, stop: @escaping () -> Void) {
         closeMeetingEnded()
+        KeyboardFocusRing.shared.hide()
         let panel = CalendarReminderWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 160),
                                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
@@ -131,7 +139,8 @@ private final class CalendarReminderWindow: NSPanel {
         let content = NSHostingView(rootView: MeetingEndedView(
             title: title, message: message,
             stop: { [weak self] in self?.closeMeetingEnded(); stop() },
-            keep: { [weak self] in self?.closeMeetingEnded() }))
+            keep: { [weak self] in self?.closeMeetingEnded() }
+        ).focusRingOnlyAfterTab())
         panel.contentView = content
         panel.setContentSize(content.fittingSize)
         if let screen = Self.activeScreen() {
@@ -165,7 +174,10 @@ struct CalendarReminderView: View {
     /// Chosen on the reminder for this meeting only.
     @State var localOverride: Bool? = nil
 
-    private var local: Bool { localOverride ?? connection.configuration.localRecording }
+    /// Shows what runs: the pick, else Settings › Modes › Meeting "Starts in" (8A).
+    private var local: Bool {
+        localOverride ?? AppDelegate.current.map { RunTimeRouting.calendarShowsThisMac($0.meetingStartRoute()) } ?? false
+    }
 
     /// The latest version of each shown meeting; the shown copy when the calendar can't be read right now.
     private var current: [CalendarMeeting] {

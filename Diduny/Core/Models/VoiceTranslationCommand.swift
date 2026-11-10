@@ -3,6 +3,8 @@ import Foundation
 enum VoiceTranslationCommandPosition: String, CaseIterable, Identifiable {
     case startAndEnd
     case endOnly
+    /// The start and end, plus a command phrase between other words (05 §2.3).
+    case anywhere
 
     var id: String {
         rawValue
@@ -10,8 +12,9 @@ enum VoiceTranslationCommandPosition: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .startAndEnd: String(localized: "Start and end")
-        case .endOnly: String(localized: "End only")
+        case .startAndEnd: String(localized: "At the start and end")
+        case .endOnly: String(localized: "At the end")
+        case .anywhere: String(localized: "Anywhere")
         }
     }
 }
@@ -33,12 +36,14 @@ enum VoiceTranslationCommandTargets: String, CaseIterable, Identifiable {
 }
 
 /// A spoken "translate into X" said as the first or last words of a dictation.
-/// Only the head and the tail of the text are checked; nothing in the middle
-/// is ever a command.
+/// Only the head and the tail of the text are checked, except with `.anywhere`:
+/// then a phrase that starts with a verb ("translate into Polish") is also a
+/// command between other words, unless it follows "to" ("need to translate...").
 struct VoiceTranslationCommand: Equatable {
     enum Position: Equatable {
         case leading
         case trailing
+        case middle
     }
 
     let targetLanguage: String
@@ -61,7 +66,7 @@ struct VoiceTranslationCommand: Equatable {
         guard !words.isEmpty, !languages.isEmpty else { return nil }
 
         let trailing = longestMatch(words: words, languages: languages, trailing: true)
-        let leading = position == .startAndEnd
+        let leading = position != .endOnly
             ? longestMatch(words: words, languages: languages, trailing: false)
             : nil
 
@@ -88,6 +93,16 @@ struct VoiceTranslationCommand: Equatable {
                 remainingText: String(dropLeadingCut(text[leading.range.upperBound...]))
                     .trimmingCharacters(in: .whitespacesAndNewlines),
                 position: .leading
+            )
+        }
+        if position == .anywhere, let middle = middleMatch(words: words, languages: languages) {
+            let before = text[..<middle.range.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+            let after = String(dropLeadingCut(text[middle.range.upperBound...]))
+            return VoiceTranslationCommand(
+                targetLanguage: middle.language,
+                commandText: String(text[middle.range]),
+                remainingText: [before, after].filter { !$0.isEmpty }.joined(separator: " "),
+                position: .middle
             )
         }
         return nil
@@ -126,6 +141,23 @@ struct VoiceTranslationCommand: Equatable {
                   let first = window.first, let last = window.last
             else { continue }
             return Match(language: language, range: first.range.lowerBound ..< last.range.upperBound)
+        }
+        return nil
+    }
+
+    /// The longest command strictly between the first and the last word that starts with a verb.
+    private static func middleMatch(words: [Word], languages: Set<String>) -> Match? {
+        guard words.count > 2 else { return nil }
+        for start in 1 ..< words.count - 1 where middleVerbs.contains(words[start].key) {
+            guard words[start - 1].key != "to" else { continue }
+            let longest = min(maxCommandWords, words.count - 1 - start)
+            for length in stride(from: longest, through: 2, by: -1) {
+                let window = Array(words[start ..< start + length])
+                guard let language = language(ofCommand: window.map(\.key)), languages.contains(language),
+                      let last = window.last
+                else { continue }
+                return Match(language: language, range: words[start].range.lowerBound ..< last.range.upperBound)
+            }
         }
         return nil
     }
@@ -175,6 +207,10 @@ struct VoiceTranslationCommand: Equatable {
     ])
     private static let englishFillers = englishVerbs.union(normalizedSet([
         "it", "this", "that", "all", "everything", "back", "please", "now", "text"
+    ]))
+    private static let middleVerbs = englishVerbs.union(normalizedSet([
+        "переклади", "перекладіть", "перекласти", "переведи", "перевести",
+        "поверни", "поверніть", "повернути", "зроби", "зробіть", "напиши", "напишіть"
     ]))
     private static let ukrainianFillers = normalizedSet([
         "переклади", "перекладіть", "перекласти", "переклад", "переведи", "перевести",

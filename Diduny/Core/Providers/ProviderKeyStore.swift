@@ -7,7 +7,12 @@ enum ProviderKeyStoreError: Error, Equatable {
 
 /// BYOK API keys, one Keychain item per provider. Keys are never logged and never put in error values.
 final class ProviderKeyStore: @unchecked Sendable {
-    static let shared = ProviderKeyStore()
+    static let shared: ProviderKeyStore = {
+        #if DEBUG || TEST_BUILD
+            if let backend = ProviderUITesting.keyBackend { return ProviderKeyStore(backend: backend) }
+        #endif
+        return ProviderKeyStore()
+    }()
 
     private let backend: AuthTokenStore
 
@@ -41,8 +46,13 @@ final class ProviderKeyStore: @unchecked Sendable {
     /// Returns the affected jobs so the UI can name them. Pending remote deletes are not touched.
     @discardableResult
     func remove(for providerID: String, defaults: ProviderDefaultsStore) -> [STTJob] {
-        backend.delete(key: Self.account(for: providerID))
+        delete(for: providerID)
         return defaults.resetJobs(using: providerID)
+    }
+
+    /// Deletes the key only; jobs keep their engine (a key that was just rejected on save).
+    func delete(for providerID: String) {
+        backend.delete(key: Self.account(for: providerID))
     }
 
     /// Shows at most the last 4 characters; short keys show none.

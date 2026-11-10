@@ -49,11 +49,8 @@ extension AppDelegate {
         // Deactivate escape cancel handler
         EscapeCancelService.shared.deactivate()
 
-        // Disconnect real-time translation (if active)
-        if appState.liveTranscriptStore != nil {
-            await realtimeTranscriptionService.disconnect()
-            meetingRecorderService.onRealtimeAudioData = nil
-        }
+        // Disconnect real-time translation (if active); a switch in progress is cancelled with it.
+        await stopMeetingLiveTranscription()
 
         // Capture in-progress recording ID before stopRecording() clears it (RLR-M1).
         let cancelInProgressRecordingId = meetingRecorderService.currentRecordingId
@@ -159,8 +156,10 @@ extension AppDelegate {
 
         // Meeting translation has its own engine setting; live two-way translation runs on Diduny Cloud,
         // whatever engine plain meetings use.
-        if onDeviceSelection(for: .meetingTranslation) != nil {
-            // Parakeet / Apple: record and transcribe on this Mac, then translate the final text once.
+        let translateRoute = modeRoute(for: .meetingTranslation)
+        if translateRoute.engine != .didunyCloud {
+            // Parakeet / Apple / Whisper / ElevenLabs (10A): record, transcribe after Stop, then Diduny
+            // translates the final text once, into the pair's Language B.
             if let message = onDeviceEngineStartError(for: .meetingTranslation) {
                 DictationOverlayController.shared.showInfo(message: message, duration: 4)
                 return
@@ -177,7 +176,8 @@ extension AppDelegate {
             }
             let pair = requestedPair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
             SettingsStorage.shared.markTranslationLanguagePairUsed(pair)
-            toggleMeetingRecording(provider: .local, translateTarget: pair.languageB)
+            toggleMeetingRecording(provider: .local, translateTarget: pair.languageB,
+                                   startRoute: RunTimeRouting.meetingTranslationAfterStop(translateRoute))
             return
         }
 
@@ -275,6 +275,11 @@ extension AppDelegate {
                 appState.meetingTranslationRecordingStartTime = Date()
                 appState.liveTranscriptStore = store
                 handleMeetingTranslationStateChange(.recording)
+                // Live two-way translation runs on Diduny Cloud (WP-32).
+                DictationOverlayController.shared.store.showRunningMeetingTranslation(engine: .didunyCloud)
+                if let controller = meetingEngineController {
+                    DictationOverlayController.shared.store.meetingSwitchHandler = meetingSwitchHandler(for: controller)
+                }
             }
 
             if let recordingId = meetingRecorderService.currentRecordingId {
@@ -326,97 +331,24 @@ extension AppDelegate {
     // MARK: - Real-Time Meeting Translation Setup
 
     private func setupRealtimeMeetingTranslation() async -> LiveTranscriptStore {
-        let store = await MainActor.run { LiveTranscriptStore() }
-
-        let rtService = realtimeTranscriptionService
-
-        // Stream the exact same mixed mono audio that is written to fallback WAV.
-        meetingRecorderService.onRealtimeAudioData = { [weak rtService] pcmData in
-            rtService?.sendAudioData(pcmData)
-        }
-
-        // Wire token callbacks. Annotate the full batch before filtering so
-        // translation tokens inherit timestamps from the interleaved originals.
-        rtService.onTokensReceived = { [weak self, weak store] tokens in
-            guard let self else { return }
-            let annotated = meetingTranslationTimestampBackfill.annotate(tokens)
-            let translatedTokens = filterMeetingTranslatedTokens(annotated)
-            guard !translatedTokens.isEmpty else { return }
-            Task { @MainActor in
-                store?.processTokens(translatedTokens)
-                self.updateRecordingFeedbackTokens(translatedTokens, mode: .meetingTranslation)
-            }
-        }
-
-        let connectionStatusHandler: (RealtimeConnectionStatus) -> Void = { [weak self, weak store] status in
-            Task { @MainActor in
-                store?.connectionStatus = status
-                self?.updateRecordingFeedbackConnectionStatus(status, mode: .meetingTranslation)
-                if let id = self?.meetingRecorderService.currentRecordingId {
-                    let detail: String? = switch status {
-                    case .connecting, .reconnecting:
-                        "Reconnecting…"
-                    case let .failed(message):
-                        message.isEmpty
-                            ? "Live transcript interrupted — audio still recording"
-                            : "Live transcript interrupted — audio still recording (\(message))"
-                    case .connected, .disconnected:
-                        nil
-                    }
-                    RecordingsLibraryStorage.shared.updateStatusDetail(id: id, detail: detail)
-                }
-            }
-        }
-
-        rtService.onSegmentBoundary = { [weak self, weak store] _ in
-            self?.meetingTranslationTimestampBackfill.reset()
-            Task { @MainActor in
-                store?.markSegmentBoundary()
-            }
-        }
-
-        let errorHandler: (Error) -> Void = { error in
-            Log.transcription.error("Realtime meeting translation error: \(error.localizedDescription)")
-            // Don't stop recording — file recording continues independently
-        }
-        rtService.setConnectionHandlers(
-            onError: errorHandler,
-            onConnectionStatusChanged: connectionStatusHandler
+        let store = LiveTranscriptStore()
+        let pair = activeMeetingTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+        let controller = makeMeetingEngineController(
+            start: .live(.didunyCloud), afterStop: SettingsStorage.shared.modeDefaults.engine(for: .recordOnly),
+            store: store, sessionID: nil, translation: pair
         )
-
-        // Connect WebSocket (recording continues even if translation socket is unavailable)
-        do {
-            let pair = activeMeetingTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
-            let languageHints = SettingsStorage.shared.translationLanguageHints(for: pair)
-
-            try await rtService.connect(
-                languageHints: languageHints,
-                strictLanguageHints: !languageHints.isEmpty,
-                audioConfig: .defaultPCM16kMono,
-                translationConfig: RealtimeTranslationConfig(
-                    mode: .twoWay(languageA: pair.languageA, languageB: pair.languageB)
-                )
-            )
-            await MainActor.run {
-                store.isActive = true
-            }
-            Log.transcription
-                .info(
-                    "Meeting real-time translation connected successfully (\(pair.languageA.uppercased()) <-> \(pair.languageB.uppercased()))"
-                )
-        } catch {
-            Log.transcription.error("Meeting real-time translation FAILED to connect: \(error.localizedDescription)")
-            await MainActor.run {
-                store.isActive = true
-                store.connectionStatus = .failed(error.localizedDescription)
-            }
-            // Recording continues — fallback to async translation on stop
-        }
-
+        meetingEngineController = controller
+        let fanOut = controller.fanOut
+        meetingRecorderService.onRealtimeAudioData = { fanOut.deliver($0) }
+        meetingLevelTask?.cancel()
+        meetingLevelTask = MeetingAudioFanOut.startLevelPump(fanOut) { DictationOverlayController.shared.updateAudioLevel($0) }
+        store.isActive = true
+        // Recording continues even if the socket is unavailable: async translation on stop.
+        await controller.startInitial(wait: true)
         return store
     }
 
-    private func filterMeetingTranslatedTokens(_ tokens: [RealtimeToken]) -> [RealtimeToken] {
+    func filterMeetingTranslatedTokens(_ tokens: [RealtimeToken]) -> [RealtimeToken] {
         let translatedStatuses: Set = [
             "translation",
             "translated",
@@ -484,12 +416,8 @@ extension AppDelegate {
         }
 
         // Finalize and disconnect real-time translation (if active)
-        let hasRealtimeSession = await MainActor.run { appState.liveTranscriptStore != nil }
-        if hasRealtimeSession {
-            _ = await realtimeTranscriptionService.finalize(profile: .safe)
-            await realtimeTranscriptionService.disconnect()
-            meetingRecorderService.onRealtimeAudioData = nil
-        }
+        let engineController = meetingEngineController
+        await stopMeetingLiveTranscription(finalizeCloud: true)
 
         // Mark store as no longer active
         let store = await MainActor.run { appState.liveTranscriptStore }
@@ -531,6 +459,18 @@ extension AppDelegate {
             capturedAudioURL = audioURL
 
             Log.app.info("Meeting translation recording stopped")
+
+            // After a switch: the saved live parts stay and only the rest is translated, in the queue (D4).
+            if let parts = translateMeetingParts(history: engineController?.machine.history,
+                                                 liveTexts: engineController?.liveTexts ?? [:],
+                                                 afterStopEngine: engineController?.machine.afterStopEngine ?? .whisper) {
+                await finishMixedMeetingTranslation(
+                    parts: parts, audioURL: audioURL, recordingId: recordingId, inProgressRecordingId: inProgressRecordingId,
+                    recordingStartTime: recordingStartTime, stopTime: stopTime, targetLanguage: targetLanguage,
+                    afterStopEngine: engineController?.machine.afterStopEngine ?? .whisper
+                )
+                return
+            }
 
             let realtimeText = await MainActor.run { store?.finalTranscriptText ?? "" }
 
@@ -639,7 +579,7 @@ extension AppDelegate {
             }
 
             if SettingsStorage.shared.playSoundOnCompletion {
-                NSSound(named: .init("Funk"))?.play()
+                CompletionSound.play()
             }
 
         } catch is CancellationError {
@@ -769,6 +709,55 @@ extension AppDelegate {
         Log.app.info("stopMeetingTranslationRecording: END")
     }
 
+    /// Saves the row as processing and hands the parts to the queue. The audio is kept whatever the queue does.
+    private func finishMixedMeetingTranslation(
+        parts: [TranslatePart], audioURL: URL, recordingId: UUID, inProgressRecordingId: UUID?,
+        recordingStartTime: Date?, stopTime: Date, targetLanguage: String, afterStopEngine: EngineID
+    ) async {
+        let compressedURL = await AudioCompressionService.compressToFLAC(wavURL: audioURL)
+        let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
+        let library = RecordingsLibraryStorage.shared
+        let saved: Bool = if library.recordings.contains(where: { $0.id == recordingId }) {
+            library.finalizeInProgressRecording(
+                id: recordingId, audioURL: compressedURL, duration: duration, endedAt: stopTime, status: .processing, forceSave: true
+            )
+        } else {
+            library.saveRecording(
+                id: recordingId, audioURL: compressedURL, type: .meetingTranslation, duration: duration,
+                translationTargetLanguageCode: targetLanguage, createdAt: recordingStartTime ?? stopTime, forceSave: true
+            ) != nil
+        }
+        var queued = false
+        if saved {
+            library.updateRecording(id: recordingId, status: .processing, error: nil, translationTargetLanguageCode: targetLanguage)
+            queued = RecordingQueueService.shared.enqueue(
+                [recordingId],
+                action: parts.isEmpty ? .translate : .translateParts(parts, target: targetLanguage),
+                targetLanguage: targetLanguage,
+                engineOverride: parts.isEmpty ? afterStopEngine : nil
+            )
+            if let ipId = inProgressRecordingId, let store = try? InProgressRecordingStore.sharedStore() {
+                try? await store.cleanup(recordingId: ipId)
+            }
+            RecoveryStateManager.shared.clearState()
+            if compressedURL != audioURL { try? FileManager.default.removeItem(at: audioURL) }
+            try? FileManager.default.removeItem(at: compressedURL)
+        } else if let ipId = inProgressRecordingId {
+            library.markNeedsRecovery(id: ipId, endedAt: stopTime, durationSeconds: duration)
+        }
+        if queued { DictationOverlayController.shared.showBackgroundHandoff() }
+        appState.lastTranscription = nil
+        appState.meetingTranslationRecordingState = .success
+        appState.meetingTranslationRecordingStartTime = nil
+        handleMeetingTranslationStateChange(.success)
+        activeMeetingTranslationLanguagePair = nil
+        activeMeetingTranslationTargetLanguage = nil
+        if let token = meetingTranslationActivityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            meetingTranslationActivityToken = nil
+        }
+    }
+
     // MARK: - Escape Cancel Handler
 
     private func setupMeetingTranslationEscapeCancelHandler() {
@@ -787,9 +776,9 @@ extension AppDelegate {
         }
 
         // On second shortcut press (confirmed cancel): cancel recording
-        escapeService.onCancel = { [weak self] in
+        escapeService.onCancel = { [weak self] keepAudio in
             Task { @MainActor in
-                let shouldSaveAudio = SettingsStorage.shared.escapeCancelSaveAudio
+                let shouldSaveAudio = keepAudio
                 await self?.cancelMeetingTranslationRecording()
                 let message = shouldSaveAudio ? "Recording cancelled and saved" : "Recording cancelled"
                 DictationOverlayController.shared.showInfo(message: message)

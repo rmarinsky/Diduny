@@ -4,10 +4,29 @@ enum RecordingsInspectorSelection: Equatable {
     case recording(UUID, parentBatchID: UUID?)
     case batch(UUID)
     case batchComposer
+    /// A calendar event of the day, by its occurrence key (`CalendarMeeting.reminderKey`).
+    case event(String)
+    /// A voice-note group of the day (`RecordingsDay.NotesGroup.key`).
+    case notes(String)
+    /// A group made with "Group" (`TranscriptionBatch.isRecordingGroup`).
+    case group(UUID)
+    /// Several recordings chosen with "Select several".
+    case selection
 
     var parentBatchID: UUID? {
         guard case let .recording(_, parentBatchID) = self else { return nil }
         return parentBatchID
+    }
+
+    /// The list marks the recording open in the detail; selection mode has its own checkboxes.
+    func marksRow(_ recordingID: UUID, isSelectionMode: Bool) -> Bool {
+        guard !isSelectionMode else { return false }
+        return opensRecording(recordingID)
+    }
+
+    func opensRecording(_ recordingID: UUID) -> Bool {
+        guard case let .recording(id, _) = self else { return false }
+        return id == recordingID
     }
 
     var backDestination: Self? {
@@ -16,24 +35,33 @@ enum RecordingsInspectorSelection: Equatable {
 }
 
 struct RecordingsLibraryView: View {
-    @State private var storage = RecordingsLibraryStorage.shared
-    @State private var batchStorage = TranscriptionBatchStorage.shared
-    @State private var queueService = RecordingQueueService.shared
-    @State private var playbackService = AudioPlaybackService.shared
+    @State var storage = RecordingsLibraryStorage.shared
+    @State var batchStorage = TranscriptionBatchStorage.shared
+    @State var queueService = RecordingQueueService.shared
+    @State var playbackService = AudioPlaybackService.shared
     @State private var searchText = ""
     @State private var searchIndex: [UUID: String] = [:]
-    @State private var filter: RecordingTypeFilter = .all
+    @State var segment: RecordingsSegment = .all
+    /// Has Translation, YouTube and Batches, kept in the filter menu.
+    @State var listFilter: RecordingTypeFilter?
     @State private var selectedCalendarIDs: Set<String> = []
-    @State private var inspectorSelection: RecordingsInspectorSelection?
+    @State var inspectorSelection: RecordingsInspectorSelection?
     @State private var trimNavigationGuard: (() -> Bool)?
-    @State private var showDeleteConfirmation = false
-    @State private var showBulkDeleteConfirmation = false
-    @State private var recordingToDelete: Recording? = nil
-    @State private var isSelectionMode = false
-    @State private var selectedRecordingIds = Set<UUID>()
+    @State var isSelectionMode = false
+    @State var selectedRecordingIds = Set<UUID>()
     @State private var recordingToRetranscribe: Recording?
     @State private var batchLoadErrorMessage: String?
-    @State private var deletionErrorMessage: String?
+    @State var operationErrorMessage: String?
+    @State var pendingDeletion: RecordingsDeletion?
+    @State var flash: RecordingsFlash?
+    @State var selectedDay = Date()
+    @State var zoom: NotesZoom = .halfHour
+    @State var expandedNotes: Set<String> = []
+    @State var dayEvents: [CalendarMeeting] = []
+    /// After a drag-detach the inspector puts the caret in the title.
+    @State private var titleFocusRecordingID: UUID?
+    @State private var dayCache = RecordingsDayCache()
+    @State private var daysWithRecordings: Set<Date> = []
 
     enum RecordingTypeFilter: String, CaseIterable {
         case all = "All"
@@ -44,8 +72,20 @@ struct RecordingsLibraryView: View {
         case youtube = "YouTube"
         case batches = "Batches"
 
+        /// The filter menu beside the segments; the rest are the segments themselves.
+        static let menuCases: [Self] = [.hasTranslation, .youtube, .batches]
+
         var showsBatches: Bool {
             self == .batches
+        }
+
+        var menuTitle: String {
+            switch self {
+            case .hasTranslation: String(localized: "Has translation")
+            case .youtube: String(localized: "YouTube")
+            case .batches: String(localized: "Batches")
+            default: String(localized: String.LocalizationValue(rawValue))
+            }
         }
 
         func matches(_ recording: Recording) -> Bool {
@@ -70,11 +110,33 @@ struct RecordingsLibraryView: View {
         }
     }
 
-    private var filteredRecordings: [Recording] {
+    // MARK: - Derived
+
+    private var matchingRecordings: [Recording] {
         storage.recordings.filter { recording in
-            filter.matches(recording) && recording.matchesCalendars(selectedCalendarIDs)
+            segment.matches(recording) && (listFilter?.matches(recording) ?? true)
+                && recording.matchesCalendars(selectedCalendarIDs)
                 && Recording.searchableText(searchIndex[recording.id] ?? recording.searchableText, matches: searchText)
         }
+    }
+
+    /// Search and the menu filters list every matching recording, across days; otherwise the day is shown.
+    private var showsList: Bool {
+        !searchText.isEmpty || listFilter != nil
+    }
+
+    var recordingGroups: [RecordingsDayGroupInput] {
+        batchStorage.batches.filter { $0.isRecordingGroup == true }
+            .map { RecordingsDayGroupInput(id: $0.id, name: $0.name, recordingIDs: $0.recordingIDs) }
+    }
+
+    /// Built once per change of its inputs (`refreshDay`), never per read.
+    var currentDay: RecordingsDay { dayCache.day }
+
+    private func refreshDay() {
+        dayCache.update(.init(day: selectedDay, recordings: matchingRecordings,
+                              events: segment == .all || segment == .meetings ? dayEvents : [],
+                              groups: recordingGroups, zoom: zoom))
     }
 
     private func rebuildSearchIndex() {
@@ -90,109 +152,82 @@ struct RecordingsLibraryView: View {
         batchStorage.batches.filter { $0.matches(searchText, recordings: storage.recordings) }
     }
 
-    private var favoriteLanguages: [SupportedLanguage] {
-        let codes = SettingsStorage.shared.favoriteLanguages
-        return codes.compactMap { SupportedLanguage.language(for: $0) }
-    }
+    // MARK: - Body
 
-    private var otherLanguages: [SupportedLanguage] {
-        let favCodes = Set(SettingsStorage.shared.favoriteLanguages)
-        return SupportedLanguage.allLanguages.filter { !favCodes.contains($0.code) }
-    }
-
-    private var selectedVisibleCount: Int {
-        filteredRecordings.filter { selectedRecordingIds.contains($0.id) }.count
-    }
-
+    // Split into three parts: one long modifier chain timed out the type checker on CI.
     var body: some View {
-        PageScaffold(title: "Recordings", scrolls: false) {
-            headerActions
-        } content: {
-            VStack(alignment: .leading, spacing: DS.Space.lg) {
-                filterToolbar
+        alerts(lifecycle(pageLayout))
+    }
 
-                if isSelectionMode, !filter.showsBatches {
-                    bulkSelectionBar
-                }
-
-                if filter.showsBatches {
-                    if batchStorage.batches.isEmpty {
-                        batchesEmptyState
-                    } else if filteredBatches.isEmpty {
-                        noResultsState
-                    } else {
-                        batchesCard
+    private var pageLayout: some View {
+        GeometryReader { proxy in
+            let windowWidth = proxy.size.width + DS.Layout.sidebarWidth
+            let inspectorWidth = RecordingsPageLayout.inspectorWidth(windowWidth: windowWidth)
+            let compact = RecordingsPageLayout.isCompact(
+                columnWidth: RecordingsPageLayout.columnWidth(windowWidth: windowWidth, inspectorOpen: inspectorSelection != nil))
+            HStack(spacing: 0) {
+                PageScaffold(title: "Recordings", scrolls: false, columnMaxWidth: DS.Layout.wideColumnMaxWidth) {
+                    headerActions(compact: compact)
+                } content: {
+                    VStack(alignment: .leading, spacing: DS.Space.md) {
+                        filterToolbar(compact: compact)
+                        mainContent
                     }
-                } else if storage.recordings.isEmpty {
-                    emptyState
-                } else if filteredRecordings.isEmpty {
-                    noResultsState
-                } else {
-                    recordingsCard
+                    .padding(.horizontal, DS.Layout.pagePadding)
+                    .padding(.bottom, isSelectionMode ? 0 : DS.Layout.pagePadding)
+                }
+                .safeAreaInset(edge: .bottom) {
+                    if isSelectionMode { selectionBar }
+                }
+                .frame(minWidth: RecordingsPageLayout.minimumColumnWidth, maxWidth: .infinity)
+
+                if inspectorSelection != nil {
+                    Divider()
+                    inspectorContent
+                        .frame(width: inspectorWidth)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .background(DS.Palette.card)
+                        .accessibilityIdentifier("recordings.inspector")
                 }
             }
-            .padding(.horizontal, DS.Layout.pagePadding)
-            .padding(.bottom, DS.Layout.pagePadding)
         }
-        .inspector(isPresented: Binding(
-            get: { inspectorSelection != nil },
-            set: { if !$0 { requestInspectorSelection(nil) } }
-        )) {
-            inspectorContent
-                .frame(minHeight: 500)
-        }
-        .onChange(of: inspectorSelection != nil, initial: true) { _, isOpen in
-            MainWindowController.shared.setRecordingInspectorExpanded(isOpen)
-        }
-        .onDisappear {
-            MainWindowController.shared.setRecordingInspectorExpanded(false)
-        }
+    }
+
+    private func lifecycle(_ content: some View) -> some View {
+        content
         .onAppear {
             batchLoadErrorMessage = batchStorage.loadErrorMessage
             rebuildSearchIndex()
+            daysWithRecordings = RecordingsWeek.daysWithRecordings(storage.recordings)
+            refreshDay()
             openRequestedRecordingIfAvailable()
             openRequestedBatchComposerIfAvailable()
         }
+        .onChange(of: selectedDay) { refreshDay() }
+        .onChange(of: zoom) { refreshDay() }
+        .onChange(of: searchText) { refreshDay() }
+        .onChange(of: dayEvents) { refreshDay() }
+        .onChange(of: segment) { refreshDay() }
+        .onChange(of: listFilter) { refreshDay() }
+        .onChange(of: selectedCalendarIDs) { refreshDay() }
+        .onChange(of: batchStorage.batches) { refreshDay() }
+        .task(id: Calendar.current.startOfDay(for: selectedDay)) { await loadDayEvents() }
         .onChange(of: MainWindowController.shared.requestedRecordingID) {
             openRequestedRecordingIfAvailable()
         }
         .onChange(of: storage.recordings) {
             openRequestedRecordingIfAvailable()
             rebuildSearchIndex()
+            daysWithRecordings = RecordingsWeek.daysWithRecordings(storage.recordings)
+            refreshDay()
         }
         .onChange(of: MainWindowController.shared.requestedBatchComposer) {
             openRequestedBatchComposerIfAvailable()
         }
-        .alert("Delete Recording", isPresented: $showDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
-                if let recording = recordingToDelete {
-                    if playbackService.playingRecordingId == recording.id {
-                        playbackService.stop()
-                    }
-                    let id = recording.id
-                    if storage.deleteRecording(recording) {
-                        selectedRecordingIds.remove(id)
-                        if case let .recording(selectedId, _) = inspectorSelection, selectedId == id {
-                            requestInspectorSelection(nil)
-                        }
-                    } else {
-                        deletionErrorMessage = String(localized: "The recording and its files were left unchanged.")
-                    }
-                }
-                recordingToDelete = nil
-            }
-            Button("Cancel", role: .cancel) { recordingToDelete = nil }
-        } message: {
-            Text("Are you sure you want to delete this recording? This cannot be undone.")
-        }
-        .alert("Delete Selected Recordings", isPresented: $showBulkDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
-                deleteSelectedRecordings()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Delete \(selectedRecordingIds.count) selected recordings? This cannot be undone.")
-        }
+    }
+
+    private func alerts(_ content: some View) -> some View {
+        content
         .alert(
             "Transcribe Again?",
             isPresented: Binding(
@@ -224,47 +259,111 @@ struct RecordingsLibraryView: View {
             Text(batchLoadErrorMessage ?? "Unknown error")
         }
         .alert(
-            "Couldn't Delete Recording",
+            "Recording Change Failed",
             isPresented: Binding(
-                get: { deletionErrorMessage != nil },
-                set: { if !$0 { deletionErrorMessage = nil } }
+                get: { operationErrorMessage != nil },
+                set: { if !$0 { operationErrorMessage = nil } }
             )
         ) {
-            Button("OK") { deletionErrorMessage = nil }
+            Button("OK") { operationErrorMessage = nil }
         } message: {
-            Text(deletionErrorMessage ?? "Unknown error")
+            Text(operationErrorMessage ?? "Unknown error")
         }
+        .sheet(item: $pendingDeletion) { deletion in
+            RecordingsDeletionSheet(deletion: deletion, recordings: storage.recordings) {
+                performDeletion(deletion)
+            }
+        }
+    }
+
+
+    @ViewBuilder
+    private var mainContent: some View {
+        if listFilter?.showsBatches == true {
+            if batchStorage.batches.isEmpty {
+                batchesEmptyState
+            } else if filteredBatches.isEmpty {
+                noResultsState
+            } else {
+                batchesCard
+            }
+        } else if storage.recordings.isEmpty, dayEvents.isEmpty {
+            emptyState
+        } else if showsList {
+            if matchingRecordings.isEmpty { noResultsState } else { recordingsCard }
+        } else {
+            if let flash { RecordingsFlashRow(flash: flash) { self.flash = nil } }
+            RecordingsDayView(
+                day: currentDay,
+                selectedDay: $selectedDay,
+                daysWithRecordings: daysWithRecordings,
+                zoom: $zoom,
+                expandedNotes: $expandedNotes,
+                openSelection: inspectorSelection,
+                isSelectionMode: isSelectionMode,
+                selectedRecordingIDs: selectedRecordingIds,
+                actions: dayActions
+            ) { recording in
+                recordingRow(recording)
+            }
+        }
+    }
+
+    private var dayActions: RecordingsDayActions {
+        RecordingsDayActions(
+            openRecording: { requestInspectorSelection(.recording($0, parentBatchID: nil)) },
+            openEvent: { requestInspectorSelection(.event($0)) },
+            openNotes: { requestInspectorSelection(.notes($0)) },
+            openGroup: { requestInspectorSelection(.group($0)) },
+            attach: { attach($0, to: $1) },
+            detachByDrag: { id in
+                detach(id)
+                requestInspectorSelection(.recording(id, parentBatchID: nil))
+                titleFocusRecordingID = id
+            },
+            toggleSelection: { toggleSelection($0) }
+        )
+    }
+
+    private func loadDayEvents() async {
+        let start = Calendar.current.startOfDay(for: selectedDay)
+        guard let end = Calendar.current.date(byAdding: .day, value: 1, to: start) else { return }
+        // Without calendar access the day still shows the events stored in linked recordings.
+        dayEvents = (try? await CalendarConnection.shared.readMeetings(from: start, to: end)) ?? []
     }
 
     // MARK: - Header
 
-    private var headerActions: some View {
+    private func headerActions(compact: Bool) -> some View {
         HStack(spacing: DS.Space.sm) {
-            if !filter.showsBatches {
+            if listFilter?.showsBatches != true {
                 Button {
                     toggleSelectionMode()
                 } label: {
-                    Label(
-                        isSelectionMode ? "Done" : "Select",
-                        systemImage: isSelectionMode ? "checkmark.circle" : "checklist"
-                    )
+                    if compact {
+                        Image(systemName: isSelectionMode ? "checkmark.circle" : "checklist")
+                    } else {
+                        Text(isSelectionMode ? String(localized: "Done") : String(localized: "Select several"))
+                    }
                 }
-                .labelStyle(.titleAndIcon)
                 .buttonStyle(.bordered)
+                .help(isSelectionMode ? String(localized: "Done") : String(localized: "Select several"))
+                .accessibilityLabel(Text(isSelectionMode ? String(localized: "Done") : String(localized: "Select several")))
                 .disabled(storage.recordings.isEmpty)
-                .accessibilityIdentifier("Toggle recording selection")
+                .accessibilityIdentifier("recordings.selectSeveral")
             }
 
             Button {
                 requestInspectorSelection(.batchComposer)
             } label: {
-                Label(MainWindowController.batchComposerActionTitle, systemImage: "square.stack.3d.up")
+                Image(systemName: "plus")
             }
             .buttonStyle(.borderedProminent)
             .tint(DS.Palette.accent)
             .keyboardShortcut("b", modifiers: [.command, .shift])
-            .help("Create a batch from files, URLs, or existing recordings (⇧⌘B)")
-            .accessibilityIdentifier("Batch files and URLs")
+            .help("Add files and links (⇧⌘B)")
+            .accessibilityLabel(Text("Add files and links"))
+            .accessibilityIdentifier("recordings.addFiles")
         }
     }
 
@@ -277,15 +376,17 @@ struct RecordingsLibraryView: View {
 
     // MARK: - Filter Toolbar
 
-    private var filterToolbar: some View {
+    private func filterToolbar(compact: Bool) -> some View {
         HStack(spacing: DS.Space.md) {
             HStack(spacing: DS.Space.sm) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                     .font(DS.Font.body)
-                TextField(filter.showsBatches ? "Search batches" : "Search meetings, people and transcripts", text: $searchText)
+                TextField(listFilter?.showsBatches == true ? String(localized: "Search batches") : String(localized: "Search meetings, people and transcripts"),
+                          text: $searchText)
                     .textFieldStyle(.plain)
                     .font(DS.Font.body)
+                    .accessibilityIdentifier("recordings.search")
                 if !searchText.isEmpty {
                     Button {
                         searchText = ""
@@ -300,123 +401,107 @@ struct RecordingsLibraryView: View {
             .padding(.horizontal, DS.Space.md)
             .frame(height: 28)
             .frame(maxWidth: .infinity)
-            .background(
-                Color.primary.opacity(0.05),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
+            .background(DS.Palette.box, in: RoundedRectangle(cornerRadius: DS.Radius.field, style: .continuous))
 
-            Picker("Type", selection: $filter) {
-                ForEach(RecordingTypeFilter.allCases, id: \.self) { type in
-                    Text(type.rawValue).tag(type)
+            if listFilter?.showsBatches != true, compact {
+                // Narrow column: the four segments become one picker, so nothing is cut off.
+                PickerField(label: nil, value: segment.title, identifier: "recordings.filter",
+                            menu: {
+                                PickerMenuModel(
+                                    groups: [PickerMenuGroup(id: "show", rows: RecordingsSegment.allCases.map {
+                                        PickerMenuRow(id: $0.rawValue, title: $0.title)
+                                    })],
+                                    selectedID: segment.rawValue, search: .never)
+                            }) { id in
+                    if let picked = RecordingsSegment(rawValue: id) { segment = picked }
                 }
+                .fixedSize()
+            } else if listFilter?.showsBatches != true {
+                ModeSegments(
+                    items: RecordingsSegment.allCases.map { segment in
+                        .init(id: segment, title: LocalizedStringKey(segment.titleKey),
+                              accessibilityID: "recordings.filter.\(segment.rawValue)")
+                    },
+                    selection: $segment,
+                    accessibilityLabel: "Show"
+                )
+                .fixedSize()
             }
-            .pickerStyle(.menu)
-            .fixedSize()
 
-            // Shown while a calendar is chosen even if its recordings are gone, so the filter can be cleared.
-            if !filter.showsBatches, !calendarOptions.isEmpty || !selectedCalendarIDs.isEmpty {
-                calendarMenu
-            }
+            filterMenu
         }
     }
 
-    /// Calendars of linked meetings. Nothing chosen shows all; choosing narrows to those calendars.
-    private var calendarMenu: some View {
+    /// Has translation, YouTube, Batches and the calendars: reachable, but out of the way.
+    private var filterMenu: some View {
         Menu {
-            Button {
-                selectedCalendarIDs = []
-            } label: {
-                Label("All calendars", systemImage: selectedCalendarIDs.isEmpty ? "checkmark" : "")
-            }
-            Divider()
-            ForEach(calendarOptions, id: \.id) { option in
-                Toggle(option.title, isOn: Binding(
-                    get: { selectedCalendarIDs.contains(option.id) },
-                    set: { isOn in
-                        if isOn {
-                            selectedCalendarIDs.insert(option.id)
-                        } else {
-                            selectedCalendarIDs.remove(option.id)
-                        }
-                    }
+            ForEach(RecordingTypeFilter.menuCases, id: \.self) { filter in
+                Toggle(filter.menuTitle, isOn: Binding(
+                    get: { listFilter == filter },
+                    set: { listFilter = $0 ? filter : nil }
                 ))
             }
+            if !calendarOptions.isEmpty || !selectedCalendarIDs.isEmpty {
+                Divider()
+                Button {
+                    selectedCalendarIDs = []
+                } label: {
+                    Label("All calendars", systemImage: selectedCalendarIDs.isEmpty ? "checkmark" : "")
+                }
+                ForEach(calendarOptions, id: \.id) { option in
+                    Toggle(option.title, isOn: Binding(
+                        get: { selectedCalendarIDs.contains(option.id) },
+                        set: { isOn in
+                            if isOn { selectedCalendarIDs.insert(option.id) } else { selectedCalendarIDs.remove(option.id) }
+                        }
+                    ))
+                }
+            }
         } label: {
-            if selectedCalendarIDs.isEmpty {
-                Text("All calendars")
-            } else if selectedCalendarIDs.count == 1,
-                      let option = calendarOptions.first(where: { selectedCalendarIDs.contains($0.id) })
-            {
-                Text(option.title)
-            } else {
-                Text("\(selectedCalendarIDs.count) calendars")
-            }
+            Image(systemName: listFilter == nil && selectedCalendarIDs.isEmpty
+                ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
         }
-        .menuStyle(.button)
+        .menuStyle(.borderlessButton)
         .fixedSize()
-        .accessibilityLabel(Text("Calendars"))
+        .help("More filters")
+        .accessibilityLabel(Text("More filters"))
+        .accessibilityIdentifier("recordings.filter.more")
     }
 
-    private var bulkSelectionBar: some View {
-        HStack(spacing: 8) {
-            Label("\(selectedRecordingIds.count) selected", systemImage: "checkmark.circle.fill")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.secondary)
+    // MARK: - Lists
 
-            Spacer()
-
-            Button("Select Visible") {
-                selectVisibleRecordings()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(filteredRecordings.isEmpty || selectedVisibleCount == filteredRecordings.count)
-
-            Button("Delete", role: .destructive) {
-                showBulkDeleteConfirmation = true
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(selectedRecordingIds.isEmpty)
-            .accessibilityIdentifier("Delete selected recordings")
-
-            Button("Cancel") {
-                cancelSelection()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        }
+    func recordingRow(_ recording: Recording) -> some View {
+        RecordingRowView(
+            recording: recording,
+            onOpen: {
+                if isSelectionMode {
+                    toggleSelection(recording.id)
+                } else {
+                    requestInspectorSelection(.recording(recording.id, parentBatchID: nil))
+                }
+            },
+            onTranscribe: { transcribe(recording) },
+            onDelete: { requestDelete([recording.id]) },
+            onProcessRecovery: recording.status == .needsRecovery
+                ? { resolveRecovery(recording, action: .processNow) }
+                : nil,
+            onSaveRecoveryAudio: recording.status == .needsRecovery
+                ? { resolveRecovery(recording, action: .saveAudioOnly) }
+                : nil,
+            isSelectionMode: isSelectionMode,
+            isSelected: selectedRecordingIds.contains(recording.id),
+            onToggleSelection: { toggleSelection(recording.id) },
+            isOpenInDetail: inspectorSelection?.marksRow(recording.id, isSelectionMode: isSelectionMode) ?? false
+        )
+        .contextMenu { recordingContextMenu(for: recording) }
     }
-
-    // MARK: - Recordings Card
 
     private var recordingsCard: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                let recordings = filteredRecordings
+                let recordings = matchingRecordings
                 ForEach(Array(recordings.enumerated()), id: \.element.id) { index, recording in
-                    RecordingRowView(
-                        recording: recording,
-                        onOpen: {
-                            if isSelectionMode {
-                                toggleSelection(for: recording)
-                            } else {
-                                requestInspectorSelection(.recording(recording.id, parentBatchID: nil))
-                            }
-                        },
-                        onTranscribe: { transcribe(recording) },
-                        onDelete: { requestDelete(recording) },
-                        onProcessRecovery: recording.status == .needsRecovery
-                            ? { resolveRecovery(recording, action: .processNow) }
-                            : nil,
-                        onSaveRecoveryAudio: recording.status == .needsRecovery
-                            ? { resolveRecovery(recording, action: .saveAudioOnly) }
-                            : nil,
-                        isSelectionMode: isSelectionMode,
-                        isSelected: selectedRecordingIds.contains(recording.id),
-                        onToggleSelection: { toggleSelection(for: recording) }
-                    )
-                    .contextMenu { recordingContextMenu(for: recording) }
+                    recordingRow(recording)
                     if index < recordings.count - 1 {
                         Divider()
                             .padding(.horizontal, 16)
@@ -437,7 +522,7 @@ struct RecordingsLibraryView: View {
             LazyVStack(spacing: 0) {
                 ForEach(Array(filteredBatches.enumerated()), id: \.element.id) { index, batch in
                     Button {
-                        requestInspectorSelection(.batch(batch.id))
+                        requestInspectorSelection(batch.isRecordingGroup == true ? .group(batch.id) : .batch(batch.id))
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "square.stack.3d.up.fill")
@@ -461,6 +546,8 @@ struct RecordingsLibraryView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
+                        .background(inspectorSelection == .batch(batch.id) || inspectorSelection == .group(batch.id)
+                            ? DS.Palette.tint : Color.clear)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -476,19 +563,13 @@ struct RecordingsLibraryView: View {
         }
     }
 
-    private func requestInspectorSelection(_ next: RecordingsInspectorSelection?) {
+    // MARK: - Inspector
+
+    func requestInspectorSelection(_ next: RecordingsInspectorSelection?) {
         guard next != inspectorSelection else { return }
         guard trimNavigationGuard?() ?? true else { return }
         trimNavigationGuard = nil
-        if inspectorSelection == nil, next != nil {
-            // Grow the window rightwards first (setFrame animates synchronously), then show the
-            // inspector in the new space without its own right-to-left slide.
-            MainWindowController.shared.setRecordingInspectorExpanded(true)
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { inspectorSelection = next }
-            return
-        }
+        flash = nil
         inspectorSelection = next
     }
 
@@ -506,10 +587,11 @@ struct RecordingsLibraryView: View {
                         requestInspectorSelection(inspectorSelection?.backDestination)
                     },
                     onClose: { requestInspectorSelection(nil) },
-                    onNavigationGuardChanged: { trimNavigationGuard = $0 }
+                    onNavigationGuardChanged: { trimNavigationGuard = $0 },
+                    calendarActions: recordingCalendarActions(for: recording),
+                    focusesTitle: titleFocusRecordingID == recording.id
                 )
                 .id(recording.id)
-                .inspectorColumnWidth(MainWindowController.recordingInspectorWidth)
             }
         case let .batch(id):
             if let batch = batchStorage.batches.first(where: { $0.id == id }) {
@@ -520,7 +602,6 @@ struct RecordingsLibraryView: View {
                     },
                     onClose: { requestInspectorSelection(nil) }
                 )
-                .inspectorColumnWidth(MainWindowController.recordingInspectorWidth)
             }
         case .batchComposer:
             NewTranscriptionBatchPanel(
@@ -530,7 +611,14 @@ struct RecordingsLibraryView: View {
                 },
                 onClose: { requestInspectorSelection(nil) }
             )
-            .inspectorColumnWidth(MainWindowController.recordingInspectorWidth)
+        case let .event(key):
+            eventInspector(key: key)
+        case let .notes(key):
+            notesInspector(key: key)
+        case let .group(id):
+            groupInspector(id: id)
+        case .selection:
+            selectionInspector
         case nil:
             EmptyView()
         }
@@ -542,6 +630,10 @@ struct RecordingsLibraryView: View {
               let recording = storage.recordings.first(where: { $0.id == id })
         else { return }
 
+        // A deep link opens the recording on its own day, highlighted.
+        searchText = ""
+        listFilter = nil
+        selectedDay = recording.createdAt
         requestInspectorSelection(.recording(recording.id, parentBatchID: nil))
         controller.requestedRecordingID = nil
     }
@@ -568,30 +660,6 @@ struct RecordingsLibraryView: View {
         }
         .disabled(recording.status == .processing || recording.status.isInProgressCapture)
 
-        if recording.type.isMeetingLike {
-            Button("Transcribe with Speakers") {
-                queueService.enqueue([recording.id], action: .transcribeDiarize, providerOverride: .cloud)
-            }
-            .disabled(recording.status == .processing || recording.status.isInProgressCapture)
-        }
-
-        Menu("Translate to") {
-            ForEach(favoriteLanguages) { lang in
-                Button(lang.name) {
-                    queueService.enqueue([recording.id], action: .translate, targetLanguage: lang.code)
-                }
-            }
-            if !otherLanguages.isEmpty {
-                Divider()
-                ForEach(otherLanguages) { lang in
-                    Button(lang.name) {
-                        queueService.enqueue([recording.id], action: .translate, targetLanguage: lang.code)
-                    }
-                }
-            }
-        }
-        .disabled(recording.status == .processing || recording.status.isInProgressCapture)
-
         if let text = recording.displayTranscriptText {
             Divider()
             Button("Copy Text") {
@@ -601,12 +669,12 @@ struct RecordingsLibraryView: View {
 
         Divider()
 
-        Button("Delete", role: .destructive) {
-            requestDelete(recording)
+        Button("Delete…", role: .destructive) {
+            requestDelete([recording.id])
         }
     }
 
-    private func transcribe(_ recording: Recording) {
+    func transcribe(_ recording: Recording) {
         guard RecordingTrimNavigation.shared.requestLeave() else { return }
         if recording.remoteSource != nil,
            !(recording.transcriptionText?.isEmpty ?? true)
@@ -617,68 +685,21 @@ struct RecordingsLibraryView: View {
         }
     }
 
-    private func requestDelete(_ recording: Recording) {
-        guard RecordingTrimNavigation.shared.requestLeave() else { return }
-        recordingToDelete = recording
-        showDeleteConfirmation = true
-    }
-
-    private func resolveRecovery(
+    func resolveRecovery(
         _ recording: Recording,
         action: MeetingRecoveryService.RecoveryAction
     ) {
         Task { @MainActor in
-            let ok = await MeetingRecoveryService.shared.resolve(
+            let outcome = await MeetingRecoveryService.shared.resolve(
                 recordingID: recording.id,
                 action: action
             )
-            if !ok, action != .discard {
+            if outcome == .failed, action != .discard {
                 DictationOverlayController.shared.showInfo(
                     message: String(localized: "Could not recover meeting audio"),
                     duration: 3
                 )
             }
-        }
-    }
-
-    private func toggleSelectionMode() {
-        isSelectionMode.toggle()
-        if !isSelectionMode {
-            selectedRecordingIds.removeAll()
-        }
-    }
-
-    private func cancelSelection() {
-        isSelectionMode = false
-        selectedRecordingIds.removeAll()
-    }
-
-    private func toggleSelection(for recording: Recording) {
-        if selectedRecordingIds.contains(recording.id) {
-            selectedRecordingIds.remove(recording.id)
-        } else {
-            selectedRecordingIds.insert(recording.id)
-        }
-    }
-
-    private func selectVisibleRecordings() {
-        selectedRecordingIds.formUnion(filteredRecordings.map(\.id))
-    }
-
-    private func deleteSelectedRecordings() {
-        guard RecordingTrimNavigation.shared.requestLeave() else { return }
-        let ids = selectedRecordingIds
-        guard !ids.isEmpty else { return }
-        if let playingId = playbackService.playingRecordingId, ids.contains(playingId) {
-            playbackService.stop()
-        }
-        if case let .recording(id, _) = inspectorSelection, ids.contains(id) {
-            requestInspectorSelection(nil)
-        }
-        if storage.deleteRecordings(ids) {
-            cancelSelection()
-        } else {
-            deletionErrorMessage = String(localized: "The selected recordings and their files were left unchanged.")
         }
     }
 
@@ -688,7 +709,7 @@ struct RecordingsLibraryView: View {
         EmptyState(
             icon: "waveform.circle",
             title: "No Recordings Yet",
-            message: "Your voice, translation, and meeting recordings will appear here."
+            message: "Start a meeting with Option Command M, or add files and links with the plus button."
         )
     }
 
@@ -703,4 +724,35 @@ struct RecordingsLibraryView: View {
             message: "Create a batch to group related recordings and transcripts."
         )
     }
+}
+
+extension RecordingsSegment {
+    /// Localization key for `ModeSegments`.
+    var titleKey: String {
+        switch self {
+        case .all: "All"
+        case .meetings: "Meetings"
+        case .notes: "Notes"
+        case .filesAndLinks: "Files and links"
+        }
+    }
+}
+
+/// Widths of the Recordings page (redesign B, iteration 3 and Roman's 2026-11-10 notes). Pure, so it is tested.
+enum RecordingsPageLayout {
+    /// The day column never gets narrower than this.
+    static let minimumColumnWidth: CGFloat = 340
+
+    /// 400 below a 1280 window, 480 above, 560 from 1700. The window never resizes itself.
+    static func inspectorWidth(windowWidth: CGFloat) -> CGFloat {
+        windowWidth >= 1700 ? 560 : windowWidth >= 1280 ? 480 : 400
+    }
+
+    /// The page column beside the sidebar and, when open, the inspector and its divider.
+    static func columnWidth(windowWidth: CGFloat, inspectorOpen: Bool) -> CGFloat {
+        windowWidth - DS.Layout.sidebarWidth - (inspectorOpen ? inspectorWidth(windowWidth: windowWidth) + 1 : 0)
+    }
+
+    /// Below this, "Select several" becomes an icon with a tooltip and the segments become one picker.
+    static func isCompact(columnWidth: CGFloat) -> Bool { columnWidth < 640 }
 }

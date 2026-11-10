@@ -1,13 +1,23 @@
-import Foundation
+import AppKit
 
 @MainActor
 final class DictationOverlayController {
     static let shared = DictationOverlayController()
 
     let store = LiveDictationOverlayStore()
+    /// The outcome after Stop for the command panel (WP-42). Kept until the next recording.
+    let outcomeStore = EdgeCommandOutcomeStore()
+    /// When Stop was pressed; the outcome duration ends here and a paste before it is stale.
+    private var stoppedAt: Date?
+    /// The meeting stop flow hands over the library id before it reports success.
+    private var outcomeRecordingID: UUID?
+
+    /// Meetings: the saved library recording, for Open recording in the outcome.
+    func setOutcomeRecordingID(_ id: UUID?) {
+        outcomeRecordingID = id
+    }
     private var autoHideTask: Task<Void, Never>?
     private var outputPreviewTask: Task<Void, Never>?
-    private static let maxPreviewSourceBytes = 1500
     private var onStopRequested: (@MainActor () async -> Void)?
 
     /// Surface captured when a feedback session starts. A recording finishes
@@ -30,11 +40,20 @@ final class DictationOverlayController {
     }
 
     func begin(mode: RecordingMode) {
+        PasteMarkController.shared.clear()
         autoHideTask?.cancel()
         isNotchHandoffShowing = false
         beginSurfaceSession()
         cancelOutputPreview()
         store.reset(mode: mode)
+        configureSession(mode: mode)
+        stoppedAt = nil
+        outcomeRecordingID = nil
+        outcomeStore.clear()
+        if !mode.isMeeting, SettingsStorage.shared.autoPaste {
+            // Chromium and Electron need their tree on before Stop; turning it on now hides the build time.
+            Task.detached(priority: .utility) { ChromiumAccessibility.prepareFrontmost() }
+        }
         store.phase = .starting
         if usesNotch {
             NotchManager.shared.resumeRecording(mode: mode)
@@ -44,10 +63,12 @@ final class DictationOverlayController {
     }
 
     func startRecording(mode: RecordingMode) {
+        PasteMarkController.shared.clear()
         autoHideTask?.cancel()
         beginSurfaceSession()
         if store.mode != mode {
             store.reset(mode: mode)
+            configureSession(mode: mode)
         }
         store.phase = .recording
         if usesNotch {
@@ -63,12 +84,24 @@ final class DictationOverlayController {
             store.mode = mode
         }
         cancelOutputPreview()
+        stoppedAt = stoppedAt ?? Date()
         if mode.isMeeting {
             // The meeting timer stops at Stop; finalizing and the hand-off show the recorded length.
             store.endedAt = Date()
         }
         store.phase = .finalizing
         store.audioLevel = 0
+        if !mode.isMeeting, SettingsStorage.shared.autoPaste {
+            PasteMarkController.shared.beginWaiting { [weak self] in
+                // No caret: the full landing plays in the header (Roman, 2026-11-10).
+                guard let self, self.store.phase == .finalizing, !self.usesNotch else { return }
+                self.store.headerLanding = .saving
+                self.showPanel()
+            }
+        }
+        if mode.isMeeting, !usesNotch {
+            store.headerLanding = .saving
+        }
         if usesNotch {
             NotchManager.shared.startProcessing(mode: mode)
         } else {
@@ -76,42 +109,210 @@ final class DictationOverlayController {
         }
     }
 
-    func startProcessing(mode: RecordingMode) {
-        autoHideTask?.cancel()
-        if store.mode != mode {
-            store.mode = mode
-        }
-        cancelOutputPreview()
-        store.phase = .processing
-        store.audioLevel = 0
-        if usesNotch {
-            NotchManager.shared.startProcessing(mode: mode)
-        } else {
-            showPanel()
-        }
-    }
-
-    func showSuccess(text: String) {
+    /// - Parameter recordingID: meetings, the library recording for Open recording.
+    func showSuccess(text: String, recordingID: UUID? = nil) {
         autoHideTask?.cancel()
         if !text.isEmpty {
             store.finalText = text
             store.provisionalText = ""
         }
+        let resultText = text.isEmpty ? store.finalText : text
         store.phase = .pasted
         store.audioLevel = 0
+        if !store.mode.isMeeting {
+            showDictationSuccess(resultText: resultText, recordingID: recordingID)
+            return
+        }
+        PasteMarkController.shared.clear()
+        if case .done = store.headerLanding { return }
+        recordOutcome(resultText: resultText, recordingID: recordingID)
+        if store.headerLanding == .saving, !usesNotch {
+            finishHeaderLanding(line: outcomeStore.outcome?.subtitle(transcript: .ready) ?? String(localized: "Meeting saved"))
+            return
+        }
         if usesNotch {
             // The notch schedules its own dismissal and ends the session.
             NotchManager.shared.showSuccess(text: text)
             endSurfaceSession()
             return
         }
+        // Floating surface: the outcome replaces the live view and closes as the success panel did.
+        let delivery = outcomeStore.outcome?.delivery ?? .copied
+        // A minimized panel has no outcome on screen; only the red-dot tab, which would stay stuck.
+        if EdgeCommandPanelController.shared.isLiveFeedbackMinimized, delivery != .pasted {
+            dismiss()
+            return
+        }
         showPanel()
-        if SettingsStorage.shared.autoPaste {
-            scheduleAutoHide(delay: 0.8)
+        if let delay = Self.outcomeAutoHideDelay(delivery: delivery) {
+            scheduleAutoHide(delay: delay)
         }
     }
 
+    /// A meeting's Stop is saved and its transcript done or queued: the header logo closes its ring,
+    /// pulses once, and the panel goes as the landing fades (Roman, 2026-11-10).
+    private func finishHeaderLanding(line: String) {
+        autoHideTask?.cancel()
+        cancelOutputPreview()
+        store.backgroundHandoffDetail = nil
+        store.audioLevel = 0
+        if EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
+            dismiss()
+            return
+        }
+        // The held outcome would replace the header view once the phase reaches success.
+        outcomeStore.clear()
+        store.headerLanding = .done(line: line)
+        showPanel()
+        let delay = PasteMarkPlan.headerLandingDismissDelay(
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        )
+        autoHideTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            self?.dismiss()
+        }
+    }
+
+    /// A meeting that needs the person (nothing transcribable, a failed stop): the outcome with the
+    /// message and Open recording stays until closed. The notch keeps its 3 s line.
+    func showMeetingNotice(_ message: String, isError: Bool = false) {
+        guard outcomeStore.outcome?.notice != message else { return }
+        if usesNotch || EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
+            isError ? showError(message: message) : showInfo(message: message, duration: 3.0)
+            return
+        }
+        autoHideTask?.cancel()
+        cancelOutputPreview()
+        store.headerLanding = nil
+        store.backgroundHandoffDetail = nil
+        store.audioLevel = 0
+        recordOutcome(resultText: "", recordingID: nil, notice: message, isError: isError)
+        store.phase = .pasted
+        showPanel()
+    }
+
+    /// Dictation and its translation: no result window (Roman, 2026-11-09). The logo plays at the
+    /// caret and the panel closes; without a caret the header logo stays 1.5 s. A failed paste keeps
+    /// the Copied outcome, its only message.
+    private func showDictationSuccess(resultText: String, recordingID: UUID?) {
+        let autoPaste = SettingsStorage.shared.autoPaste
+        let pasted = Self.delivery(
+            autoPaste: autoPaste, lastPaste: ClipboardService.shared.lastPaste, stoppedAt: stoppedAt
+        ) == .pasted
+        PasteMarkTrace.note("dictationSuccess autoPaste=\(autoPaste) pasted=\(pasted) lastPaste=\(String(describing: ClipboardService.shared.lastPaste)) stoppedAt=\(String(describing: stoppedAt)) notch=\(usesNotch) minimized=\(EdgeCommandPanelController.shared.isLiveFeedbackMinimized)")
+        if pasted {
+            let stop = stoppedAt
+            PasteMarkController.shared.land { [weak self] caretKnown in
+                guard let self, self.stoppedAt == stop, self.store.phase == .pasted else { return }
+                self.finishDictation(
+                    PasteMarkPlan.dictationEnd(autoPaste: autoPaste, pasted: true, caretKnown: caretKnown),
+                    resultText: resultText, recordingID: recordingID
+                )
+            }
+        } else {
+            PasteMarkController.shared.clear()
+        }
+        if usesNotch {
+            recordOutcome(resultText: resultText, recordingID: recordingID)
+            NotchManager.shared.showSuccess(text: resultText)
+            endSurfaceSession()
+            return
+        }
+        guard !pasted else { return }
+        finishDictation(
+            PasteMarkPlan.dictationEnd(autoPaste: autoPaste, pasted: false, caretKnown: false),
+            resultText: resultText, recordingID: recordingID
+        )
+    }
+
+    private func finishDictation(_ end: PasteMarkPlan.DictationEnd, resultText: String, recordingID: UUID?) {
+        PasteMarkTrace.note("finishDictation end=\(end) minimized=\(EdgeCommandPanelController.shared.isLiveFeedbackMinimized)")
+        guard !usesNotch else { return }
+        autoHideTask?.cancel()
+        if end == .closeNow || EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
+            dismiss()
+            return
+        }
+        recordOutcome(resultText: resultText, recordingID: recordingID, headerOnly: end == .headerLogo)
+        if end == .headerLogo, let title = outcomeStore.outcome?.title {
+            // The same landing as at the caret, in the header: ring, one pulse, then the panel goes.
+            finishHeaderLanding(line: title)
+            return
+        }
+        showPanel()
+    }
+
+    /// Roman, 2026-11-09, replaces default 8: after a paste the outcome closes in 0.8 s. "Copied" (auto-paste
+    /// off or a failed paste) stays until ×, New recording or the next recording.
+    nonisolated static func outcomeAutoHideDelay(delivery: EdgeCommandOutcome.Delivery) -> TimeInterval? {
+        delivery == .pasted ? 0.8 : nil
+    }
+
+    /// Two-way Cloud translation names the pair (WP-41 "EN ↔ UK"). One-direction engines name the
+    /// target only, "→ UK" (decision 2A), as the tile caption does.
+    static func meetingTranslationFlow(engine: EngineID, pair: TranslationLanguagePair) -> EdgeCommandOutcome.Flow {
+        engine == .didunyCloud
+            ? .meetingTranslation(pair: CommandHome.pairCodes(pair))
+            : .meetingTranslation(pair: "→ " + pair.languageB.uppercased())
+    }
+
+    /// Builds the outcome for the stopped recording from the session (default 8, 02 Q11-Q12).
+    private func recordOutcome(
+        resultText: String,
+        recordingID: UUID?,
+        headerOnly: Bool = false,
+        notice: String? = nil,
+        isError: Bool = false
+    ) {
+        let end = stoppedAt ?? store.endedAt ?? Date()
+        let duration = Int(max(end.timeIntervalSince(store.startedAt), 0).rounded())
+        let flow: EdgeCommandOutcome.Flow = switch store.mode {
+        case .meeting:
+            .meeting
+        case .meetingTranslation:
+            Self.meetingTranslationFlow(engine: store.meetingTranslationEngine, pair: store.meetingTranslationPair)
+        default:
+            if store.selectedOutput.targetLanguage != nil {
+                .dictationTranslation(languageName: store.selectedOutput.label)
+            } else {
+                .dictation
+            }
+        }
+        outcomeStore.show(EdgeCommandOutcome(
+            flow: flow,
+            durationSeconds: duration,
+            delivery: Self.delivery(
+                autoPaste: SettingsStorage.shared.autoPaste,
+                lastPaste: ClipboardService.shared.lastPaste,
+                stoppedAt: stoppedAt
+            ),
+            resultText: flow.isMeeting ? "" : resultText,
+            recordingID: recordingID ?? outcomeRecordingID,
+            headerOnly: headerOnly,
+            notice: notice,
+            isError: isError
+        ))
+    }
+
+    /// Pasted only for a paste of this recording; auto-paste off or a failed or older paste is copied.
+    nonisolated static func delivery(
+        autoPaste: Bool,
+        lastPaste: Date?,
+        stoppedAt: Date?
+    ) -> EdgeCommandOutcome.Delivery {
+        guard autoPaste, let lastPaste else { return .copied }
+        if let stoppedAt, lastPaste < stoppedAt { return .copied }
+        return .pasted
+    }
+
     func showError(message: String) {
+        PasteMarkController.shared.clearIfWaiting()
+        if store.mode.isMeeting, store.headerLanding != nil {
+            showMeetingNotice(message, isError: true)
+            return
+        }
+        store.headerLanding = nil
         autoHideTask?.cancel()
         cancelOutputPreview()
         store.phase = .error(message)
@@ -134,6 +335,7 @@ final class DictationOverlayController {
         }
         autoHideTask?.cancel()
         cancelOutputPreview()
+        store.headerLanding = nil
         store.phase = .info(message)
         store.audioLevel = 0
         if usesNotch {
@@ -147,14 +349,15 @@ final class DictationOverlayController {
 
     /// True while the "Transcribing in background" hand-off is on screen.
     var isShowingBackgroundHandoff: Bool {
-        store.backgroundHandoffDetail != nil || isNotchHandoffShowing
+        store.backgroundHandoffDetail != nil || isNotchHandoffShowing || store.headerLanding != nil
     }
 
     /// The notch shows the hand-off itself; this keeps `.success` from hiding it early.
     private var isNotchHandoffShowing = false
 
     /// Stop handed the meeting to the transcription queue: say so for 2 s, then close.
-    func showBackgroundHandoff(duration: TimeInterval = 2.0) {
+    func showBackgroundHandoff(duration: TimeInterval = 2.0, detail: String? = nil) {
+        recordOutcome(resultText: "", recordingID: nil)
         let message = String(localized: "Transcribing in background")
         autoHideTask?.cancel()
         cancelOutputPreview()
@@ -175,7 +378,11 @@ final class DictationOverlayController {
             dismiss()
             return
         }
-        store.backgroundHandoffDetail = String(localized: "The transcript will appear in Recordings.")
+        if store.headerLanding != nil {
+            finishHeaderLanding(line: message)
+            return
+        }
+        store.backgroundHandoffDetail = detail ?? String(localized: "The transcript will appear in Recordings.")
         store.phase = .info(message)
         showPanel()
         scheduleAutoHide(delay: duration)
@@ -206,26 +413,37 @@ final class DictationOverlayController {
 
     func hide() {
         // Toast auto-hide must not dismiss while the user hid the live panel
-        // to the red-dot tab — recording is still active.
+        // to the red-dot tab — recording is still active. Once Stop moved the
+        // panel to finalizing/processing, the end of the stop must dismiss it.
         if EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
             switch store.phase {
-            case .pasted, .error:
-                break
-            default:
+            case .starting, .recording:
                 return
+            default:
+                break
             }
         }
-        guard usesNotch || store.phase != .pasted || SettingsStorage.shared.autoPaste else { return }
+        // A meeting saved with no transcript and nothing queued: the done moment, then the panel goes.
+        if store.mode.isMeeting, store.headerLanding == .saving {
+            finishHeaderLanding(line: String(localized: "Meeting saved"))
+            return
+        }
+        if case .done = store.headerLanding { return }
+        guard usesNotch || store.phase != .pasted || outcomeStore.outcome?.delivery == .pasted
+            || outcomeStore.outcome?.headerOnly == true else { return }
         dismiss()
     }
 
     func dismiss() {
+        PasteMarkController.shared.clearIfWaiting()
+        outcomeStore.clear()
         autoHideTask?.cancel()
         cancelOutputPreview()
         autoHideTask = nil
         isNotchHandoffShowing = false
         store.audioLevel = 0
         store.backgroundHandoffDetail = nil
+        store.headerLanding = nil
         if usesNotch {
             NotchManager.shared.hide()
         }
@@ -318,11 +536,8 @@ final class DictationOverlayController {
     }
 
     private var needsOutputPreview: Bool {
-        // The GET endpoint carries the text in the URL; past this the preview
-        // stays on the spoken words and Stop translates the final text.
         guard store.canStop, store.selectedOutput.targetLanguage != nil,
-              let source = store.outputSourceText,
-              source.utf8.count <= Self.maxPreviewSourceBytes
+              let source = store.outputSourceText, store.isPreviewable
         else { return false }
         guard let preview = store.convertedPreview else { return true }
         return preview.output != store.selectedOutput || preview.source != source
@@ -341,6 +556,21 @@ final class DictationOverlayController {
     func updateConnectionStatus(_ status: RealtimeConnectionStatus) {
         guard !usesNotch else { return }
         store.connectionStatus = status
+    }
+
+    /// The session's engine and the Output menu's languages, read once at start.
+    private func configureSession(mode: RecordingMode) {
+        store.yourLanguages = SettingsStorage.shared.yourLanguages
+        let job: STTJob? = switch mode {
+        case .voice: .dictation
+        case .translation: .dictationTranslation
+        case .meeting: .meeting
+        case .meetingTranslation: .meetingTranslation
+        case .fileTranscription: nil
+        }
+        store.sessionEngine = job.flatMap { job in
+            AppDelegate.current.flatMap { LiveSessionEngine.running($0.modeRoute(for: job), job: job) }
+        }
     }
 
     private func beginSurfaceSession() {

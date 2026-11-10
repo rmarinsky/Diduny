@@ -15,6 +15,9 @@ enum LiveDictationOverlayPhase: Equatable {
 @Observable
 @MainActor
 final class LiveDictationOverlayStore {
+    /// Read by the Stop and cancel hints only; tests inject their own (test-plan T1-SH).
+    @ObservationIgnored var settings: SettingsStorage = .shared
+    @ObservationIgnored var hotkeys: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared
     var mode: RecordingMode = .voice
     /// False while the edge panel morphs out of its tab: a static skeleton shows
     /// instead of live content, so state updates never fight the entrance.
@@ -29,11 +32,17 @@ final class LiveDictationOverlayStore {
     var endedAt: Date?
     /// Box text while the "Transcribing in background" hand-off is shown; nil otherwise.
     var backgroundHandoffDetail: String?
+    /// After a meeting's Stop on the floating panel: the header-only logo view; nil otherwise.
+    var headerLanding: PasteMarkPlan.HeaderLanding?
     var finalText = ""
     var provisionalText = ""
     var copiedAt: Date?
-    /// Set while a meeting records audio only; turns on the cloud live transcript.
-    var onTurnOnLiveTranscript: (() -> Void)?
+    /// Meeting panel segment and engine per segment (WP-31). Seeded from Settings > Modes once WP-13 lands.
+    var meetingSegment: MeetingSegment = .cloud
+    var meetingEngines: [MeetingSegment: EngineID] = MeetingPanelState.defaultEngines
+    /// The running meeting's switch state and where clicks go (ADR-0013). Nil handler: no meeting behind the panel.
+    var meetingSwitch = MeetingSwitchDisplay()
+    var meetingSwitchHandler: MeetingSwitchHandler?
     /// What the live STT stream produces for this session.
     private(set) var nativeOutput: DictationOutput = .original
     /// Output of the session or picked in the panel, before any spoken command.
@@ -53,56 +62,48 @@ final class LiveDictationOverlayStore {
 
     private var fallbackFinalText = ""
     private var fallbackProvisionalText = ""
-    private let meetingTranscript = LiveTranscriptStore()
+    /// Meeting turns behind `MeetingLiveContent` (WP-31).
+    let meetingTranscript = LiveTranscriptStore()
+    /// Translate meeting: the session's pair, engine and two-way transcript (WP-32).
+    var meetingTranslationPair = TranslationLanguagePair(languageA: "en", languageB: "uk")
+    var meetingTranslationEngine: EngineID = .didunyCloud
+    var meetingTranslation = TranslateMeetingTranscript(pair: TranslationLanguagePair(languageA: "en", languageB: "uk"))
+    var meetingTranslationShowsOriginal = false
+    /// Battery warning on This Mac (WP-16, WP-31).
+    @ObservationIgnored private(set) lazy var powerSource = PowerSourceMonitor()
 
     var title: String {
-        if !outputOptions.isEmpty {
-            return selectedOutput == .original
-                ? String(localized: "Transcribing")
-                : String(localized: "Translating")
-        }
-        return switch mode {
-        case .voice:
-            String(localized: "Transcribing")
-        case .translation:
-            String(localized: "Translating")
-        case .meeting:
-            String(localized: "Recording meeting")
-        case .meetingTranslation:
-            String(localized: "Translating meeting")
-        case .fileTranscription:
-            String(localized: "File Transcription")
-        }
+        panelState.title
     }
 
-    var statusText: String {
-        switch phase {
-        case .starting:
-            String(localized: "Starting")
-        case .recording:
-            switch connectionStatus {
-            case .connected:
-                String(localized: "Recording live")
-            case .connecting:
-                String(localized: "Connecting")
-            case .reconnecting:
-                String(localized: "Reconnecting")
-            case .failed:
-                String(localized: "Recording offline")
-            case .disconnected:
-                String(localized: "Recording")
-            }
-        case .finalizing:
-            String(localized: "Finalizing")
-        case .processing:
-            String(localized: "Formatting")
-        case .pasted:
-            String(localized: "Complete")
-        case let .error(message):
-            message
-        case let .info(message):
-            message
-        }
+    /// Engine of the running session (N6, N18); nil until the controller sets it at start.
+    var sessionEngine: LiveSessionEngine?
+    /// Settings > Languages, first in the Output menu.
+    var yourLanguages: [String] = YourLanguages.defaultCodes
+
+    /// What the live panel shows now.
+    var panelState: LivePanelState {
+        LivePanelState(
+            mode: mode,
+            phase: phase,
+            connectionStatus: connectionStatus,
+            engine: sessionEngine,
+            output: mode.isMeeting ? .original : displayedOutput,
+            hasText: hasText,
+            previewPastLimit: selectedOutput != nativeOutput && !isPreviewable
+        )
+    }
+
+    /// The Output the title and caption follow: the picked output, or the session's own target.
+    private var displayedOutput: DictationOutput {
+        if !outputOptions.isEmpty { return selectedOutput }
+        if case let .translation(target) = mode { return .translation(targetLanguage: target) }
+        return .original
+    }
+
+    /// Output menu: Original, your languages, all languages (01 §4 item 3).
+    var outputMenu: PickerMenuModel {
+        DictationOutputMenu.model(yourLanguages: yourLanguages, selected: selectedOutput)
     }
 
     var visibleText: String {
@@ -111,7 +112,7 @@ final class LiveDictationOverlayStore {
         if selectedOutput == .original {
             return spokenText
         }
-        guard let convertedPreview, convertedPreview.output == selectedOutput else { return spokenText }
+        guard isShowingConvertedPreview, let convertedPreview else { return spokenText }
         return convertedPreview.text
     }
 
@@ -123,10 +124,18 @@ final class LiveDictationOverlayStore {
         return text.isEmpty ? nil : text
     }
 
+    /// The GET endpoint carries the text in the URL. Past this the preview cannot refresh, so the panel
+    /// goes back to the spoken words instead of freezing on an old translation; Stop translates the final text.
+    static let maxPreviewSourceBytes = 1500
+
+    var isPreviewable: Bool {
+        (outputSourceText?.utf8.count ?? 0) <= Self.maxPreviewSourceBytes
+    }
+
     /// True while the panel shows the text-translated preview instead of the spoken words.
     var isShowingConvertedPreview: Bool {
         phase != .pasted && selectedOutput != nativeOutput && selectedOutput != .original
-            && convertedPreview?.output == selectedOutput
+            && convertedPreview?.output == selectedOutput && isPreviewable
     }
 
     private var spokenFinalText: String {
@@ -165,34 +174,34 @@ final class LiveDictationOverlayStore {
         switch mode {
         case .voice:
             if let modifierHint = modifierToggleHint(
-                key: SettingsStorage.shared.pushToTalkKey,
-                isEnabled: SettingsStorage.shared.pushToTalkToggleEnabled,
-                tapCount: SettingsStorage.shared.pushToTalkToggleTapCount
+                key: settings.pushToTalkKey,
+                isEnabled: settings.pushToTalkToggleEnabled,
+                tapCount: settings.pushToTalkToggleTapCount
             ) {
                 return modifierHint
             }
-            return actionShortcutHint(.toggleRecording, pressCount: SettingsStorage.shared.recordingHotkeyPressCount)
+            return actionShortcutHint(.toggleRecording, pressCount: 1)
         case .translation:
             if let modifierHint = modifierToggleHint(
-                key: SettingsStorage.shared.translationPushToTalkKey,
-                isEnabled: SettingsStorage.shared.translationPushToTalkToggleEnabled,
-                tapCount: SettingsStorage.shared.translationPushToTalkToggleTapCount
+                key: settings.translationPushToTalkKey,
+                isEnabled: settings.translationPushToTalkToggleEnabled,
+                tapCount: settings.translationPushToTalkToggleTapCount
             ) {
                 return modifierHint
             }
             return actionShortcutHint(
                 .toggleTranslation,
-                pressCount: SettingsStorage.shared.translationHotkeyPressCount
+                pressCount: 1
             )
         case .meeting:
             return actionShortcutHint(
                 .toggleMeetingRecording,
-                pressCount: SettingsStorage.shared.meetingHotkeyPressCount
+                pressCount: 1
             )
         case .meetingTranslation:
             return actionShortcutHint(
                 .toggleMeetingTranslation,
-                pressCount: SettingsStorage.shared.meetingTranslationHotkeyPressCount
+                pressCount: 1
             )
         case .fileTranscription:
             return nil
@@ -200,39 +209,11 @@ final class LiveDictationOverlayStore {
     }
 
     var cancelShortcutHint: String? {
-        guard canStop, SettingsStorage.shared.escapeCancelEnabled else { return nil }
+        guard canStop, settings.escapeCancelEnabled else { return nil }
         return repeatedShortcutHint(
-            "Esc",
-            pressCount: SettingsStorage.shared.escapeCancelPressCount
+            settings.escapeCancelShortcut.displayName,
+            pressCount: settings.escapeCancelPressCount
         )
-    }
-
-    var providerLabel: String {
-        let provider: TranscriptionProvider = switch mode {
-        case .translation, .meetingTranslation:
-            SettingsStorage.shared.effectiveTranslationProvider
-        case .voice, .meeting, .fileTranscription:
-            SettingsStorage.shared.effectiveTranscriptionProvider
-        }
-        return provider == .cloud ? "Cloud" : "Local"
-    }
-
-    var sourceLabel: String {
-        mode.isMeeting ? String(localized: "System + microphone") : "Microphone"
-    }
-
-    var targetLabel: String? {
-        if !outputOptions.isEmpty {
-            return selectedOutput.targetLanguage.map { _ in selectedOutput.label }
-        }
-        return switch mode {
-        case let .translation(targetLanguage):
-            targetLanguage
-        case .meetingTranslation:
-            SettingsStorage.shared.resolveTranslationLanguagePair().displayLabel
-        case .voice, .meeting, .fileTranscription:
-            nil
-        }
     }
 
     func reset(mode: RecordingMode) {
@@ -243,11 +224,13 @@ final class LiveDictationOverlayStore {
         startedAt = Date()
         endedAt = nil
         backgroundHandoffDetail = nil
+        headerLanding = nil
         finalText = ""
         provisionalText = ""
         fallbackFinalText = ""
         fallbackProvisionalText = ""
         meetingTranscript.reset()
+        applyMeetingDefaults()
         copiedAt = nil
         nativeOutput = .original
         pickedOutput = .original
@@ -255,7 +238,9 @@ final class LiveDictationOverlayStore {
         listensForVoiceCommands = false
         outputOptions = []
         convertedPreview = nil
-        onTurnOnLiveTranscript = nil
+        meetingSwitch = MeetingSwitchDisplay()
+        meetingSwitchHandler = nil
+        sessionEngine = nil
     }
 
     func configureOutput(native: DictationOutput, options: [DictationOutput], listensForVoiceCommands: Bool) {
@@ -292,6 +277,8 @@ final class LiveDictationOverlayStore {
     func processTokens(_ tokens: [RealtimeToken]) {
         if mode == .meeting {
             meetingTranscript.processTokens(tokens)
+        } else if mode == .meetingTranslation {
+            meetingTranslation.process(tokens)
         }
 
         let isTranslationMode = switch mode {
@@ -343,6 +330,13 @@ final class LiveDictationOverlayStore {
         meetingTranscript.markSegmentBoundary()
     }
 
+    /// At a cut: the old engine's provisional text stays (ADR-0013 D1, C6).
+    func commitProvisional() {
+        meetingTranscript.commitProvisional()
+        finalText += provisionalText
+        provisionalText = ""
+    }
+
     func bestText(includeProvisional: Bool) -> String {
         let primary = composedText(final: finalText, provisional: includeProvisional ? provisionalText : "")
         if !primary.isEmpty {
@@ -369,7 +363,7 @@ final class LiveDictationOverlayStore {
     }
 
     private func actionShortcutHint(_ name: KeyboardShortcuts.Name, pressCount: Int) -> String? {
-        guard let shortcut = KeyboardShortcuts.getShortcut(for: name) else { return nil }
+        guard let shortcut = hotkeys.getShortcut(for: name) else { return nil }
         return repeatedShortcutHint(String(describing: shortcut), pressCount: pressCount)
     }
 

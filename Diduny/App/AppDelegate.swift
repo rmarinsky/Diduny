@@ -145,14 +145,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var meetingPipelineGeneration: UInt64 = 0
     var activeMeetingTranscriptionSessionID: UUID?
     var activeMeetingTranscriptionProvider: TranscriptionProvider?
+    /// The segment and engine the running meeting started with (WP-17); nil when idle.
+    var activeMeetingStartRoute: MeetingStartRoute?
     var meetingTranslationPipelineTask: Task<Void, Never>?
-    /// In-flight meeting realtime WS connect, launched before capture setup so
-    /// the handshake overlaps it. Held so stop/cancel can abort a connect that
-    /// is still in progress.
-    var meetingRealtimeConnectTask: Task<Void, Never>?
-    /// Batches meeting realtime tokens to ≤10Hz store updates. Held so the
-    /// stop path can flush the tail before reading the transcript.
-    var meetingTokenCoalescer: RealtimeTokenCoalescer?
+    /// Runs the meeting's live engines and switches between them (ADR-0013). One per recording.
+    var meetingEngineController: MeetingEngineController?
+    /// Feeds the live panel's level meter from the meeting fan-out (all segments, Record only included).
+    var meetingLevelTask: Task<Void, Never>?
 
     // Auto-reset Tasks (success/error → idle timers)
     var voiceAutoResetTask: Task<Void, Never>?
@@ -170,7 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// "Stop after silence" for voice dictation / voice translation (they share `audioRecorder`).
     var dictationSilenceMonitor: SilenceAutoStopMonitor?
     var meetingSilenceMonitor: SilenceAutoStopMonitor?
-    lazy var clipboardService = ClipboardService()
+    lazy var clipboardService = ClipboardService.shared
     lazy var hotkeyService = HotkeyService()
     lazy var pushToTalkService = PushToTalkService()
     lazy var translationPushToTalkService = PushToTalkService()
@@ -193,6 +192,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set at translation start when the translation engine is ElevenLabs (transcribe, then Diduny text translation).
     var translationByokPlan: ExecutionPlan?
     var translationRealtimeService: RealtimeTranscriptionProtocol?
+    /// WP-64: engine switching for the running dictation or translation; one at a time, like the recordings.
+    var dictationEngineSwitch: DictationEngineSwitcher?
     /// BYOK realtime engine for the current meeting; nil = `realtimeTranscriptionService`.
     var meetingRealtimeService: (any RealtimeTranscriptionProtocol)?
     /// Last ElevenLabs failure in the current meeting, offered with a Diduny Cloud re-run after Stop.
@@ -220,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var meetingTranslationTimestampBackfill = TranslationTimestampBackfill()
 
     var activeTranscriptionService: TranscriptionServiceProtocol {
-        switch routedProvider(for: .dictation, legacy: SettingsStorage.shared.effectiveTranscriptionProvider) {
+        switch routedProvider(for: .dictation) {
         case .cloud: transcriptionService
         case .local: whisperTranscriptionService
         }
@@ -376,6 +377,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             showMainWindowAfterLaunch()
         }
+        #if TEST_BUILD
+            UITestOpenTarget.didFinishLaunching(self)
+        #endif
     }
 
     /// Runtime setup is never gated by first-use guidance.
@@ -637,8 +641,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func recoverRecording(from state: RecoveryState) {
         Task {
             let translationTarget = state.translationTargetLanguage
-                ?? (SettingsStorage.shared.effectiveTranslationProvider == .local
-                    ? "en" : SettingsStorage.shared.resolveTranslationLanguagePair().languageB)
+                ?? (self.routedTranslationProvider == .local
+                    ? "en" : SettingsStorage.shared.effectiveDictationTranslationTargetLanguage)
             var recoveredRecordingID: UUID?
             let processor = RecoveryRecordingProcessor(
                 save: { audioData, state, duration in
@@ -668,6 +672,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             )
 
+            if state.recordingType == .meetingTranslation {
+                // Same path as Stop: the mode engine after Stop, then Diduny translates (7A, WP-61).
+                let target = RunTimeRouting.meetingTranslationRecoveryTarget(
+                    saved: state.translationTargetLanguage, pair: SettingsStorage.shared.resolveTranslationLanguagePair())
+                let engine = self.modeRoute(for: .meetingTranslation).engine
+                do {
+                    let id = try await processor.handOff(state: state) { id in
+                        RecordingQueueService.shared.enqueue([id], action: .translate, targetLanguage: target,
+                                                             engineOverride: engine)
+                    }
+                    MainWindowController.shared.showRecording(id: id)
+                } catch {
+                    Log.app.error("Recovery hand-off failed: \(error.localizedDescription)")
+                    DictationOverlayController.shared.showInfo(
+                        message: "Recovery failed. The original audio was kept for another attempt.", duration: 5)
+                }
+                return
+            }
+
             do {
                 let result = try await processor.process(state: state) { audioData, recordingType in
                     Log.app.info("Recovered audio data: \(audioData.count) bytes")
@@ -676,14 +699,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     case .voice:
                         rawText = try await self.activeTranscriptionService.transcribe(audioData: audioData)
                     case .meeting:
-                        if SettingsStorage.shared.effectiveTranscriptionProvider == .cloud {
+                        let start = self.meetingStartRoute()
+                        if start.recoversInCloud(signedIn: AuthService.hasStoredSession) {
                             rawText = try await self.transcriptionService.transcribeMeeting(audioData: audioData)
+                        } else if self.onDeviceEngine(for: .meeting) != nil {
+                            rawText = try await self.transcribeWithOwnEngine(job: .meeting, audioData: audioData)
                         } else {
                             rawText = try await self.whisperTranscriptionService.transcribe(audioData: audioData)
                         }
                     case .translation:
-                        if SettingsStorage.shared.effectiveTranslationProvider == .local {
-                            rawText = try await self.whisperTranscriptionService.translateAndTranscribe(
+                        if self.routedTranslationProvider == .local {
+                            rawText = try await self.localWhisperTranslation(
                                 audioData: audioData,
                                 targetLanguage: translationTarget
                             )
@@ -695,10 +721,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             )
                         }
                     case .meetingTranslation:
-                        let service: TranscriptionServiceProtocol = SettingsStorage.shared
-                            .effectiveTranslationProvider == .local
-                            ? self.whisperTranscriptionService : self.transcriptionService
-                        rawText = try await service.translateAndTranscribe(audioData: audioData)
+                        // Handed to the queue above.
+                        throw RecoveryRecordingProcessorError.couldNotPersist
                     }
 
                     let cleanedText = await TranscriptCleanupService.shared.clean(
@@ -725,7 +749,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 MainWindowController.shared.showRecording(id: result.recordingID)
 
                 if SettingsStorage.shared.playSoundOnCompletion {
-                    NSSound(named: .init("Funk"))?.play()
+                    CompletionSound.play()
                 }
             } catch {
                 Log.app.error("Recovery transcription failed: \(error.localizedDescription)")
@@ -1256,7 +1280,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if state != .recording, state != .processing { whisperTranscriptionService.endRecordingHold() }
         if state == .recording {
-            startMeetingSilenceMonitor { [weak self] in
+            startMeetingSilenceMonitor(job: .meeting) { [weak self] in
                 guard self?.appState.meetingRecordingState == .recording else { return }
                 await self?.stopMeetingRecording()
             }
@@ -1266,7 +1290,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         meetingAutoResetTask?.cancel()
         handleStateChange(
             state,
-            mode: .meeting,
+            // A Translate meeting on an after-Stop engine shows the Translate panel: no segments, its Engine menu.
+            mode: activeMeetingTranslateTarget != nil ? .meetingTranslation : .meeting,
             currentStateGetter: { self.appState.meetingRecordingState },
             stateResetter: { self.appState.meetingRecordingState = $0 },
             autoResetTaskSetter: { self.meetingAutoResetTask = $0 },
@@ -1278,7 +1303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func handleMeetingTranslationStateChange(_ state: RecordingState) {
         if state == .recording {
-            startMeetingSilenceMonitor { [weak self] in
+            startMeetingSilenceMonitor(job: .meetingTranslation) { [weak self] in
                 guard self?.appState.meetingTranslationRecordingState == .recording else { return }
                 await self?.stopMeetingTranslationRecording()
             }
@@ -1300,16 +1325,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var translationTargetLanguage: String {
         activeTranslationTargetLanguage
             ?? activeTranslationLanguagePair?.languageB
-            ?? (SettingsStorage.shared.effectiveTranslationProvider == .local
-                ? "en" : SettingsStorage.shared.defaultTranslationLanguagePair.languageB)
+            ?? SettingsStorage.shared.effectiveDictationTranslationTargetLanguage
     }
 
     var translationTargetLabel: String {
         translationTargetLanguage.uppercased()
-    }
-
-    var translationTargetDisplayName: String {
-        SupportedLanguage.language(for: translationTargetLanguage)?.name ?? translationTargetLabel
     }
 
     var translationPairLabel: String {
@@ -1360,13 +1380,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         static func applyIfRequested(arguments: [String] = ProcessInfo.processInfo.arguments) {
             guard !didApply else { return }
             didApply = true
-            guard arguments.contains(resetArgument), let bundleID = Bundle.main.bundleIdentifier else { return }
-            NSLog("[Diduny] UI testing: resetting state for %@", bundleID)
-            UserDefaults.standard.removePersistentDomain(forName: bundleID)
-            AuthService.removeStoredSession()
-            if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-                try? FileManager.default.removeItem(at: appSupport.appendingPathComponent(bundleID))
+            let didReset = arguments.contains(resetArgument)
+            if didReset, let bundleID = Bundle.main.bundleIdentifier {
+                NSLog("[Diduny] UI testing: resetting state for %@", bundleID)
+                UserDefaults.standard.removePersistentDomain(forName: bundleID)
+                AuthService.removeStoredSession()
+                if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+                    try? FileManager.default.removeItem(at: appSupport.appendingPathComponent(bundleID))
+                }
             }
+            #if TEST_BUILD
+                UITestHarness.applySeed(didReset: didReset)
+            #endif
         }
     }
 #endif

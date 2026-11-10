@@ -10,6 +10,7 @@ struct RecordingRowView: View {
     var isSelectionMode = false
     var isSelected = false
     var onToggleSelection: (() -> Void)?
+    var isOpenInDetail = false
 
     @State private var playbackService = AudioPlaybackService.shared
     @State private var queueService = RecordingQueueService.shared
@@ -50,8 +51,10 @@ struct RecordingRowView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 11)
+        .background(isOpenInDetail ? DS.Palette.tint : Color.clear)
         .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isOpenInDetail ? .isSelected : [])
     }
 
     // MARK: - Subviews
@@ -332,7 +335,7 @@ struct RecordingRowView: View {
             return recording.statusDetail ?? String(localized: "Recording…")
         }
         if recording.status == .needsRecovery {
-            return String(localized: "Needs processing — recover audio from this session")
+            return recording.recoveryFailureMessage ?? String(localized: "Needs processing — recover audio from this session")
         }
         if recording.status == .processing {
             return queueService.isQueued(recording.id)
@@ -349,7 +352,9 @@ struct RecordingRowView: View {
     }
 
     private var previewColor: Color {
-        recording.status == .failed ? .red : .secondary
+        recording.status == .failed || recording.recoveryFailureMessage != nil
+            ? .red
+            : .secondary
     }
 
     private var formattedDuration: String {

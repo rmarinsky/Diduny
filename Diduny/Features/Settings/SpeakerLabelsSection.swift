@@ -112,6 +112,116 @@ struct SpeakerLabelsSection: View {
     }
 }
 
+/// Settings > Audio "Speaker labels on this Mac" (design-spec 7.14, 05 §2.4), restyled as
+/// settings rows. Same keys and rules as `SpeakerLabelsSection`: hidden on Intel, disabled below
+/// macOS 15, profile row only while identification is on. The model state is the caption's last
+/// sentence; "Retry" sits next to the switch after a failed download.
+struct SpeakerLabelsGroup: View {
+    @State private var isEnabled = SettingsStorage.shared.speakerIdentificationEnabled
+    @State private var profile = VoiceProfileStore.shared.load()
+    @State private var isEnrolling = false
+    @State private var isConfirmingDelete = false
+    private let models = SpeakerModelManager.shared
+
+    var body: some View {
+        if !LocalSpeakerDiarizer.isRunningOnIntel {
+            AudioSettingsGroup(title: "Speaker labels on this Mac") {
+                if LocalSpeakerDiarizer.isSupported {
+                    identifyRow
+                    if isEnabled { profileRow }
+                } else {
+                    SettingsLineRow(
+                        title: "Identify speakers",
+                        caption: "Needs macOS 15 or later. Meetings are labelled Me and Others.",
+                        kind: .toggle,
+                        showsHairline: false
+                    ) {
+                        SettingsSwitch(title: "Identify speakers", isOn: .constant(false))
+                            .disabled(true)
+                            .accessibilityIdentifier("audio.speakers.identify")
+                    }
+                }
+            }
+            .sheet(isPresented: $isEnrolling, onDismiss: { profile = VoiceProfileStore.shared.load() }) {
+                VoiceEnrollmentView()
+            }
+            .alert("Delete your voice profile?", isPresented: $isConfirmingDelete) {
+                Button("Delete", role: .destructive) {
+                    do {
+                        try VoiceProfileStore.shared.delete()
+                    } catch {
+                        Log.app.error("Voice profile delete failed: \(error.localizedDescription, privacy: .public)")
+                    }
+                    profile = VoiceProfileStore.shared.load()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Diduny will go back to treating the main voice on your microphone as you. Existing transcripts don't change.")
+            }
+        }
+    }
+
+    private var identifyCaption: String {
+        AudioSettingsText.identifySpeakersCaption(
+            state: models.state,
+            downloadMegabytes: LocalSpeakerDiarizer.modelDownloadMegabytes
+        )
+    }
+
+    private var identifyRow: some View {
+        SettingsLineRow(
+            title: "Identify speakers",
+            caption: "\(identifyCaption)",
+            kind: .toggle,
+            showsHairline: isEnabled
+        ) {
+            if AudioSettingsText.showsRetry(models.state) {
+                Button("Retry") { models.downloadIfNeeded() }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("audio.speakers.retry")
+            }
+            SettingsSwitch(title: "Identify speakers", isOn: $isEnabled)
+                .accessibilityIdentifier("audio.speakers.identify")
+                .onChange(of: isEnabled) { _, value in
+                    SettingsStorage.shared.speakerIdentificationEnabled = value
+                }
+        }
+        .overlay(alignment: .topLeading) {
+            // Lets XCUI read the caption (test-plan §2.1 `audio.speakers.caption`).
+            Color.clear.frame(width: 1, height: 1)
+                .accessibilityElement()
+                .accessibilityLabel(Text(verbatim: identifyCaption))
+                .accessibilityIdentifier("audio.speakers.caption")
+        }
+    }
+
+    /// Spec caption, plus today's saved date as a proposal (05 §2.4 "keep the date in the caption").
+    private var profileCaption: String {
+        let lead = String(localized: "Labels your own voice as you.")
+        guard let profile else { return lead }
+        let saved = String(localized: "Saved \(profile.savedAt.formatted(date: .abbreviated, time: .omitted))")
+        return "\(lead) \(saved)."
+    }
+
+    private var profileRow: some View {
+        SettingsLineRow(title: "My voice profile", caption: "\(profileCaption)", kind: .button, showsHairline: false) {
+            if profile == nil {
+                Button("Set up") { isEnrolling = true }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("audio.voiceProfile.setUp")
+            } else {
+                Button("Re-record") { isEnrolling = true }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("audio.voiceProfile.reRecord")
+                Button("Delete", role: .destructive) { isConfirmingDelete = true }
+                    .buttonStyle(.bordered)
+                    .foregroundStyle(DS.Palette.no)
+                    .accessibilityIdentifier("audio.voiceProfile.delete")
+            }
+        }
+    }
+}
+
 /// Records 10–20 s of the person's voice once and saves only a voice fingerprint (design §2).
 struct VoiceEnrollmentView: View {
     @Environment(\.dismiss) private var dismiss

@@ -38,16 +38,14 @@ extension AppDelegate {
                 }
             }
         }
+
+        // A Shortcuts row switch: off keeps the keys and disables the name; on enables it again.
+        NotificationCenter.default.addObserver(forName: .shortcutSwitchesChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.hotkeyService.refreshSwitches() }
+        }
     }
 
     func setupPushToTalk() {
-        let key = SettingsStorage.shared.pushToTalkKey
-        pushToTalkService.selectedKey = key
-        pushToTalkService.holdModeEnabled = SettingsStorage.shared.pushToTalkHoldEnabled
-        pushToTalkService.toggleModeEnabled = SettingsStorage.shared.pushToTalkToggleEnabled
-        pushToTalkService.toggleTapCount = SettingsStorage.shared.pushToTalkToggleTapCount
-        pushToTalkService.holdStartDelaySeconds = SettingsStorage.shared.pushToTalkHoldStartDelaySeconds
-
         pushToTalkService.onKeyDown = { [weak self] in
             guard let self else { return }
             Task {
@@ -70,25 +68,13 @@ extension AppDelegate {
             }
         }
 
-        if shouldMonitorModifierKey(key, hold: pushToTalkService.holdModeEnabled, toggle: pushToTalkService.toggleModeEnabled) {
-            pushToTalkService.start()
-        }
+        PushToTalkConfigurator.apply(PushToTalkConfigurator.dictation(.shared), to: pushToTalkService)
     }
 
     @objc func pushToTalkKeyChanged(_ notification: Notification) {
         guard let key = notification.object as? PushToTalkKey else { return }
         Log.app.info("Push-to-talk key changed to: \(key.displayName)")
-
-        pushToTalkService.stop()
-        pushToTalkService.selectedKey = key
-        pushToTalkService.holdModeEnabled = SettingsStorage.shared.pushToTalkHoldEnabled
-        pushToTalkService.toggleModeEnabled = SettingsStorage.shared.pushToTalkToggleEnabled
-        pushToTalkService.toggleTapCount = SettingsStorage.shared.pushToTalkToggleTapCount
-        pushToTalkService.holdStartDelaySeconds = SettingsStorage.shared.pushToTalkHoldStartDelaySeconds
-
-        if shouldMonitorModifierKey(key, hold: pushToTalkService.holdModeEnabled, toggle: pushToTalkService.toggleModeEnabled) {
-            pushToTalkService.start()
-        }
+        PushToTalkConfigurator.apply(PushToTalkConfigurator.dictation(.shared).with(key: key), to: pushToTalkService)
     }
 
     @objc func pushToTalkModeChanged(_: Notification) {
@@ -146,8 +132,13 @@ extension AppDelegate {
     }
 
     private func refreshInplaceTranslationMonitor() {
-        inplaceTranslationMonitor.reservedKeys = SettingsStorage.shared.inplaceTranslationReservedKeys
-        if SettingsStorage.shared.inplaceTranslationActive {
+        let settings = SettingsStorage.shared
+        inplaceTranslationMonitor.reservedKeys = settings.inplaceTranslationReservedKeys
+        inplaceTranslationMonitor.configure(
+            shortcut: settings.inplaceTranslationShortcut,
+            pressCount: settings.inplaceTranslationPressCount
+        )
+        if settings.inplaceTranslationActive {
             inplaceTranslationMonitor.start()
         } else {
             inplaceTranslationMonitor.stop()
@@ -157,14 +148,6 @@ extension AppDelegate {
     // MARK: - Translation Push to Talk
 
     func setupTranslationPushToTalk() {
-        let key = SettingsStorage.shared.translationPushToTalkKey
-        translationPushToTalkService.selectedKey = key
-        translationPushToTalkService.holdModeEnabled = SettingsStorage.shared.translationPushToTalkHoldEnabled
-        translationPushToTalkService.toggleModeEnabled = SettingsStorage.shared.translationPushToTalkToggleEnabled
-        translationPushToTalkService.toggleTapCount = SettingsStorage.shared.translationPushToTalkToggleTapCount
-        translationPushToTalkService.holdStartDelaySeconds =
-            SettingsStorage.shared.translationPushToTalkHoldStartDelaySeconds
-
         translationPushToTalkService.onKeyDown = { [weak self] in
             guard let self else { return }
             Task {
@@ -187,34 +170,16 @@ extension AppDelegate {
             }
         }
 
-        if shouldMonitorModifierKey(
-            key,
-            hold: translationPushToTalkService.holdModeEnabled,
-            toggle: translationPushToTalkService.toggleModeEnabled
-        ) {
-            translationPushToTalkService.start()
-        }
+        PushToTalkConfigurator.apply(PushToTalkConfigurator.translation(.shared), to: translationPushToTalkService)
     }
 
     @objc func translationPushToTalkKeyChanged(_ notification: Notification) {
         guard let key = notification.object as? PushToTalkKey else { return }
         Log.app.info("Translation push-to-talk key changed to: \(key.displayName)")
-
-        translationPushToTalkService.stop()
-        translationPushToTalkService.selectedKey = key
-        translationPushToTalkService.holdModeEnabled = SettingsStorage.shared.translationPushToTalkHoldEnabled
-        translationPushToTalkService.toggleModeEnabled = SettingsStorage.shared.translationPushToTalkToggleEnabled
-        translationPushToTalkService.toggleTapCount = SettingsStorage.shared.translationPushToTalkToggleTapCount
-        translationPushToTalkService.holdStartDelaySeconds =
-            SettingsStorage.shared.translationPushToTalkHoldStartDelaySeconds
-
-        if shouldMonitorModifierKey(
-            key,
-            hold: translationPushToTalkService.holdModeEnabled,
-            toggle: translationPushToTalkService.toggleModeEnabled
-        ) {
-            translationPushToTalkService.start()
-        }
+        PushToTalkConfigurator.apply(
+            PushToTalkConfigurator.translation(.shared).with(key: key),
+            to: translationPushToTalkService
+        )
     }
 
     @objc func translationPushToTalkModeChanged(_: Notification) {

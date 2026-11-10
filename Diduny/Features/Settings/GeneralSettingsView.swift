@@ -1,7 +1,9 @@
 import LaunchAtLogin
 import SwiftUI
 
+/// Settings > General (design-spec 7.12, 05 section 2.2).
 struct GeneralSettingsView: View {
+    @State private var appLanguage = AppLanguage.preference()
     @State private var messageFormattingMode = SettingsStorage.shared.messageFormattingMode
     @State private var autoPaste = SettingsStorage.shared.autoPaste
     @State private var playSound = SettingsStorage.shared.playSoundOnCompletion
@@ -9,21 +11,24 @@ struct GeneralSettingsView: View {
     @State private var recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
     @State private var showLiveTranscriptModal = SettingsStorage.shared.showLiveTranscriptModal
     @State private var typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
-    @State private var screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
     @State private var dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
     @State private var meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        PageScaffold(title: "General", scrolls: false) {
-            form
+        PageScaffold(title: "General", subtitle: "How the app behaves, whatever the mode.") {
+            VStack(alignment: .leading, spacing: 0) {
+                topGroup
+                afterRecordingGroup
+                whileRecordingGroup
+                historyGroup
+                helpGroup
+            }
         }
         .onAppear {
             launchAtLogin = LaunchAtLogin.isEnabled
             recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
             showLiveTranscriptModal = SettingsStorage.shared.showLiveTranscriptModal
             typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
-            screenRecordingPromptEnabled = !SettingsStorage.shared.userDeclinedScreenRecording
             dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
             meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
         }
@@ -32,188 +37,199 @@ struct GeneralSettingsView: View {
         }
     }
 
-    private var form: some View {
-        Form {
-            AppLanguageSettingsSection()
+    // MARK: - Groups
 
-            Section {
-                Toggle("Auto-paste transcribed text", isOn: $autoPaste)
-                    .onChange(of: autoPaste) { _, newValue in
-                        SettingsStorage.shared.autoPaste = newValue
-                    }
-
-                Toggle("Play sound when done", isOn: $playSound)
-                    .onChange(of: playSound) { _, newValue in
-                        SettingsStorage.shared.playSoundOnCompletion = newValue
-                    }
-
-                Toggle("Launch at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, newValue in
-                        LaunchAtLogin.isEnabled = newValue
-                    }
-
-                Picker("Recording feedback", selection: $recordingFeedbackSurface) {
-                    ForEach(RecordingFeedbackSurface.allCases) { surface in
-                        Text(surface.displayName).tag(surface)
-                    }
+    private var topGroup: some View {
+        GeneralGroup(heading: nil) {
+            SettingsLineRow(
+                title: "App language",
+                caption: "Restart Diduny to apply the language to all windows and menus. Recording and translation languages do not change.",
+                kind: .popUp
+            ) {
+                Picker("App language", selection: $appLanguage) {
+                    ForEach(AppLanguage.allCases) { Text($0.displayName).tag($0) }
                 }
-                .pickerStyle(.segmented)
-                .onChange(of: recordingFeedbackSurface) { _, newValue in
-                    SettingsStorage.shared.recordingFeedbackSurface = newValue
-                    EdgeCommandPanelController.shared.applySurfacePreference()
-                }
-
-                if recordingFeedbackSurface == .compactPanel {
-                    Toggle("Show transcript window when recording starts", isOn: $showLiveTranscriptModal)
-                        .onChange(of: showLiveTranscriptModal) { _, newValue in
-                            SettingsStorage.shared.showLiveTranscriptModal = newValue
-                        }
-                        .transition(.opacity)
-                }
-
-            } header: {
-                Text("Behavior")
-            } footer: {
-                Text(
-                    recordingFeedbackSurface == .compactPanel
-                        ? "Floating modal shows the live transcript. Turn the toggle off to start on the edge tab (red dot); click the tab to open the window. Minus hides it again."
-                        : "Dynamic Notch shows a compact indicator without the live transcript."
-                )
+                .pickerStyle(.menu).labelsHidden().fixedSize()
+                .accessibilityIdentifier("general.appLanguage")
+                .onChange(of: appLanguage) { _, value in value.save() }
             }
-
-            Section {
-                Picker("Message style", selection: $messageFormattingMode) {
-                    ForEach(MessageFormattingMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: messageFormattingMode) { _, newValue in
-                    SettingsStorage.shared.messageFormattingMode = newValue
-                }
-            } header: {
-                Text("Message Formatting")
-            } footer: {
-                Text(
-                    "For chat applies to dictation and translated messages up to 280 characters and 50 words on one line. It always lowercases the first word, including names and acronyms, and omits the final period. Internal punctuation, question marks, exclamation marks and ellipses are preserved. Meeting transcripts are unchanged."
-                )
-            }
-
-            Section {
-                HStack {
-                    Text("Typing speed")
-                    Spacer()
-                    Text("\(formatWordsPerMinute(typingSpeedWordsPerMinute)) WPM")
-                        .fontWeight(.semibold)
-                        .monospacedDigit()
-                }
-
-                Button("Open Typing Speed Test…") {
-                    MainWindowController.shared.showWindow(section: .typingTest)
-                }
-                .buttonStyle(.bordered)
-            } header: {
-                Text("Statistics")
-            } footer: {
-                Text("Used to estimate typing time avoided in Overview.")
-            }
-
-            Section {
-                Picker("Dictation & translation", selection: $dictationRetention) {
-                    ForEach(HistoryRetentionPolicy.allCases) { policy in
-                        Text(policy.displayName).tag(policy)
-                    }
-                }
-                .onChange(of: dictationRetention) { _, newValue in
-                    SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy = newValue
-                    pruneExpiredHistoryIfNeeded()
-                }
-
-                Picker("Meeting recordings (beta)", selection: $meetingRetention) {
-                    ForEach(HistoryRetentionPolicy.allCases) { policy in
-                        Text(policy.displayName).tag(policy)
-                    }
-                }
-                .onChange(of: meetingRetention) { _, newValue in
-                    SettingsStorage.shared.meetingHistoryRetentionPolicy = newValue
-                    pruneExpiredHistoryIfNeeded()
-                }
-
-                Button("Delete Expired History Now") {
-                    RecordingsLibraryStorage.shared.pruneExpiredRecordings()
-                }
-                .buttonStyle(.bordered)
-            } header: {
-                Text("History & Storage")
-            } footer: {
-                Text(
-                    "Choose how long Diduny keeps recordings in the library. "
-                        + "Meeting recordings remain available under Recordings while Meetings is in beta."
-                )
-            }
-
-            Section {
-                // Toggling ON clears the declined flag so next launch can prompt again.
-                Toggle("Re-enable Screen Recording prompt", isOn: $screenRecordingPromptEnabled)
-                    .onChange(of: screenRecordingPromptEnabled) { _, newValue in
-                        SettingsStorage.shared.userDeclinedScreenRecording = !newValue
-                    }
-            } header: {
-                Text("Onboarding")
-            } footer: {
-                Text(
-                    "When enabled, Diduny will prompt you to grant Screen Recording permission on next launch if it is not yet granted."
-                )
-            }
-
-            Section {
-                Button("Open Setup Guide") {
-                    openSetupGuide()
-                }
-                .buttonStyle(.bordered)
-            } header: {
-                Text("Help")
+            SettingsLineRow(title: "Launch at login", kind: .toggle) {
+                SettingsSwitch(title: "Launch at login", isOn: $launchAtLogin)
+                    .accessibilityIdentifier("general.launchAtLogin")
+                    .onChange(of: launchAtLogin) { _, value in LaunchAtLogin.isEnabled = value }
             }
         }
-        .formStyle(.grouped)
-        .animation(reduceMotion ? nil : DS.Motion.easeInOut(0.18), value: recordingFeedbackSurface)
+    }
+
+    private var afterRecordingGroup: some View {
+        GeneralGroup(heading: "After a recording") {
+            SettingsLineRow(title: "Paste the text where I was typing", caption: "Off: the text is only copied.", kind: .toggle) {
+                SettingsSwitch(title: "Paste the text where I was typing", isOn: $autoPaste)
+                    .accessibilityIdentifier("general.autoPaste")
+                    .onChange(of: autoPaste) { _, value in SettingsStorage.shared.autoPaste = value }
+            }
+            SettingsLineRow(title: "Play a sound when done", kind: .toggle) {
+                SettingsSwitch(title: "Play a sound when done", isOn: $playSound)
+                    .accessibilityIdentifier("general.playSound")
+                    .onChange(of: playSound) { _, value in SettingsStorage.shared.playSoundOnCompletion = value }
+            }
+            SettingsLineRow(title: "Message style", kind: .segmented) {
+                Picker("Message style", selection: $messageFormattingMode) {
+                    Text("Normal").tag(MessageFormattingMode.normal)
+                    Text("For chat").tag(MessageFormattingMode.chat)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                .accessibilityIdentifier("general.messageStyle")
+                .onChange(of: messageFormattingMode) { _, value in SettingsStorage.shared.messageFormattingMode = value }
+            }
+        }
+    }
+
+    private var whileRecordingGroup: some View {
+        GeneralGroup(heading: "While recording") {
+            SettingsLineRow(title: "Show the recording in", caption: "Pick how a recording looks on screen.") {
+                HStack(spacing: 10) {
+                    ForEach(SurfacePreviewKind.allCases, id: \.self) { kind in
+                        SurfacePreviewTile(kind: kind, isSelected: GeneralSettingsActions.previewKind(for: recordingFeedbackSurface) == kind) {
+                            selectSurface(GeneralSettingsActions.surface(for: kind))
+                        }
+                        .accessibilityIdentifier(kind == .floatingPanel ? "general.surface.compactPanel" : "general.surface.notch")
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(Text("Show the recording in"))
+            }
+            // Today's rule (05 2.2 proposal): the Dynamic Notch has no panel to open.
+            if recordingFeedbackSurface == .compactPanel {
+                SettingsLineRow(title: "Open the panel when a recording starts", kind: .toggle) {
+                    SettingsSwitch(title: "Open the panel when a recording starts", isOn: $showLiveTranscriptModal)
+                        .accessibilityIdentifier("general.openPanelOnStart")
+                        .onChange(of: showLiveTranscriptModal) { _, value in SettingsStorage.shared.showLiveTranscriptModal = value }
+                }
+            }
+        }
+    }
+
+    private var historyGroup: some View {
+        GeneralGroup(heading: "History") {
+            SettingsLineRow(title: "Keep dictation and translation", kind: .popUp) {
+                retentionPicker("Keep dictation and translation", selection: $dictationRetention, id: "general.keepDictation")
+                    .onChange(of: dictationRetention) { _, value in
+                        SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy = value
+                        RecordingsLibraryStorage.shared.pruneExpiredRecordings()
+                    }
+            }
+            SettingsLineRow(title: "Keep meeting recordings", kind: .popUp) {
+                retentionPicker("Keep meeting recordings", selection: $meetingRetention, id: "general.keepMeetings")
+                    .onChange(of: meetingRetention) { _, value in
+                        SettingsStorage.shared.meetingHistoryRetentionPolicy = value
+                        RecordingsLibraryStorage.shared.pruneExpiredRecordings()
+                    }
+            }
+            SettingsLineRow(title: "Expired history", kind: .button) {
+                Button("Delete now") { RecordingsLibraryStorage.shared.pruneExpiredRecordings() }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("general.deleteExpired")
+            }
+        }
+    }
+
+    private var helpGroup: some View {
+        GeneralGroup(heading: "Help") {
+            SettingsLineRow(title: "Setup guide", kind: .button) {
+                Button("Open") {
+                    OnboardingManager.shared.showFromSettings()
+                    OnboardingWindowController.shared.showOnboarding()
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("general.setupGuide")
+            }
+            SettingsLineRow(
+                title: "Permission to record system audio",
+                caption: "You said no to Screen Recording earlier. Meetings need it to record the other side.",
+                kind: .button
+            ) {
+                Button("Ask again") {
+                    Task {
+                        await GeneralSettingsActions.askAgainForScreenRecording {
+                            await PermissionManager.shared.ensureScreenRecordingPermission(context: .meetingRecording)
+                        }
+                    }
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("general.screenRecording.askAgain")
+            }
+            SettingsLineRow(title: "Typing speed", kind: .button, showsHairline: false) {
+                Text("\(String(format: "%.0f", typingSpeedWordsPerMinute)) WPM")
+                    .font(DS.Font.meta)
+                    .foregroundStyle(DS.Palette.secondary)
+                    .monospacedDigit()
+                    .accessibilityIdentifier("general.typingSpeed")
+                Button("Typing test") { MainWindowController.shared.showWindow(section: .typingTest) }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("general.typingTest")
+            }
+        }
     }
 
     // MARK: - Helpers
 
-    private func openSetupGuide() {
-        OnboardingManager.shared.showFromSettings()
-        OnboardingWindowController.shared.showOnboarding()
+    private func retentionPicker(_ title: LocalizedStringKey, selection: Binding<HistoryRetentionPolicy>, id: String) -> some View {
+        Picker(title, selection: selection) {
+            ForEach(HistoryRetentionPolicy.allCases) { Text($0.displayName).tag($0) }
+        }
+        .pickerStyle(.menu).labelsHidden().fixedSize()
+        .accessibilityIdentifier(id)
     }
 
-    private func pruneExpiredHistoryIfNeeded() {
-        RecordingsLibraryStorage.shared.pruneExpiredRecordings()
+    /// The selection ring changes without animation (05 2.2 Motion).
+    private func selectSurface(_ surface: RecordingFeedbackSurface) {
+        guard surface != recordingFeedbackSurface else { return }
+        recordingFeedbackSurface = surface
+        SettingsStorage.shared.recordingFeedbackSurface = surface
+        EdgeCommandPanelController.shared.applySurfacePreference()
+    }
+}
+
+/// Group on a Settings page (spec 4.10): 18 above, heading 15 semibold, 2 below it, then rows.
+private struct GeneralGroup<Rows: View>: View {
+    let heading: LocalizedStringKey?
+    @ViewBuilder var rows: () -> Rows
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let heading {
+                Text(heading)
+                    .font(DS.Font.groupHeading)
+                    .foregroundStyle(DS.Palette.text)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.bottom, 2)
+            }
+            rows()
+        }
+        .padding(.top, 18)
+    }
+}
+
+/// Testable parts of the General page.
+enum GeneralSettingsActions {
+    /// "Ask again" (05 2.2): runs the request path (Diduny's explanation, the macOS prompt, then
+    /// System Settings). It stores no value; `userDeclinedScreenRecording` has no control now.
+    @MainActor
+    static func askAgainForScreenRecording(request: @MainActor () async -> Bool) async {
+        _ = await request()
     }
 
-    private func formatWordsPerMinute(_ value: Double) -> String {
-        String(format: "%.0f", value)
+    static func surface(for kind: SurfacePreviewKind) -> RecordingFeedbackSurface {
+        kind == .floatingPanel ? .compactPanel : .notch
+    }
+
+    static func previewKind(for surface: RecordingFeedbackSurface) -> SurfacePreviewKind {
+        surface == .compactPanel ? .floatingPanel : .dynamicNotch
     }
 }
 
 #Preview {
     GeneralSettingsView()
-        .frame(width: 500, height: 400)
-}
-
-struct AppLanguageSettingsSection: View {
-    @State private var appLanguage = AppLanguage.preference()
-    var body: some View {
-        Section {
-            Picker("App language", selection: $appLanguage) {
-                ForEach(AppLanguage.allCases) { language in
-                    Text(language.displayName).tag(language)
-                }
-            }
-            .onChange(of: appLanguage) { _, value in value.save() }
-        } footer: {
-            Text(
-                "Restart Diduny to apply the language to all windows and menus. Recording and translation languages do not change."
-            )
-        }
-    }
+        .frame(width: 757, height: 900)
 }

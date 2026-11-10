@@ -23,6 +23,84 @@ final class MeetingChunkStitcherTests: XCTestCase {
         super.tearDown()
     }
 
+    // MARK: - Interrupted chunks
+
+    func testRepairedCopyRestoresAudioOfKilledChunkAndLeavesTheSourceAlone() throws {
+        let chunk = try writeChunk(name: "chunk_001.wav", durationSeconds: 2)
+        var bytes = try Data(contentsOf: chunk)
+        let dataTag = try XCTUnwrap(bytes.range(of: Data("data".utf8))).lowerBound
+        bytes.replaceSubrange(dataTag + 4 ..< dataTag + 8, with: Data(count: 4))
+        bytes.append(0) // a killed writer can stop mid-sample
+        try bytes.write(to: chunk)
+        XCTAssertEqual(try AVAudioFile(forReading: chunk).length, 0)
+
+        let copy = tmpDir.appendingPathComponent("repaired.wav")
+        XCTAssertTrue(try MeetingChunkStitcher.writeRepairedCopy(of: chunk, to: copy))
+
+        XCTAssertEqual(try AVAudioFile(forReading: copy).length, 32000)
+        XCTAssertEqual(try Data(contentsOf: chunk), bytes)
+    }
+
+    func testRepairedCopyLeavesAClosedWavWithChunksAfterDataAlone() throws {
+        let chunk = try writeChunk(name: "tail.wav", durationSeconds: 1)
+        var bytes = try Data(contentsOf: chunk)
+        bytes.append(Data("LIST".utf8) + Data([4, 0, 0, 0]) + Data("INFO".utf8))
+        try bytes.write(to: chunk)
+
+        let copy = tmpDir.appendingPathComponent("repaired.wav")
+        XCTAssertFalse(try MeetingChunkStitcher.writeRepairedCopy(of: chunk, to: copy))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: copy.path))
+    }
+
+    func testRepairedCopyFixesADeclaredSizeBeyondTheFile() throws {
+        let chunk = try writeChunk(name: "over.wav", durationSeconds: 1)
+        var bytes = try Data(contentsOf: chunk)
+        let dataTag = try XCTUnwrap(bytes.range(of: Data("data".utf8))).lowerBound
+        bytes.replaceSubrange(dataTag + 4 ..< dataTag + 8, with: Data([0xFF, 0xFF, 0xFF, 0x7F]))
+        try bytes.write(to: chunk)
+
+        let copy = tmpDir.appendingPathComponent("repaired.wav")
+        XCTAssertTrue(try MeetingChunkStitcher.writeRepairedCopy(of: chunk, to: copy))
+        XCTAssertEqual(try AVAudioFile(forReading: copy).length, 16000)
+    }
+
+    func testRepairRefusesAFileOverFourGiBWithAClearError() throws {
+        let chunk = try writeChunk(name: "big.wav", durationSeconds: 1)
+        var bytes = try Data(contentsOf: chunk)
+        let dataTag = try XCTUnwrap(bytes.range(of: Data("data".utf8))).lowerBound
+        bytes.replaceSubrange(dataTag + 4 ..< dataTag + 8, with: Data(count: 4))
+        try bytes.write(to: chunk)
+        let handle = try FileHandle(forUpdating: chunk)
+        try handle.truncate(atOffset: UInt64(UInt32.max) + 4096) // sparse
+        try handle.close()
+
+        let copy = tmpDir.appendingPathComponent("repaired.wav")
+        XCTAssertThrowsError(try MeetingChunkStitcher.writeRepairedCopy(of: chunk, to: copy)) {
+            XCTAssertTrue($0 is MeetingChunkStitcher.RepairError)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: copy.path))
+    }
+
+    func testHasNoAudioOnlyForFilesWithoutAudioBytes() throws {
+        let empty = tmpDir.appendingPathComponent("empty.wav")
+        try Data().write(to: empty)
+        XCTAssertTrue(try MeetingChunkStitcher.hasNoAudio(empty))
+        let garbage = tmpDir.appendingPathComponent("garbage.wav")
+        try Data("not audio".utf8).write(to: garbage)
+        XCTAssertFalse(try MeetingChunkStitcher.hasNoAudio(garbage))
+        XCTAssertFalse(try MeetingChunkStitcher.hasNoAudio(try writeChunk(name: "real.wav", durationSeconds: 1)))
+    }
+
+    func testRepairedCopyIgnoresProperlyClosedAndNonWavFiles() throws {
+        let copy = tmpDir.appendingPathComponent("repaired.wav")
+        let closed = try writeChunk(name: "closed.wav", durationSeconds: 1)
+        XCTAssertFalse(try MeetingChunkStitcher.writeRepairedCopy(of: closed, to: copy))
+        let garbage = tmpDir.appendingPathComponent("garbage.wav")
+        try Data("not audio".utf8).write(to: garbage)
+        XCTAssertFalse(try MeetingChunkStitcher.writeRepairedCopy(of: garbage, to: copy))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: copy.path))
+    }
+
     // MARK: - Helpers
 
     /// Writes a WAV chunk filled with constant-amplitude samples; returns its URL.
