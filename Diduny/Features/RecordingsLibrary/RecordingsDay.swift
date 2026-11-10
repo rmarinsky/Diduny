@@ -316,6 +316,8 @@ struct RecordingsDayPlacement: Equatable {
     let startHour: Int
     let hourHeight: Double
     let frames: [Frame]
+    /// Items that did not fit a readable lane, shown as "+N" at `top`.
+    var overflow: [Overflow] = []
     let hours: [HourLine]
     let height: Double
 
@@ -353,8 +355,46 @@ struct RecordingsDayPlacement: Equatable {
         return result
     }
 
+    struct Overflow: Equatable {
+        let top: Double
+        let ids: [String]
+    }
+
+    /// Narrowest lane that still reads: titles never set one letter per line.
+    static let minimumLaneWidth: Double = 120
+    static let minimumChildLaneWidth: Double = 64
+    static let laneGap: Double = 4
+
+    static func maxLanes(width: Double, minimumLaneWidth: Double) -> Int {
+        guard width.isFinite else { return .max } // No width given: every lane fits.
+        return max(1, Int((width + laneGap) / (minimumLaneWidth + laneGap)))
+    }
+
+    /// Keeps lanes below `maxLanes`; the rest are hidden and listed as "+N" at the top of the first hidden one.
+    static func fit(_ frames: [Frame], maxLanes: Int) -> (frames: [Frame], overflow: [Overflow]) {
+        var visible: [Frame] = []
+        var hidden: [Frame] = []
+        for var frame in frames {
+            if frame.column >= maxLanes { hidden.append(frame); continue }
+            frame.columns = min(frame.columns, maxLanes)
+            visible.append(frame)
+        }
+        var overflow: [Overflow] = []
+        var bottom = -Double.infinity
+        for frame in hidden.sorted(by: { $0.top < $1.top }) {
+            if let last = overflow.last, frame.top < bottom {
+                overflow[overflow.count - 1] = Overflow(top: last.top, ids: last.ids + [frame.id])
+            } else {
+                overflow.append(Overflow(top: frame.top, ids: [frame.id]))
+            }
+            bottom = max(bottom, frame.top + frame.height)
+        }
+        return (visible, overflow)
+    }
+
     static func place(_ items: [RecordingsDay.Item], hourHeight: Double,
-                      minimumHeight: Double = minimumHeight) -> RecordingsDayPlacement
+                      minimumHeight: Double = minimumHeight, width: Double = .infinity,
+                      minimumLaneWidth: Double = minimumLaneWidth) -> RecordingsDayPlacement
     {
         guard let first = items.map(\.startMinute).min() else {
             return RecordingsDayPlacement(startHour: 0, hourHeight: hourHeight, frames: [], hours: [], height: 0)
@@ -373,26 +413,33 @@ struct RecordingsDayPlacement: Equatable {
             drawn[item.id] = (top, size.drawn, size.true)
         }
         let lanes = lanes(drawn.map { (id: $0.key, top: $0.value.top, bottom: $0.value.top + $0.value.height) })
-        let frames = items.map { item -> Frame in
+        let all = items.map { item -> Frame in
             let box = drawn[item.id]!
             let lane = lanes[item.id] ?? (0, 1)
             return Frame(id: item.id, top: box.top, height: box.height, trueHeight: box.true,
                          column: lane.lane, columns: lane.lanes)
         }
+        let (frames, overflow) = fit(all, maxLanes: maxLanes(width: width, minimumLaneWidth: minimumLaneWidth))
         let lastMinute = items.map(\.endMinute).max() ?? first
         let endHour = max(startHour + 1, Int((lastMinute / 60).rounded(.up)))
         let hours = (startHour ... endHour).map { HourLine(hour: $0, y: y(Double($0 * 60), startHour: startHour, hourHeight: hourHeight)) }
         let height = max(hours.last?.y ?? 0, frames.map { $0.top + $0.height }.max() ?? 0) + 8
-        return RecordingsDayPlacement(startHour: startHour, hourHeight: hourHeight, frames: frames, hours: hours, height: height)
+        return RecordingsDayPlacement(startHour: startHour, hourHeight: hourHeight, frames: frames, overflow: overflow,
+                                      hours: hours, height: height)
     }
 
     /// Recordings inside an event or group, relative to its top, at their real times, in lanes.
+    /// `topInset` keeps a stacked event title readable: a recording starting under it begins below the title and
+    /// still ends at its true time.
     static func children(_ spans: [RecordingsDay.Span], containerStart: Double, hourHeight: Double,
-                         minimumHeight: Double = minimumHeight) -> [Frame]
+                         minimumHeight: Double = minimumHeight, topInset: Double = 0) -> [Frame]
     {
         let boxes = spans.map { span -> (id: String, top: Double, height: Double, true: Double) in
             let size = heights(start: span.start, end: span.end, hourHeight: hourHeight, minimum: minimumHeight)
-            return (span.recording.id.uuidString, (span.start - containerStart) / 60 * hourHeight, size.drawn, size.true)
+            let realTop = (span.start - containerStart) / 60 * hourHeight
+            let top = max(realTop, topInset)
+            let bottom = max(realTop + size.drawn, top + minimumHeight)
+            return (span.recording.id.uuidString, top, bottom - top, min(size.true, bottom - top))
         }
         let lanes = lanes(boxes.map { ($0.id, $0.top, $0.top + $0.height) })
         return boxes.map { box in

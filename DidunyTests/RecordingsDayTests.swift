@@ -368,4 +368,49 @@ struct RecordingsDayTests {
         #expect(RecordingsDayScroll.targetMinute(items: [], nowMinute: nil) == nil)
         #expect(RecordingsDayScroll.minuteOfDay(at(14, 5), calendar: calendar) == 845)
     }
+
+    @Test func dictationTranslationsGroupWithVoiceNotesAndMeetingTranslationsStayMeetings() {
+        let voice = recording(.voice, 13, 2), translation = recording(.translation, 13, 10)
+        let meetingTranslation = recording(.meetingTranslation, 13, 5, minutes: 20)
+        let items = build([voice, translation, meetingTranslation]).items
+        #expect(items.count == 2, "One notes group plus the meeting")
+        guard case let .notes(group, _, _) = items.first(where: { if case .notes = $0 { true } else { false } }) else {
+            Issue.record("no group"); return
+        }
+        #expect(group.recordings.map(\.id) == [voice.id, translation.id])
+        #expect(RecordingsSegment.notes.matches(translation) && !RecordingsSegment.notes.matches(meetingTranslation))
+        #expect(RecordingsSegment.meetings.matches(meetingTranslation))
+    }
+
+    @Test func lanesNeverGetNarrowerThanReadableAndTheRestBecomePlusN() {
+        #expect(RecordingsDayPlacement.maxLanes(width: 290, minimumLaneWidth: 120) == 2)
+        #expect(RecordingsDayPlacement.maxLanes(width: 100, minimumLaneWidth: 120) == 1)
+        #expect(RecordingsDayPlacement.maxLanes(width: 1000, minimumLaneWidth: 120) == 8)
+        #expect(RecordingsDayPlacement.maxLanes(width: .infinity, minimumLaneWidth: 120) == .max)
+        let four = (0 ..< 4).map { index in
+            RecordingsDayPlacement.Frame(id: "\(index)", top: Double(index), height: 50, trueHeight: 50, column: index, columns: 4)
+        }
+        let later = RecordingsDayPlacement.Frame(id: "later", top: 300, height: 30, trueHeight: 30, column: 0, columns: 1)
+        let fitted = RecordingsDayPlacement.fit(four + [later], maxLanes: 2)
+        #expect(fitted.frames.map(\.id) == ["0", "1", "later"])
+        #expect(fitted.frames.map(\.columns) == [2, 2, 1])
+        #expect(fitted.overflow == [.init(top: 2, ids: ["2", "3"])])
+
+        // At 1000 with the inspector open the rail is about 266 wide: two lanes at most.
+        let events = (0 ..< 4).map { event("e\($0)", 16, 0, minutes: 60, title: "E\($0)") }
+        let placement = RecordingsDayPlacement.place(build([], events: events).items, hourHeight: 96, width: 266)
+        #expect(placement.frames.count == 2)
+        #expect(placement.overflow.first?.ids.count == 2)
+    }
+
+    @Test func aStackedEventKeepsItsTitleAboveItsRecordings() {
+        let meeting = event("e", 12, 0, minutes: 90)
+        let first = recording(.meeting, 12, 1, minutes: 50, event: meeting)
+        guard case let .event(slot, start, _) = build([first], events: [meeting]).items.first else {
+            Issue.record("no event"); return
+        }
+        let inner = RecordingsDayPlacement.children(slot.spans, containerStart: start, hourHeight: 96, topInset: 34)[0]
+        #expect(inner.top == 34)
+        #expect(abs(inner.top + inner.height - 51 / 60 * 96) < 0.001, "Still ends at its true time")
+    }
 }
