@@ -58,6 +58,8 @@ struct RecordingsLibraryView: View {
     @State var zoom: NotesZoom = .halfHour
     @State var expandedNotes: Set<String> = []
     @State var dayEvents: [CalendarMeeting] = []
+    /// After a drag-detach the inspector puts the caret in the title.
+    @State private var titleFocusRecordingID: UUID?
     @State private var dayCache = RecordingsDayCache()
     @State private var daysWithRecordings: Set<Date> = []
 
@@ -314,6 +316,11 @@ struct RecordingsLibraryView: View {
             openNotes: { requestInspectorSelection(.notes($0)) },
             openGroup: { requestInspectorSelection(.group($0)) },
             attach: { attach($0, to: $1) },
+            detachByDrag: { id in
+                detach(id)
+                requestInspectorSelection(.recording(id, parentBatchID: nil))
+                titleFocusRecordingID = id
+            },
             toggleSelection: { toggleSelection($0) }
         )
     }
@@ -581,7 +588,8 @@ struct RecordingsLibraryView: View {
                     },
                     onClose: { requestInspectorSelection(nil) },
                     onNavigationGuardChanged: { trimNavigationGuard = $0 },
-                    calendarActions: recordingCalendarActions(for: recording)
+                    calendarActions: recordingCalendarActions(for: recording),
+                    focusesTitle: titleFocusRecordingID == recording.id
                 )
                 .id(recording.id)
             }

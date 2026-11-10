@@ -2221,3 +2221,6 @@
 "Meeting stopped" = "Meeting stopped";
 "Current transcript, until the new one is ready" = "Current transcript, until the new one is ready";
 "%@ of audio. The transcript appears here when it is ready. You can leave this screen." = "%@ of audio. The transcript appears here when it is ready. You can leave this screen.";
+"Who was it with? Notes" = "Who was it with? Notes";
+"Release to detach from the event" = "Release to detach from the event";
+"Go to today, at the current time (⌘T)" = "Go to today, at the current time (⌘T)";

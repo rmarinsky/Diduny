@@ -2221,3 +2221,6 @@
 "Meeting stopped" = "Зустріч зупинено";
 "Current transcript, until the new one is ready" = "Поточний транскрипт, доки не буде нового";
 "%@ of audio. The transcript appears here when it is ready. You can leave this screen." = "Аудіо: %@. Транскрипт зʼявиться тут, щойно буде готовий. Можна вийти з цього екрана.";
+"Who was it with? Notes" = "З ким це було? Нотатки";
+"Release to detach from the event" = "Відпусти, щоб відвʼязати від події";
+"Go to today, at the current time (⌘T)" = "До сьогодні, на поточний час (⌘T)";

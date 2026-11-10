@@ -10,6 +10,7 @@ struct RecordingDetailView: View {
     let onClose: () -> Void
     let onNavigationGuardChanged: (((() -> Bool)?) -> Void)?
     let calendarActions: RecordingCalendarActions?
+    let focusesTitle: Bool
     @State private var trimEditor: AudioTrimEditorState?
 
     @State private var playbackService = AudioPlaybackService.shared
@@ -25,6 +26,7 @@ struct RecordingDetailView: View {
     @State private var operationErrorMessage: String?
     @State private var isRecoveringAudio = false
     @FocusState private var titleFocused: Bool
+    @FocusState private var notesFocused: Bool
 
     init(
         recording: Recording,
@@ -32,7 +34,8 @@ struct RecordingDetailView: View {
         onBack: (() -> Void)? = nil,
         onClose: @escaping () -> Void,
         onNavigationGuardChanged: (((() -> Bool)?) -> Void)? = nil,
-        calendarActions: RecordingCalendarActions? = nil
+        calendarActions: RecordingCalendarActions? = nil,
+        focusesTitle: Bool = false
     ) {
         self.recording = recording
         self.parentBatchName = parentBatchName
@@ -40,6 +43,7 @@ struct RecordingDetailView: View {
         self.onClose = onClose
         self.onNavigationGuardChanged = onNavigationGuardChanged
         self.calendarActions = calendarActions
+        self.focusesTitle = focusesTitle
         _title = State(initialValue: recording.displayTitle)
         _description = State(initialValue: recording.description ?? recording.remoteSource?.description ?? "")
     }
@@ -75,6 +79,8 @@ struct RecordingDetailView: View {
                 .padding(16)
             }
         }
+        .onAppear { if focusesTitle { titleFocused = true } }
+        .onChange(of: focusesTitle) { _, focus in if focus { titleFocused = true } }
         .onDisappear { if trimEditor != nil { finishTrimming() } }
         .onExitCommand {
             if canLeaveTrimEditor() { onClose() }
@@ -170,7 +176,21 @@ struct RecordingDetailView: View {
 
             calendarLine
 
-            if isEditingDescription {
+            if currentRecording.calendarMeeting == nil, !isEditingDescription {
+                // No event: who it was with is worth a line, so the notes field is always visible.
+                TextField("Who was it with? Notes", text: $description, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1 ... 4)
+                    .font(DS.Font.callout)
+                    .focused($notesFocused)
+                    .onSubmit { saveNotes() }
+                    .onChange(of: notesFocused) { _, focused in if !focused { saveNotes() } }
+                    .padding(.horizontal, DS.Space.sm)
+                    .padding(.vertical, 5)
+                    .background(DS.Palette.box, in: RoundedRectangle(cornerRadius: DS.Radius.field))
+                    .padding(.top, DS.Space.xs)
+                    .accessibilityIdentifier("recordings.detail.notes")
+            } else if isEditingDescription {
                 TextField("Description", text: $description, axis: .vertical)
                     .lineLimit(2 ... 4)
                     .font(DS.Font.callout)
@@ -270,6 +290,11 @@ struct RecordingDetailView: View {
             operationErrorMessage = String(localized: "The title and description were left unchanged.")
         }
         title = currentRecording.displayTitle
+    }
+
+    private func saveNotes() {
+        guard description.trimmingCharacters(in: .whitespacesAndNewlines) != (currentRecording.description ?? "") else { return }
+        saveDescription()
     }
 
     private func saveDescription() {
