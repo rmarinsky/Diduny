@@ -102,7 +102,7 @@ extension AppDelegate {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("diduny-local-\(UUID().uuidString).wav")
         try audioData.write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
-        let language = SettingsStorage.shared.speechLanguageHints.first ?? BenchmarkRunner.defaultLanguage
+        let language = OnDeviceLanguage.engineArgument(hints: SettingsStorage.shared.speechLanguageHints)
         let text = try await engine.transcribe(url, language: language).text
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TranscriptionError.emptyTranscription }
         return text

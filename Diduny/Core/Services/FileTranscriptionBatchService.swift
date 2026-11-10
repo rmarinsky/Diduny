@@ -1576,7 +1576,7 @@ private final class LiveFileTranscriptionBatchTranscriber: FileTranscriptionBatc
     ) async throws -> GeneratedTranscript {
         if let engine = OnDeviceEngines.engine(id: settings.onDeviceEngineID) {
             onUpdate(JobProgressUpdate(status: .processing))
-            let language = settings.languageHints.first ?? BenchmarkRunner.defaultLanguage
+            let language = OnDeviceLanguage.engineArgument(hints: settings.languageHints)
             return GeneratedTranscript(text: try await engine.transcribe(audioFileURL, language: language).text)
         }
         switch settings.provider {

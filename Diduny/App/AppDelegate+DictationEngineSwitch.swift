@@ -187,7 +187,7 @@ extension AppDelegate {
                 defer { try? FileManager.default.removeItem(at: url) }
                 let pair = activeTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
                 let hints = translating ? SettingsStorage.shared.translationLanguageHints(for: pair) : SettingsStorage.shared.speechLanguageHints
-                return try await local.transcribe(url, language: hints.first ?? BenchmarkRunner.defaultLanguage).text
+                return try await local.transcribe(url, language: translating ? (hints.first ?? BenchmarkRunner.defaultLanguage) : OnDeviceLanguage.engineArgument(hints: hints)).text
             case .whisper:
                 return try await whisperTranscriptionService.transcribe(audioData: audio)
             case .elevenLabs:

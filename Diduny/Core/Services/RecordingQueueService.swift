@@ -235,7 +235,7 @@ final class RecordingQueueService {
                 if let engine = item.engineOverride {
                     transcript = try await runner.transcribe(engine, diarize: false, hints: SettingsStorage.shared.speechLanguageHints)
                 } else if let onDevice {
-                    let language = SettingsStorage.shared.speechLanguageHints.first ?? BenchmarkRunner.defaultLanguage
+                    let language = OnDeviceLanguage.engineArgument(hints: SettingsStorage.shared.speechLanguageHints)
                     transcript = try await GeneratedTranscript(text: onDevice.transcribe(audioURL, language: language).text)
                 } else if provider == .cloud {
                     transcript = try await transcribeViaJobs(
@@ -258,7 +258,7 @@ final class RecordingQueueService {
                 if let engine = item.engineOverride {
                     transcript = try await runner.transcribe(engine, diarize: true, hints: SettingsStorage.shared.speechLanguageHints)
                 } else if let onDevice {
-                    let language = SettingsStorage.shared.speechLanguageHints.first ?? BenchmarkRunner.defaultLanguage
+                    let language = OnDeviceLanguage.engineArgument(hints: SettingsStorage.shared.speechLanguageHints)
                     transcript = try await GeneratedTranscript(text: onDevice.transcribe(audioURL, language: language).text)
                 } else if provider == .cloud {
                     transcript = try await transcribeViaJobs(
@@ -458,7 +458,7 @@ final class RecordingQueueService {
                 guard let engine = OnDeviceEngines.engine(id: id) else {
                     throw TranscriptionError.apiError(OnDeviceEngines.notReadyMessage)
                 }
-                let language = SettingsStorage.shared.speechLanguageHints.first ?? BenchmarkRunner.defaultLanguage
+                let language = OnDeviceLanguage.engineArgument(hints: SettingsStorage.shared.speechLanguageHints)
                 return try await engine.transcribe(audioURL, language: language).text
             },
             elevenLabs: { diarize in try await Self.transcribeWithElevenLabs(audioURL: audioURL, diarize: diarize) },
