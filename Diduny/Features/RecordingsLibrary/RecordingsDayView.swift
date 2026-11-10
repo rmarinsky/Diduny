@@ -8,6 +8,8 @@ struct RecordingsDayActions {
     var openNotes: (String) -> Void
     var openGroup: (UUID) -> Void
     var attach: (UUID, CalendarMeeting) -> Void
+    /// A recording dragged out of its event and dropped outside every event.
+    var detachByDrag: (UUID) -> Void
     var toggleSelection: (UUID) -> Void
 }
 
@@ -27,6 +29,13 @@ struct RecordingsDayView<FileRow: View>: View {
 
     @State private var dropTarget: String?
     @State private var pinchStart: NotesZoom?
+    /// The recording being dragged, set when its drag preview appears.
+    @State private var draggingID: UUID?
+    @State private var railTargeted = false
+    /// Where the scale scrolls next: a minute of day and where it lands in the view.
+    @State private var scrollMinute: Double?
+    @State private var scrollAnchor = UnitPoint.top
+    @State private var scrollRequest = 0
     private let calendar = Calendar.current
 
     /// The day column never gets narrower than this; below it the page scrolls sideways.
@@ -41,6 +50,7 @@ struct RecordingsDayView<FileRow: View>: View {
                 zoomButtons
             }
             GeometryReader { proxy in
+                ScrollViewReader { scroller in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         if day.isEmpty {
@@ -67,7 +77,17 @@ struct RecordingsDayView<FileRow: View>: View {
                     .padding(.bottom, DS.Space.sm)
                 }
                 .accessibilityIdentifier("recordings.day")
+                .overlay(alignment: .top) { detachHint }
+                .onChange(of: scrollRequest) {
+                    // After the marker moved to the new minute.
+                    DispatchQueue.main.async {
+                        withAnimation(DS.Motion.easeOut(0.25)) { scroller.scrollTo(Self.scrollMarkerID, anchor: scrollAnchor) }
+                    }
+                }
+                }
             }
+            .onAppear { scrollToFirstItem() }
+            .onChange(of: calendar.startOfDay(for: selectedDay)) { scrollToFirstItem() }
             .gesture(
                 MagnifyGesture()
                     .onChanged { value in
@@ -79,6 +99,45 @@ struct RecordingsDayView<FileRow: View>: View {
                     }
                     .onEnded { _ in pinchStart = nil }
             )
+        }
+    }
+
+    private static var scrollMarkerID: String { "recordings.day.scrollTarget" }
+
+    private func scrollToFirstItem() {
+        guard let minute = RecordingsDayScroll.targetMinute(items: day.items, nowMinute: nil) else { return }
+        scroll(to: max(0, minute - 10), anchor: .top)
+    }
+
+    private func scroll(to minute: Double, anchor: UnitPoint) {
+        scrollMinute = minute
+        scrollAnchor = anchor
+        scrollRequest += 1
+    }
+
+    /// "Now": today, with the current time about a third from the top.
+    private func goToNow() {
+        let now = Date()
+        selectedDay = now
+        let minute = RecordingsDayScroll.minuteOfDay(now, calendar: calendar)
+        // Wait for the new day to lay out before scrolling.
+        DispatchQueue.main.async {
+            scroll(to: minute, anchor: UnitPoint(x: 0, y: RecordingsDayScroll.nowAnchor))
+        }
+    }
+
+    @ViewBuilder
+    private var detachHint: some View {
+        if let draggingID, railTargeted, dropTarget == nil,
+           RecordingsDrop.sourceEventKey(of: draggingID, in: day.items) != nil
+        {
+            Label("Release to detach from the event", systemImage: "arrow.up.left.and.arrow.down.right")
+                .font(DS.Font.calloutStrong)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .foregroundStyle(DS.Palette.accentText)
+                .background(DS.Palette.tint, in: Capsule())
+                .padding(.top, DS.Space.sm)
+                .accessibilityIdentifier("recordings.day.detachHint")
         }
     }
 
@@ -99,6 +158,11 @@ struct RecordingsDayView<FileRow: View>: View {
                 .foregroundStyle(DS.Palette.secondary)
                 .help("Next week")
                 .accessibilityIdentifier("recordings.week.next")
+            Button("Now") { goToNow() }
+                .controlSize(.small)
+                .keyboardShortcut("t", modifiers: .command)
+                .help("Go to today, at the current time (⌘T)")
+                .accessibilityIdentifier("recordings.week.now")
         }
     }
 
@@ -157,6 +221,14 @@ struct RecordingsDayView<FileRow: View>: View {
                     .foregroundStyle(DS.Palette.secondary)
                     .offset(x: 0, y: line.y - 7)
             }
+            if let scrollMinute {
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: max(0, RecordingsDayPlacement.y(scrollMinute, startHour: placement.startHour,
+                                                                               hourHeight: placement.hourHeight)))
+                    Color.clear.frame(width: 1, height: 1).id(Self.scrollMarkerID)
+                }
+                .accessibilityHidden(true)
+            }
             ForEach(placement.frames, id: \.id) { frame in
                 if let item = byID[frame.id] {
                     let gap: CGFloat = frame.columns > 1 ? 4 : 0
@@ -173,8 +245,16 @@ struct RecordingsDayView<FileRow: View>: View {
             }
         }
         .frame(width: width, height: placement.height, alignment: .topLeading)
-        // A drop on empty space does nothing and the item springs back: only the explicit Detach detaches
-        // (a near-miss drag must never mark a recording "no event").
+        .contentShape(Rectangle())
+        // Outside every event: a recording dragged out of its own event detaches; anything else springs back.
+        .dropDestination(for: String.self) { ids, _ in
+            defer { draggingID = nil }
+            guard let id = ids.first.flatMap(UUID.init(uuidString:)) else { return false }
+            let source = RecordingsDrop.sourceEventKey(of: id, in: day.items)
+            guard RecordingsDrop.decide(sourceEventKey: source, targetEventKey: nil) == .detach else { return false }
+            actions.detachByDrag(id)
+            return true
+        } isTargeted: { railTargeted = $0 }
         .padding(.top, 8)
         .animation(DS.Motion.easeOut(0.18), value: zoom)
     }
@@ -266,7 +346,10 @@ struct RecordingsDayView<FileRow: View>: View {
         .onTapGesture { actions.openEvent(event.key) }
         .accessibilityAction { actions.openEvent(event.key) }
         .dropDestination(for: String.self) { ids, _ in
+            defer { draggingID = nil }
             guard let id = ids.first.flatMap(UUID.init(uuidString:)) else { return false }
+            let source = RecordingsDrop.sourceEventKey(of: id, in: day.items)
+            guard case .attach = RecordingsDrop.decide(sourceEventKey: source, targetEventKey: event.key) else { return false }
             actions.attach(id, event.meeting)
             return true
         } isTargeted: { targeted in
@@ -301,7 +384,7 @@ struct RecordingsDayView<FileRow: View>: View {
         .contentShape(Rectangle())
         .onTapGesture { tapRecording(recording.id) }
         .accessibilityAction { tapRecording(recording.id) }
-        .draggable(recording.id.uuidString)
+        .draggable(recording.id.uuidString) { dragPreview(recording) }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
         .accessibilityIdentifier("recordings.day.attached")
@@ -452,10 +535,18 @@ struct RecordingsDayView<FileRow: View>: View {
         .contentShape(Rectangle())
         .onTapGesture { tapRecording(recording.id) }
         .accessibilityAction { tapRecording(recording.id) }
-        .draggable(recording.id.uuidString)
+        .draggable(recording.id.uuidString) { dragPreview(recording) }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
         .accessibilityIdentifier("recordings.day.recording")
+    }
+
+    private func dragPreview(_ recording: Recording) -> some View {
+        Text(recording.displayTitle)
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(DS.Palette.card, in: RoundedRectangle(cornerRadius: 5))
+            .onAppear { draggingID = recording.id }
     }
 
     // MARK: - Helpers

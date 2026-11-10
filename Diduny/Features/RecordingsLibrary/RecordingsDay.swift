@@ -528,3 +528,40 @@ struct RecordingsDayCache {
         builds += 1
     }
 }
+
+/// What dropping a dragged recording does. Only a recording attached to an event and dropped outside every
+/// event detaches; a drop back on its own event, or an unattached one on empty space, does nothing.
+enum RecordingsDrop: Equatable {
+    case nothing
+    case attach(eventKey: String)
+    case detach
+
+    static func decide(sourceEventKey: String?, targetEventKey: String?) -> RecordingsDrop {
+        if let targetEventKey { return targetEventKey == sourceEventKey ? .nothing : .attach(eventKey: targetEventKey) }
+        return sourceEventKey == nil ? .nothing : .detach
+    }
+
+    /// The event a recording sits in on this day, or nil.
+    static func sourceEventKey(of id: UUID, in items: [RecordingsDay.Item]) -> String? {
+        items.lazy.compactMap { item -> String? in
+            guard case let .event(event, _, _) = item, event.attached.contains(where: { $0.id == id }) else { return nil }
+            return event.key
+        }.first
+    }
+}
+
+/// Where the hour scale scrolls: "Now" puts the current time about a third from the top; opening a day shows
+/// its first item.
+enum RecordingsDayScroll {
+    static let nowAnchor = 1.0 / 3
+
+    /// Minute of day to bring into view: now when asked (today only), else the first item's start.
+    static func targetMinute(items: [RecordingsDay.Item], nowMinute: Double?) -> Double? {
+        nowMinute ?? items.map(\.startMinute).min()
+    }
+
+    static func minuteOfDay(_ date: Date, calendar: Calendar = .current) -> Double {
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        return Double((parts.hour ?? 0) * 60 + (parts.minute ?? 0))
+    }
+}

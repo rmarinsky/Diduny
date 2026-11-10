@@ -344,4 +344,27 @@ struct RecordingsDayTests {
                                            zoom: .halfHour, calendar: calendar).items
         #expect(tomorrow.first?.startMinute == 0, "Shows from 0:00 on the next day")
     }
+
+    @Test func draggingOutOfItsOwnEventDetachesAndNothingElseDoes() {
+        #expect(RecordingsDrop.decide(sourceEventKey: "a", targetEventKey: nil) == .detach)
+        #expect(RecordingsDrop.decide(sourceEventKey: "a", targetEventKey: "b") == .attach(eventKey: "b"))
+        #expect(RecordingsDrop.decide(sourceEventKey: "a", targetEventKey: "a") == .nothing)
+        #expect(RecordingsDrop.decide(sourceEventKey: nil, targetEventKey: nil) == .nothing)
+        #expect(RecordingsDrop.decide(sourceEventKey: nil, targetEventKey: "b") == .attach(eventKey: "b"))
+
+        let meeting = event("e", 12, 0, minutes: 90)
+        let inside = recording(.meeting, 13, 0, event: meeting)
+        let loose = recording(.meeting, 9, 0)
+        let items = build([inside, loose], events: [meeting]).items
+        #expect(RecordingsDrop.sourceEventKey(of: inside.id, in: items) == meeting.reminderKey)
+        #expect(RecordingsDrop.sourceEventKey(of: loose.id, in: items) == nil)
+    }
+
+    @Test func scrollGoesToNowOrTheFirstItem() {
+        let items = build([recording(.meeting, 11, 30), recording(.meeting, 9, 15)]).items
+        #expect(RecordingsDayScroll.targetMinute(items: items, nowMinute: nil) == 555)
+        #expect(RecordingsDayScroll.targetMinute(items: items, nowMinute: 840) == 840)
+        #expect(RecordingsDayScroll.targetMinute(items: [], nowMinute: nil) == nil)
+        #expect(RecordingsDayScroll.minuteOfDay(at(14, 5), calendar: calendar) == 845)
+    }
 }
