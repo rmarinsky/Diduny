@@ -339,10 +339,11 @@ struct RecordingsDayTests {
 
         let overnight = event("n", 23, 30, minutes: 60)
         let today = build([], events: [overnight]).items
-        #expect(today.first?.endMinute == 24 * 60, "Clipped at midnight")
+        // Minutes are fractional (seconds and nanoseconds), so compare within a millisecond-scale tolerance.
+        #expect(abs((today.first?.endMinute ?? 0) - 24 * 60) < 0.001, "Clipped at midnight")
         let tomorrow = RecordingsDay.build(day: at(12, 0, dayOffset: 1), recordings: [], events: [overnight],
                                            zoom: .halfHour, calendar: calendar).items
-        #expect(tomorrow.first?.startMinute == 0, "Shows from 0:00 on the next day")
+        #expect(abs((tomorrow.first?.startMinute ?? -1) - 0) < 0.001, "Shows from 0:00 on the next day")
     }
 
     @Test func draggingOutOfItsOwnEventDetachesAndNothingElseDoes() {
