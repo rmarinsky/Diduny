@@ -151,12 +151,18 @@ final class EdgeCommandPanelModel {
     }
 
     var engineFieldLabel: String {
-        pick == nil ? String(localized: "Engine, as in Settings") : String(localized: "Engine, this session")
+        pick == nil ? String(localized: "Engine") : String(localized: "Engine, this session")
     }
 
+    /// The pick, else the Transcribe default: dictation is the main mode (Roman, 2026-11-10).
     var engineFieldValue: String {
-        let engine = pick ?? CommandHome.sharedEngine(defaults)
-        return engine.map(CommandHome.engineName) ?? String(localized: "Different per mode")
+        CommandHome.engineName(pick ?? defaults.dictation)
+    }
+
+    /// A tile's engine name for its caption when it differs from the Engine field, else nil.
+    func captionEngine(for action: EdgeCommandAction) -> String? {
+        let engine = engine(for: action)
+        return engine == (pick ?? defaults.dictation) ? nil : CommandHome.engineName(engine)
     }
 
     func engine(for action: EdgeCommandAction) -> EngineID {

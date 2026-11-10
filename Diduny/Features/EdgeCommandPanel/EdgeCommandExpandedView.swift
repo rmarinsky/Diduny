@@ -170,6 +170,7 @@ struct EdgeCommandExpandedView: View {
             symbol: action.icon,
             title: "\(action.title)",
             caption: "\(caption)",
+            captionEngine: model.captionEngine(for: action),
             action: { onAction(action) }
         )
         .disabled(!model.tilesEnabled)
