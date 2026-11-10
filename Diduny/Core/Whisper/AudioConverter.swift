@@ -60,6 +60,8 @@ enum AudioConverter {
             Log.whisper.error("Failed to create audio converter")
             throw WhisperError.audioConversionFailed
         }
+        // Without this, 2 -> 1 channels keeps channel 0 only (meetings: mic and system on separate channels).
+        converter.downmix = true
 
         // Calculate output frame count
         let ratio = whisperSampleRate / sourceFormat.sampleRate
