@@ -152,7 +152,12 @@ struct RecordingsLibraryView: View {
 
     // MARK: - Body
 
+    // Split into three parts: one long modifier chain timed out the type checker on CI.
     var body: some View {
+        alerts(lifecycle(pageLayout))
+    }
+
+    private var pageLayout: some View {
         GeometryReader { proxy in
             let inspectorWidth = Self.inspectorWidth(windowWidth: proxy.size.width + DS.Layout.sidebarWidth)
             HStack(spacing: 0) {
@@ -181,6 +186,10 @@ struct RecordingsLibraryView: View {
                 }
             }
         }
+    }
+
+    private func lifecycle(_ content: some View) -> some View {
+        content
         .onAppear {
             batchLoadErrorMessage = batchStorage.loadErrorMessage
             rebuildSearchIndex()
@@ -210,6 +219,10 @@ struct RecordingsLibraryView: View {
         .onChange(of: MainWindowController.shared.requestedBatchComposer) {
             openRequestedBatchComposerIfAvailable()
         }
+    }
+
+    private func alerts(_ content: some View) -> some View {
+        content
         .alert(
             "Transcribe Again?",
             isPresented: Binding(
