@@ -5,7 +5,7 @@
     "highlights": [
       "Recordings is now a calendar: meetings, voice notes and calendar events on one day, with an inspector to transcribe, translate and group.",
       "Switch the mode during a meeting, or the engine during a dictation, without stopping. The text so far is kept.",
-      "After Stop, the Diduny logo lands where your text appears. Settings are redesigned, in a window you can resize."
+      "After Stop, the Diduny logo lands where your text appears. Settings are redesigned, and a minimized meeting panel no longer gets stuck on Finalizing."
     ]
   },
   "uk": {
@@ -13,7 +13,7 @@
     "highlights": [
       "Записи тепер у календарі: зустрічі, голосові нотатки й події одного дня поруч, а збоку інспектор, щоб транскрибувати, перекладати й групувати.",
       "Змінюй режим під час зустрічі чи рушій під час диктування, не зупиняючись. Уже сказаний текст лишається.",
-      "Після «Стоп» логотип Diduny зʼявляється там, де вставився текст. Налаштування перероблено, а вікно тепер можна розтягувати."
+      "Після «Стоп» логотип Diduny зʼявляється там, де вставився текст. Налаштування перероблено, а згорнута панель зустрічі більше не зависає на «Finalizing»."
     ]
   }
 }
