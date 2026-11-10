@@ -46,7 +46,6 @@ struct PasteMarkTests {
         #expect(PasteMarkPlan.dictationEnd(autoPaste: true, pasted: true, caretKnown: true) == .closeNow)
         #expect(PasteMarkPlan.dictationEnd(autoPaste: true, pasted: true, caretKnown: false) == .headerLogo)
         #expect(PasteMarkPlan.dictationEnd(autoPaste: false, pasted: false, caretKnown: false) == .headerLogo)
-        #expect(PasteMarkPlan.headerLogoSeconds == 1.5)
     }
 
     @Test func aFailedPasteKeepsTheCopiedOutcome() {
@@ -104,11 +103,11 @@ struct PasteMarkTests {
     }
 
     // Roman, 2026-11-10: a meeting's Stop shows the header logo, not the progress bar or the transcript.
-    @Test func meetingEndArcWhileSavingThenRing() {
+    @Test func headerLandingArcWhileSavingThenRing() {
         #expect(PasteMarkPlan.logo(for: .saving) == .waiting)
         #expect(PasteMarkPlan.logo(for: .done(line: "Transcribing in background")) == .done)
-        #expect(PasteMarkPlan.meetingEndDismissDelay(reduceMotion: false) == 0.68)
-        #expect(PasteMarkPlan.meetingEndDismissDelay(reduceMotion: true) == 0.68)
+        #expect(PasteMarkPlan.headerLandingDismissDelay(reduceMotion: false) == 0.68)
+        #expect(PasteMarkPlan.headerLandingDismissDelay(reduceMotion: true) == 0.68)
     }
 
     @Test func meetingNoticeStaysWithItsMessage() {
@@ -140,6 +139,57 @@ struct PasteMarkTests {
             geometry: geometry, before: 10, timeout: .milliseconds(30), interval: .milliseconds(5)
         )
         #expect(found == nil)
+    }
+}
+
+@Suite("Caret in Chromium and Electron apps")
+struct ChromiumAccessibilityTests {
+    @Test func knownElectronAppsAreDetectedByBundleID() {
+        for id in ["com.anthropic.claudefordesktop", "com.tinyspeck.slackmacgap", "com.microsoft.VSCode"] {
+            #expect(ChromiumAccessibility.kind(bundleID: id, hasElectronFramework: false) == .electron)
+        }
+    }
+
+    @Test func unknownElectronAppsAreDetectedByTheirFramework() {
+        #expect(ChromiumAccessibility.kind(bundleID: "com.example.chat", hasElectronFramework: true) == .electron)
+        #expect(ChromiumAccessibility.kind(bundleID: nil, hasElectronFramework: true) == .electron)
+        #expect(ChromiumAccessibility.kind(bundleID: "com.apple.Terminal", hasElectronFramework: false) == .other)
+    }
+
+    @Test func chromiumBrowsersAreDetected() {
+        #expect(ChromiumAccessibility.kind(bundleID: "com.google.Chrome", hasElectronFramework: false) == .chromium)
+        #expect(ChromiumAccessibility.kind(bundleID: "company.thebrowser.Browser", hasElectronFramework: false) == .chromium)
+    }
+
+    @Test func enhancedUserInterfaceOnlyAsAChromiumFallback() {
+        #expect(ChromiumAccessibility.attributes(for: .electron) == ["AXManualAccessibility"])
+        #expect(ChromiumAccessibility.attributes(for: .chromium) == ["AXManualAccessibility", "AXEnhancedUserInterface"])
+        #expect(ChromiumAccessibility.attributes(for: .other).isEmpty)
+    }
+}
+
+@MainActor
+@Suite("Header fallback when the caret is unknown", .serialized)
+struct PasteMarkFallbackTests {
+    @Test func noCaretHandsTheLandingToTheHeader() async {
+        let controller = PasteMarkController.shared
+        let saved = controller.geometry
+        defer { controller.geometry = saved }
+        controller.geometry = FakeCaretGeometry(answers: [nil])
+
+        var missing = false
+        controller.beginWaiting { missing = true }
+        var known: Bool?
+        await withCheckedContinuation { continuation in
+            controller.land { caretKnown in
+                known = caretKnown
+                continuation.resume()
+            }
+        }
+        #expect(missing)
+        #expect(known == false)
+        #expect(controller.phase == .idle)
+        #expect(PasteMarkPlan.dictationEnd(autoPaste: true, pasted: true, caretKnown: false) == .headerLogo)
     }
 }
 

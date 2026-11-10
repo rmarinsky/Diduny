@@ -55,8 +55,8 @@ struct LivePanelView: View {
     var body: some View {
         let state = store.panelState
         VStack(alignment: .leading, spacing: DS.Panel.blockGap) {
-            if let end = store.meetingEnd {
-                meetingEndHeader(end, state: state)
+            if let end = store.headerLanding {
+                landingHeader(end, state: state)
             } else {
                 header(state)
                     .reveal(store.contentRevealed, step: 0, reduceMotion: reduceMotion)
@@ -105,7 +105,7 @@ struct LivePanelView: View {
     }
 
     /// A meeting's Stop: the header only, its logo's rim arc while saving, then ring and one pulse.
-    private func meetingEndHeader(_ end: PasteMarkPlan.MeetingEnd, state: LivePanelState) -> some View {
+    private func landingHeader(_ end: PasteMarkPlan.HeaderLanding, state: LivePanelState) -> some View {
         let line = switch end {
         case .saving: String(localized: "Saving the recording...")
         case let .done(line): line
@@ -114,7 +114,8 @@ struct LivePanelView: View {
             icon: LogoBadge(
                 phase: PasteMarkPlan.logo(for: end),
                 discSize: DS.Size.iconTile,
-                pulseTrigger: end == .saving ? 0 : 1
+                pulseTrigger: end == .saving ? 0 : 1,
+                pulsesOnAppear: end != .saving
             ),
             title: LocalizedStringKey(state.title),
             status: .plain(LocalizedStringKey(line)),
@@ -123,7 +124,7 @@ struct LivePanelView: View {
         ) {
             EmptyView()
         }
-        .accessibilityIdentifier("livePanel.meetingEnd")
+        .accessibilityIdentifier("livePanel.headerLanding")
     }
 
     private func header(_ state: LivePanelState) -> some View {

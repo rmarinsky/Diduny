@@ -34,7 +34,8 @@ final class PasteMarkController {
     private init() {}
 
     /// Stop on a dictation that will paste: find the caret and show the logo with its waiting arc.
-    func beginWaiting() {
+    /// `onCaretMissing`: no caret geometry (Terminal, games); the panel header plays instead.
+    func beginWaiting(onCaretMissing: @escaping @MainActor () -> Void = {}) {
         clear()
         phase = PasteMarkPlan.next(phase, .finalizing)
         let generation = generation
@@ -43,7 +44,10 @@ final class PasteMarkController {
             let found = await Task.detached(priority: .userInitiated) { geometry.caret() }.value
             guard let self, self.generation == generation else { return }
             self.phase = PasteMarkPlan.next(self.phase, found == nil ? .caretMissing : .caretFound)
-            guard let found, self.phase == .waiting else { return }
+            guard let found, self.phase == .waiting else {
+                onCaretMissing()
+                return
+            }
             self.start = found
             self.show(at: found.rect)
         }

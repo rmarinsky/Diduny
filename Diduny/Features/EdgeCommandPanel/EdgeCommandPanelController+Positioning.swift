@@ -144,7 +144,7 @@ extension EdgeCommandPanelController {
             return panelContentView?.expandedFittingHeight().map { min($0, maximum) }
         case .live:
             let overlay = DictationOverlayController.shared
-            if overlay.store.meetingEnd != nil {
+            if overlay.store.headerLanding != nil {
                 return panelContentView?.expandedFittingHeight().map { min($0, maximum) }
             }
             guard EdgeCommandOutcomeVisibility.outcome(

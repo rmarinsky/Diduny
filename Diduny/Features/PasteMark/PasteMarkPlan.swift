@@ -85,18 +85,18 @@ enum PasteMarkPlan {
 
     /// A meeting's Stop on the floating panel (Roman, 2026-11-10): the header logo's rim arc while
     /// the recording is saved, then the ring closes, pulses once and the panel goes by itself.
-    enum MeetingEnd: Equatable {
+    enum HeaderLanding: Equatable {
         case saving
         /// Saved, and the transcript is done or queued; `line` is the header status.
         case done(line: String)
     }
 
-    static func logo(for end: MeetingEnd) -> LogoBadgePhase {
+    static func logo(for end: HeaderLanding) -> LogoBadgePhase {
         end == .saving ? .waiting : .done
     }
 
     /// The panel goes when the landing fades: no caret, so all of it plays in the header.
-    static func meetingEndDismissDelay(reduceMotion: Bool) -> TimeInterval {
+    static func headerLandingDismissDelay(reduceMotion: Bool) -> TimeInterval {
         timeline(reduceMotion: reduceMotion).fadeStart
     }
 
@@ -105,13 +105,11 @@ enum PasteMarkPlan {
     enum DictationEnd: Equatable {
         /// The logo plays at the caret; the panel closes at once.
         case closeNow
-        /// Only the panel header with the logo, for `headerLogoSeconds`, then the panel goes.
+        /// No caret: the same landing in the panel header (ring, one pulse), then the panel goes.
         case headerLogo
         /// Auto-paste is on but the paste failed: the Copied outcome stays, it is the only message.
         case copiedOutcome
     }
-
-    static let headerLogoSeconds: TimeInterval = 1.5
 
     static func dictationEnd(autoPaste: Bool, pasted: Bool, caretKnown: Bool) -> DictationEnd {
         if pasted { return caretKnown ? .closeNow : .headerLogo }
