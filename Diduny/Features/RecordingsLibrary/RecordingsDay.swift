@@ -73,9 +73,18 @@ struct RecordingsDayGroupInput: Equatable {
 }
 
 struct RecordingsDay: Equatable {
+    /// A recording's exact place on the scale, in wall-clock minutes from midnight (fractional).
+    struct Span: Equatable {
+        let recording: Recording
+        let start: Double
+        let end: Double
+    }
+
     struct Event: Equatable {
         let meeting: CalendarMeeting
         let attached: [Recording]
+        /// The attached recordings at their real times, placed inside the event's column.
+        var spans: [Span] = []
         /// Event key plus start: two days of a repeating event never merge.
         var key: String { meeting.reminderKey }
     }
@@ -92,13 +101,14 @@ struct RecordingsDay: Equatable {
         let id: UUID
         let name: String
         let recordings: [Recording]
+        var spans: [Span] = []
     }
 
     enum Item: Equatable, Identifiable {
-        case event(Event, startMinute: Int, endMinute: Int)
-        case recording(Recording, startMinute: Int, endMinute: Int)
-        case notes(NotesGroup, startMinute: Int, endMinute: Int)
-        case group(Group, startMinute: Int, endMinute: Int)
+        case event(Event, startMinute: Double, endMinute: Double)
+        case recording(Recording, startMinute: Double, endMinute: Double)
+        case notes(NotesGroup, startMinute: Double, endMinute: Double)
+        case group(Group, startMinute: Double, endMinute: Double)
 
         var id: String {
             switch self {
@@ -109,13 +119,13 @@ struct RecordingsDay: Equatable {
             }
         }
 
-        var startMinute: Int {
+        var startMinute: Double {
             switch self {
             case let .event(_, start, _), let .recording(_, start, _), let .notes(_, start, _), let .group(_, start, _): start
             }
         }
 
-        var endMinute: Int {
+        var endMinute: Double {
             switch self {
             case let .event(_, _, end), let .recording(_, _, end), let .notes(_, _, end), let .group(_, _, end): end
             }
@@ -124,6 +134,15 @@ struct RecordingsDay: Equatable {
         var isEvent: Bool {
             if case .event = self { return true }
             return false
+        }
+
+        /// Recordings placed inside the block at their real times (events and groups).
+        var childSpans: [Span]? {
+            switch self {
+            case let .event(event, _, _): event.spans
+            case let .group(group, _, _): group.spans
+            case .recording, .notes: nil
+            }
         }
 
         /// Every recording the item shows, in time order.
@@ -158,11 +177,16 @@ struct RecordingsDay: Equatable {
             return RecordingsDay(items: [], files: [])
         }
         // Wall-clock minutes, so hour labels stay right on a 23- or 25-hour DST day; outside the day, real time.
-        let minute = { (date: Date) -> Int in
-            if date < dayStart { return Int(date.timeIntervalSince(dayStart) / 60) }
-            if date >= dayEnd { return 24 * 60 + Int(date.timeIntervalSince(dayEnd) / 60) }
-            let parts = calendar.dateComponents([.hour, .minute], from: date)
-            return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        let minute = { (date: Date) -> Double in
+            if date < dayStart { return date.timeIntervalSince(dayStart) / 60 }
+            if date >= dayEnd { return 24 * 60 + date.timeIntervalSince(dayEnd) / 60 }
+            let parts = calendar.dateComponents([.hour, .minute, .second, .nanosecond], from: date)
+            return Double((parts.hour ?? 0) * 60 + (parts.minute ?? 0))
+                + (Double(parts.second ?? 0) + Double(parts.nanosecond ?? 0) / 1e9) / 60
+        }
+        let spanOf = { (recording: Recording) -> Span in
+            let start = minute(recording.createdAt)
+            return Span(recording: recording, start: start, end: min(24 * 60, start + max(0, recording.durationSeconds) / 60))
         }
         let dayRecordings = recordings
             .filter { $0.createdAt >= dayStart && $0.createdAt < dayEnd }
@@ -189,14 +213,16 @@ struct RecordingsDay: Equatable {
 
         var items: [Item] = meetings.values.map { meeting in
             let start = max(0, minute(meeting.start))
-            let end = min(24 * 60, max(minute(meeting.end), start + 1))
-            return .event(Event(meeting: meeting, attached: attached[meeting.reminderKey] ?? []), startMinute: start, endMinute: end)
+            let end = min(24 * 60, max(minute(meeting.end), start))
+            let members = attached[meeting.reminderKey] ?? []
+            return .event(Event(meeting: meeting, attached: members, spans: members.map(spanOf)),
+                          startMinute: start, endMinute: end)
         }
 
-        let span = { (recordings: [Recording]) -> (Int, Int) in
-            let start = recordings.map { minute($0.createdAt) }.min() ?? 0
-            let end = recordings.map { minute($0.createdAt) + max(1, Int(($0.durationSeconds / 60).rounded(.up))) }.max() ?? start + 1
-            return (start, min(24 * 60, max(end, start + 1)))
+        let span = { (recordings: [Recording]) -> (Double, Double) in
+            let spans = recordings.map(spanOf)
+            let start = spans.map(\.start).min() ?? 0
+            return (start, max(spans.map(\.end).max() ?? start, start))
         }
 
         let timedByID = Dictionary(uniqueKeysWithValues: timed.map { ($0.id, $0) })
@@ -206,13 +232,14 @@ struct RecordingsDay: Equatable {
             guard members.count > 1 else { continue }
             members.forEach { used.insert($0.id) }
             let (start, end) = span(members)
-            items.append(.group(Group(id: group.id, name: group.name, recordings: members), startMinute: start, endMinute: end))
+            items.append(.group(Group(id: group.id, name: group.name, recordings: members, spans: members.map(spanOf)),
+                                startMinute: start, endMinute: end))
         }
 
         let loose = timed.filter { !used.contains($0.id) }
         let notes = loose.filter(\.isVoiceNote)
         if let bucket = zoom.bucketMinutes {
-            let buckets = Dictionary(grouping: notes) { minute($0.createdAt) / bucket }
+            let buckets = Dictionary(grouping: notes) { Int(minute($0.createdAt).rounded(.down)) / bucket }
             for (index, members) in buckets {
                 let sorted = members.sorted { $0.createdAt < $1.createdAt }
                 let (start, end) = span(sorted)
@@ -265,15 +292,18 @@ struct RecordingsDay: Equatable {
 
 // MARK: - Placement on the hour scale
 
+/// Time-accurate placement: a block starts at its start time and is as tall as it lasts. A block shorter than
+/// `minimumHeight` is drawn at that height for its label, with `trueHeight` showing the real span. Blocks whose
+/// drawn rectangles overlap stand side by side in lanes, as in a calendar.
 struct RecordingsDayPlacement: Equatable {
     struct Frame: Equatable {
         let id: String
         var top: Double
         var height: Double
+        /// The real span on the scale; smaller than `height` when the minimum height applies.
+        var trueHeight: Double
         var column: Int
         var columns: Int
-        /// Narrow layout: an unattached recording under an event is indented.
-        var indented: Bool
     }
 
     struct HourLine: Equatable {
@@ -281,85 +311,117 @@ struct RecordingsDayPlacement: Equatable {
         let y: Double
     }
 
+    static let minimumHeight: Double = 30
+
+    let startHour: Int
+    let hourHeight: Double
     let frames: [Frame]
     let hours: [HourLine]
     let height: Double
 
-    /// Ported from the prototype: overlapping items share a cluster and stand side by side (or stack when narrow);
-    /// a block taller than its time pushes the scale below it down, so hour labels stay true.
-    static func place(
-        _ items: [RecordingsDay.Item],
-        hourHeight: Double,
-        narrow: Bool,
-        minimumHeight: (RecordingsDay.Item) -> Double
-    ) -> RecordingsDayPlacement {
-        guard let first = items.min(by: { $0.startMinute < $1.startMinute }) else {
-            return RecordingsDayPlacement(frames: [], hours: [], height: 0)
-        }
-        let startHour = first.startMinute / 60
-        let y = { (minute: Int) in Double(minute - startHour * 60) / 60 * hourHeight }
+    static func y(_ minute: Double, startHour: Int, hourHeight: Double) -> Double {
+        (minute - Double(startHour * 60)) / 60 * hourHeight
+    }
 
-        var clusters: [[RecordingsDay.Item]] = []
-        var clusterEnd = -1
-        for item in items.sorted(by: { $0.startMinute < $1.startMinute }) {
-            if !clusters.isEmpty, item.startMinute < clusterEnd {
-                clusters[clusters.count - 1].append(item)
-                clusterEnd = max(clusterEnd, item.endMinute)
-            } else {
-                clusters.append([item])
-                clusterEnd = item.endMinute
-            }
-        }
+    /// Height from duration, and the drawn height with the minimum applied.
+    static func heights(start: Double, end: Double, hourHeight: Double, minimum: Double = minimumHeight)
+        -> (drawn: Double, true: Double)
+    {
+        let real = max(0, end - start) / 60 * hourHeight
+        return (max(real, minimum), real)
+    }
 
-        var frames: [Frame] = []
-        var floor = 0.0
-        var shift = 0.0
-        var shifts: [(minute: Int, shift: Double)] = []
-        for cluster in clusters {
-            let ordered = cluster.sorted { lhs, rhs in
-                lhs.isEvent != rhs.isEvent ? lhs.isEvent : lhs.startMinute < rhs.startMinute
-            }
-            let clusterEndMinute = cluster.map(\.endMinute).max() ?? 0
-            let shifted = { (minute: Int) in y(minute) + shift }
-            func height(_ item: RecordingsDay.Item) -> Double {
-                max(y(item.endMinute) - y(item.startMinute) - 2, minimumHeight(item))
-            }
-            var bottom = floor
-            if narrow || ordered.count == 1 {
-                var previous = floor - 4
-                for (index, item) in ordered.enumerated() {
-                    let top = max(shifted(item.startMinute), previous + 4)
-                    let itemHeight = height(item)
-                    let indented = narrow && index > 0 && !item.isEvent && ordered[0].isEvent
-                    frames.append(Frame(id: item.id, top: top, height: itemHeight, column: 0, columns: 1, indented: indented))
-                    previous = top + itemHeight
-                }
-                bottom = previous
-            } else {
-                let clusterTop = max(shifted(cluster[0].startMinute), floor)
-                for (index, item) in ordered.enumerated() {
-                    let top = max(shifted(item.startMinute), clusterTop)
-                    let itemHeight = height(item)
-                    frames.append(Frame(id: item.id, top: top, height: itemHeight, column: index,
-                                        columns: ordered.count, indented: false))
-                    bottom = max(bottom, top + itemHeight)
-                }
-            }
-            floor = bottom + 4
-            let natural = shifted(clusterEndMinute)
-            if floor > natural { shift += floor - natural }
-            shifts.append((clusterEndMinute, shift))
+    /// Lanes for spans in one column: greedy first free lane; a cluster of touching spans shares a lane count.
+    static func lanes(_ spans: [(id: String, top: Double, bottom: Double)]) -> [String: (lane: Int, lanes: Int)] {
+        var result: [String: (lane: Int, lanes: Int)] = [:]
+        var cluster: [(id: String, lane: Int)] = []
+        var laneBottoms: [Double] = []
+        var clusterBottom = -Double.infinity
+        func close() {
+            for entry in cluster { result[entry.id] = (entry.lane, laneBottoms.count) }
+            cluster = []
+            laneBottoms = []
         }
+        for span in spans.sorted(by: { $0.top != $1.top ? $0.top < $1.top : $0.id < $1.id }) {
+            if span.top >= clusterBottom { close() }
+            let lane = laneBottoms.firstIndex { $0 <= span.top } ?? laneBottoms.count
+            if lane == laneBottoms.count { laneBottoms.append(span.bottom) } else { laneBottoms[lane] = span.bottom }
+            cluster.append((span.id, lane))
+            clusterBottom = max(clusterBottom, span.bottom)
+        }
+        close()
+        return result
+    }
 
-        let endHour = Int((Double(items.map(\.endMinute).max() ?? 0) / 60).rounded(.up))
-        let hourY = { (minute: Int) -> Double in
-            var applied = 0.0
-            for entry in shifts where entry.minute <= minute { applied = entry.shift }
-            return y(minute) + applied
+    static func place(_ items: [RecordingsDay.Item], hourHeight: Double,
+                      minimumHeight: Double = minimumHeight) -> RecordingsDayPlacement
+    {
+        guard let first = items.map(\.startMinute).min() else {
+            return RecordingsDayPlacement(startHour: 0, hourHeight: hourHeight, frames: [], hours: [], height: 0)
         }
-        let hours = (startHour ... max(startHour, endHour)).map { HourLine(hour: $0, y: hourY($0 * 60)) }
-        let height = max(hourY(endHour * 60), floor) + 8
-        return RecordingsDayPlacement(frames: frames, hours: hours, height: height)
+        let startHour = Int((first / 60).rounded(.down))
+        var drawn: [String: (top: Double, height: Double, true: Double)] = [:]
+        for item in items {
+            let top = y(item.startMinute, startHour: startHour, hourHeight: hourHeight)
+            var size = heights(start: item.startMinute, end: item.endMinute, hourHeight: hourHeight, minimum: minimumHeight)
+            if let spans = item.childSpans {
+                // An attached recording that runs past the event's end stays inside the event's column.
+                let inner = children(spans, containerStart: item.startMinute, hourHeight: hourHeight, minimumHeight: minimumHeight)
+                let bottom = inner.map { $0.top + $0.height }.max() ?? 0
+                size.drawn = max(size.drawn, bottom)
+            }
+            drawn[item.id] = (top, size.drawn, size.true)
+        }
+        let lanes = lanes(drawn.map { (id: $0.key, top: $0.value.top, bottom: $0.value.top + $0.value.height) })
+        let frames = items.map { item -> Frame in
+            let box = drawn[item.id]!
+            let lane = lanes[item.id] ?? (0, 1)
+            return Frame(id: item.id, top: box.top, height: box.height, trueHeight: box.true,
+                         column: lane.lane, columns: lane.lanes)
+        }
+        let lastMinute = items.map(\.endMinute).max() ?? first
+        let endHour = max(startHour + 1, Int((lastMinute / 60).rounded(.up)))
+        let hours = (startHour ... endHour).map { HourLine(hour: $0, y: y(Double($0 * 60), startHour: startHour, hourHeight: hourHeight)) }
+        let height = max(hours.last?.y ?? 0, frames.map { $0.top + $0.height }.max() ?? 0) + 8
+        return RecordingsDayPlacement(startHour: startHour, hourHeight: hourHeight, frames: frames, hours: hours, height: height)
+    }
+
+    /// Recordings inside an event or group, relative to its top, at their real times, in lanes.
+    static func children(_ spans: [RecordingsDay.Span], containerStart: Double, hourHeight: Double,
+                         minimumHeight: Double = minimumHeight) -> [Frame]
+    {
+        let boxes = spans.map { span -> (id: String, top: Double, height: Double, true: Double) in
+            let size = heights(start: span.start, end: span.end, hourHeight: hourHeight, minimum: minimumHeight)
+            return (span.recording.id.uuidString, (span.start - containerStart) / 60 * hourHeight, size.drawn, size.true)
+        }
+        let lanes = lanes(boxes.map { ($0.id, $0.top, $0.top + $0.height) })
+        return boxes.map { box in
+            let lane = lanes[box.id] ?? (0, 1)
+            return Frame(id: box.id, top: box.top, height: box.height, trueHeight: box.true, column: lane.lane, columns: lane.lanes)
+        }
+    }
+}
+
+/// What the day shows while a recording is worked on. Read from the stored status, which the queue sets at
+/// enqueue and clears at the end, so the observed library is enough (no polling).
+enum RecordingsProcessingState: Equatable {
+    case none
+    case working
+    case failed
+
+    static func of(_ recording: Recording) -> Self {
+        switch recording.status {
+        case .processing: .working
+        case .failed: .failed
+        default: .none
+        }
+    }
+
+    /// An event or a notes group: working while any member works, else failed if any failed.
+    static func of(_ recordings: [Recording]) -> Self {
+        let states = recordings.map(of)
+        if states.contains(.working) { return .working }
+        return states.contains(.failed) ? .failed : .none
     }
 }
 

@@ -181,37 +181,63 @@ struct RecordingsDayTests {
 
     // MARK: Placement
 
-    @Test func overlappingBlocksStandSideBySideOrStackWhenNarrow() {
+    @Test func blocksStartAtTheirTimeAndAreAsTallAsTheyLast() {
+        let long = recording(.meeting, 10, 15, minutes: 45)
+        let short = recording(.meeting, 12, 0, minutes: 0.5)
+        let placement = RecordingsDayPlacement.place(build([long, short]).items, hourHeight: 96)
+        let longFrame = placement.frames.first { $0.id == "recording:" + long.id.uuidString }!
+        #expect(placement.startHour == 10)
+        #expect(longFrame.top == 24, "10:15 is a quarter of an hour below 10:00")
+        #expect(longFrame.height == 72 && longFrame.trueHeight == 72, "45 min fills 45 min")
+        let shortFrame = placement.frames.first { $0.id == "recording:" + short.id.uuidString }!
+        #expect(shortFrame.height == RecordingsDayPlacement.minimumHeight, "Readable minimum")
+        #expect(abs(shortFrame.trueHeight - 0.8) < 0.001, "The true span stays visible")
+        #expect(placement.hours.first { $0.hour == 12 }?.y == 192, "Hour lines are never shifted")
+    }
+
+    @Test func overlappingBlocksGoIntoLanes() {
         let review = event("r", 16, 30, minutes: 60), office = event("o", 16, 30, minutes: 60, title: "Office")
-        let items = build([], events: [review, office]).items
-        let wide = RecordingsDayPlacement.place(items, hourHeight: 96, narrow: false) { _ in 40 }
-        #expect(wide.frames.map(\.columns) == [2, 2])
-        #expect(Set(wide.frames.map(\.column)) == [0, 1])
-        let narrow = RecordingsDayPlacement.place(items, hourHeight: 96, narrow: true) { _ in 40 }
-        #expect(narrow.frames.allSatisfy { $0.columns == 1 })
-        #expect(narrow.frames[1].top >= narrow.frames[0].top + narrow.frames[0].height)
+        let later = recording(.meeting, 18, 0, minutes: 30)
+        let placement = RecordingsDayPlacement.place(build([later], events: [review, office]).items, hourHeight: 96)
+        let events = placement.frames.filter { $0.id.hasPrefix("event:") }
+        #expect(events.map(\.columns) == [2, 2])
+        #expect(Set(events.map(\.column)) == [0, 1])
+        #expect(placement.frames.first { $0.id.hasPrefix("recording:") }?.columns == 1, "Later items get the full width")
     }
 
-    @Test func narrowIndentsAnUnattachedRecordingUnderItsEvent() {
-        let meeting = event("e", 10, 0, minutes: 60)
-        let loose = recording(.meeting, 10, 5, minutes: 10)
-        let items = build([loose], events: [meeting]).items
-        let placement = RecordingsDayPlacement.place(items, hourHeight: 96, narrow: true) { _ in 40 }
-        #expect(placement.frames.map(\.indented) == [false, true])
+    @Test func lanesReuseAFreeLaneAndShareTheClusterCount() {
+        let lanes = RecordingsDayPlacement.lanes([("a", 0, 100), ("b", 10, 30), ("c", 40, 60), ("d", 200, 220)])
+        #expect(lanes["a"]! == (0, 2) && lanes["b"]! == (1, 2))
+        #expect(lanes["c"]! == (1, 2), "c reuses the lane b freed")
+        #expect(lanes["d"]! == (0, 1))
     }
 
-    @Test func aTallBlockPushesLaterHoursDownSoLabelsStayTrue() {
-        let notes = (0 ..< 5).map { recording(.voice, 10, $0) }
-        let later = recording(.meeting, 11, 0, minutes: 10)
-        let items = build(notes + [later]).items
-        let placement = RecordingsDayPlacement.place(items, hourHeight: 96, narrow: false) { item in
-            if case .notes = item { return 300 } else { return 40 }
-        }
-        let eleven = placement.hours.first { $0.hour == 11 }!
-        let laterFrame = placement.frames.first { $0.id == "recording:" + later.id.uuidString }!
-        #expect(eleven.y > 96)
-        #expect(laterFrame.top >= eleven.y - 0.5)
-        #expect(placement.height >= laterFrame.top + laterFrame.height)
+    @Test func recordingsInsideAnEventSitAtTheirRealTimes() {
+        let interview = event("i", 12, 0, minutes: 60)
+        let first = recording(.meeting, 12, 1, minutes: 59, event: interview)
+        let second = recording(.meeting, 13, 2, minutes: 45, event: interview) // runs past the end
+        let items = build([first, second], events: [interview]).items
+        guard case let .event(slot, start, _) = items.first else { Issue.record("no event"); return }
+        let inner = RecordingsDayPlacement.children(slot.spans, containerStart: start, hourHeight: 96)
+        #expect(abs(inner[0].top - 1.6) < 0.001 && abs(inner[1].top - 99.2) < 0.001)
+        #expect(abs(inner[1].height - 72) < 0.001)
+        let frame = RecordingsDayPlacement.place(items, hourHeight: 96).frames[0]
+        #expect(abs(frame.height - (99.2 + 72)) < 0.001, "The event column holds a recording that runs past its end")
+        #expect(frame.trueHeight == 96, "The event itself spans its time")
+    }
+
+    @Test func processingStateShowsOnTheBlockAndItsParent() {
+        var working = recording(.meeting, 10, 0)
+        working.status = .processing
+        var failed = recording(.voice, 10, 0)
+        failed.status = .failed
+        let done = recording(.voice, 10, 0, text: "ok")
+        #expect(RecordingsProcessingState.of(working) == .working)
+        #expect(RecordingsProcessingState.of(failed) == .failed)
+        #expect(RecordingsProcessingState.of(done) == .none)
+        #expect(RecordingsProcessingState.of([done, failed, working]) == .working)
+        #expect(RecordingsProcessingState.of([done, failed]) == .failed)
+        #expect(RecordingsProcessingState.of([done]) == .none)
     }
 
     // MARK: Week, segments, names
@@ -267,12 +293,18 @@ struct RecordingsDayTests {
         #expect(versions.translations.map(\.text) == ["uk 2", "en"], "Newest per language, one tab each")
     }
 
-    @Test func inspectorIsFixedWidthAndNeverResizesTheWindow() {
-        #expect(RecordingsLibraryView.inspectorWidth(windowWidth: 1000) == 480)
-        #expect(RecordingsLibraryView.inspectorWidth(windowWidth: 1699) == 480)
-        #expect(RecordingsLibraryView.inspectorWidth(windowWidth: 1700) == 560)
-        // At a 1000 window the calendar keeps 1000 - 238 - 480 = 282 and stacks.
-        #expect(1000 - DS.Layout.sidebarWidth - 480 < RecordingsDayView<EmptyView>.narrowWidth)
+    @Test func pageWidthsAt1000_1280_1700WithTheInspectorOpenAndClosed() {
+        #expect(RecordingsPageLayout.inspectorWidth(windowWidth: 1000) == 400)
+        #expect(RecordingsPageLayout.inspectorWidth(windowWidth: 1280) == 480)
+        #expect(RecordingsPageLayout.inspectorWidth(windowWidth: 1700) == 560)
+        let column = { RecordingsPageLayout.columnWidth(windowWidth: $0, inspectorOpen: $1) }
+        #expect(column(1000, true) == 361)
+        #expect(column(1000, true) >= RecordingsPageLayout.minimumColumnWidth, "The day stays usable at 1000")
+        #expect(RecordingsPageLayout.isCompact(columnWidth: column(1000, true)))
+        #expect(RecordingsPageLayout.isCompact(columnWidth: column(1280, true)))
+        #expect(!RecordingsPageLayout.isCompact(columnWidth: column(1000, false)))
+        #expect(!RecordingsPageLayout.isCompact(columnWidth: column(1280, false)))
+        #expect(!RecordingsPageLayout.isCompact(columnWidth: column(1700, true)))
     }
 
     @Test func openStateFollowsTheSelection() {

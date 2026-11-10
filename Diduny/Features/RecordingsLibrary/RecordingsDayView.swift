@@ -29,7 +29,8 @@ struct RecordingsDayView<FileRow: View>: View {
     @State private var pinchStart: NotesZoom?
     private let calendar = Calendar.current
 
-    static var narrowWidth: CGFloat { 460 }
+    /// The day column never gets narrower than this; below it the page scrolls sideways.
+    static var minimumWidth: CGFloat { 300 }
     private static var railInset: CGFloat { 42 }
     private static var rowHeight: Double { 24 }
 
@@ -144,9 +145,7 @@ struct RecordingsDayView<FileRow: View>: View {
     // MARK: - Hour scale
 
     private func rail(width: CGFloat) -> some View {
-        let narrow = width < Self.narrowWidth
-        let placement = RecordingsDayPlacement.place(day.items, hourHeight: zoom.hourHeight, narrow: narrow,
-                                                     minimumHeight: minimumHeight)
+        let placement = RecordingsDayPlacement.place(day.items, hourHeight: zoom.hourHeight)
         let railWidth = max(0, width - Self.railInset - 6)
         let byID = Dictionary(uniqueKeysWithValues: day.items.map { ($0.id, $0) })
         return ZStack(alignment: .topLeading) {
@@ -160,12 +159,16 @@ struct RecordingsDayView<FileRow: View>: View {
             }
             ForEach(placement.frames, id: \.id) { frame in
                 if let item = byID[frame.id] {
-                    let indent: CGFloat = frame.indented ? 14 : 0
                     let gap: CGFloat = frame.columns > 1 ? 4 : 0
                     let columnWidth = railWidth / CGFloat(frame.columns)
-                    block(item)
-                        .frame(width: max(0, columnWidth - gap - indent), height: frame.height, alignment: .topLeading)
-                        .offset(x: Self.railInset + columnWidth * CGFloat(frame.column) + indent, y: frame.top)
+                    let blockWidth = max(0, columnWidth - gap)
+                    let expanded = expandedHeight(item)
+                    block(item, width: blockWidth, frame: frame)
+                        .frame(width: blockWidth, height: max(frame.height, expanded ?? 0), alignment: .topLeading)
+                        .offset(x: Self.railInset + columnWidth * CGFloat(frame.column), y: frame.top)
+                        // An open notes list floats over what follows; the times underneath stay true.
+                        .zIndex(expanded == nil ? 0 : 1)
+                        .shadow(color: expanded == nil ? .clear : .black.opacity(0.18), radius: 8, y: 3)
                 }
             }
         }
@@ -176,61 +179,89 @@ struct RecordingsDayView<FileRow: View>: View {
         .animation(DS.Motion.easeOut(0.18), value: zoom)
     }
 
-    private func minimumHeight(_ item: RecordingsDay.Item) -> Double {
-        switch item {
-        case let .event(event, _, _):
-            event.attached.isEmpty ? 24 : 24 + Double(event.attached.count) * Self.rowHeight
-        case let .notes(group, _, _):
-            expandedNotes.contains(group.key)
-                ? 40 + Double(min(group.recordings.count, NotesGroupRows.shownWhenLong + 1)) * Self.rowHeight
-                : 40
-        case let .group(group, _, _):
-            24 + Double(group.recordings.count) * Self.rowHeight
-        case .recording:
-            40
-        }
+    /// The height an open notes group needs for its rows, or nil when it is closed.
+    private func expandedHeight(_ item: RecordingsDay.Item) -> Double? {
+        guard case let .notes(group, _, _) = item, expandedNotes.contains(group.key) else { return nil }
+        return 40 + Double(min(group.recordings.count, NotesGroupRows.shownWhenLong + 1)) * Self.rowHeight
     }
 
     @ViewBuilder
-    private func block(_ item: RecordingsDay.Item) -> some View {
+    private func block(_ item: RecordingsDay.Item, width: CGFloat, frame: RecordingsDayPlacement.Frame) -> some View {
         switch item {
-        case let .event(event, _, _): eventBlock(event)
-        case let .notes(group, _, _): notesBlock(group)
-        case let .group(group, _, _): groupBlock(group)
-        case let .recording(recording, _, _): recordingBlock(recording)
+        case let .event(event, start, _): eventBlock(event, start: start, width: width)
+        case let .notes(group, _, _): notesBlock(group, frame: frame)
+        case let .group(group, start, _): groupBlock(group, start: start, width: width)
+        case let .recording(recording, _, _): recordingBlock(recording, frame: frame)
         }
     }
 
-    private func eventBlock(_ event: RecordingsDay.Event) -> some View {
+    /// Spinner while any of these recordings is transcribed; a warning when one failed.
+    @ViewBuilder
+    private func stateMark(_ state: RecordingsProcessingState, isOn: Bool) -> some View {
+        switch state {
+        case .working:
+            ProgressView().controlSize(.mini)
+                .accessibilityLabel(Text("Transcribing"))
+        case .failed:
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10))
+                .foregroundStyle(isOn ? Color.white : DS.Palette.no)
+                .accessibilityLabel(Text("Failed"))
+        case .none:
+            EmptyView()
+        }
+    }
+
+    /// Share of an event's width given to its title when recordings stand inside it at their real times.
+    private static var titleShare: CGFloat { 0.4 }
+
+    private func eventBlock(_ event: RecordingsDay.Event, start: Double, width: CGFloat) -> some View {
         let isOn = !isSelectionMode && openSelection == .event(event.key)
         let stripe = event.meeting.calendarColorRGB.map { Color(rgb: $0) } ?? DS.Palette.secondary
-        return VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 4) {
-                Text(event.meeting.title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+        let hasChildren = !event.spans.isEmpty
+        let childX = hasChildren ? width * Self.titleShare : width
+        let children = RecordingsDayPlacement.children(event.spans, containerStart: start, hourHeight: zoom.hourHeight)
+        let byID = Dictionary(uniqueKeysWithValues: event.spans.map { ($0.recording.id.uuidString, $0.recording) })
+        let eventHeight = RecordingsDayPlacement.heights(start: start, end: start + event.meeting.end.timeIntervalSince(event.meeting.start) / 60,
+                                                         hourHeight: zoom.hourHeight).drawn
+        return ZStack(alignment: .topLeading) {
+            // The event's own time; recordings that run past its end hang below it.
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isOn ? DS.Palette.accentFill : DS.Palette.box)
+                .frame(height: eventHeight)
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(stripe).frame(width: 3).clipShape(RoundedRectangle(cornerRadius: 1.5))
+                        .padding(.vertical, 3).padding(.leading, 3)
+                }
+                .overlay {
+                    if dropTarget == event.key {
+                        RoundedRectangle(cornerRadius: 6).strokeBorder(DS.Palette.accent, lineWidth: 2)
+                    }
+                }
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    Text(event.meeting.title).font(.system(size: 12, weight: .semibold)).lineLimit(hasChildren ? 4 : 1)
+                    stateMark(.of(event.attached), isOn: isOn)
+                }
                 if event.attached.isEmpty {
-                    Text("not recorded").font(DS.Font.caption).foregroundStyle(isOn ? Color.white : DS.Palette.secondary)
-                        .lineLimit(1)
+                    Text("not recorded").font(DS.Font.caption).lineLimit(1)
+                        .foregroundStyle(isOn ? Color.white : DS.Palette.secondary)
                 }
             }
-            ForEach(event.attached) { recording in
-                attachedRow(recording, title: recording.isVoiceNote
-                    ? String(localized: "Voice note \(time(recording.createdAt))")
-                    : String(localized: "Recording \(time(recording.createdAt))"))
+            .padding(EdgeInsets(top: 4, leading: 10, bottom: 0, trailing: 4))
+            .frame(width: childX, alignment: .leading)
+            .frame(maxHeight: eventHeight, alignment: .topLeading)
+            .clipped()
+            ForEach(children, id: \.id) { child in
+                if let recording = byID[child.id] {
+                    let laneWidth = (width - childX - 3) / CGFloat(child.columns)
+                    childBlock(recording, frame: child)
+                        .frame(width: max(0, laneWidth - (child.columns > 1 ? 2 : 0)), height: child.height, alignment: .topLeading)
+                        .offset(x: childX + laneWidth * CGFloat(child.column), y: child.top)
+                }
             }
         }
-        .padding(EdgeInsets(top: 4, leading: 10, bottom: 5, trailing: 6))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .foregroundStyle(isOn ? Color.white : DS.Palette.text)
-        .background(isOn ? DS.Palette.accentFill : DS.Palette.box, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(alignment: .leading) {
-            Rectangle().fill(stripe).frame(width: 3).clipShape(RoundedRectangle(cornerRadius: 1.5)).padding(.vertical, 3)
-                .padding(.leading, 3)
-        }
-        .overlay {
-            if dropTarget == event.key {
-                RoundedRectangle(cornerRadius: 6).strokeBorder(DS.Palette.accent, lineWidth: 2)
-            }
-        }
         .contentShape(Rectangle())
         .onTapGesture { actions.openEvent(event.key) }
         .accessibilityAction { actions.openEvent(event.key) }
@@ -247,27 +278,46 @@ struct RecordingsDayView<FileRow: View>: View {
         .accessibilityIdentifier("recordings.day.event")
     }
 
-    private func attachedRow(_ recording: Recording, title: String) -> some View {
+    /// A recording inside an event or group, as tall as it lasts.
+    private func childBlock(_ recording: Recording, frame: RecordingsDayPlacement.Frame, title: String? = nil) -> some View {
         let isOn = !isSelectionMode && openSelection?.opensRecording(recording.id) == true
-        return HStack(spacing: 6) {
-            if isSelectionMode { checkmark(selectedRecordingIDs.contains(recording.id)) }
-            Text(title).font(.system(size: 11, weight: .semibold)).lineLimit(1).layoutPriority(1)
-            Text(statusLine(recording)).font(DS.Font.caption).lineLimit(1)
-                .foregroundStyle(isOn ? Color.white : DS.Palette.secondary)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
+                if isSelectionMode { checkmark(selectedRecordingIDs.contains(recording.id)) }
+                Text(title ?? time(recording.createdAt)).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                stateMark(.of(recording), isOn: isOn)
+            }
+            if frame.height >= 40 {
+                Text(recording.isVoiceNote ? statusLine(recording) : "\(duration(recording.durationSeconds)), \(statusLine(recording))")
+                    .font(DS.Font.caption).lineLimit(1)
+                    .foregroundStyle(isOn ? Color.white : DS.Palette.secondary)
+            }
         }
-        .padding(.horizontal, 6)
-        .frame(maxWidth: .infinity, minHeight: 21, maxHeight: 21, alignment: .leading)
+        .padding(EdgeInsets(top: 3, leading: 7, bottom: 2, trailing: 4))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .foregroundStyle(isOn ? Color.white : DS.Palette.text)
         .background(isOn ? DS.Palette.accentFill : DS.Palette.card, in: RoundedRectangle(cornerRadius: 5))
+        .overlay(alignment: .topLeading) { trueSpanBar(frame) }
         .contentShape(Rectangle())
         .onTapGesture { tapRecording(recording.id) }
         .accessibilityAction { tapRecording(recording.id) }
         .draggable(recording.id.uuidString)
+        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
         .accessibilityIdentifier("recordings.day.attached")
     }
 
-    private func notesBlock(_ group: RecordingsDay.NotesGroup) -> some View {
+    /// The real span of a block drawn taller than it lasts.
+    @ViewBuilder
+    private func trueSpanBar(_ frame: RecordingsDayPlacement.Frame) -> some View {
+        if frame.trueHeight < frame.height {
+            Rectangle().fill(DS.Palette.accent)
+                .frame(width: 3, height: max(2, frame.trueHeight))
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func notesBlock(_ group: RecordingsDay.NotesGroup, frame: RecordingsDayPlacement.Frame) -> some View {
         let expanded = expandedNotes.contains(group.key)
         let isOn = !isSelectionMode && openSelection == .notes(group.key)
         let rows = NotesGroupRows.visible(group.recordings)
@@ -282,14 +332,22 @@ struct RecordingsDayView<FileRow: View>: View {
                         .frame(width: 14, height: 16)
                 }
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("\(group.recordings.count) voice notes").font(.system(size: 12, weight: .semibold)).lineLimit(1)
-                    Text(verbatim: "\(time(group.recordings[0].createdAt))-\(time(group.recordings.last!.createdAt)), \(duration(total))")
-                        .font(DS.Font.caption).lineLimit(1)
-                        .foregroundStyle(isOn ? Color.white : DS.Palette.secondary)
+                    HStack(spacing: 4) {
+                        Text("\(group.recordings.count) voice notes").font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                        stateMark(.of(group.recordings), isOn: isOn)
+                    }
+                    if frame.height >= 40 || expanded {
+                        Text(verbatim: "\(time(group.recordings[0].createdAt))-\(time(group.recordings.last!.createdAt)), \(duration(total))")
+                            .font(DS.Font.caption).lineLimit(1)
+                            .foregroundStyle(isOn ? Color.white : DS.Palette.secondary)
+                    }
                 }
             }
             if expanded {
-                ForEach(rows.shown) { attachedRow($0, title: time($0.createdAt)) }
+                ForEach(rows.shown) { note in
+                    childBlock(note, frame: .init(id: note.id.uuidString, top: 0, height: 21, trueHeight: 21, column: 0, columns: 1))
+                        .frame(height: 21)
+                }
                 if rows.hidden > 0 {
                     Button { actions.openNotes(group.key) } label: {
                         Text("\(rows.hidden) more, all of them are in the inspector")
@@ -305,6 +363,7 @@ struct RecordingsDayView<FileRow: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .foregroundStyle(isOn ? Color.white : DS.Palette.text)
         .background(isOn ? DS.Palette.accentFill : DS.Palette.box, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(alignment: .topLeading) { if !expanded { trueSpanBar(frame) } }
         .contentShape(Rectangle())
         .onTapGesture {
             if isSelectionMode {
@@ -322,21 +381,31 @@ struct RecordingsDayView<FileRow: View>: View {
         .accessibilityIdentifier("recordings.day.notes")
     }
 
-    private func groupBlock(_ group: RecordingsDay.Group) -> some View {
+    private func groupBlock(_ group: RecordingsDay.Group, start: Double, width: CGFloat) -> some View {
         let isOn = !isSelectionMode && openSelection == .group(group.id)
-        return VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
+        let childX = width * Self.titleShare
+        let children = RecordingsDayPlacement.children(group.spans, containerStart: start, hourHeight: zoom.hourHeight)
+        let parts = Dictionary(uniqueKeysWithValues: group.recordings.enumerated().map { ($1.id.uuidString, ($0, $1)) })
+        return ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 6).fill(isOn ? DS.Palette.accentFill : DS.Palette.box)
+            HStack(alignment: .top, spacing: 4) {
                 Image(systemName: "square.stack").font(.system(size: 10))
-                Text(group.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                Text(group.name).font(.system(size: 12, weight: .semibold)).lineLimit(4)
+                stateMark(.of(group.recordings), isOn: isOn)
             }
-            ForEach(Array(group.recordings.enumerated()), id: \.element.id) { index, recording in
-                attachedRow(recording, title: String(localized: "Part \(index + 1)"))
+            .padding(EdgeInsets(top: 4, leading: 7, bottom: 0, trailing: 4))
+            .frame(width: childX, alignment: .leading)
+            ForEach(children, id: \.id) { child in
+                if let part = parts[child.id] {
+                    let laneWidth = (width - childX - 3) / CGFloat(child.columns)
+                    childBlock(part.1, frame: child, title: String(localized: "Part \(part.0 + 1)"))
+                        .frame(width: max(0, laneWidth - (child.columns > 1 ? 2 : 0)), height: child.height, alignment: .topLeading)
+                        .offset(x: childX + laneWidth * CGFloat(child.column), y: child.top)
+                }
             }
         }
-        .padding(EdgeInsets(top: 4, leading: 7, bottom: 5, trailing: 6))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .foregroundStyle(isOn ? Color.white : DS.Palette.text)
-        .background(isOn ? DS.Palette.accentFill : DS.Palette.box, in: RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
         .onTapGesture { actions.openGroup(group.id) }
         .accessibilityAction { actions.openGroup(group.id) }
@@ -344,16 +413,21 @@ struct RecordingsDayView<FileRow: View>: View {
         .accessibilityIdentifier("recordings.day.group")
     }
 
-    private func recordingBlock(_ recording: Recording) -> some View {
+    private func recordingBlock(_ recording: Recording, frame: RecordingsDayPlacement.Frame) -> some View {
         let isOn = !isSelectionMode && openSelection?.opensRecording(recording.id) == true
         let overlap = RecordingsDay.overlappingEvents(for: recording, in: day.items)
         return HStack(alignment: .top, spacing: 6) {
             if isSelectionMode { checkmark(selectedRecordingIDs.contains(recording.id)) }
             VStack(alignment: .leading, spacing: 0) {
-                Text(recording.displayTitle).font(.system(size: 12, weight: .semibold)).lineLimit(1)
-                Text(recording.isVoiceNote ? statusLine(recording) : "\(duration(recording.durationSeconds)), \(statusLine(recording))")
-                    .font(DS.Font.caption).lineLimit(1)
-                    .foregroundStyle(isOn ? Color.white : DS.Palette.secondary)
+                HStack(spacing: 4) {
+                    Text(recording.displayTitle).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                    stateMark(.of(recording), isOn: isOn)
+                }
+                if frame.height >= 40 {
+                    Text(recording.isVoiceNote ? statusLine(recording) : "\(duration(recording.durationSeconds)), \(statusLine(recording))")
+                        .font(DS.Font.caption).lineLimit(1)
+                        .foregroundStyle(isOn ? Color.white : DS.Palette.secondary)
+                }
             }
             Spacer(minLength: 0)
             if let event = overlap.first, !isSelectionMode {
@@ -374,6 +448,7 @@ struct RecordingsDayView<FileRow: View>: View {
         .foregroundStyle(isOn ? Color.white : DS.Palette.text)
         .background(isOn ? DS.Palette.accentFill : DS.Palette.card, in: RoundedRectangle(cornerRadius: 6))
         .overlay { if !isOn { RoundedRectangle(cornerRadius: 6).strokeBorder(DS.Palette.line, lineWidth: 1) } }
+        .overlay(alignment: .topLeading) { trueSpanBar(frame) }
         .contentShape(Rectangle())
         .onTapGesture { tapRecording(recording.id) }
         .accessibilityAction { tapRecording(recording.id) }

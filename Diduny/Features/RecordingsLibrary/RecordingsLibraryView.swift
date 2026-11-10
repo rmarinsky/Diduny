@@ -159,13 +159,16 @@ struct RecordingsLibraryView: View {
 
     private var pageLayout: some View {
         GeometryReader { proxy in
-            let inspectorWidth = Self.inspectorWidth(windowWidth: proxy.size.width + DS.Layout.sidebarWidth)
+            let windowWidth = proxy.size.width + DS.Layout.sidebarWidth
+            let inspectorWidth = RecordingsPageLayout.inspectorWidth(windowWidth: windowWidth)
+            let compact = RecordingsPageLayout.isCompact(
+                columnWidth: RecordingsPageLayout.columnWidth(windowWidth: windowWidth, inspectorOpen: inspectorSelection != nil))
             HStack(spacing: 0) {
                 PageScaffold(title: "Recordings", scrolls: false, columnMaxWidth: DS.Layout.wideColumnMaxWidth) {
-                    headerActions
+                    headerActions(compact: compact)
                 } content: {
                     VStack(alignment: .leading, spacing: DS.Space.md) {
-                        filterToolbar
+                        filterToolbar(compact: compact)
                         mainContent
                     }
                     .padding(.horizontal, DS.Layout.pagePadding)
@@ -174,7 +177,7 @@ struct RecordingsLibraryView: View {
                 .safeAreaInset(edge: .bottom) {
                     if isSelectionMode { selectionBar }
                 }
-                .frame(maxWidth: .infinity)
+                .frame(minWidth: RecordingsPageLayout.minimumColumnWidth, maxWidth: .infinity)
 
                 if inspectorSelection != nil {
                     Divider()
@@ -271,10 +274,6 @@ struct RecordingsLibraryView: View {
         }
     }
 
-    /// 480 inside the window, 560 from a 1700-wide window. The window never resizes itself.
-    static func inspectorWidth(windowWidth: CGFloat) -> CGFloat {
-        windowWidth >= 1700 ? 560 : 480
-    }
 
     @ViewBuilder
     private var mainContent: some View {
@@ -328,15 +327,21 @@ struct RecordingsLibraryView: View {
 
     // MARK: - Header
 
-    private var headerActions: some View {
+    private func headerActions(compact: Bool) -> some View {
         HStack(spacing: DS.Space.sm) {
             if listFilter?.showsBatches != true {
                 Button {
                     toggleSelectionMode()
                 } label: {
-                    Text(isSelectionMode ? String(localized: "Done") : String(localized: "Select several"))
+                    if compact {
+                        Image(systemName: isSelectionMode ? "checkmark.circle" : "checklist")
+                    } else {
+                        Text(isSelectionMode ? String(localized: "Done") : String(localized: "Select several"))
+                    }
                 }
                 .buttonStyle(.bordered)
+                .help(isSelectionMode ? String(localized: "Done") : String(localized: "Select several"))
+                .accessibilityLabel(Text(isSelectionMode ? String(localized: "Done") : String(localized: "Select several")))
                 .disabled(storage.recordings.isEmpty)
                 .accessibilityIdentifier("recordings.selectSeveral")
             }
@@ -364,7 +369,7 @@ struct RecordingsLibraryView: View {
 
     // MARK: - Filter Toolbar
 
-    private var filterToolbar: some View {
+    private func filterToolbar(compact: Bool) -> some View {
         HStack(spacing: DS.Space.md) {
             HStack(spacing: DS.Space.sm) {
                 Image(systemName: "magnifyingglass")
@@ -391,7 +396,20 @@ struct RecordingsLibraryView: View {
             .frame(maxWidth: .infinity)
             .background(DS.Palette.box, in: RoundedRectangle(cornerRadius: DS.Radius.field, style: .continuous))
 
-            if listFilter?.showsBatches != true {
+            if listFilter?.showsBatches != true, compact {
+                // Narrow column: the four segments become one picker, so nothing is cut off.
+                PickerField(label: nil, value: segment.title, identifier: "recordings.filter",
+                            menu: {
+                                PickerMenuModel(
+                                    groups: [PickerMenuGroup(id: "show", rows: RecordingsSegment.allCases.map {
+                                        PickerMenuRow(id: $0.rawValue, title: $0.title)
+                                    })],
+                                    selectedID: segment.rawValue, search: .never)
+                            }) { id in
+                    if let picked = RecordingsSegment(rawValue: id) { segment = picked }
+                }
+                .fixedSize()
+            } else if listFilter?.showsBatches != true {
                 ModeSegments(
                     items: RecordingsSegment.allCases.map { segment in
                         .init(id: segment, title: LocalizedStringKey(segment.titleKey),
@@ -710,4 +728,23 @@ extension RecordingsSegment {
         case .filesAndLinks: "Files and links"
         }
     }
+}
+
+/// Widths of the Recordings page (redesign B, iteration 3 and Roman's 2026-11-10 notes). Pure, so it is tested.
+enum RecordingsPageLayout {
+    /// The day column never gets narrower than this.
+    static let minimumColumnWidth: CGFloat = 340
+
+    /// 400 below a 1280 window, 480 above, 560 from 1700. The window never resizes itself.
+    static func inspectorWidth(windowWidth: CGFloat) -> CGFloat {
+        windowWidth >= 1700 ? 560 : windowWidth >= 1280 ? 480 : 400
+    }
+
+    /// The page column beside the sidebar and, when open, the inspector and its divider.
+    static func columnWidth(windowWidth: CGFloat, inspectorOpen: Bool) -> CGFloat {
+        windowWidth - DS.Layout.sidebarWidth - (inspectorOpen ? inspectorWidth(windowWidth: windowWidth) + 1 : 0)
+    }
+
+    /// Below this, "Select several" becomes an icon with a tooltip and the segments become one picker.
+    static func isCompact(columnWidth: CGFloat) -> Bool { columnWidth < 640 }
 }
