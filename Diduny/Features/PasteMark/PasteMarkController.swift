@@ -42,7 +42,8 @@ final class PasteMarkController {
         let geometry = geometry
         locateTask = Task { [weak self] in
             let found = await Task.detached(priority: .userInitiated) { geometry.caret() }.value
-            guard let self, self.generation == generation else { return }
+            PasteMarkTrace.note("beginWaiting caret=\(found.map { "\($0.rect)" } ?? "nil") app=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?")")
+            guard let self, self.generation == generation else { PasteMarkTrace.note("beginWaiting stale"); return }
             self.phase = PasteMarkPlan.next(self.phase, found == nil ? .caretMissing : .caretFound)
             guard let found, self.phase == .waiting else {
                 onCaretMissing()
@@ -59,6 +60,7 @@ final class PasteMarkController {
         let generation = generation
         landTask = Task { [weak self] in
             await self?.locateTask?.value
+            PasteMarkTrace.note("land phase=\(String(describing: self?.phase)) gen=\(self?.generation == generation) start=\(self?.start != nil)")
             guard let self, self.generation == generation, self.phase == .waiting, let start = self.start else {
                 self?.clear()
                 completion(false)
@@ -77,6 +79,7 @@ final class PasteMarkController {
 
     /// At once, without an exit: a new recording, typing, or nothing pasted.
     func clear() {
+        PasteMarkTrace.note("clear from phase=\(phase)")
         generation += 1
         locateTask?.cancel()
         landTask?.cancel()
@@ -128,6 +131,7 @@ final class PasteMarkController {
         model.isVisible = false
         panel?.setFrame(frame(caret: caret), display: false)
         panel?.orderFrontRegardless()
+        PasteMarkTrace.note("show caret=\(caret) frame=\(String(describing: panel?.frame)) visible=\(panel?.isVisible ?? false) onScreen=\(panel?.screen != nil)")
         model.isVisible = true
         installKeyMonitor()
     }

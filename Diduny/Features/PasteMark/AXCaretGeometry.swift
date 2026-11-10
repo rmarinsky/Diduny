@@ -16,11 +16,57 @@ struct AXCaretGeometry: CaretGeometry {
               let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID()
         else { return nil }
         let element = focusedRef as! AXUIElement // swiftlint:disable:this force_cast
+        let range = selectedRange(element)
+        PasteMarkTrace.note("caret role=\(Self.string(element, kAXRoleAttribute)) range=\(range.map { "\($0.location)+\($0.length)" } ?? "nil")")
 
-        if let range = selectedRange(element), let position = characterBefore(range, in: element) {
+        if let range, let position = characterBefore(range, in: element) {
             return position
         }
-        return markerCaret(element, location: selectedRange(element).map { $0.location + $0.length })
+        let location = range.map { $0.location + $0.length }
+        if let marker = markerCaret(element, location: location) {
+            return marker
+        }
+        PasteMarkTrace.note("caret no text geometry; element frame=\(String(describing: Self.frame(of: element)))")
+        return elementCaret(element, location: location ?? 0)
+    }
+
+    /// Last resort: the focused text element itself. Editors such as Monaco (VS Code, Cursor) focus a
+    /// small hidden textarea that sits at the caret, so its frame is the caret. An empty field gets the
+    /// logo at its leading edge, a field with text at its trailing bottom edge, where pasted text ends.
+    private func elementCaret(_ element: AXUIElement, location: Int) -> CaretPosition? {
+        guard let frame = Self.frame(of: element), frame.width > 0, frame.height > 0,
+              let primary = NSScreen.screens.first
+        else { return nil }
+        let line = min(frame.height, 22)
+        // An empty field (Claude, Slack inputs before the paste) has its caret at the leading edge.
+        let x = location == 0 ? frame.minX + 6 : frame.maxX - 1
+        let axRect = CGRect(x: x, y: frame.maxY - line, width: 1, height: line)
+        let rect = PasteMarkPlan.plausibleCaretRect(
+            InplaceTranslationAnchor.appKitRect(fromAX: axRect, primaryScreenHeight: primary.frame.height)
+        )
+        PasteMarkTrace.note("caret from element frame -> \(String(describing: rect))")
+        return rect.map { CaretPosition(location: location, rect: $0) }
+    }
+
+    private static func frame(of element: AXUIElement) -> CGRect? {
+        var positionRef: CFTypeRef?
+        var sizeRef: CFTypeRef?
+        var origin = CGPoint.zero
+        var size = CGSize.zero
+        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionRef) == .success,
+              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRef) == .success,
+              let positionRef, let sizeRef,
+              CFGetTypeID(positionRef) == AXValueGetTypeID(), CFGetTypeID(sizeRef) == AXValueGetTypeID(),
+              AXValueGetValue(positionRef as! AXValue, .cgPoint, &origin), // swiftlint:disable:this force_cast
+              AXValueGetValue(sizeRef as! AXValue, .cgSize, &size) // swiftlint:disable:this force_cast
+        else { return nil }
+        return CGRect(origin: origin, size: size)
+    }
+
+    private static func string(_ element: AXUIElement, _ attribute: String) -> String {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &ref) == .success else { return "?" }
+        return (ref as? String) ?? "?"
     }
 
     private func selectedRange(_ element: AXUIElement) -> CFRange? {

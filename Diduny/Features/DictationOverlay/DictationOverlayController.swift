@@ -200,6 +200,7 @@ final class DictationOverlayController {
         let pasted = Self.delivery(
             autoPaste: autoPaste, lastPaste: ClipboardService.shared.lastPaste, stoppedAt: stoppedAt
         ) == .pasted
+        PasteMarkTrace.note("dictationSuccess autoPaste=\(autoPaste) pasted=\(pasted) lastPaste=\(String(describing: ClipboardService.shared.lastPaste)) stoppedAt=\(String(describing: stoppedAt)) notch=\(usesNotch) minimized=\(EdgeCommandPanelController.shared.isLiveFeedbackMinimized)")
         if pasted {
             let stop = stoppedAt
             PasteMarkController.shared.land { [weak self] caretKnown in
@@ -226,6 +227,7 @@ final class DictationOverlayController {
     }
 
     private func finishDictation(_ end: PasteMarkPlan.DictationEnd, resultText: String, recordingID: UUID?) {
+        PasteMarkTrace.note("finishDictation end=\(end) minimized=\(EdgeCommandPanelController.shared.isLiveFeedbackMinimized)")
         guard !usesNotch else { return }
         autoHideTask?.cancel()
         if end == .closeNow || EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
