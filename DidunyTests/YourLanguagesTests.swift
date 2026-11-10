@@ -77,7 +77,7 @@ final class YourLanguagesTests {
         #expect(TranslationLanguagePair(languageA: "en", languageB: "mt").languageB == "uk")
     }
 
-    @Test("T5-LA-02 the last language cannot be removed; a new pick goes to the end")
+    @Test("T5-LA-02 the value keeps one language; the stored list may be emptied (no hint)")
     func keepsAtLeastOne() throws {
         let one = try #require(YourLanguages(["en"]))
         #expect(one.removing("en").codes == ["en"])
@@ -88,7 +88,7 @@ final class YourLanguagesTests {
         let store = storage()
         store.yourLanguages = ["en"]
         store.yourLanguages = []
-        #expect(store.yourLanguages == ["en"])
+        #expect(store.yourLanguages.isEmpty)
     }
 
     @Test("T5-LA-03 the default target falls back to the first of Your languages")

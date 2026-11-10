@@ -17,12 +17,16 @@ extension SettingsStorage {
         case favoriteLanguages
     }
 
-    /// Ordered codes; may hold codes outside the 60 Cloud languages. Setting an empty list is refused.
+    /// Ordered codes; may hold codes outside the 60 Cloud languages. A saved empty list stays empty
+    /// (no hint, engines detect; never re-seeded); pairs and the target then use the derivation.
     var yourLanguages: [String] {
-        get { yourLanguagesValue.codes }
+        get {
+            if defaults.stringArray(forKey: LanguagesKey.yourLanguages.rawValue)?.isEmpty == true { return [] }
+            return yourLanguagesValue.codes
+        }
         set {
-            guard let languages = YourLanguages(newValue) else { return }
-            defaults.set(languages.codes, forKey: LanguagesKey.yourLanguages.rawValue)
+            let codes = YourLanguages(newValue)?.codes ?? []
+            defaults.set(codes, forKey: LanguagesKey.yourLanguages.rawValue)
         }
     }
 

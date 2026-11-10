@@ -2225,5 +2225,5 @@
 "%lld more at this time" = "%lld more at this time";
 
 /* Speech hints from Your languages */
-"Sent to every engine as a hint: Your languages, in their order. Keyboard layouts are not used." = "Sent to every engine as a hint: Your languages, in their order. Keyboard layouts are not used.";
+"Sent to every engine as a hint, in this order. With none chosen the engine detects the language." = "Sent to every engine as a hint, in this order. With none chosen the engine detects the language.";
 "A hint for every engine: Your languages, in order" = "A hint for every engine: Your languages, in order";

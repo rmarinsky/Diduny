@@ -59,6 +59,20 @@ final class SpeechLanguageHintsTests {
         #expect(again.speechLanguageHints == ["es"])
     }
 
+    @Test("An emptied list stays empty across relaunch: no hint for cloud, nil on-device")
+    @MainActor func emptiedStaysEmpty() {
+        let store = storage()
+        store.yourLanguages = []
+        #expect(store.speechLanguageHints.isEmpty)
+        defaults.removeObject(forKey: SettingsMigration.schemaVersionKey) // relaunch re-runs the migration
+        let relaunched = storage(layouts: ["en", "uk"])
+        #expect(relaunched.speechLanguageHints.isEmpty)
+        #expect(RecordingQueueService.buildCloudTranscriptionConfig(
+            hints: relaunched.speechLanguageHints, enableSpeakerDiarization: false
+        )["language_hints"] == nil)
+        #expect(OnDeviceLanguage.resolve(hints: relaunched.speechLanguageHints) == nil)
+    }
+
     @Test("A stored list is never overwritten by the seed")
     func storedListKept() {
         defaults.set(["uk", "en", "es", "fr"], forKey: "yourLanguages")

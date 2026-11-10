@@ -2225,5 +2225,5 @@
 "%lld more at this time" = "Ще %lld у цей час";
 
 /* Speech hints from Your languages */
-"Sent to every engine as a hint: Your languages, in their order. Keyboard layouts are not used." = "Передаються кожному рушію як підказка: ваші мови, у їхньому порядку. Розкладки клавіатури не враховуються.";
+"Sent to every engine as a hint, in this order. With none chosen the engine detects the language." = "Передаються кожному рушію як підказка, у цьому порядку. Якщо нічого не вибрано, рушій сам визначає мову.";
 "A hint for every engine: Your languages, in order" = "Підказка для кожного рушія: ваші мови, по порядку";

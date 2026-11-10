@@ -28,9 +28,9 @@ enum LanguageChangeList: String, CaseIterable {
         }
     }
 
-    /// Both lists are Your languages (the hints come from it), which keeps one.
+    /// Both lists are Your languages (the hints come from it); empty means the engine detects.
     var mayBeEmpty: Bool {
-        false
+        true
     }
 }
 
@@ -116,8 +116,8 @@ final class LanguagesSettingsModel {
         guard canToggle(code, in: list) else { return }
         let isChosen = chosen(list).contains(code)
         // The hints are Your languages, so both lists edit it.
-        guard let current = YourLanguages(store.yourLanguages) else { return }
-        store.yourLanguages = (isChosen ? current.removing(code) : current.adding(code)).codes
+        let current = store.yourLanguages
+        store.yourLanguages = isChosen ? current.filter { $0 != code } : current + [code]
         reload()
     }
 
