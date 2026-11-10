@@ -2224,3 +2224,5 @@
 "Who was it with? Notes" = "З ким це було? Нотатки";
 "Release to detach from the event" = "Відпусти, щоб відвʼязати від події";
 "Go to today, at the current time (⌘T)" = "До сьогодні, на поточний час (⌘T)";
+"%lld dictation notes" = "Нотатки диктування: %lld";
+"%lld more at this time" = "Ще %lld у цей час";

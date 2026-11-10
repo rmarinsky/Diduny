@@ -102,7 +102,7 @@ struct RecordingsNotesInspector: View {
         let missing = notes.filter(\.needsTranscript)
         let total = notes.reduce(0) { $0 + $1.durationSeconds }
         RecordingsInspectorShell(
-            title: String(localized: "\(notes.count) voice notes"),
+            title: String(localized: "\(notes.count) dictation notes"),
             subtitle: String(localized: "\(range), \(Duration.seconds(total).formatted(.time(pattern: .minuteSecond))) in total"),
             onClose: onClose
         ) {

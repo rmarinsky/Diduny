@@ -14,7 +14,7 @@ struct RecordingsDayActions {
 }
 
 /// Variant B: a week strip, then the day on an hour scale. Events with their recordings inside, unattached
-/// recordings beside them, voice notes grouped by the zoom level, files and links listed under the scale.
+/// recordings beside them, dictation notes (voice and translation) grouped by the zoom level, files and links listed under the scale.
 struct RecordingsDayView<FileRow: View>: View {
     let day: RecordingsDay
     @Binding var selectedDay: Date
@@ -209,8 +209,8 @@ struct RecordingsDayView<FileRow: View>: View {
     // MARK: - Hour scale
 
     private func rail(width: CGFloat) -> some View {
-        let placement = RecordingsDayPlacement.place(day.items, hourHeight: zoom.hourHeight)
         let railWidth = max(0, width - Self.railInset - 6)
+        let placement = RecordingsDayPlacement.place(day.items, hourHeight: zoom.hourHeight, width: railWidth)
         let byID = Dictionary(uniqueKeysWithValues: day.items.map { ($0.id, $0) })
         return ZStack(alignment: .topLeading) {
             ForEach(placement.hours, id: \.hour) { line in
@@ -243,6 +243,11 @@ struct RecordingsDayView<FileRow: View>: View {
                         .shadow(color: expanded == nil ? .clear : .black.opacity(0.18), radius: 8, y: 3)
                 }
             }
+            ForEach(placement.overflow, id: \.top) { more in
+                overflowChip(more.ids.compactMap { byID[$0] })
+                    .offset(x: Self.railInset + railWidth - 34, y: more.top)
+                    .zIndex(2)
+            }
         }
         .frame(width: width, height: placement.height, alignment: .topLeading)
         .contentShape(Rectangle())
@@ -271,7 +276,7 @@ struct RecordingsDayView<FileRow: View>: View {
         case let .event(event, start, _): eventBlock(event, start: start, width: width)
         case let .notes(group, _, _): notesBlock(group, frame: frame)
         case let .group(group, start, _): groupBlock(group, start: start, width: width)
-        case let .recording(recording, _, _): recordingBlock(recording, frame: frame)
+        case let .recording(recording, _, _): recordingBlock(recording, frame: frame, width: width)
         }
     }
 
@@ -293,13 +298,60 @@ struct RecordingsDayView<FileRow: View>: View {
 
     /// Share of an event's width given to its title when recordings stand inside it at their real times.
     private static var titleShare: CGFloat { 0.4 }
+    /// Below this an event stacks its title above its recordings.
+    static var stackedEventWidth: CGFloat { 260 }
+    /// Below this "Attach" is an icon with a tooltip.
+    private static var compactBlockWidth: CGFloat { 170 }
+
+    /// "+N": items that did not fit a readable lane, listed in a menu that opens them.
+    private func overflowChip(_ items: [RecordingsDay.Item]) -> some View {
+        Menu {
+            ForEach(items) { item in
+                Button(Self.menuTitle(item)) { open(item) }
+            }
+        } label: {
+            Text(verbatim: "+\(items.count)").font(.system(size: 11, weight: .semibold))
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .controlSize(.mini)
+        .fixedSize()
+        .help(Text("\(items.count) more at this time"))
+        .accessibilityLabel(Text("\(items.count) more at this time"))
+        .accessibilityIdentifier("recordings.day.overflow")
+    }
+
+    private static func menuTitle(_ item: RecordingsDay.Item) -> String {
+        switch item {
+        case let .event(event, _, _): event.meeting.title
+        case let .recording(recording, _, _): "\(recording.createdAt.formatted(date: .omitted, time: .shortened)) \(recording.displayTitle)"
+        case let .notes(group, _, _): String(localized: "\(group.recordings.count) dictation notes")
+        case let .group(group, _, _): group.name
+        }
+    }
+
+    private func open(_ item: RecordingsDay.Item) {
+        switch item {
+        case let .event(event, _, _): actions.openEvent(event.key)
+        case let .recording(recording, _, _): actions.openRecording(recording.id)
+        case let .notes(group, _, _): actions.openNotes(group.key)
+        case let .group(group, _, _): actions.openGroup(group.id)
+        }
+    }
 
     private func eventBlock(_ event: RecordingsDay.Event, start: Double, width: CGFloat) -> some View {
         let isOn = !isSelectionMode && openSelection == .event(event.key)
         let stripe = event.meeting.calendarColorRGB.map { Color(rgb: $0) } ?? DS.Palette.secondary
         let hasChildren = !event.spans.isEmpty
-        let childX = hasChildren ? width * Self.titleShare : width
-        let children = RecordingsDayPlacement.children(event.spans, containerStart: start, hourHeight: zoom.hourHeight)
+        // Narrow event: title on top, recordings below it on the time scale; wide: title beside them.
+        let stacked = hasChildren && width < Self.stackedEventWidth
+        let titleHeight: Double = stacked ? 34 : 0
+        let childX = stacked ? 0 : hasChildren ? width * Self.titleShare : width
+        let childRegion = max(0, width - childX - 3)
+        let fitted = RecordingsDayPlacement.fit(
+            RecordingsDayPlacement.children(event.spans, containerStart: start, hourHeight: zoom.hourHeight, topInset: titleHeight),
+            maxLanes: RecordingsDayPlacement.maxLanes(width: childRegion, minimumLaneWidth: RecordingsDayPlacement.minimumChildLaneWidth))
+        let children = fitted.frames
         let byID = Dictionary(uniqueKeysWithValues: event.spans.map { ($0.recording.id.uuidString, $0.recording) })
         let eventHeight = RecordingsDayPlacement.heights(start: start, end: start + event.meeting.end.timeIntervalSince(event.meeting.start) / 60,
                                                          hourHeight: zoom.hourHeight).drawn
@@ -319,7 +371,9 @@ struct RecordingsDayView<FileRow: View>: View {
                 }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
-                    Text(event.meeting.title).font(.system(size: 12, weight: .semibold)).lineLimit(hasChildren ? 4 : 1)
+                    Text(event.meeting.title).font(.system(size: 12, weight: .semibold))
+                        .lineLimit(stacked || !hasChildren ? 2 : 4)
+                        .truncationMode(.tail)
                     stateMark(.of(event.attached), isOn: isOn)
                 }
                 if event.attached.isEmpty {
@@ -328,16 +382,20 @@ struct RecordingsDayView<FileRow: View>: View {
                 }
             }
             .padding(EdgeInsets(top: 4, leading: 10, bottom: 0, trailing: 4))
-            .frame(width: childX, alignment: .leading)
-            .frame(maxHeight: eventHeight, alignment: .topLeading)
+            .frame(width: stacked ? width : childX, alignment: .leading)
+            .frame(maxHeight: stacked ? titleHeight : eventHeight, alignment: .topLeading)
             .clipped()
             ForEach(children, id: \.id) { child in
                 if let recording = byID[child.id] {
-                    let laneWidth = (width - childX - 3) / CGFloat(child.columns)
+                    let laneWidth = childRegion / CGFloat(child.columns)
                     childBlock(recording, frame: child)
                         .frame(width: max(0, laneWidth - (child.columns > 1 ? 2 : 0)), height: child.height, alignment: .topLeading)
-                        .offset(x: childX + laneWidth * CGFloat(child.column), y: child.top)
+                        .offset(x: childX + (stacked ? 6 : 0) + laneWidth * CGFloat(child.column), y: child.top)
                 }
+            }
+            ForEach(fitted.overflow, id: \.top) { more in
+                overflowChip(more.ids.compactMap { id in byID[id].map { RecordingsDay.Item.recording($0, startMinute: 0, endMinute: 0) } })
+                    .offset(x: max(0, width - 34), y: more.top)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -416,7 +474,7 @@ struct RecordingsDayView<FileRow: View>: View {
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 4) {
-                        Text("\(group.recordings.count) voice notes").font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                        Text("\(group.recordings.count) dictation notes").font(.system(size: 12, weight: .semibold)).lineLimit(1)
                         stateMark(.of(group.recordings), isOn: isOn)
                     }
                     if frame.height >= 40 || expanded {
@@ -458,7 +516,7 @@ struct RecordingsDayView<FileRow: View>: View {
             }
         }
         .accessibilityAction { actions.openNotes(group.key) }
-        .accessibilityLabel(Text("\(group.recordings.count) voice notes"))
+        .accessibilityLabel(Text("\(group.recordings.count) dictation notes"))
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .accessibilityIdentifier("recordings.day.notes")
@@ -467,7 +525,10 @@ struct RecordingsDayView<FileRow: View>: View {
     private func groupBlock(_ group: RecordingsDay.Group, start: Double, width: CGFloat) -> some View {
         let isOn = !isSelectionMode && openSelection == .group(group.id)
         let childX = width * Self.titleShare
-        let children = RecordingsDayPlacement.children(group.spans, containerStart: start, hourHeight: zoom.hourHeight)
+        let children = RecordingsDayPlacement.fit(
+            RecordingsDayPlacement.children(group.spans, containerStart: start, hourHeight: zoom.hourHeight),
+            maxLanes: RecordingsDayPlacement.maxLanes(width: max(0, width - childX - 3),
+                                                      minimumLaneWidth: RecordingsDayPlacement.minimumChildLaneWidth)).frames
         let parts = Dictionary(uniqueKeysWithValues: group.recordings.enumerated().map { ($1.id.uuidString, ($0, $1)) })
         return ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 6).fill(isOn ? DS.Palette.accentFill : DS.Palette.box)
@@ -496,14 +557,15 @@ struct RecordingsDayView<FileRow: View>: View {
         .accessibilityIdentifier("recordings.day.group")
     }
 
-    private func recordingBlock(_ recording: Recording, frame: RecordingsDayPlacement.Frame) -> some View {
+    private func recordingBlock(_ recording: Recording, frame: RecordingsDayPlacement.Frame, width: CGFloat) -> some View {
         let isOn = !isSelectionMode && openSelection?.opensRecording(recording.id) == true
         let overlap = RecordingsDay.overlappingEvents(for: recording, in: day.items)
         return HStack(alignment: .top, spacing: 6) {
             if isSelectionMode { checkmark(selectedRecordingIDs.contains(recording.id)) }
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 4) {
-                    Text(recording.displayTitle).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                    Text(recording.displayTitle).font(.system(size: 12, weight: .semibold))
+                        .lineLimit(frame.height >= 44 ? 2 : 1).truncationMode(.tail)
                     stateMark(.of(recording), isOn: isOn)
                 }
                 if frame.height >= 40 {
@@ -515,7 +577,13 @@ struct RecordingsDayView<FileRow: View>: View {
             Spacer(minLength: 0)
             if let event = overlap.first, !isSelectionMode {
                 Button { actions.attach(recording.id, event) } label: {
-                    Text("Attach").font(.system(size: 11, weight: .semibold))
+                    Group {
+                        if width < Self.compactBlockWidth {
+                            Image(systemName: "link").font(.system(size: 10, weight: .semibold))
+                        } else {
+                            Text("Attach").font(.system(size: 11, weight: .semibold))
+                        }
+                    }
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .foregroundStyle(DS.Palette.accentText)
                         .background(DS.Palette.tint, in: RoundedRectangle(cornerRadius: 5))
