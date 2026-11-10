@@ -103,6 +103,25 @@ struct PasteMarkTests {
         #expect(!reduced.glides && reduced.pulseAt == nil)
     }
 
+    // Roman, 2026-11-10: a meeting's Stop shows the header logo, not the progress bar or the transcript.
+    @Test func meetingEndArcWhileSavingThenRing() {
+        #expect(PasteMarkPlan.logo(for: .saving) == .waiting)
+        #expect(PasteMarkPlan.logo(for: .done(line: "Transcribing in background")) == .done)
+        #expect(PasteMarkPlan.meetingEndDismissDelay(reduceMotion: false) == 0.68)
+        #expect(PasteMarkPlan.meetingEndDismissDelay(reduceMotion: true) == 0.68)
+    }
+
+    @Test func meetingNoticeStaysWithItsMessage() {
+        let line = "The whole recording is saved."
+        let notice = EdgeCommandOutcome(flow: .meeting, durationSeconds: 60, notice: line)
+        #expect(notice.title == "Meeting saved")
+        #expect(notice.subtitle(transcript: .making(fraction: 0)) == line)
+        #expect(DictationOverlayController.outcomeAutoHideDelay(delivery: notice.delivery) == nil)
+        let failed = EdgeCommandOutcome(flow: .meetingTranslation(pair: "→ UK"), durationSeconds: 60, notice: "Failed", isError: true)
+        #expect(failed.title == "Meeting stopped")
+        #expect(failed.subtitle(transcript: .ready) == "Failed")
+    }
+
     @Test func pollFindsTheEndOfThePastedText() async {
         let end = CaretPosition(location: 42, rect: CGRect(x: 300, y: 200, width: 8, height: 17))
         let geometry = FakeCaretGeometry(answers: [

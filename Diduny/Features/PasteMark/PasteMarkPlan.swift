@@ -83,6 +83,23 @@ enum PasteMarkPlan {
         return Landing(glides: true, pulseAt: pulseAt, fadeAt: pulseAt + timeline.fadeStart - timeline.pulseStart)
     }
 
+    /// A meeting's Stop on the floating panel (Roman, 2026-11-10): the header logo's rim arc while
+    /// the recording is saved, then the ring closes, pulses once and the panel goes by itself.
+    enum MeetingEnd: Equatable {
+        case saving
+        /// Saved, and the transcript is done or queued; `line` is the header status.
+        case done(line: String)
+    }
+
+    static func logo(for end: MeetingEnd) -> LogoBadgePhase {
+        end == .saving ? .waiting : .done
+    }
+
+    /// The panel goes when the landing fades: no caret, so all of it plays in the header.
+    static func meetingEndDismissDelay(reduceMotion: Bool) -> TimeInterval {
+        timeline(reduceMotion: reduceMotion).fadeStart
+    }
+
     /// How a dictation or its translation ends on the floating panel (Roman, 2026-11-09: no result
     /// window, the text is already pasted or copied).
     enum DictationEnd: Equatable {

@@ -2216,3 +2216,6 @@
 "Delete “%@”?" = "Видалити «%@»?";
 "The recordings were deleted, but the empty group could not be removed." = "Записи видалено, але порожню групу не вдалося прибрати.";
 "“%@” is already in a group. Ungroup it first." = "«%@» уже в групі. Спершу розгрупуй її.";
+
+/* Stop animation: meeting end */
+"Meeting stopped" = "Зустріч зупинено";

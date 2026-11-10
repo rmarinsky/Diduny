@@ -2216,3 +2216,6 @@
 "Delete “%@”?" = "Delete “%@”?";
 "The recordings were deleted, but the empty group could not be removed." = "The recordings were deleted, but the empty group could not be removed.";
 "“%@” is already in a group. Ungroup it first." = "“%@” is already in a group. Ungroup it first.";
+
+/* Stop animation: meeting end */
+"Meeting stopped" = "Meeting stopped";

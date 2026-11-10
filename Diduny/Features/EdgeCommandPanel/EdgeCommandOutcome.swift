@@ -39,15 +39,21 @@ struct EdgeCommandOutcome: Equatable, Identifiable {
     var recordingID: UUID?
     /// Dictation with nothing more to say than "done": the header and its logo only, no result or Copy.
     var headerOnly = false
+    /// Meetings that need the person: the message replaces the subtitle and the outcome stays
+    /// until closed, with Open recording (Roman, 2026-11-10).
+    var notice: String?
+    /// A failed meeting stop: "Meeting stopped" and the red ring.
+    var isError = false
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id && lhs.flow == rhs.flow && lhs.durationSeconds == rhs.durationSeconds
             && lhs.delivery == rhs.delivery && lhs.resultText == rhs.resultText && lhs.recordingID == rhs.recordingID
-            && lhs.headerOnly == rhs.headerOnly
+            && lhs.headerOnly == rhs.headerOnly && lhs.notice == rhs.notice && lhs.isError == rhs.isError
     }
 
     var title: String {
-        switch (flow, delivery) {
+        if isError { return String(localized: "Meeting stopped") }
+        return switch (flow, delivery) {
         case (.dictation, .pasted): String(localized: "Dictated and pasted")
         case (.dictationTranslation, .pasted): String(localized: "Translated and pasted")
         case (.meeting, .pasted), (.meetingTranslation, .pasted): String(localized: "Meeting ended and pasted")
@@ -57,6 +63,7 @@ struct EdgeCommandOutcome: Equatable, Identifiable {
     }
 
     func subtitle(transcript: OutcomeTranscriptState) -> String {
+        if let notice { return notice }
         switch flow {
         case .dictation:
             return String(format: String(localized: "%lld s · also in Recordings"), durationSeconds)

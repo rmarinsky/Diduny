@@ -55,19 +55,23 @@ struct LivePanelView: View {
     var body: some View {
         let state = store.panelState
         VStack(alignment: .leading, spacing: DS.Panel.blockGap) {
-            header(state)
-                .reveal(store.contentRevealed, step: 0, reduceMotion: reduceMotion)
-            content
-                .reveal(store.contentRevealed, step: 1, reduceMotion: reduceMotion)
-            if store.phase == .pasted {
-                Toggle("Paste and close automatically", isOn: $autoPaste)
-                    .toggleStyle(.checkbox)
-                    .font(DS.Font.caption)
-                    .foregroundStyle(DS.Palette.secondary)
-                    .onChange(of: autoPaste) { _, value in SettingsStorage.shared.autoPaste = value }
+            if let end = store.meetingEnd {
+                meetingEndHeader(end, state: state)
+            } else {
+                header(state)
+                    .reveal(store.contentRevealed, step: 0, reduceMotion: reduceMotion)
+                content
+                    .reveal(store.contentRevealed, step: 1, reduceMotion: reduceMotion)
+                if store.phase == .pasted {
+                    Toggle("Paste and close automatically", isOn: $autoPaste)
+                        .toggleStyle(.checkbox)
+                        .font(DS.Font.caption)
+                        .foregroundStyle(DS.Palette.secondary)
+                        .onChange(of: autoPaste) { _, value in SettingsStorage.shared.autoPaste = value }
+                }
+                controls(state)
+                    .reveal(store.contentRevealed, step: 2, reduceMotion: reduceMotion)
             }
-            controls(state)
-                .reveal(store.contentRevealed, step: 2, reduceMotion: reduceMotion)
         }
         .padding(DS.Panel.padding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -98,6 +102,28 @@ struct LivePanelView: View {
         case .voice, .translation, .fileTranscription:
             DictationLiveContent(store: store, onSelectOutput: onSelectOutput)
         }
+    }
+
+    /// A meeting's Stop: the header only, its logo's rim arc while saving, then ring and one pulse.
+    private func meetingEndHeader(_ end: PasteMarkPlan.MeetingEnd, state: LivePanelState) -> some View {
+        let line = switch end {
+        case .saving: String(localized: "Saving the recording...")
+        case let .done(line): line
+        }
+        return PanelHeader(
+            icon: LogoBadge(
+                phase: PasteMarkPlan.logo(for: end),
+                discSize: DS.Size.iconTile,
+                pulseTrigger: end == .saving ? 0 : 1
+            ),
+            title: LocalizedStringKey(state.title),
+            status: .plain(LocalizedStringKey(line)),
+            titleID: "livePanel.title",
+            statusID: "livePanel.status"
+        ) {
+            EmptyView()
+        }
+        .accessibilityIdentifier("livePanel.meetingEnd")
     }
 
     private func header(_ state: LivePanelState) -> some View {

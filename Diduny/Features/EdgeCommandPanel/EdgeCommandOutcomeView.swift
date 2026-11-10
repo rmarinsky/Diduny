@@ -56,7 +56,7 @@ struct EdgeCommandOutcomeView: View {
         let isMeeting = outcome.flow.isMeeting
         let ready = transcript == .ready
         return LogoBadge(
-            phase: isMeeting && !ready ? .waiting : .done,
+            phase: outcome.isError ? .error : (isMeeting && !ready && outcome.notice == nil ? .waiting : .done),
             discSize: DS.Size.iconTile,
             pulseTrigger: isMeeting && ready ? 1 : 0,
             pulsesOnAppear: PasteMarkPlan.headerPulsesOnAppear(isMeeting: isMeeting, transcriptReady: ready)

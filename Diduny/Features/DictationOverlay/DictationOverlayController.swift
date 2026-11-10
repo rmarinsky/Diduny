@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 @MainActor
 final class DictationOverlayController {
@@ -90,6 +90,9 @@ final class DictationOverlayController {
         if !mode.isMeeting, SettingsStorage.shared.autoPaste {
             PasteMarkController.shared.beginWaiting()
         }
+        if mode.isMeeting, !usesNotch {
+            store.meetingEnd = .saving
+        }
         if usesNotch {
             NotchManager.shared.startProcessing(mode: mode)
         } else {
@@ -112,7 +115,12 @@ final class DictationOverlayController {
             return
         }
         PasteMarkController.shared.clear()
+        if case .done = store.meetingEnd { return }
         recordOutcome(resultText: resultText, recordingID: recordingID)
+        if store.meetingEnd == .saving, !usesNotch {
+            finishMeetingEnd(line: outcomeStore.outcome?.subtitle(transcript: .ready) ?? String(localized: "Meeting saved"))
+            return
+        }
         if usesNotch {
             // The notch schedules its own dismissal and ends the session.
             NotchManager.shared.showSuccess(text: text)
@@ -130,6 +138,49 @@ final class DictationOverlayController {
         if let delay = Self.outcomeAutoHideDelay(delivery: delivery) {
             scheduleAutoHide(delay: delay)
         }
+    }
+
+    /// A meeting's Stop is saved and its transcript done or queued: the header logo closes its ring,
+    /// pulses once, and the panel goes as the landing fades (Roman, 2026-11-10).
+    private func finishMeetingEnd(line: String) {
+        autoHideTask?.cancel()
+        cancelOutputPreview()
+        store.backgroundHandoffDetail = nil
+        store.audioLevel = 0
+        if EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
+            dismiss()
+            return
+        }
+        // The held outcome would replace the header view once the phase reaches success.
+        outcomeStore.clear()
+        store.meetingEnd = .done(line: line)
+        showPanel()
+        let delay = PasteMarkPlan.meetingEndDismissDelay(
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        )
+        autoHideTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            self?.dismiss()
+        }
+    }
+
+    /// A meeting that needs the person (nothing transcribable, a failed stop): the outcome with the
+    /// message and Open recording stays until closed. The notch keeps its 3 s line.
+    func showMeetingNotice(_ message: String, isError: Bool = false) {
+        guard outcomeStore.outcome?.notice != message else { return }
+        if usesNotch || EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
+            isError ? showError(message: message) : showInfo(message: message, duration: 3.0)
+            return
+        }
+        autoHideTask?.cancel()
+        cancelOutputPreview()
+        store.meetingEnd = nil
+        store.backgroundHandoffDetail = nil
+        store.audioLevel = 0
+        recordOutcome(resultText: "", recordingID: nil, notice: message, isError: isError)
+        store.phase = .pasted
+        showPanel()
     }
 
     /// Dictation and its translation: no result window (Roman, 2026-11-09). The logo plays at the
@@ -194,7 +245,13 @@ final class DictationOverlayController {
     }
 
     /// Builds the outcome for the stopped recording from the session (default 8, 02 Q11-Q12).
-    private func recordOutcome(resultText: String, recordingID: UUID?, headerOnly: Bool = false) {
+    private func recordOutcome(
+        resultText: String,
+        recordingID: UUID?,
+        headerOnly: Bool = false,
+        notice: String? = nil,
+        isError: Bool = false
+    ) {
         let end = stoppedAt ?? store.endedAt ?? Date()
         let duration = Int(max(end.timeIntervalSince(store.startedAt), 0).rounded())
         let flow: EdgeCommandOutcome.Flow = switch store.mode {
@@ -219,7 +276,9 @@ final class DictationOverlayController {
             ),
             resultText: flow.isMeeting ? "" : resultText,
             recordingID: recordingID ?? outcomeRecordingID,
-            headerOnly: headerOnly
+            headerOnly: headerOnly,
+            notice: notice,
+            isError: isError
         ))
     }
 
@@ -236,6 +295,10 @@ final class DictationOverlayController {
 
     func showError(message: String) {
         PasteMarkController.shared.clearIfWaiting()
+        if store.mode.isMeeting, store.meetingEnd != nil {
+            showMeetingNotice(message, isError: true)
+            return
+        }
         autoHideTask?.cancel()
         cancelOutputPreview()
         store.phase = .error(message)
@@ -271,7 +334,7 @@ final class DictationOverlayController {
 
     /// True while the "Transcribing in background" hand-off is on screen.
     var isShowingBackgroundHandoff: Bool {
-        store.backgroundHandoffDetail != nil || isNotchHandoffShowing
+        store.backgroundHandoffDetail != nil || isNotchHandoffShowing || store.meetingEnd != nil
     }
 
     /// The notch shows the hand-off itself; this keeps `.success` from hiding it early.
@@ -298,6 +361,10 @@ final class DictationOverlayController {
         // A panel the person minimized stays out of the way.
         if EdgeCommandPanelController.shared.isLiveFeedbackMinimized {
             dismiss()
+            return
+        }
+        if store.meetingEnd != nil {
+            finishMeetingEnd(line: message)
             return
         }
         store.backgroundHandoffDetail = detail ?? String(localized: "The transcript will appear in Recordings.")
@@ -341,6 +408,12 @@ final class DictationOverlayController {
                 break
             }
         }
+        // A meeting saved with no transcript and nothing queued: the done moment, then the panel goes.
+        if store.meetingEnd == .saving {
+            finishMeetingEnd(line: String(localized: "Meeting saved"))
+            return
+        }
+        if case .done = store.meetingEnd { return }
         guard usesNotch || store.phase != .pasted || outcomeStore.outcome?.delivery == .pasted
             || outcomeStore.outcome?.headerOnly == true else { return }
         dismiss()
@@ -355,6 +428,7 @@ final class DictationOverlayController {
         isNotchHandoffShowing = false
         store.audioLevel = 0
         store.backgroundHandoffDetail = nil
+        store.meetingEnd = nil
         if usesNotch {
             NotchManager.shared.hide()
         }

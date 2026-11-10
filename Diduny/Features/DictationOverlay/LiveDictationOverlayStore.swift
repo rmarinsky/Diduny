@@ -32,6 +32,8 @@ final class LiveDictationOverlayStore {
     var endedAt: Date?
     /// Box text while the "Transcribing in background" hand-off is shown; nil otherwise.
     var backgroundHandoffDetail: String?
+    /// After a meeting's Stop on the floating panel: the header-only logo view; nil otherwise.
+    var meetingEnd: PasteMarkPlan.MeetingEnd?
     var finalText = ""
     var provisionalText = ""
     var copiedAt: Date?
@@ -222,6 +224,7 @@ final class LiveDictationOverlayStore {
         startedAt = Date()
         endedAt = nil
         backgroundHandoffDetail = nil
+        meetingEnd = nil
         finalText = ""
         provisionalText = ""
         fallbackFinalText = ""

@@ -946,6 +946,10 @@ extension AppDelegate {
                     }
                 }
                 await MainActor.run {
+                    // Nothing can make the transcript: the message stays, not the done moment.
+                    if !queued, librarySavedId != nil, case .saveOnly = plan {
+                        DictationOverlayController.shared.showMeetingNotice(MeetingStopPlan.saveOnlyLine)
+                    }
                     // Shown before .success so the panel switches in place instead of hiding.
                     if queued, translateTarget == nil {
                         DictationOverlayController.shared.showBackgroundHandoff(detail: plan.stopLine(preview: liveEngine, mode: history?.spans.last?.target.segment))
@@ -985,7 +989,7 @@ extension AppDelegate {
                         error: nil
                     )
                     if case .saveOnly = plan {
-                        DictationOverlayController.shared.showInfo(message: MeetingStopPlan.saveOnlyLine, duration: 3.0)
+                        DictationOverlayController.shared.showMeetingNotice(MeetingStopPlan.saveOnlyLine)
                     }
                 }
             }
@@ -1099,7 +1103,10 @@ extension AppDelegate {
                 "Transcription failed: \(error.localizedDescription). Audio saved to Recordings."
             }
 
+            let openableID: UUID? = librarySavedId
+                ?? (RecordingsLibraryStorage.shared.recordings.contains { $0.id == recordingId } ? recordingId : nil)
             await MainActor.run {
+                DictationOverlayController.shared.setOutcomeRecordingID(openableID)
                 appState.errorMessage = userMessage
                 appState.meetingRecordingState = .error
                 appState.meetingRecordingStartTime = nil
