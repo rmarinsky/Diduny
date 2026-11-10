@@ -481,5 +481,14 @@
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure url="https://github.com/rmarinsky/Diduny/releases/download/v2.18.2/Diduny-2.18.2.dmg" sparkle:edSignature="eLEVgZgr87OX8IKrAXjMmSuTOfLSr35XL5/384uGhoH6w2nKLSgy/il1wvtyYtnGibTnXfbqiaNGd80BMMtiAg==" length="155799012" type="application/octet-stream" />
     </item>
+    <item>
+      <title>Version 2.19.0</title>
+      <pubDate>Tue, 10 Nov 2026 20:20:44 +0000</pubDate>
+      <sparkle:version>604</sparkle:version>
+      <sparkle:shortVersionString>2.19.0</sparkle:shortVersionString>
+      <sparkle:releaseNotesLink>https://rmarinsky.github.io/Diduny/release-notes/2.19.0.md</sparkle:releaseNotesLink>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/rmarinsky/Diduny/releases/download/v2.19.0/Diduny-2.19.0.dmg" sparkle:edSignature="JxS+sXv/+mYrmWho5hmkvegTsta2euH68LmbQUO5prgmcHAhY1sxOaJDkLEHP1YpVo6Col+MXKFRCk0bQjW+AA==" length="157275078" type="application/octet-stream" />
+    </item>
   </channel>
 </rss>
