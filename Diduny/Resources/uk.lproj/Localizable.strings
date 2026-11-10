@@ -1868,7 +1868,6 @@
 "The languages you speak and the ones you translate into." = "Мови, якими ви говорите, і мови, на які перекладаєте.";
 "Languages you speak" = "Мови, якими ви говорите";
 "Detect the language" = "Визначати мову";
-"Sent to the engine as a hint. Suggested from your keyboard layouts. With none chosen the engine detects the language." = "Передаються рушію як підказка. Запропоновано з ваших розкладок клавіатури. Якщо нічого не вибрано, рушій сам визначає мову.";
 "Shown first and in crimson in every Translate into menu and language list." = "Показуються першими й малиновим у кожному меню «Перекласти на» та списку мов.";
 "Translate into, by default" = "Перекладати на, типово";
 "For dictation and the translation window. One language." = "Для диктування й вікна перекладу. Одна мова.";
@@ -1880,7 +1879,6 @@
 "At the start and end" = "На початку й у кінці";
 "At the end" = "У кінці";
 "Languages you can ask for" = "Мови, які можна назвати";
-"A hint for the engine. Choose none to detect" = "Підказка для рушія. Не вибирайте жодної, щоб визначати мову";
 "Shown first everywhere you pick a language" = "Показуються першими скрізь, де ви вибираєте мову";
 "Chosen" = "Вибрані";
 "Add a second language to Your languages" = "Додайте другу мову до «Ваших мов»";
@@ -2226,3 +2224,7 @@
 "Go to today, at the current time (⌘T)" = "До сьогодні, на поточний час (⌘T)";
 "%lld dictation notes" = "Нотатки диктування: %lld";
 "%lld more at this time" = "Ще %lld у цей час";
+
+/* Speech hints from Your languages */
+"Sent to every engine as a hint: Your languages, in their order. Keyboard layouts are not used." = "Передаються кожному рушію як підказка: ваші мови, у їхньому порядку. Розкладки клавіатури не враховуються.";
+"A hint for every engine: Your languages, in order" = "Підказка для кожного рушія: ваші мови, по порядку";

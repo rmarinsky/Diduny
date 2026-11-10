@@ -940,38 +940,10 @@ final class SettingsStorage {
         }
     }
 
-    var detectedSpeechLanguageHints: [String] {
-        KeyboardLanguageDetector.detectedLanguageCodes()
-    }
-
+    /// The hints every engine gets: "Your languages", in the person's order. Keyboard layouts do not
+    /// feed it; a layout only seeds an unset list once (`SettingsMigration.seedYourLanguages`).
     var speechLanguageHints: [String] {
-        effectiveSpeechLanguageHints()
-    }
-
-    func effectiveSpeechLanguageHints(detectedCodes: [String]? = nil) -> [String] {
-        let detected = Self.normalizedLanguageCodes(
-            detectedCodes ?? detectedSpeechLanguageHints,
-            fallback: []
-        )
-        let disabled = Set(disabledDetectedSpeechLanguageHints)
-        let enabledDetected = detected.filter { !disabled.contains($0) }
-        let combined = Self.normalizedLanguageCodes(
-            enabledDetected + manualSpeechLanguageHints,
-            fallback: []
-        )
-        // WP-53 (T5-LA-05): an empty "Languages you speak" sends no hint; the engine detects.
-        return combined
-    }
-
-    func setDetectedSpeechLanguage(_ code: String, enabled: Bool) {
-        guard let normalized = Self.normalizedLanguageCode(code) else { return }
-        var disabled = Set(disabledDetectedSpeechLanguageHints)
-        if enabled {
-            disabled.remove(normalized)
-        } else {
-            disabled.insert(normalized)
-        }
-        disabledDetectedSpeechLanguageHints = Array(disabled).sorted()
+        yourLanguages
     }
 
     // MARK: - Translation Languages

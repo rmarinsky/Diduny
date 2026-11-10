@@ -23,14 +23,14 @@ enum LanguageChangeList: String, CaseIterable {
 
     var subtitle: String {
         switch self {
-        case .speak: String(localized: "A hint for the engine. Choose none to detect")
+        case .speak: String(localized: "A hint for every engine: Your languages, in order")
         case .yourLanguages: String(localized: "Shown first everywhere you pick a language")
         }
     }
 
-    /// Languages you speak may be empty; Your languages keeps one.
+    /// Both lists are Your languages (the hints come from it), which keeps one.
     var mayBeEmpty: Bool {
-        self == .speak
+        false
     }
 }
 
@@ -61,7 +61,6 @@ struct ChangeLanguagesRows: Equatable {
 @Observable
 final class LanguagesSettingsModel {
     @ObservationIgnored private let store: SettingsStorage
-    @ObservationIgnored private let detectedCodes: () -> [String]
 
     private(set) var speak: [String] = []
     private(set) var yourLanguages: [String] = []
@@ -72,17 +71,13 @@ final class LanguagesSettingsModel {
     private(set) var voicePosition: VoiceTranslationCommandPosition = .startAndEnd
     private(set) var voiceTargets: VoiceTranslationCommandTargets = .anySupported
 
-    init(
-        store: SettingsStorage = .shared,
-        detectedCodes: @escaping () -> [String] = { KeyboardLanguageDetector.detectedLanguageCodes() }
-    ) {
+    init(store: SettingsStorage = .shared) {
         self.store = store
-        self.detectedCodes = detectedCodes
         reload()
     }
 
     func reload() {
-        speak = store.effectiveSpeechLanguageHints(detectedCodes: detectedCodes())
+        speak = store.speechLanguageHints
         yourLanguages = store.yourLanguages
         defaultTarget = store.defaultTranslationTargetLanguage
         pairs = store.offeredTranslationPairs
@@ -120,29 +115,10 @@ final class LanguagesSettingsModel {
     func toggle(_ code: String, in list: LanguageChangeList) {
         guard canToggle(code, in: list) else { return }
         let isChosen = chosen(list).contains(code)
-        switch list {
-        case .yourLanguages:
-            guard let current = YourLanguages(store.yourLanguages) else { return }
-            store.yourLanguages = (isChosen ? current.removing(code) : current.adding(code)).codes
-        case .speak:
-            toggleSpeak(code, isChosen: isChosen)
-        }
+        // The hints are Your languages, so both lists edit it.
+        guard let current = YourLanguages(store.yourLanguages) else { return }
+        store.yourLanguages = (isChosen ? current.removing(code) : current.adding(code)).codes
         reload()
-    }
-
-    /// A keyboard-layout language is switched with `disabledDetectedSpeechLanguageHints` (C16); any other
-    /// is added to or removed from `manualSpeechLanguageHints`, new picks at the end.
-    private func toggleSpeak(_ code: String, isChosen: Bool) {
-        let isDetected = detectedCodes().compactMap { SupportedLanguage.normalizedCode($0) }.contains(code)
-        let manual = store.manualSpeechLanguageHints
-        if isChosen {
-            if isDetected { store.setDetectedSpeechLanguage(code, enabled: false) }
-            store.manualSpeechLanguageHints = manual.filter { $0 != code }
-        } else if isDetected {
-            store.setDetectedSpeechLanguage(code, enabled: true)
-        } else {
-            store.manualSpeechLanguageHints = manual + [code]
-        }
     }
 
     // MARK: - Translation

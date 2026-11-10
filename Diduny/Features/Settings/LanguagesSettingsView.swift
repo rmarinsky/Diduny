@@ -16,7 +16,7 @@ struct LanguagesSettingsView: View {
                 group("Languages you speak", first: true)
                 SettingsLineRow(
                     title: LocalizedStringKey(LanguagesSettingsModel.listText(model.speak)),
-                    caption: "Sent to the engine as a hint. Suggested from your keyboard layouts. With none chosen the engine detects the language.",
+                    caption: "Sent to every engine as a hint: Your languages, in their order. Keyboard layouts are not used.",
                     kind: .button,
                     titleIdentifier: "languages.speak"
                 ) {

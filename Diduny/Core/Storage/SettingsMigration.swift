@@ -7,12 +7,15 @@ enum SettingsMigration {
     struct Environment {
         let hasProviderKey: (String) -> Bool
         let isAppleSilicon: Bool
+        /// Keyboard-layout languages, read once to seed an unset "Your languages".
+        var detectedKeyboardLanguages: () -> [String] = { [] }
 
         /// The keychain is read only when a step asks for a key.
         static var live: Environment {
             Environment(
                 hasProviderKey: { ProviderKeyStore.shared.hasKey(for: $0) },
-                isAppleSilicon: ParakeetModelStore.isSupportedHardware
+                isAppleSilicon: ParakeetModelStore.isSupportedHardware,
+                detectedKeyboardLanguages: { KeyboardLanguageDetector.detectedLanguageCodes() }
             )
         }
     }
@@ -36,6 +39,7 @@ enum SettingsMigration {
     static func runIfNeeded(defaults: UserDefaults, environment: Environment) {
         let version = defaults.integer(forKey: schemaVersionKey)
         guard version < currentSchemaVersion else { return }
+        seedYourLanguages(defaults: defaults, detected: environment.detectedKeyboardLanguages())
         if version == 2 {
             // Already ran the mode-defaults step before 8A: only the calendar mapping is new.
             migrateCalendarLocalRecording(defaults: defaults)

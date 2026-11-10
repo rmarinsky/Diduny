@@ -12,19 +12,22 @@ final class YourLanguagesTests {
         defaults = try #require(UserDefaults(suiteName: suiteName))
     }
 
+    /// No keyboard layouts, so the one-time seed of Your languages does not depend on this Mac.
+    static let noLayouts = SettingsMigration.Environment(hasProviderKey: { _ in false }, isAppleSilicon: true)
+
     deinit {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
     private func storage() -> SettingsStorage {
-        SettingsStorage(defaults: defaults)
+        SettingsStorage(defaults: defaults, migrationEnvironment: Self.noLayouts)
     }
 
     /// Since WP-13, `SettingsStorage.init` runs the migration for existing installs. Read-time cases
     /// mark the schema current first, so they read the stored keys without the migration writing.
     private func readTimeStorage() -> SettingsStorage {
         defaults.set(SettingsMigration.currentSchemaVersion, forKey: SettingsMigration.schemaVersionKey)
-        return SettingsStorage(defaults: defaults)
+        return SettingsStorage(defaults: defaults, migrationEnvironment: Self.noLayouts)
     }
 
     private func storePairs(_ pairs: [TranslationLanguagePair], defaultID: String? = nil) throws {
@@ -113,22 +116,6 @@ final class YourLanguagesTests {
         #expect(store.translationPair == nil)
     }
 
-    @Test("T5-LA-05 (partial, WP-14 part) Languages you speak keep their order; unticking a detected language is stored")
-    func languagesYouSpeakPartial() {
-        let store = storage()
-        store.manualSpeechLanguageHints = []
-        #expect(store.manualSpeechLanguageHints.isEmpty)
-        // WP-53: with nothing chosen or detected, no hint is sent.
-        #expect(store.effectiveSpeechLanguageHints(detectedCodes: []).isEmpty)
-
-        store.manualSpeechLanguageHints = ["pl", "en"]
-        #expect(store.manualSpeechLanguageHints == ["pl", "en"])
-
-        store.setDetectedSpeechLanguage("uk", enabled: false)
-        #expect(store.disabledDetectedSpeechLanguageHints.contains("uk"))
-        #expect(store.effectiveSpeechLanguageHints(detectedCodes: ["uk", "en"]) == ["en", "pl"])
-    }
-
     @Test("Pair labels: short codes and full names")
     func pairLabels() {
         let english = Locale(identifier: "en")
@@ -163,7 +150,7 @@ final class YourLanguagesTests {
         #expect(store.defaultTranslationLanguagePairID == "en-pl")
         #expect(store.translationLanguagePairs.map(\.id) == ["en-uk", "en-pl"])
         #expect(store.translationPair?.id == "en-pl")
-        #expect(SettingsStorage(defaults: defaults).translationPair?.id == "en-pl")
+        #expect(SettingsStorage(defaults: defaults, migrationEnvironment: Self.noLayouts).translationPair?.id == "en-pl")
 
         // The same pair in the other direction selects the stored one, without a duplicate.
         store.selectTranslationPair(pair("uk", "en"))
@@ -330,6 +317,6 @@ final class YourLanguagesTests {
         #expect(store.voiceTranslationCommandPosition == .startAndEnd)
         store.voiceTranslationCommandPosition = .anywhere
         #expect(defaults.string(forKey: "voiceTranslationCommandPosition") == "anywhere")
-        #expect(SettingsStorage(defaults: defaults).voiceTranslationCommandPosition == .anywhere)
+        #expect(SettingsStorage(defaults: defaults, migrationEnvironment: Self.noLayouts).voiceTranslationCommandPosition == .anywhere)
     }
 }
