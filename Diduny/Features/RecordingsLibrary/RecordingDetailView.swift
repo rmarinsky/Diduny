@@ -350,6 +350,19 @@ struct RecordingDetailView: View {
                 .foregroundStyle(DS.Palette.secondary)
         } else if recording.status == .processing {
             queueProgressView
+            // While a new run works, the text the recording already has stays readable.
+            if let text = recording.displayTranscriptText {
+                Text(RecordingVersions(recording).current == nil ? String(localized: "Live text") : String(localized: "Current transcript, until the new one is ready"))
+                    .font(DS.Font.caption.weight(.semibold))
+                    .foregroundStyle(DS.Palette.secondary)
+                    .padding(.top, DS.Space.xs)
+                Text(text)
+                    .font(DS.Font.body)
+                    .foregroundStyle(DS.Palette.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("recordings.detail.previousText")
+            }
         } else if recording.status == .failed {
             Label(recording.errorMessage ?? String(localized: "Transcription failed"), systemImage: "exclamationmark.triangle.fill")
                 .font(DS.Font.callout)
@@ -409,7 +422,11 @@ struct RecordingDetailView: View {
                     .tint(DS.Palette.accent)
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: fraction)
             }
-            Text("You can leave this screen.").font(DS.Font.caption).foregroundStyle(DS.Palette.secondary)
+            Text(currentRecording.displayTranscriptText == nil
+                ? String(localized: "\(formattedDuration) of audio. The transcript appears here when it is ready. You can leave this screen.")
+                : String(localized: "You can leave this screen."))
+                .font(DS.Font.caption).foregroundStyle(DS.Palette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

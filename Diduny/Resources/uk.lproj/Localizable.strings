@@ -2219,3 +2219,5 @@
 
 /* Stop animation: meeting end */
 "Meeting stopped" = "Зустріч зупинено";
+"Current transcript, until the new one is ready" = "Поточний транскрипт, доки не буде нового";
+"%@ of audio. The transcript appears here when it is ready. You can leave this screen." = "Аудіо: %@. Транскрипт зʼявиться тут, щойно буде готовий. Можна вийти з цього екрана.";
