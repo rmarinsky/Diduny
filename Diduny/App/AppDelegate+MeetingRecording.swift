@@ -581,6 +581,8 @@ extension AppDelegate {
         meetingEngineController = controller
         let fanOut = controller.fanOut
         meetingRecorderService.onRealtimeAudioData = { fanOut.deliver($0) }
+        meetingLevelTask?.cancel()
+        meetingLevelTask = MeetingAudioFanOut.startLevelPump(fanOut) { DictationOverlayController.shared.updateAudioLevel($0) }
         if target.isLive {
             Log.app.info("Meeting starts live on \(target.engine.rawValue, privacy: .public)")
             store.isActive = true
@@ -612,6 +614,8 @@ extension AppDelegate {
     func stopMeetingLiveTranscription(finalizeCloud: Bool = false) async -> Bool {
         let controller = meetingEngineController
         meetingEngineController = nil
+        meetingLevelTask?.cancel()
+        meetingLevelTask = nil
         let confirmed = await controller?.shutdown(finalize: finalizeCloud) ?? true
         meetingRealtimeService = nil
         if localMeetingStreamingService != nil {

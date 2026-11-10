@@ -150,6 +150,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var meetingTranslationPipelineTask: Task<Void, Never>?
     /// Runs the meeting's live engines and switches between them (ADR-0013). One per recording.
     var meetingEngineController: MeetingEngineController?
+    /// Feeds the live panel's level meter from the meeting fan-out (all segments, Record only included).
+    var meetingLevelTask: Task<Void, Never>?
 
     // Auto-reset Tasks (success/error → idle timers)
     var voiceAutoResetTask: Task<Void, Never>?

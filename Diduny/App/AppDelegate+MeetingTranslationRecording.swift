@@ -340,6 +340,8 @@ extension AppDelegate {
         meetingEngineController = controller
         let fanOut = controller.fanOut
         meetingRecorderService.onRealtimeAudioData = { fanOut.deliver($0) }
+        meetingLevelTask?.cancel()
+        meetingLevelTask = MeetingAudioFanOut.startLevelPump(fanOut) { DictationOverlayController.shared.updateAudioLevel($0) }
         store.isActive = true
         // Recording continues even if the socket is unavailable: async translation on stop.
         await controller.startInitial(wait: true)

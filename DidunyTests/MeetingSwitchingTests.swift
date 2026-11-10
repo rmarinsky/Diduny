@@ -603,6 +603,36 @@ struct MeetingAudioFanOutTests {
         fanOut.deliver(Data([1]))
         #expect(sink.total == 1)
     }
+
+    private static func tone(_ amplitude: Int16, frames: Int = 1600) -> Data {
+        var samples = (0 ..< frames).map { $0.isMultiple(of: 2) ? amplitude : -amplitude }
+        return Data(bytes: &samples, count: frames * 2)
+    }
+
+    @Test("Mixed audio sets the level with no consumer (Record only); silence drops it")
+    func levelWithoutConsumer() {
+        let fanOut = MeetingAudioFanOut()
+        fanOut.deliver(Self.tone(Int16.max / 10)) // -20 dB
+        #expect(abs(fanOut.level - 40.0 / 60.0) < 0.01)
+        fanOut.deliver(Self.tone(0))
+        #expect(fanOut.level == 0)
+    }
+
+    @MainActor
+    @Test("The level pump carries the fan-out level to the panel sink, and zeroes it on cancel")
+    func levelPumpReachesSink() async throws {
+        let fanOut = MeetingAudioFanOut()
+        var seen: [Float] = []
+        let task = MeetingAudioFanOut.startLevelPump(fanOut, interval: .milliseconds(5)) { seen.append($0) }
+        fanOut.deliver(Self.tone(Int16.max / 10))
+        for _ in 0 ..< 200 where !seen.contains(where: { $0 > 0.5 }) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(seen.contains { $0 > 0.5 })
+        task.cancel()
+        await task.value
+        #expect(seen.last == 0)
+    }
 }
 
 @MainActor
