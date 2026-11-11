@@ -33,8 +33,8 @@ enum PasteMarkPlan {
 
     /// The logo disc, one size for every mode.
     static let disc: CGFloat = 42
-    /// Room around the disc for the 1.15 pulse.
-    static let panelMargin: CGFloat = 5
+    /// Room around the disc for the 1.15 landing scale and the sparks (20/28 of the disc out).
+    static let panelMargin: CGFloat = 17
 
     struct Timeline: Equatable {
         var appear: TimeInterval

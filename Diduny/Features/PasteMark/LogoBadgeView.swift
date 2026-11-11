@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum LogoBadgePhase: Equatable {
-    /// A 30% arc spins on the rim (1 s a turn) while the logo breathes.
+    /// A 25% arc spins on the rim (900 ms a turn); the only waiting cue.
     case waiting
     /// The arc stops where it is and grows into a closed ring.
     case done
@@ -11,23 +11,21 @@ enum LogoBadgePhase: Equatable {
 }
 
 /// The app icon on its material disc: the in-place translation badge, the caret logo after
-/// Stop and the outcome header logo (docs/design/stop-animation, "Logo badge").
+/// Stop and the outcome header logo. Restored to the earlier in-place translation look
+/// (before 87dfc77): spring pop-in, a breathing and tilting logo with three orbiting dots
+/// while waiting, then a check and six sparks when the text lands, or a red ring on error.
 struct LogoBadge: View {
     var phase: LogoBadgePhase
     var discSize: CGFloat = PasteMarkPlan.disc
     var isVisible = true
-    /// Each change plays one M8 pulse (none under Reduce Motion).
+    /// Each change replays the landing burst (none under Reduce Motion).
     var pulseTrigger = 0
     var pulsesOnAppear = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
-    @State private var frozenAngle: Double = 0
-    @State private var ringTrim: CGFloat = 1
-    @State private var pulses = 0
-
-    private static let turn: Double = 1.0
-    private static let arc: CGFloat = 0.3
+    @State private var breathing = false
+    @State private var burst = false
 
     private var unit: CGFloat {
         discSize / 28
@@ -38,101 +36,111 @@ struct LogoBadge: View {
         return colorScheme == .dark ? Color("BrandTintSoft").opacity(0.9) : Color("BrandAccentDeep")
     }
 
+    private var isThinking: Bool {
+        isVisible && phase == .waiting && !reduceMotion
+    }
+
     var body: some View {
         ZStack {
-            Circle().fill(.regularMaterial)
-            Circle().stroke(Color("BrandTintBorder"), lineWidth: 0.5)
-            logo
-            rim
-        }
-        .frame(width: discSize, height: discSize)
-        .keyframeAnimator(initialValue: 1.0, trigger: pulses) { content, scale in
-            content.scaleEffect(scale)
-        } keyframes: { _ in
-            KeyframeTrack {
-                CubicKeyframe(DS.Motion.pulseScale, duration: DS.Motion.m8SuccessPulse.duration / 2)
-                CubicKeyframe(1.0, duration: DS.Motion.m8SuccessPulse.duration / 2)
-            }
-        }
-        .scaleEffect(reduceMotion || isVisible ? 1 : 0.85)
-        .opacity(isVisible ? 1 : 0)
-        .animation(visibilityAnimation, value: isVisible)
-        .accessibilityHidden(true)
-        .onAppear {
-            ringTrim = phase == .waiting ? Self.arc : 1
-            if pulsesOnAppear { pulse() }
-        }
-        .onChange(of: phase) { _, new in close(into: new) }
-        .onChange(of: pulseTrigger) { _, _ in pulse() }
-    }
-
-    /// Waiting: the logo breathes 1 to 1.08 (2.4 s cycle, eased). Otherwise it stays still.
-    @ViewBuilder
-    private var logo: some View {
-        if phase == .waiting, !reduceMotion {
-            TimelineView(.animation(minimumInterval: 1.0 / 60)) { timeline in
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                logoImage.scaleEffect(1 + 0.08 * (1 - cos(t * 2 * .pi / 2.4)) / 2)
-            }
-        } else {
-            logoImage
-        }
-    }
-
-    private var logoImage: some View {
-        Image(nsImage: NSApp.applicationIconImage)
-            .resizable()
-            .frame(width: 18 * unit, height: 18 * unit)
-    }
-
-    @ViewBuilder
-    private var rim: some View {
-        switch phase {
-        case .waiting:
-            if !reduceMotion {
-                TimelineView(.animation(minimumInterval: 1.0 / 60)) { timeline in
-                    ring(trim: Self.arc, angle: Self.angle(at: timeline.date))
+            if phase == .done, !reduceMotion { burstView }
+            ZStack {
+                Circle().fill(.regularMaterial)
+                Circle().stroke(Color("BrandTintBorder"), lineWidth: 0.5)
+                // Paused (no frames) whenever the badge is not thinking.
+                TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isThinking)) { timeline in
+                    thinking(t: timeline.date.timeIntervalSinceReferenceDate)
+                }
+                ring
+                if phase == .done {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11 * unit, weight: .bold))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, ringColor)
+                        .offset(x: 9 * unit, y: 9 * unit)
+                        .transition(reduceMotion ? .opacity : .scale(scale: 0.2).combined(with: .opacity))
                 }
             }
-        case .done, .error:
-            ring(trim: ringTrim, angle: frozenAngle)
-                .transition(.opacity.animation(reduceMotion ? DS.Motion.reduced : nil))
+            .frame(width: discSize, height: discSize)
+        }
+        .scaleEffect(scale)
+        .opacity(isVisible ? 1 : 0)
+        .animation(appearAnimation, value: isVisible)
+        .animation(reduceMotion ? nil : .bouncy(duration: 0.3, extraBounce: 0.15), value: phase)
+        .accessibilityHidden(true)
+        .onAppear {
+            if pulsesOnAppear { playBurst() }
+            guard reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { breathing = true }
+        }
+        .onChange(of: phase) { _, new in if new == .done { playBurst() } }
+        .onChange(of: pulseTrigger) { _, _ in playBurst() }
+    }
+
+    /// Logo + orbiting dots, driven by the timeline clock (60 fps cap).
+    private func thinking(t: Double) -> some View {
+        let animate = phase == .waiting && !reduceMotion
+        let orbit = t.truncatingRemainder(dividingBy: 0.9) / 0.9 // one orbit per 0.9 s
+        let pulse = animate ? (sin(t * 2 * .pi / 0.9) + 1) / 2 : 0
+        return ZStack {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 18 * unit, height: 18 * unit)
+                .scaleEffect(1 + 0.08 * pulse)
+                .rotationEffect(.degrees(animate ? sin(t * 2 * .pi / 1.8) * 6 : 0))
+                .opacity(reduceMotion && phase == .waiting ? (breathing ? 0.6 : 1.0) : 1)
+            if animate {
+                ForEach(0..<3, id: \.self) { i in
+                    let angle = (orbit - Double(i) * 0.08) * 2 * .pi
+                    let size = (3.5 - Double(i)) * unit
+                    Circle()
+                        .fill(ringColor)
+                        .frame(width: size, height: size)
+                        .opacity(1 - Double(i) * 0.3)
+                        .offset(x: cos(angle) * 14 * unit, y: sin(angle) * 14 * unit)
+                }
+            }
         }
     }
 
-    private func ring(trim: CGFloat, angle: Double) -> some View {
-        Circle()
-            .trim(from: 0, to: trim)
-            .stroke(ringColor, style: StrokeStyle(lineWidth: 1.5 * unit, lineCap: .round))
-            .rotationEffect(.degrees(angle - 90))
-    }
-
-    private static func angle(at date: Date) -> Double {
-        date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: turn) / turn * 360
-    }
-
-    private func close(into new: LogoBadgePhase) {
-        guard new != .waiting else {
-            ringTrim = Self.arc
-            return
+    @ViewBuilder
+    private var ring: some View {
+        if reduceMotion {
+            if phase == .error { Circle().stroke(ringColor, lineWidth: 1.5 * unit) }
+        } else if phase != .waiting {
+            Circle().stroke(ringColor, lineWidth: 1.5 * unit)
+                .transition(.opacity)
         }
-        guard !reduceMotion, new == .done else {
-            ringTrim = 1
-            return
+    }
+
+    /// Six sparks that fly out and fade when the text lands.
+    private var burstView: some View {
+        ForEach(0..<6, id: \.self) { i in
+            let angle = Double(i) / 6 * 2 * .pi
+            let distance = (burst ? 20 : 12) * unit
+            Circle()
+                .fill(ringColor)
+                .frame(width: 3 * unit, height: 3 * unit)
+                .offset(x: cos(angle) * distance, y: sin(angle) * distance)
+                .opacity(burst ? 0 : 1)
         }
-        frozenAngle = Self.angle(at: Date())
-        ringTrim = Self.arc
-        withAnimation(DS.Motion.easeOut(PasteMarkPlan.timeline(reduceMotion: false).ringClose)) { ringTrim = 1 }
     }
 
-    private func pulse() {
-        if !reduceMotion { pulses += 1 }
+    private var scale: CGFloat {
+        if reduceMotion { return 1 }
+        if !isVisible { return 0.4 }
+        return phase == .done ? 1.15 : 1
     }
 
-    private var visibilityAnimation: Animation {
-        let timeline = PasteMarkPlan.timeline(reduceMotion: reduceMotion)
-        if reduceMotion { return .linear(duration: isVisible ? timeline.appear : timeline.fade) }
-        // Springy pop-in; the exit keeps the timeline's fade.
-        return isVisible ? .spring(response: 0.28, dampingFraction: 0.72) : DS.Motion.easeOut(timeline.fade)
+    private var appearAnimation: Animation {
+        if reduceMotion { return .easeInOut(duration: 0.15) }
+        return isVisible ? .bouncy(duration: 0.28, extraBounce: 0.2) : .easeIn(duration: 0.15)
+    }
+
+    private func playBurst() {
+        guard !reduceMotion else { return }
+        burst = false
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.35)) { burst = true }
+        }
     }
 }
