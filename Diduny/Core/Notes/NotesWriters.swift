@@ -7,39 +7,60 @@ struct NotesDraft: Decodable {
     struct Action: Decodable { var owner: String?; var task: String; var deadline: String?; var time: String? }
     var summary: String
     var points: [String]?
+    var topics: [String]?
     var decisions: [Decision]?
     var actionItems: [Action]?
     var openQuestions: [String]?
 
     /// Strict schema: every property required, no extra properties (Codex requires this).
-    static let schema: [String: Any] = {
-        func object(_ properties: [String: Any]) -> [String: Any] {
-            ["type": "object", "additionalProperties": false,
-             "required": Array(properties.keys).sorted(), "properties": properties]
-        }
-        let string: [String: Any] = ["type": "string"]
-        func array(_ items: [String: Any]) -> [String: Any] { ["type": "array", "items": items] }
-        return object([
-            "summary": string,
-            "points": array(string),
-            "decisions": array(object(["text": string, "time": string])),
-            "actionItems": array(object(["owner": string, "task": string, "deadline": string, "time": string])),
-            "openQuestions": array(string)
-        ])
-    }()
-
-    static var schemaJSON: String {
-        String(decoding: try! JSONSerialization.data(withJSONObject: schema, options: [.sortedKeys]), as: UTF8.self)
-    }
+    static let schema: [String: Any] = JSONSchema.object([
+        "summary": JSONSchema.string,
+        "points": JSONSchema.array(JSONSchema.string),
+        "topics": JSONSchema.array(JSONSchema.string),
+        "decisions": JSONSchema.array(JSONSchema.object(["text": JSONSchema.string, "time": JSONSchema.string])),
+        "actionItems": JSONSchema.array(JSONSchema.object([
+            "owner": JSONSchema.string, "task": JSONSchema.string,
+            "deadline": JSONSchema.string, "time": JSONSchema.string
+        ])),
+        "openQuestions": JSONSchema.array(JSONSchema.string)
+    ])
 
     static func decode(_ text: String) throws -> NotesDraft {
+        try JSONSchema.decode(NotesDraft.self, from: text)
+    }
+}
+
+/// The transcript check's answer: numbers of the items the transcript supports.
+struct NotesCheckResult: Decodable {
+    var supported: [Int]
+    static let schema: [String: Any] = JSONSchema.object(["supported": JSONSchema.array(["type": "integer"])])
+}
+
+enum JSONSchema {
+    static let string: [String: Any] = ["type": "string"]
+
+    static func array(_ items: [String: Any]) -> [String: Any] {
+        ["type": "array", "items": items]
+    }
+
+    static func object(_ properties: [String: Any]) -> [String: Any] {
+        ["type": "object", "additionalProperties": false,
+         "required": Array(properties.keys).sorted(), "properties": properties]
+    }
+
+    static func text(_ schema: [String: Any]) -> String {
+        String(decoding: (try? JSONSerialization.data(withJSONObject: schema, options: [.sortedKeys])) ?? Data(),
+               as: UTF8.self)
+    }
+
+    static func decode<T: Decodable>(_ type: T.Type, from text: String) throws -> T {
         var body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Local models sometimes wrap the JSON in a code fence.
+        // Some models wrap the JSON in a code fence or add a line before it.
         if let open = body.firstIndex(of: "{"), let close = body.lastIndex(of: "}") {
             body = String(body[open ... close])
         }
         do {
-            return try JSONDecoder().decode(NotesDraft.self, from: Data(body.utf8))
+            return try JSONDecoder().decode(T.self, from: Data(body.utf8))
         } catch {
             throw NotesError.unreadableAnswer
         }
@@ -71,68 +92,125 @@ enum NotesError: LocalizedError {
 }
 
 protocol NotesWriter {
+    var kind: NotesWriterKind { get }
     var displayName: String { get }
     /// Whole transcripts fit; local models get the transcript in parts.
     var partCharacters: Int? { get }
-    func write(prompt: String) async throws -> NotesDraft
+    /// Returns the model's answer as JSON text that follows `schema`.
+    func complete(prompt: String, schema: [String: Any]) async throws -> String
 }
 
-// MARK: - Local servers
+// MARK: - Local servers and OpenAI-style APIs
 
-/// Ollama (`/api/chat`) or LM Studio (OpenAI-compatible `/v1/chat/completions`) on this Mac.
+/// Ollama (`/api/chat`), or LM Studio and other OpenAI-compatible servers (`/v1/chat/completions`).
 struct LocalServerWriter: NotesWriter {
     let kind: NotesWriterKind
     let address: String
     let model: String
 
-    var displayName: String { "\(kind.label), \(model)" }
+    var displayName: String { "\(kind == .openAICompatible ? String(localized: "Local server") : kind.label), \(model)" }
     var partCharacters: Int? { 24000 }
 
-    func write(prompt: String) async throws -> NotesDraft {
+    func complete(prompt: String, schema: [String: Any]) async throws -> String {
         guard !model.isEmpty else { throw NotesError.server(String(localized: "Choose a model in Notes settings.")) }
         let messages = [["role": "user", "content": prompt]]
-        let path: String
-        let body: [String: Any]
         if kind == .ollama {
-            path = "/api/chat"
-            body = ["model": model, "messages": messages, "stream": false, "format": NotesDraft.schema,
-                    "options": ["num_ctx": 16384, "temperature": 0.2]]
+            let reply = try await HTTPJSON.post(address + "/api/chat", body: [
+                "model": model, "messages": messages, "stream": false, "format": schema,
+                "options": ["num_ctx": 16384, "temperature": 0.2]
+            ])
+            guard let content = (reply["message"] as? [String: Any])?["content"] as? String else {
+                throw NotesError.unreadableAnswer
+            }
+            return content
+        }
+        return try await OpenAIChat.complete(address: address, key: nil, model: model, prompt: prompt, schema: schema)
+    }
+
+    struct Model: Hashable {
+        var name: String
+        /// Bytes on disk, when the server reports it (Ollama does).
+        var size: Int64?
+    }
+
+    /// Models the server has that can write text (embedding models are left out).
+    static func models(kind: NotesWriterKind, address: String) async throws -> [Model] {
+        let models: [Model]
+        if kind == .ollama {
+            let reply = try await HTTPJSON.get(address + "/api/tags")
+            models = ((reply["models"] as? [[String: Any]]) ?? []).compactMap { row in
+                (row["name"] as? String).map { Model(name: $0, size: (row["size"] as? NSNumber)?.int64Value) }
+            }
         } else {
-            path = "/v1/chat/completions"
-            body = ["model": model, "messages": messages, "temperature": 0.2,
-                    "response_format": ["type": "json_schema",
-                                        "json_schema": ["name": "notes", "strict": true, "schema": NotesDraft.schema]]]
+            let reply = try await HTTPJSON.get(address + "/v1/models")
+            models = ((reply["data"] as? [[String: Any]]) ?? []).compactMap { ($0["id"] as? String).map { Model(name: $0) } }
         }
-        let reply = try await Self.post(address + path, body: body)
-        let content: String? = kind == .ollama
-            ? (reply["message"] as? [String: Any])?["content"] as? String
-            : (((reply["choices"] as? [[String: Any]])?.first)?["message"] as? [String: Any])?["content"] as? String
-        guard let content else { throw NotesError.unreadableAnswer }
-        return try NotesDraft.decode(content)
+        return models.filter { !$0.name.lowercased().contains("embed") }
     }
+}
 
-    /// Model names the server has, for the picker.
-    static func models(kind: NotesWriterKind, address: String) async throws -> [String] {
-        if kind == .ollama {
-            let reply = try await get(address + "/api/tags")
-            return ((reply["models"] as? [[String: Any]]) ?? []).compactMap { $0["name"] as? String }
+enum OpenAIChat {
+    static func complete(address: String, key: String?, model: String, prompt: String, schema: [String: Any]) async throws -> String {
+        let reply = try await HTTPJSON.post(address + "/v1/chat/completions", body: [
+            "model": model, "temperature": 0.2,
+            "messages": [["role": "user", "content": prompt]],
+            "response_format": ["type": "json_schema", "json_schema": ["name": "notes", "strict": true, "schema": schema]]
+        ], headers: key.map { ["Authorization": "Bearer \($0)"] } ?? [:])
+        guard let content = (((reply["choices"] as? [[String: Any]])?.first)?["message"] as? [String: Any])?["content"] as? String else {
+            throw NotesError.unreadableAnswer
         }
-        let reply = try await get(address + "/v1/models")
-        return ((reply["data"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String }
+        return content
     }
+}
 
-    private static func get(_ url: String) async throws -> [String: Any] {
+/// An API key the user entered: Anthropic Messages API (a forced tool call returns the JSON),
+/// OpenAI, or another OpenAI-compatible address. Paid per use.
+struct APIKeyWriter: NotesWriter {
+    let provider: NotesAPIProvider
+    let key: String
+    let model: String
+    let address: String
+
+    var kind: NotesWriterKind { .apiKey }
+    var displayName: String { "\(provider.label), \(model)" }
+    var partCharacters: Int? { nil }
+
+    func complete(prompt: String, schema: [String: Any]) async throws -> String {
+        switch provider {
+        case .anthropic:
+            let reply = try await HTTPJSON.post("https://api.anthropic.com/v1/messages", body: [
+                "model": model, "max_tokens": 8000,
+                "tools": [["name": "notes", "description": "Return the notes.", "input_schema": schema]],
+                "tool_choice": ["type": "tool", "name": "notes"],
+                "messages": [["role": "user", "content": prompt]]
+            ], headers: ["x-api-key": key, "anthropic-version": "2023-06-01"])
+            let input = ((reply["content"] as? [[String: Any]]) ?? []).first { $0["type"] as? String == "tool_use" }?["input"]
+            guard let input, let data = try? JSONSerialization.data(withJSONObject: input) else {
+                throw NotesError.unreadableAnswer
+            }
+            return String(decoding: data, as: UTF8.self)
+        case .openAI:
+            return try await OpenAIChat.complete(address: "https://api.openai.com", key: key, model: model, prompt: prompt, schema: schema)
+        case .other:
+            return try await OpenAIChat.complete(address: address, key: key, model: model, prompt: prompt, schema: schema)
+        }
+    }
+}
+
+enum HTTPJSON {
+    static func get(_ url: String) async throws -> [String: Any] {
         guard let url = URL(string: url) else { throw NotesError.server(String(localized: "The address is not valid.")) }
         var request = URLRequest(url: url)
         request.timeoutInterval = 5
         return try await send(request)
     }
 
-    private static func post(_ url: String, body: [String: Any]) async throws -> [String: Any] {
+    static func post(_ url: String, body: [String: Any], headers: [String: String] = [:]) async throws -> [String: Any] {
         guard let url = URL(string: url) else { throw NotesError.server(String(localized: "The address is not valid.")) }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         request.timeoutInterval = 1800
         return try await send(request)
@@ -144,7 +222,7 @@ struct LocalServerWriter: NotesWriter {
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
-            throw NotesError.server(String(localized: "The server is not running at \(request.url?.host ?? ""):\(request.url?.port ?? 0)."))
+            throw NotesError.server(String(localized: "No answer from \(request.url?.host ?? "the server")."))
         }
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         if let status = (response as? HTTPURLResponse)?.statusCode, status >= 400 {
@@ -157,17 +235,26 @@ struct LocalServerWriter: NotesWriter {
 
 // MARK: - Subscription CLIs
 
-/// Runs `claude -p` or `codex exec` headless with tools, MCP servers, hooks and saved
-/// sessions switched off, following pingdotgg/t3code. The prompt goes on stdin.
+/// Runs `claude -p`, `codex exec` or `gemini -p` headless. Claude Code and Codex run with tools,
+/// MCP servers, hooks and saved sessions off, following pingdotgg/t3code. Gemini CLI has no
+/// read-only switch without an experimental setting, so it runs in an empty folder with
+/// extensions off and no tool approvals. The prompt goes on stdin.
 struct CLIWriter: NotesWriter {
     let kind: NotesWriterKind
     let executable: String
-    let model: String
+    let tier: NotesModelTier
 
-    var displayName: String { model.isEmpty ? kind.label : "\(kind.label), \(model)" }
+    var displayName: String {
+        switch kind {
+        case .claudeCode: "Claude Code, \(tier.claudeAlias)"
+        case .codex: tier == .standard ? "Codex" : "Codex, \(tier.label.lowercased())"
+        default: kind.label
+        }
+    }
+
     var partCharacters: Int? { nil }
 
-    func write(prompt: String) async throws -> NotesDraft {
+    func complete(prompt: String, schema: [String: Any]) async throws -> String {
         let work = FileManager.default.temporaryDirectory
             .appendingPathComponent("diduny-notes-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
@@ -175,28 +262,34 @@ struct CLIWriter: NotesWriter {
 
         switch kind {
         case .claudeCode:
-            var arguments = ["-p", "--output-format", "json", "--json-schema", NotesDraft.schemaJSON,
+            let arguments = ["-p", "--output-format", "json", "--json-schema", JSONSchema.text(schema),
+                             "--model", tier.claudeAlias,
                              "--tools", "", "--disable-slash-commands", "--strict-mcp-config",
                              "--permission-mode", "dontAsk", "--settings", #"{"disableAllHooks":true}"#,
                              "--no-session-persistence"]
-            if !model.isEmpty { arguments += ["--model", model] }
             let run = try await CLIRunner.run(executable, arguments, stdin: prompt, in: work)
             return try Self.parseClaude(run)
         case .codex:
             let schemaURL = work.appendingPathComponent("schema.json")
             let answerURL = work.appendingPathComponent("answer.json")
-            try Data(NotesDraft.schemaJSON.utf8).write(to: schemaURL)
+            try Data(JSONSchema.text(schema).utf8).write(to: schemaURL)
             var arguments = ["exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only",
                              "--config", "features.plugins=false", "--config", "features.apps=false",
                              "--output-schema", schemaURL.path, "--output-last-message", answerURL.path]
             if let mcpOff = Self.codexMCPServersOff() { arguments += ["--config", mcpOff] }
-            if !model.isEmpty { arguments += ["--model", model] }
+            if let effort = tier.codexEffort { arguments += ["--config", "model_reasoning_effort=\"\(effort)\""] }
             arguments.append("-")
             let run = try await CLIRunner.run(executable, arguments, stdin: prompt, in: work)
             guard let answer = try? String(contentsOf: answerURL, encoding: .utf8), !answer.isEmpty else {
                 throw NotesError.tool(run.errorSummary)
             }
-            return try NotesDraft.decode(answer)
+            return answer
+        case .gemini:
+            let arguments = ["-o", "json", "-e", "none", "--allowed-mcp-server-names", "diduny-none",
+                             "-p", "Answer only with one JSON object that follows this JSON schema, with no other text: "
+                                 + JSONSchema.text(schema)]
+            let run = try await CLIRunner.run(executable, arguments, stdin: prompt, in: work)
+            return try Self.parseGemini(run)
         default:
             throw NotesError.noWriter
         }
@@ -220,7 +313,7 @@ struct CLIWriter: NotesWriter {
     }
 
     /// Older CLIs print one result object; newer ones print every message as an array.
-    static func parseClaude(_ run: CLIRunner.Result) throws -> NotesDraft {
+    static func parseClaude(_ run: CLIRunner.Result) throws -> String {
         let json = try? JSONSerialization.jsonObject(with: Data(run.stdout.utf8))
         let result = (json as? [String: Any])
             ?? (json as? [[String: Any]])?.last(where: { $0["type"] as? String == "result" })
@@ -229,11 +322,23 @@ struct CLIWriter: NotesWriter {
             throw NotesError.tool((result["result"] as? String) ?? run.errorSummary)
         }
         if let structured = result["structured_output"],
-           let data = try? JSONSerialization.data(withJSONObject: structured),
-           let draft = try? JSONDecoder().decode(NotesDraft.self, from: data) {
-            return draft
+           let data = try? JSONSerialization.data(withJSONObject: structured) {
+            return String(decoding: data, as: UTF8.self)
         }
-        return try NotesDraft.decode(result["result"] as? String ?? "")
+        return result["result"] as? String ?? ""
+    }
+
+    /// `gemini -o json` prints `{"response": ...}` or `{"error": {"message": ...}}`.
+    static func parseGemini(_ run: CLIRunner.Result) throws -> String {
+        let body = run.stdout.firstIndex(of: "{").map { String(run.stdout[$0...]) } ?? run.stdout
+        guard let json = (try? JSONSerialization.jsonObject(with: Data(body.utf8))) as? [String: Any] else {
+            throw NotesError.tool(run.errorSummary)
+        }
+        if let error = json["error"] as? [String: Any] {
+            throw NotesError.tool(error["message"] as? String ?? run.errorSummary)
+        }
+        guard let response = json["response"] as? String else { throw NotesError.tool(run.errorSummary) }
+        return response
     }
 }
 
@@ -302,9 +407,26 @@ enum CLIRunner {
         timeout: TimeInterval = timeout
     ) async throws -> Result {
         let env: [String: String] = if let environment { environment } else { await self.environment() }
-        return try await withCheckedThrowingContinuation { continuation in
+        let process = Process()
+        // Cancel (the notes block's Cancel button) stops the tool.
+        return try await withTaskCancellationHandler {
+            try await launch(process, executable, arguments, stdin: stdin, in: directory, environment: env, timeout: timeout)
+        } onCancel: {
+            if process.isRunning { process.terminate() }
+        }
+    }
+
+    private static func launch(
+        _ process: Process,
+        _ executable: String,
+        _ arguments: [String],
+        stdin: String?,
+        in directory: URL?,
+        environment env: [String: String],
+        timeout: TimeInterval
+    ) async throws -> Result {
+        try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
-                let process = Process()
                 process.executableURL = URL(fileURLWithPath: executable)
                 process.arguments = arguments
                 process.environment = env

@@ -30,6 +30,13 @@ struct RecordingNote: Identifiable, Codable, Equatable {
     var openQuestions: [String]
     /// Points of a voice note; empty for meetings.
     var points: [String] = []
+    var topics: [String]? = nil
+    /// Items the transcript check did not find in the transcript, kept so the user can see them.
+    var removedItems: [String]? = nil
+    /// Names the model wrote that are not in the calendar event or the terms.
+    var unknownNames: [String]? = nil
+    /// Seconds the model took.
+    var seconds: Int? = nil
 
     var markdown: String {
         var lines = ["## " + String(localized: "Summary"), summary, ""]
@@ -39,6 +46,7 @@ struct RecordingNote: Identifiable, Codable, Equatable {
             lines += rows.map { "- " + $0 }
             lines.append("")
         }
+        section(String(localized: "Topics"), topics ?? [])
         section(String(localized: "Points"), points)
         section(String(localized: "Decisions"), decisions.map { $0.time.isEmpty ? $0.text : "\($0.text) [\($0.time)]" })
         section(String(localized: "Action items"), actionItems.map(\.markdownLine))
@@ -47,7 +55,7 @@ struct RecordingNote: Identifiable, Codable, Equatable {
     }
 
     var searchableText: String {
-        ([writer, summary] + points + decisions.map(\.text) + openQuestions
+        ([writer, summary] + points + (topics ?? []) + decisions.map(\.text) + openQuestions
             + actionItems.flatMap { [$0.owner, $0.task] })
             .joined(separator: "\u{0}").lowercased()
     }
@@ -64,6 +72,8 @@ extension RecordingNote.ActionItem {
 
 enum NotesTemplate: String, Codable, CaseIterable, Identifiable {
     case meeting
+    case oneOnOne
+    case interview
     case voiceNote
 
     var id: String { rawValue }
@@ -71,12 +81,14 @@ enum NotesTemplate: String, Codable, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .meeting: String(localized: "Meeting")
+        case .oneOnOne: String(localized: "One-on-one")
+        case .interview: String(localized: "Interview")
         case .voiceNote: String(localized: "Voice note")
         }
     }
 
     static func forRecording(_ recording: Recording) -> NotesTemplate {
-        recording.type.isMeetingLike ? .meeting : .voiceNote
+        recording.type.isMeetingLike ? NotesSettings.meetingTemplate : .voiceNote
     }
 
     var defaultPrompt: String {
@@ -88,12 +100,40 @@ enum NotesTemplate: String, Codable, CaseIterable, Identifiable {
             People in the meeting: {people}. Spell their names this way. Terms: {terms}.
 
             Summary: 2 to 4 sentences on what the meeting was about and how it ended.
+            Topics: the subjects discussed, a few words each.
             Decisions: only what the group agreed on. A proposal that nobody answered is not a decision.
-            Action items: one each, with the owner only if the transcript says who does the task, otherwise leave the owner empty. Write a deadline only if it was said.
+            Action items: one each, with the owner only if the transcript says who does the task. Write a deadline only if it was said. A status update on ongoing work is not an action item.
             Open questions: questions that were raised and not answered.
 
-            For each decision and action item give the time in the transcript where it was said.
-            Leave out greetings, small talk and repeated points. If a section has nothing, leave it empty.
+            Leave out greetings, small talk and repeated points.
+            """
+        case .oneOnOne:
+            """
+            You write notes for a one-on-one conversation from its transcript.
+            Write in {language}. Use only what was said in the transcript. If something was not said, do not add it.
+            People in the meeting: {people}. Spell their names this way. Terms: {terms}.
+
+            Summary: 2 to 3 sentences on how the person is doing and what they need.
+            Topics: what was talked about, a few words each.
+            Decisions: what the two people agreed on.
+            Action items: who does what, only when the transcript says who. Write a deadline only if it was said.
+            Open questions: what is still open between them.
+
+            Leave out small talk. Do not judge the person.
+            """
+        case .interview:
+            """
+            You write notes for an interview from its transcript.
+            Write in {language}. Use only what was said in the transcript. If something was not said, do not add it.
+            People in the meeting: {people}. Spell their names this way. Terms: {terms}.
+
+            Summary: 2 to 4 sentences on what the candidate said about their experience.
+            Topics: the subjects covered, a few words each.
+            Decisions: next steps that were agreed, if any.
+            Action items: who does what after the interview, only when the transcript says who.
+            Open questions: questions that the candidate or the interviewer left open.
+
+            Record what was said. Do not rate or judge the candidate.
             """
         case .voiceNote:
             """
@@ -105,8 +145,46 @@ enum NotesTemplate: String, Codable, CaseIterable, Identifiable {
             Points: the separate ideas, one each.
             Action items: tasks the speaker set for themselves, with an empty owner.
 
-            Leave out repeated points and filler. If a section has nothing, leave it empty.
+            Leave out repeated points and filler.
             """
+        }
+    }
+}
+
+enum NotesSection: String, CaseIterable, Identifiable {
+    case summary, topics, decisions, actionItems, openQuestions
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .summary: String(localized: "Summary")
+        case .topics: String(localized: "Topics")
+        case .decisions: String(localized: "Decisions")
+        case .actionItems: String(localized: "Action items")
+        case .openQuestions: String(localized: "Open questions")
+        }
+    }
+}
+
+enum NotesLength: String, CaseIterable, Identifiable {
+    case short, standard, detailed
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .short: String(localized: "Short")
+        case .standard: String(localized: "Standard")
+        case .detailed: String(localized: "Detailed")
+        }
+    }
+
+    var instruction: String {
+        switch self {
+        case .short: "Keep the notes short: only the most important items, one short line each."
+        case .standard: ""
+        case .detailed: "Write detailed notes: include every item that was said, with the context needed to understand it."
         }
     }
 }
@@ -143,5 +221,17 @@ enum NotesTranscript {
 
     static func hasTranscript(_ recording: Recording) -> Bool {
         recording.transcriptionText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    static func hasTimes(_ recording: Recording) -> Bool {
+        recording.transcriptSegments?.isEmpty == false
+    }
+
+    /// "12:40" or "1:02:05" to seconds.
+    static func seconds(from time: String) -> TimeInterval? {
+        let parts = time.trimmingCharacters(in: CharacterSet(charactersIn: "[] "))
+            .split(separator: ":").compactMap { Int($0) }
+        guard (2 ... 3).contains(parts.count) else { return nil }
+        return TimeInterval(parts.reduce(0) { $0 * 60 + $1 })
     }
 }

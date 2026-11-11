@@ -19,7 +19,7 @@ struct NotesTests {
 
     @Test func readsClaudeArrayOutputAndStructuredOutput() throws {
         let stdout = #"[{"type":"system"},{"type":"result","is_error":false,"result":"","structured_output":"# + answer + "}]"
-        let draft = try CLIWriter.parseClaude(.init(status: 0, stdout: stdout, stderr: ""))
+        let draft = try NotesDraft.decode(CLIWriter.parseClaude(.init(status: 0, stdout: stdout, stderr: "")))
         #expect(draft.openQuestions == ["Who tests?"])
     }
 
@@ -43,7 +43,7 @@ struct NotesTests {
 
     @Test func schemaRequiresEveryField() throws {
         let required = NotesDraft.schema["required"] as? [String]
-        #expect(required == ["actionItems", "decisions", "openQuestions", "points", "summary"])
+        #expect(required == ["actionItems", "decisions", "openQuestions", "points", "summary", "topics"])
     }
 
     @Test func markdownListsOpenItemsWithoutOwner() {
@@ -51,5 +51,19 @@ struct NotesTests {
                                  summary: "S", decisions: [], actionItems: [.init(owner: "", task: "Do it", deadline: "", time: "")],
                                  openQuestions: [])
         #expect(note.markdown.contains("[ ] No owner: Do it"))
+    }
+
+    @Test func readsGeminiResponseAndError() throws {
+        let ok = #"{"session_id":"x","response":"{\"supported\":[1,3]}"}"#
+        let answer = try CLIWriter.parseGemini(.init(status: 0, stdout: ok, stderr: ""))
+        #expect(try JSONSchema.decode(NotesCheckResult.self, from: answer).supported == [1, 3])
+        let failed = #"{"error":{"message":"Sign in first"}}"#
+        #expect(throws: NotesError.self) { try CLIWriter.parseGemini(.init(status: 1, stdout: failed, stderr: "")) }
+    }
+
+    @Test func readsTranscriptTimes() {
+        #expect(NotesTranscript.seconds(from: "12:40") == 760)
+        #expect(NotesTranscript.seconds(from: "[1:02:05]") == 3725)
+        #expect(NotesTranscript.seconds(from: "soon") == nil)
     }
 }
