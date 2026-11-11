@@ -113,7 +113,7 @@ struct RecordingsLibraryView: View {
     // MARK: - Derived
 
     private var matchingRecordings: [Recording] {
-        storage.recordings.filter { recording in
+        storage.libraryRecordings.filter { recording in
             segment.matches(recording) && (listFilter?.matches(recording) ?? true)
                 && recording.matchesCalendars(selectedCalendarIDs)
                 && Recording.searchableText(searchIndex[recording.id] ?? recording.searchableText, matches: searchText)
@@ -140,12 +140,12 @@ struct RecordingsLibraryView: View {
     }
 
     private func rebuildSearchIndex() {
-        searchIndex = Dictionary(storage.recordings.map { ($0.id, $0.searchableText) },
+        searchIndex = Dictionary(storage.libraryRecordings.map { ($0.id, $0.searchableText) },
                                  uniquingKeysWith: { first, _ in first })
     }
 
     private var calendarOptions: [CalendarFilterOption] {
-        Recording.calendarFilterOptions(storage.recordings)
+        Recording.calendarFilterOptions(storage.libraryRecordings)
     }
 
     private var filteredBatches: [TranscriptionBatch] {
@@ -196,9 +196,10 @@ struct RecordingsLibraryView: View {
     private func lifecycle(_ content: some View) -> some View {
         content
         .onAppear {
+            storage.reloadOtherBuildLibrary()
             batchLoadErrorMessage = batchStorage.loadErrorMessage
             rebuildSearchIndex()
-            daysWithRecordings = RecordingsWeek.daysWithRecordings(storage.recordings)
+            daysWithRecordings = RecordingsWeek.daysWithRecordings(storage.libraryRecordings)
             refreshDay()
             openRequestedRecordingIfAvailable()
             openRequestedBatchComposerIfAvailable()
@@ -215,10 +216,10 @@ struct RecordingsLibraryView: View {
         .onChange(of: MainWindowController.shared.requestedRecordingID) {
             openRequestedRecordingIfAvailable()
         }
-        .onChange(of: storage.recordings) {
+        .onChange(of: storage.libraryRecordings) {
             openRequestedRecordingIfAvailable()
             rebuildSearchIndex()
-            daysWithRecordings = RecordingsWeek.daysWithRecordings(storage.recordings)
+            daysWithRecordings = RecordingsWeek.daysWithRecordings(storage.libraryRecordings)
             refreshDay()
         }
         .onChange(of: MainWindowController.shared.requestedBatchComposer) {
@@ -287,7 +288,7 @@ struct RecordingsLibraryView: View {
             } else {
                 batchesCard
             }
-        } else if storage.recordings.isEmpty, dayEvents.isEmpty {
+        } else if storage.libraryRecordings.isEmpty, dayEvents.isEmpty {
             emptyState
         } else if showsList {
             if matchingRecordings.isEmpty { noResultsState } else { recordingsCard }
@@ -577,7 +578,7 @@ struct RecordingsLibraryView: View {
     private var inspectorContent: some View {
         switch inspectorSelection {
         case let .recording(id, parentBatchID):
-            if let recording = storage.recordings.first(where: { $0.id == id }) {
+            if let recording = storage.libraryRecordings.first(where: { $0.id == id }) {
                 RecordingDetailView(
                     recording: recording,
                     parentBatchName: parentBatchID.flatMap { id in

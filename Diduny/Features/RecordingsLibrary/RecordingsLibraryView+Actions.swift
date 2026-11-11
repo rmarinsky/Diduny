@@ -246,6 +246,8 @@ extension RecordingsLibraryView {
     // MARK: - Delete
 
     func requestDelete(_ ids: [UUID], groupID: UUID? = nil) {
+        // The other build's rows are read-only here.
+        let ids = ids.filter { !storage.isOtherBuildRecording($0) }
         guard !ids.isEmpty, RecordingTrimNavigation.shared.requestLeave() else { return }
         pendingDeletion = RecordingsDeletion(recordingIDs: ids, groupID: groupID)
     }

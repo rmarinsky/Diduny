@@ -54,6 +54,22 @@ final class RecordingsLibraryStorage {
     }
 
     private(set) var recordings: [Recording] = []
+    /// The other build's library (production ↔ DEV), read-only: never written, pruned or deleted from here.
+    private(set) var otherBuildRecordings: [Recording] = []
+    private var otherBuildIDs: Set<UUID> = []
+
+    /// This build's recordings plus the other build's; an ID present in both shows this build's row.
+    var libraryRecordings: [Recording] {
+        guard !otherBuildRecordings.isEmpty else { return recordings }
+        let ownIDs = Set(recordings.map(\.id))
+        return (recordings + otherBuildRecordings.filter { !ownIDs.contains($0.id) })
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// True for a row that lives in the other build's library and cannot be changed from here.
+    func isOtherBuildRecording(_ id: UUID) -> Bool {
+        otherBuildIDs.contains(id) && !recordings.contains { $0.id == id }
+    }
     /// Stats of recordings that were deleted (by retention or by hand) or never saved (see `UsageStatRow`).
     private(set) var archivedUsageStats: [UsageStatRow] = []
 
@@ -67,6 +83,7 @@ final class RecordingsLibraryStorage {
     private let fileManager = FileManager.default
     private let appSupportDir: URL
     private let recordingsDir: URL
+    private let otherBuildDir: URL?
     private let metadataURL: URL
     private let usageStatsArchiveURL: URL
     private let deletionRecoveryURL: URL
@@ -91,11 +108,13 @@ final class RecordingsLibraryStorage {
         deletionCommitWriter: ((RecordingDeletionRecovery, URL) -> Bool)? = nil,
         synchronousMetadataWriter: (([Recording], URL) -> Bool)? = nil,
         usageStatsArchiveWriter: (([UsageStatRow], URL) -> Bool)? = nil,
-        audioCompressor: ((URL) async -> URL)? = nil
+        audioCompressor: ((URL) async -> URL)? = nil,
+        otherBuildDirectory: URL? = nil
     ) {
         let fm = FileManager.default
         let appDir = baseDirectory ?? Self.defaultAppDirectory
         appSupportDir = appDir
+        otherBuildDir = otherBuildDirectory ?? (baseDirectory == nil ? Self.defaultOtherBuildDirectory : nil)
         self.batchStorage = batchStorage ?? .shared
         self.deletionRecoveryRemover = deletionRecoveryRemover
         self.deletionCommitWriter = deletionCommitWriter ?? Self.writeDeletionRecovery
@@ -122,6 +141,48 @@ final class RecordingsLibraryStorage {
             usageStatsArchiveWritable = false
         }
         loadAndPrune()
+        reloadOtherBuildLibrary()
+    }
+
+    // MARK: - Other build's library (read-only)
+
+    /// Production reads DEV's library and DEV reads production's; other builds (tests) read none.
+    private nonisolated static var defaultOtherBuildDirectory: URL? {
+        let otherID: String? = switch Bundle.main.bundleIdentifier {
+        case "ua.com.rmarinsky.diduny": "ua.com.rmarinsky.diduny.dev"
+        case "ua.com.rmarinsky.diduny.dev": "ua.com.rmarinsky.diduny"
+        default: nil
+        }
+        guard let otherID else { return nil }
+        return defaultAppDirectory.deletingLastPathComponent().appendingPathComponent(otherID)
+    }
+
+    /// Re-reads the other build's metadata. Only reads files; rows that fail to decode are skipped.
+    func reloadOtherBuildLibrary() {
+        guard let otherBuildDir else { return }
+        let url = otherBuildDir.appendingPathComponent("recordings_metadata.json")
+        Task.detached(priority: .utility) {
+            let loaded = Self.readOtherBuildRecordings(from: url)
+            await MainActor.run {
+                guard loaded != self.otherBuildRecordings else { return }
+                self.otherBuildRecordings = loaded
+                self.otherBuildIDs = Set(loaded.map(\.id))
+            }
+        }
+    }
+
+    private struct LenientRecording: Decodable {
+        let recording: Recording?
+        init(from decoder: Decoder) throws { recording = try? Recording(from: decoder) }
+    }
+
+    /// Live or unfinished rows are left out: the other build still owns them.
+    nonisolated static func readOtherBuildRecordings(from url: URL) -> [Recording] {
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let rows = try? decoder.decode([LenientRecording].self, from: data) else { return [] }
+        return rows.compactMap(\.recording).filter { !$0.status.isInProgressCapture && $0.status != .processing }
     }
 
     // MARK: - Save (from Data — voice/translation)
@@ -1041,7 +1102,14 @@ final class RecordingsLibraryStorage {
     // MARK: - Audio File Access
 
     func audioFileURL(for recording: Recording) -> URL {
-        recordingsDir.appendingPathComponent(recording.audioFileName)
+        recordingsDirectory(for: recording.id).appendingPathComponent(recording.audioFileName)
+    }
+
+    private func recordingsDirectory(for id: UUID) -> URL {
+        if isOtherBuildRecording(id), let otherBuildDir {
+            return otherBuildDir.appendingPathComponent("Recordings")
+        }
+        return recordingsDir
     }
 
     // MARK: - Meeting Tracks (speaker labels)
@@ -1049,7 +1117,7 @@ final class RecordingsLibraryStorage {
     /// The meeting's 2-channel file (channel 1 mic, channel 2 system), if one was kept.
     func tracksFileURL(for id: UUID) -> URL? {
         ["flac", "wav"]
-            .map { recordingsDir.appendingPathComponent("\(id.uuidString).tracks.\($0)") }
+            .map { recordingsDirectory(for: id).appendingPathComponent("\(id.uuidString).tracks.\($0)") }
             .first { fileManager.fileExists(atPath: $0.path) }
     }
 
