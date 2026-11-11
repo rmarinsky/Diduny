@@ -8,11 +8,16 @@ final class UpdaterManager: NSObject, ObservableObject {
 
     @Published var canCheckForUpdates = false
 
-    override init() {
+    /// True while a recording or transcription runs; a silent update waits until it is false.
+    private let isBusy: () -> Bool
+    private var pendingInstallTimer: Timer?
+
+    init(isBusy: @escaping () -> Bool) {
+        self.isBusy = isBusy
         super.init()
         updaterController = SPUStandardUpdaterController(
             startingUpdater: false,
-            updaterDelegate: nil,
+            updaterDelegate: self,
             userDriverDelegate: self
         )
         updaterController.updater.publisher(for: \.canCheckForUpdates)
@@ -22,6 +27,34 @@ final class UpdaterManager: NSObject, ObservableObject {
 
     func checkForUpdates() {
         updaterController.checkForUpdates(nil)
+    }
+}
+
+// MARK: - SPUUpdaterDelegate
+
+extension UpdaterManager: @preconcurrency SPUUpdaterDelegate {
+    /// A silently downloaded update would otherwise wait for the user to quit a menu bar app.
+    /// Install and relaunch right away, but never during a recording or transcription.
+    func updater(
+        _: SPUUpdater,
+        willInstallUpdateOnQuit item: SUAppcastItem,
+        immediateInstallationBlock immediateInstallHandler: @escaping () -> Void
+    ) -> Bool {
+        Log.app.info("Update \(item.displayVersionString) downloaded; installing when idle")
+        pendingInstallTimer?.invalidate()
+        let install = { [weak self] in
+            guard let self, !self.isBusy() else { return false }
+            self.pendingInstallTimer?.invalidate()
+            self.pendingInstallTimer = nil
+            immediateInstallHandler()
+            return true
+        }
+        if !install() {
+            pendingInstallTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+                MainActor.assumeIsolated { _ = install() }
+            }
+        }
+        return true
     }
 }
 

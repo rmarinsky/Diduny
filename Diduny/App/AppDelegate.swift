@@ -161,7 +161,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Services (exposed for SwiftUI access)
 
-    lazy var updaterManager = UpdaterManager()
+    lazy var updaterManager = UpdaterManager { [weak self] in
+        guard let state = self?.appState else { return false }
+        return [
+            state.recordingState,
+            state.translationRecordingState,
+            state.meetingRecordingState,
+            state.meetingTranslationRecordingState,
+        ].contains { $0 == .recording || $0 == .processing }
+    }
     lazy var audioDeviceManager = AudioDeviceManager()
     lazy var audioRecorder = AudioRecorderService()
     lazy var transcriptionService = CloudTranscriptionService()

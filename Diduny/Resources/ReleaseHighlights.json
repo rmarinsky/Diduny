@@ -1,19 +1,17 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Fixes for notes and agents",
+    "headline": "Updates install on their own",
     "highlights": [
-      "Notes are kept safe: they are no longer lost if the recordings library fails to load, and a note that could not be saved says so.",
-      "Notes for earlier recordings pause when you press Pause, and they use only the writer you confirmed. Notes with an Anthropic API key work with the current models.",
-      "The diduny command reads the right library for each Diduny build, and Codex and Gemini CLI run with their tools fully off."
+      "From the next version on, Diduny installs updates in the background and relaunches itself, with no update window.",
+      "An update never interrupts you: it waits until no dictation, translation or meeting is being recorded or transcribed."
     ]
   },
   "uk": {
-    "headline": "Виправлення для нотаток і агентів",
+    "headline": "Оновлення ставляться самі",
     "highlights": [
-      "Нотатки в безпеці: вони більше не зникають, якщо бібліотека записів не завантажилась, а нотатка, яку не вдалося зберегти, про це скаже.",
-      "Нотатки для старих записів справді стають на паузу й пишуться лише тим способом, який ви підтвердили. Нотатки через API-ключ Anthropic працюють з актуальними моделями.",
-      "Команда diduny читає бібліотеку саме своєї збірки Diduny, а Codex і Gemini CLI працюють з повністю вимкненими інструментами."
+      "Починаючи з наступної версії, Diduny сам встановлює оновлення у фоні й перезапускається, без вікна оновлення.",
+      "Оновлення вас не перерве: воно чекає, поки не йде запис чи розпізнавання диктування, перекладу або зустрічі."
     ]
   }
 }
