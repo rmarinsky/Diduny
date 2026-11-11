@@ -28,6 +28,13 @@ enum Render {
         (recording.calendarMeeting?.attendees ?? []).map(\.displayName)
     }
 
+    /// Text other people wrote or said (invitations, transcripts) is marked as data, so an
+    /// agent never mistakes it for instructions. `diduny guide` says the same.
+    static func untrusted(_ source: String, _ text: String) -> String {
+        let safe = text.replacingOccurrences(of: "</untrusted>", with: "</ untrusted>")
+        return "<untrusted source=\"\(source)\">\n\(safe)\n</untrusted>"
+    }
+
     // MARK: - List
 
     static func listMarkdown(_ recordings: [Recording]) -> String {
@@ -82,7 +89,9 @@ enum Render {
                 return text
             }
             if !attendees.isEmpty { out += ["- attendees:"] + attendees.map { "  - \($0)" } }
-            if let notes = meeting.notes?.nilIfBlank { out += ["", "### Agenda and notes from the invitation", notes] }
+            if let notes = meeting.notes?.nilIfBlank {
+                out += ["", "### Agenda and notes from the invitation", untrusted("calendar-invitation", notes)]
+            }
         }
         if let chapters = recording.chapters, !chapters.isEmpty {
             out += ["", "## Chapters"] + chapters.map { "- [\(time($0.timestampSeconds))] \($0.label)" }
@@ -99,7 +108,7 @@ enum Render {
                 out.append(recording.transcriptSegments?.isEmpty == false
                     ? "Lines are `[mm:ss] Speaker: text`. Speakers are numbered by the recognizer, not named."
                     : "This transcript has no timestamps.")
-                out += ["", text]
+                out += ["", untrusted("transcript", text)]
             } else {
                 out.append("No transcript yet (status: \(recording.status.rawValue)).")
             }
