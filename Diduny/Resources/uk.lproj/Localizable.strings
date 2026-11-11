@@ -2359,3 +2359,13 @@
 "Settings agents can change" = "Налаштування, які можуть змінювати агенти";
 "Transcription words, languages, filler words, silence stop and sounds. Addresses, hotkeys, devices and history stay here." = "Слова для транскрипції, мови, слова-паразити, зупинка за тишею і звуки. Адреси, гарячі клавіші, пристрої та історія лишаються тут.";
 "Nobody writes notes yet. Choose a model or a subscription tool in Notes settings." = "Нотатки поки ніхто не пише. Виберіть модель або інструмент підписки в налаштуваннях нотаток.";
+
+/* Notes and the other build's recordings (PR 109) */
+"Recorded in the other Diduny build. Open it there to change it." = "Записано в іншій збірці Diduny. Відкрийте його там, щоб змінити.";
+"Recorded in the other Diduny build. It cannot be selected here." = "Записано в іншій збірці Diduny. Тут його не можна вибрати.";
+"The model declined to write notes for this recording." = "Модель відмовилася писати нотатки для цього запису.";
+"Diduny could not check Codex's MCP servers, so it did not send the transcript. %@" = "Diduny не вдалося перевірити MCP-сервери Codex, тому транскрипт не надіслано. %@";
+"Diduny could not turn off these Codex MCP servers, so it did not send the transcript: %@. Turn them off in Codex or choose another writer." = "Diduny не вдалося вимкнути ці MCP-сервери Codex, тому транскрипт не надіслано: %@. Вимкніть їх у Codex або виберіть інший спосіб.";
+"Paused because you chose another writer. Stop and start again to confirm where the transcripts go." = "Призупинено, бо ви вибрали інший спосіб. Зупиніть і почніть знову, щоб підтвердити, куди підуть транскрипти.";
+"Notes could not be read, so Diduny will not change them. Restart Diduny to try again." = "Нотатки не вдалося прочитати, тому Diduny їх не змінюватиме. Перезапустіть Diduny, щоб спробувати знову.";
+"Diduny could not save the notes: %@" = "Diduny не вдалося зберегти нотатки: %@";
