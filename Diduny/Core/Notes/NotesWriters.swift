@@ -454,27 +454,57 @@ enum CLIRunner {
         }
     }
 
+    /// Output read on other threads; a reader that is still running after the bounded wait
+    /// cannot race the result.
+    private final class Collected: @unchecked Sendable {
+        private let lock = NSLock()
+        private var outData = Data()
+        private var errData = Data()
+        func setOut(_ data: Data) { lock.lock(); outData = data; lock.unlock() }
+        func setErr(_ data: Data) { lock.lock(); errData = data; lock.unlock() }
+        var out: Data { lock.lock(); defer { lock.unlock() }; return outData }
+        var err: Data { lock.lock(); defer { lock.unlock() }; return errData }
+    }
+
     /// Shared between the cancel handler, the timeout and the launch thread.
     private final class LaunchControl: @unchecked Sendable {
         private let lock = NSLock()
         private var process: Process?
-        private(set) var cancelled = false
-        private(set) var timedOut = false
+        private var cancelled = false
+        private var timedOut = false
+
+        /// Both flags read together under the lock, after the process ended.
+        var outcome: (cancelled: Bool, timedOut: Bool) {
+            lock.lock()
+            defer { lock.unlock() }
+            return (cancelled, timedOut)
+        }
 
         func cancel() {
             lock.lock()
             cancelled = true
-            let running = process
             lock.unlock()
-            if running?.isRunning == true { running?.terminate() }
+            stop()
         }
 
         func timeOut() {
             lock.lock()
             timedOut = true
+            lock.unlock()
+            stop()
+        }
+
+        /// SIGTERM first; a tool that ignores it gets SIGKILL 5 s later, which it cannot ignore.
+        private func stop() {
+            lock.lock()
             let running = process
             lock.unlock()
-            if running?.isRunning == true { running?.terminate() }
+            guard let running, running.isRunning else { return }
+            running.terminate()
+            let pid = running.processIdentifier
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                if running.isRunning { kill(pid, SIGKILL) }
+            }
         }
 
         /// Starts the process unless a cancel already came in.
@@ -522,13 +552,12 @@ enum CLIRunner {
                 // The timeout runs from launch, so a tool that stops reading stdin is still stopped.
                 let timer = DispatchWorkItem { control.timeOut() }
                 DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timer)
-                var outData = Data()
-                var errData = Data()
+                let collected = Collected()
                 let group = DispatchGroup()
                 group.enter()
-                DispatchQueue.global().async { outData = output.fileHandleForReading.readDataToEndOfFile(); group.leave() }
+                DispatchQueue.global().async { collected.setOut(output.fileHandleForReading.readDataToEndOfFile()); group.leave() }
                 group.enter()
-                DispatchQueue.global().async { errData = errors.fileHandleForReading.readDataToEndOfFile(); group.leave() }
+                DispatchQueue.global().async { collected.setErr(errors.fileHandleForReading.readDataToEndOfFile()); group.leave() }
                 // The prompt goes on its own thread: a full pipe blocks it, not the timeout.
                 DispatchQueue.global().async {
                     if let stdin { try? input.fileHandleForWriting.write(contentsOf: Data(stdin.utf8)) }
@@ -536,15 +565,18 @@ enum CLIRunner {
                 }
                 process.waitUntilExit()
                 timer.cancel()
-                group.wait()
-                if control.cancelled {
+                // A child the tool started can keep the pipes open after the tool exits; the
+                // result does not wait for it forever.
+                _ = group.wait(timeout: .now() + 10)
+                let outcome = control.outcome
+                if outcome.cancelled {
                     continuation.resume(throwing: CancellationError())
-                } else if control.timedOut {
+                } else if outcome.timedOut {
                     continuation.resume(throwing: NotesError.timedOut)
                 } else {
                     continuation.resume(returning: Result(status: process.terminationStatus,
-                                                          stdout: String(decoding: outData, as: UTF8.self),
-                                                          stderr: String(decoding: errData, as: UTF8.self)))
+                                                          stdout: String(decoding: collected.out, as: UTF8.self),
+                                                          stderr: String(decoding: collected.err, as: UTF8.self)))
                 }
             }
         }

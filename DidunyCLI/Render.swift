@@ -47,7 +47,8 @@ enum Render {
                          recording.displayTitle, people(recording).joined(separator: ", ")]
             lines.append("| " + cells.map { $0.replacingOccurrences(of: "|", with: "/") }.joined(separator: " | ") + " |")
         }
-        return lines.joined(separator: "\n") + "\n\nShow one: `diduny meetings show <id>`\n"
+        // Titles and names can come from an invitation someone else wrote.
+        return untrusted("recordings-list", lines.joined(separator: "\n")) + "\n\nShow one: `diduny meetings show <id>`\n"
     }
 
     static func summary(_ recording: Recording) -> [String: Any] {
@@ -69,7 +70,8 @@ enum Render {
     // MARK: - Show
 
     static func showMarkdown(_ recording: Recording, audioPath: String, includeTranscript: Bool) -> String {
-        var out = ["# \(recording.displayTitle)", ""]
+        // The title can be an invitation's title, so it goes in a data block too.
+        var out = ["# Recording \(shortID(recording))", "", untrusted("title", recording.displayTitle), ""]
         out.append("- id: \(recording.id.uuidString)")
         out.append("- type: \(recording.type.rawValue)")
         out.append("- start: \(date(recording.createdAt))")

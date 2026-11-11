@@ -57,6 +57,9 @@ final class RecordingsLibraryStorage {
     /// True once the metadata file was read and decoded. While false, `recordings` being empty
     /// says nothing about what is on disk, so nothing may treat it as "every recording was deleted".
     private(set) var hasLoadedLibrary = false
+    /// True when the last load kept every decoded row, so `recordings` (even empty) is the
+    /// whole library. Rows hidden because their audio is missing make it false.
+    private(set) var loadIsComplete = false
     /// The other build's library (production ↔ DEV), read-only: never written, pruned or deleted from here.
     private(set) var otherBuildRecordings: [Recording] = []
     private var otherBuildIDs: Set<UUID> = []
@@ -1173,7 +1176,7 @@ final class RecordingsLibraryStorage {
         let recoveryURL = deletionRecoveryURL
         let removeRecovery = deletionRecoveryRemover
         let recDir = recordingsDir
-        let result: (recordings: [Recording], resetInterrupted: Bool)? = {
+        let result: (recordings: [Recording], resetInterrupted: Bool, complete: Bool)? = {
             let data: Data
             if !hasCommittedDeletion,
                let recoveryData = try? Data(contentsOf: recoveryURL),
@@ -1231,11 +1234,13 @@ final class RecordingsLibraryStorage {
                 decoder.dateDecodingStrategy = .iso8601
                 var loaded = try decoder.decode([Recording].self, from: data)
                 let resetInterrupted = Self.resetInterruptedProcessingStates(in: &loaded)
+                var complete = true
                 // Prune orphans with a single directory scan instead of per-file fileExists
                 if let contents = try? FileManager.default.contentsOfDirectory(
                     at: recDir, includingPropertiesForKeys: nil
                 ) {
                     let names = Set(contents.map(\.lastPathComponent))
+                    let decodedCount = loaded.count
                     loaded.removeAll { recording in
                         // Live / needs-recovery rows may have no durable audio yet.
                         if recording.audioFileName.isEmpty {
@@ -1243,8 +1248,9 @@ final class RecordingsLibraryStorage {
                         }
                         return !names.contains(recording.audioFileName)
                     }
+                    complete = loaded.count == decodedCount
                 }
-                return (loaded, resetInterrupted)
+                return (loaded, resetInterrupted, complete)
             } catch {
                 Log.app.error("Failed to load recordings metadata: \(error.localizedDescription)")
                 return nil
@@ -1256,6 +1262,7 @@ final class RecordingsLibraryStorage {
         if let result {
             recordings = result.recordings
             hasLoadedLibrary = true
+            loadIsComplete = result.complete
             if result.resetInterrupted {
                 saveMetadata()
             }

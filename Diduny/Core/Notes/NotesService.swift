@@ -11,23 +11,30 @@ final class NotesStore {
     static let shared = NotesStore()
 
     private(set) var notes: [RecordingNote] = []
+    /// Shown under the notes when a change could not be saved.
+    private(set) var lastError: String?
+    /// False when notes.json exists but could not be read or moved aside: saving would
+    /// replace notes that are still on disk.
+    private var isWritable = true
     private let fileURL: URL
 
     init(directory: URL? = nil) {
         let appDirectory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first!.appendingPathComponent(Bundle.main.bundleIdentifier ?? "Diduny")
         fileURL = appDirectory.appendingPathComponent("notes.json")
-        guard let data = try? Data(contentsOf: fileURL) else { return }
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        if let decoded = try? decoder.decode([RecordingNote].self, from: data) {
+        if let data = try? Data(contentsOf: fileURL), let decoded = try? decoder.decode([RecordingNote].self, from: data) {
             notes = decoded
-        } else {
-            // Keep an unreadable file (for example from a newer build) instead of overwriting
-            // it with the next save.
-            let aside = fileURL.deletingPathExtension()
-                .appendingPathExtension("unreadable-\(Int(Date().timeIntervalSince1970)).json")
-            try? FileManager.default.moveItem(at: fileURL, to: aside)
+            return
+        }
+        // Keep an unreadable file (for example from a newer build) instead of overwriting it.
+        let aside = fileURL.deletingPathExtension()
+            .appendingPathExtension("unreadable-\(Int(Date().timeIntervalSince1970)).json")
+        if (try? FileManager.default.moveItem(at: fileURL, to: aside)) == nil {
+            isWritable = false
+            lastError = String(localized: "Notes could not be read, so Diduny will not change them. Restart Diduny to try again.")
         }
     }
 
@@ -43,10 +50,10 @@ final class NotesStore {
         try commit(next)
     }
 
-    func delete(recordingID: UUID) {
+    func delete(recordingID: UUID) throws {
         var next = notes
         next.removeAll { $0.recordingID == recordingID }
-        try? commit(next)
+        try commit(next)
     }
 
     func setDone(_ done: Bool, item: UUID, in noteID: UUID) {
@@ -55,6 +62,7 @@ final class NotesStore {
         var next = notes
         next[noteIndex].actionItems[itemIndex].done = done
         try? commit(next)
+        // The checkbox snaps back; lastError says why.
     }
 
     /// Drops notes whose recording was deleted.
@@ -66,6 +74,17 @@ final class NotesStore {
 
     /// Writes first, then updates memory, so a failed write changes nothing.
     private func commit(_ next: [RecordingNote]) throws {
+        guard isWritable else { throw CocoaError(.fileWriteNoPermission) }
+        do {
+            try write(next)
+            lastError = nil
+        } catch {
+            lastError = String(localized: "Diduny could not save the notes: \(error.localizedDescription)")
+            throw error
+        }
+    }
+
+    private func write(_ next: [RecordingNote]) throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(next)
@@ -182,7 +201,7 @@ final class NotesService {
     private func queueAutomaticNotes() {
         // Only an authoritative library: a failed or partial load must never read as
         // "every recording was deleted" and wipe the notes.
-        if library.hasLoadedLibrary, !library.recordings.isEmpty {
+        if library.hasLoadedLibrary, library.loadIsComplete {
             store.prune(keeping: Set(library.recordings.map(\.id)))
         }
         guard NotesSettings.writer != .off else { return }

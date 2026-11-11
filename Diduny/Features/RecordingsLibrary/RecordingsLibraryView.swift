@@ -322,7 +322,8 @@ struct RecordingsLibraryView: View {
                 requestInspectorSelection(.recording(id, parentBatchID: nil))
                 titleFocusRecordingID = id
             },
-            toggleSelection: { toggleSelection($0) }
+            toggleSelection: { toggleSelection($0) },
+            isReadOnly: { storage.isOtherBuildRecording($0) }
         )
     }
 

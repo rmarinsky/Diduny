@@ -105,7 +105,7 @@ struct NoteActions: View {
                 }
                 Button("Save as Markdown...") { saveMarkdown() }
                 Divider()
-                Button("Delete the notes", role: .destructive) { NotesStore.shared.delete(recordingID: note.recordingID) }
+                Button("Delete the notes", role: .destructive) { try? NotesStore.shared.delete(recordingID: note.recordingID) }
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -154,6 +154,9 @@ struct NoteBody: View {
                         ForEach(removed, id: \.self) { Text($0).font(DS.Font.callout).foregroundStyle(.secondary).strikethrough() }
                     }
                 }
+            }
+            if let error = NotesStore.shared.lastError {
+                Text(error).font(DS.Font.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }
             Text(footer).font(DS.Font.caption).foregroundStyle(.secondary)
         }
