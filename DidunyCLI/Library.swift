@@ -25,11 +25,20 @@ struct Library {
 
     /// `Diduny.app/Contents/Helpers/diduny`, reached directly or through a symlink in PATH.
     static func enclosingAppBundleIdentifier() -> String? {
-        let executable = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
-        let resolved = executable.path.hasPrefix("/") ? executable : URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
-        let app = resolved.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        guard app.pathExtension == "app" else { return nil }
-        return Bundle(url: app)?.bundleIdentifier
+        enclosingAppURL().flatMap { Bundle(url: $0)?.bundleIdentifier }
+    }
+
+    /// The app this binary ships in. Uses the kernel's path of the running executable, not
+    /// `argv[0]`: a shell that finds `diduny-dev` through PATH passes just the name, which
+    /// would make the DEV tool read the release library and settings.
+    static func enclosingAppURL() -> URL? {
+        var size: UInt32 = 0
+        _ = _NSGetExecutablePath(nil, &size)
+        var buffer = [CChar](repeating: 0, count: Int(size))
+        guard _NSGetExecutablePath(&buffer, &size) == 0 else { return nil }
+        let executable = URL(fileURLWithPath: String(cString: buffer)).resolvingSymlinksInPath()
+        let app = executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        return app.pathExtension == "app" ? app : nil
     }
 
     var metadataURL: URL { directory.appendingPathComponent("recordings_metadata.json") }

@@ -2359,3 +2359,13 @@
 "Settings agents can change" = "Settings agents can change";
 "Transcription words, languages, filler words, silence stop and sounds. Addresses, hotkeys, devices and history stay here." = "Transcription words, languages, filler words, silence stop and sounds. Addresses, hotkeys, devices and history stay here.";
 "Nobody writes notes yet. Choose a model or a subscription tool in Notes settings." = "Nobody writes notes yet. Choose a model or a subscription tool in Notes settings.";
+
+/* Notes and the other build's recordings (PR 109) */
+"Recorded in the other Diduny build. Open it there to change it." = "Recorded in the other Diduny build. Open it there to change it.";
+"Recorded in the other Diduny build. It cannot be selected here." = "Recorded in the other Diduny build. It cannot be selected here.";
+"The model declined to write notes for this recording." = "The model declined to write notes for this recording.";
+"Diduny could not check Codex's MCP servers, so it did not send the transcript. %@" = "Diduny could not check Codex's MCP servers, so it did not send the transcript. %@";
+"Diduny could not turn off these Codex MCP servers, so it did not send the transcript: %@. Turn them off in Codex or choose another writer." = "Diduny could not turn off these Codex MCP servers, so it did not send the transcript: %@. Turn them off in Codex or choose another writer.";
+"Paused because you chose another writer. Stop and start again to confirm where the transcripts go." = "Paused because you chose another writer. Stop and start again to confirm where the transcripts go.";
+"Notes could not be read, so Diduny will not change them. Restart Diduny to try again." = "Notes could not be read, so Diduny will not change them. Restart Diduny to try again.";
+"Diduny could not save the notes: %@" = "Diduny could not save the notes: %@";

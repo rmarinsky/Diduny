@@ -31,9 +31,11 @@ enum Render {
     /// Text other people wrote or said (invitations, transcripts) is marked as data, so an
     /// agent never mistakes it for instructions. `diduny guide` says the same.
     static func untrusted(_ source: String, _ text: String) -> String {
-        let safe = text.replacingOccurrences(of: "</untrusted>", with: "</ untrusted>")
-        return "<untrusted source=\"\(source)\">\n\(safe)\n</untrusted>"
+        // A random tag per run: text inside cannot close the block, because it cannot know the tag.
+        "<\(untrustedTag) source=\"\(source)\">\n\(text)\n</\(untrustedTag)>"
     }
+
+    static let untrustedTag = "untrusted-" + UUID().uuidString.prefix(8).lowercased()
 
     // MARK: - List
 
@@ -45,7 +47,8 @@ enum Render {
                          recording.displayTitle, people(recording).joined(separator: ", ")]
             lines.append("| " + cells.map { $0.replacingOccurrences(of: "|", with: "/") }.joined(separator: " | ") + " |")
         }
-        return lines.joined(separator: "\n") + "\n\nShow one: `diduny meetings show <id>`\n"
+        // Titles and names can come from an invitation someone else wrote.
+        return untrusted("recordings-list", lines.joined(separator: "\n")) + "\n\nShow one: `diduny meetings show <id>`\n"
     }
 
     static func summary(_ recording: Recording) -> [String: Any] {
@@ -67,20 +70,23 @@ enum Render {
     // MARK: - Show
 
     static func showMarkdown(_ recording: Recording, audioPath: String, includeTranscript: Bool) -> String {
-        var out = ["# \(recording.displayTitle)", ""]
+        // The title can be an invitation's title, so it goes in a data block too.
+        var out = ["# Recording \(shortID(recording))", "", untrusted("title", recording.displayTitle), ""]
         out.append("- id: \(recording.id.uuidString)")
         out.append("- type: \(recording.type.rawValue)")
         out.append("- start: \(date(recording.createdAt))")
         out.append("- length: \(minutes(recording))")
         out.append("- status: \(recording.status.rawValue)")
         out.append("- audio: \(audioPath)")
-        if let description = recording.description?.nilIfBlank { out += ["", "## Description", description] }
+        if let description = recording.description?.nilIfBlank {
+            out += ["", "## Description", untrusted("description", description)]
+        }
         if let meeting = recording.calendarMeeting {
-            out += ["", "## Calendar event", "- title: \(meeting.title)"]
-            out.append("- scheduled: \(date(meeting.start)) to \(date(meeting.end))")
-            if let calendar = meeting.calendarTitle { out.append("- calendar: \(calendar)") }
-            if let location = meeting.location?.nilIfBlank { out.append("- location: \(location)") }
-            if let url = meeting.meetingURL { out.append("- meeting link: \(url.absoluteString)") }
+            // Every field of an invitation is written by whoever sent it.
+            var event = ["- title: \(meeting.title)", "- scheduled: \(date(meeting.start)) to \(date(meeting.end))"]
+            if let calendar = meeting.calendarTitle { event.append("- calendar: \(calendar)") }
+            if let location = meeting.location?.nilIfBlank { event.append("- location: \(location)") }
+            if let url = meeting.meetingURL { event.append("- meeting link: \(url.absoluteString)") }
             let attendees = (meeting.attendees ?? []).map { attendee -> String in
                 var text = attendee.displayName
                 if let email = attendee.email, email != text { text += " <\(email)>" }
@@ -88,13 +94,12 @@ enum Render {
                 if attendee.isCurrentUser { text += " (you)" }
                 return text
             }
-            if !attendees.isEmpty { out += ["- attendees:"] + attendees.map { "  - \($0)" } }
-            if let notes = meeting.notes?.nilIfBlank {
-                out += ["", "### Agenda and notes from the invitation", untrusted("calendar-invitation", notes)]
-            }
+            if !attendees.isEmpty { event += ["- attendees:"] + attendees.map { "  - \($0)" } }
+            if let notes = meeting.notes?.nilIfBlank { event += ["", "Agenda and notes from the invitation:", notes] }
+            out += ["", "## Calendar event", untrusted("calendar-invitation", event.joined(separator: "\n"))]
         }
         if let chapters = recording.chapters, !chapters.isEmpty {
-            out += ["", "## Chapters"] + chapters.map { "- [\(time($0.timestampSeconds))] \($0.label)" }
+            out += ["", "## Chapters", untrusted("chapters", chapters.map { "- [\(time($0.timestampSeconds))] \($0.label)" }.joined(separator: "\n"))]
         }
         let versions = recording.resolvedTranscriptHistory
         if versions.count > 1 {
@@ -205,7 +210,8 @@ enum Render {
             let speaker = hit.speaker.map { "\($0): " } ?? ""
             lines.append("- \(time)\(speaker)\(hit.text)")
         }
-        return lines.joined(separator: "\n").trimmingCharacters(in: .newlines) + "\n"
+        // Matches are other people's words and invitation text.
+        return untrusted("search-results", lines.joined(separator: "\n").trimmingCharacters(in: .newlines)) + "\n"
     }
 
     static func json(_ object: Any) -> String {

@@ -322,7 +322,8 @@ struct RecordingsLibraryView: View {
                 requestInspectorSelection(.recording(id, parentBatchID: nil))
                 titleFocusRecordingID = id
             },
-            toggleSelection: { toggleSelection($0) }
+            toggleSelection: { toggleSelection($0) },
+            isReadOnly: { storage.isOtherBuildRecording($0) }
         )
     }
 
@@ -643,6 +644,21 @@ struct RecordingsLibraryView: View {
 
     @ViewBuilder
     private func recordingContextMenu(for recording: Recording) -> some View {
+        if storage.isOtherBuildRecording(recording.id) {
+            // Read-only here: only copying, and a line that says why the rest is missing.
+            Text("Recorded in the other Diduny build. Open it there to change it.")
+            if let text = recording.displayTranscriptText {
+                Button("Copy Text") {
+                    ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
+                }
+            }
+        } else {
+            localRecordingContextMenu(for: recording)
+        }
+    }
+
+    @ViewBuilder
+    private func localRecordingContextMenu(for recording: Recording) -> some View {
         if recording.status == .needsRecovery {
             Button("Process Now") {
                 resolveRecovery(recording, action: .processNow)

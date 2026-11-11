@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Notes from your meetings, written by a model you choose",
+    "headline": "Fixes for notes and agents",
     "highlights": [
-      "Diduny writes notes from a meeting or voice note: summary, decisions, action items and open questions. A model on this Mac, Claude Code, Codex or Gemini CLI on your own subscription, or an API key writes them.",
-      "Your AI agents can read your meetings: install the diduny command in Settings > General > Agents, and Claude Code or Codex learns how to search and quote them.",
-      "New sliders for playback and audio levels, and the paste animation is back."
+      "Notes are kept safe: they are no longer lost if the recordings library fails to load, and a note that could not be saved says so.",
+      "Notes for earlier recordings pause when you press Pause, and they use only the writer you confirmed. Notes with an Anthropic API key work with the current models.",
+      "The diduny command reads the right library for each Diduny build, and Codex and Gemini CLI run with their tools fully off."
     ]
   },
   "uk": {
-    "headline": "Нотатки зустрічей від моделі, яку ви оберете",
+    "headline": "Виправлення для нотаток і агентів",
     "highlights": [
-      "Diduny пише нотатки із зустрічі чи голосової нотатки: підсумок, рішення, завдання й відкриті питання. Пише модель на цьому Mac, Claude Code, Codex чи Gemini CLI за вашою підпискою або API-ключ.",
-      "Ваші ШІ-агенти можуть читати зустрічі: встановіть команду diduny в Налаштування > Загальні > Агенти, і Claude Code чи Codex навчиться шукати й цитувати їх.",
-      "Нові повзунки для відтворення й рівнів звуку, і повернулася анімація вставлення."
+      "Нотатки в безпеці: вони більше не зникають, якщо бібліотека записів не завантажилась, а нотатка, яку не вдалося зберегти, про це скаже.",
+      "Нотатки для старих записів справді стають на паузу й пишуться лише тим способом, який ви підтвердили. Нотатки через API-ключ Anthropic працюють з актуальними моделями.",
+      "Команда diduny читає бібліотеку саме своєї збірки Diduny, а Codex і Gemini CLI працюють з повністю вимкненими інструментами."
     ]
   }
 }

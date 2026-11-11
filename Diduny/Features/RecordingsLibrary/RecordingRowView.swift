@@ -122,6 +122,10 @@ struct RecordingRowView: View {
         .accessibilityLabel(Text(line))
     }
 
+    private var isReadOnly: Bool {
+        RecordingsLibraryStorage.shared.isOtherBuildRecording(recording.id)
+    }
+
     private var selectionButton: some View {
         Button {
             onToggleSelection?()
@@ -137,8 +141,12 @@ struct RecordingRowView: View {
             .labelStyle(.iconOnly)
         }
         .buttonStyle(.plain)
-        .help(isSelected ? "Deselect recording" : "Select recording")
+        // The other build's recordings are read-only here, so they cannot be selected.
+        .disabled(isReadOnly)
+        .help(isReadOnly ? "Recorded in the other Diduny build. It cannot be selected here."
+            : isSelected ? "Deselect recording" : "Select recording")
         .accessibilityLabel(Text(isSelected ? "Deselect recording" : "Select recording"))
+        .accessibilityHint(isReadOnly ? Text("Recorded in the other Diduny build. It cannot be selected here.") : Text(""))
         .accessibilityIdentifier(isSelected ? "Recording selected" : "Recording not selected")
     }
 

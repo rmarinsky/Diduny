@@ -11,6 +11,8 @@ struct RecordingsDayActions {
     /// A recording dragged out of its event and dropped outside every event.
     var detachByDrag: (UUID) -> Void
     var toggleSelection: (UUID) -> Void
+    /// The other build's recordings: shown, never changed or selected here.
+    var isReadOnly: (UUID) -> Bool = { _ in false }
 }
 
 /// Variant B: a week strip, then the day on an hour scale. Events with their recordings inside, unattached
@@ -445,6 +447,7 @@ struct RecordingsDayView<FileRow: View>: View {
         .draggable(recording.id.uuidString) { dragPreview(recording) }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+        .contextMenu { readOnlyMenu(recording) }
         .accessibilityIdentifier("recordings.day.attached")
     }
 
@@ -458,6 +461,24 @@ struct RecordingsDayView<FileRow: View>: View {
         }
     }
 
+    /// Recordings of a notes group that selection can act on.
+    private func selectable(_ group: RecordingsDay.NotesGroup) -> [Recording] {
+        group.recordings.filter { !actions.isReadOnly($0.id) }
+    }
+
+    /// The other build's recordings get the read-only menu here too, as in the list.
+    @ViewBuilder
+    private func readOnlyMenu(_ recording: Recording) -> some View {
+        if actions.isReadOnly(recording.id) {
+            Text("Recorded in the other Diduny build. Open it there to change it.")
+            if let text = recording.displayTranscriptText {
+                Button("Copy Text") {
+                    ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
+                }
+            }
+        }
+    }
+
     private func notesBlock(_ group: RecordingsDay.NotesGroup, frame: RecordingsDayPlacement.Frame) -> some View {
         let expanded = expandedNotes.contains(group.key)
         let isOn = !isSelectionMode && openSelection == .notes(group.key)
@@ -466,7 +487,7 @@ struct RecordingsDayView<FileRow: View>: View {
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .top, spacing: 6) {
                 if isSelectionMode {
-                    checkmark(group.recordings.allSatisfy { selectedRecordingIDs.contains($0.id) })
+                    checkmark(!selectable(group).isEmpty && selectable(group).allSatisfy { selectedRecordingIDs.contains($0.id) })
                 } else {
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
                         .rotationEffect(.degrees(expanded ? 90 : 0))
@@ -508,8 +529,9 @@ struct RecordingsDayView<FileRow: View>: View {
         .contentShape(Rectangle())
         .onTapGesture {
             if isSelectionMode {
-                let all = group.recordings.allSatisfy { selectedRecordingIDs.contains($0.id) }
-                group.recordings.filter { selectedRecordingIDs.contains($0.id) == all }.forEach { actions.toggleSelection($0.id) }
+                let members = selectable(group)
+                let all = members.allSatisfy { selectedRecordingIDs.contains($0.id) }
+                members.filter { selectedRecordingIDs.contains($0.id) == all }.forEach { actions.toggleSelection($0.id) }
             } else {
                 if expanded { expandedNotes.remove(group.key) } else { expandedNotes.insert(group.key) }
                 actions.openNotes(group.key)
@@ -606,6 +628,7 @@ struct RecordingsDayView<FileRow: View>: View {
         .draggable(recording.id.uuidString) { dragPreview(recording) }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+        .contextMenu { readOnlyMenu(recording) }
         .accessibilityIdentifier("recordings.day.recording")
     }
 

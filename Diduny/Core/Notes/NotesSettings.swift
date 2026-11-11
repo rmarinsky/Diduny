@@ -299,24 +299,40 @@ enum NotesSettings {
     static var meetingTiming: NotesMeetingTiming {
         get { value("meetingTiming2", .onRequest) }
         set {
+            let wasOn = meetingTiming != .onRequest
             set("meetingTiming2", newValue)
-            if newValue != .onRequest { autoNotesSince = autoNotesSince ?? Date() }
+            if newValue == .onRequest { meetingAutoSince = nil } else if !wasOn || meetingAutoSince == nil { meetingAutoSince = Date() }
         }
     }
 
     static var voiceTiming: NotesVoiceTiming {
         get { value("voiceTiming2", .onRequest) }
         set {
+            let wasOn = voiceTiming != .onRequest
             set("voiceTiming2", newValue)
-            if newValue != .onRequest { autoNotesSince = autoNotesSince ?? Date() }
+            if newValue == .onRequest { voiceAutoSince = nil } else if !wasOn || voiceAutoSince == nil { voiceAutoSince = Date() }
         }
     }
 
-    /// Automatic notes cover only recordings made after they were turned on, so turning
-    /// them on never sends the whole library to a model.
-    static var autoNotesSince: Date? {
-        get { defaults.object(forKey: "notes.autoSince") as? Date }
-        set { defaults.set(newValue, forKey: "notes.autoSince") }
+    /// Automatic notes cover only recordings made after they were turned on, separately for
+    /// meetings and voice notes, so turning one on never sends earlier recordings of that kind.
+    static var meetingAutoSince: Date? {
+        get { defaults.object(forKey: "notes.meetingAutoSince") as? Date }
+        set { defaults.set(newValue, forKey: "notes.meetingAutoSince") }
+    }
+
+    static var voiceAutoSince: Date? {
+        get { defaults.object(forKey: "notes.voiceAutoSince") as? Date }
+        set { defaults.set(newValue, forKey: "notes.voiceAutoSince") }
+    }
+
+    /// v2.20.0 kept one date for both kinds, which let old voice notes through. Each kind
+    /// that is on starts from now instead; earlier ones go through Earlier recordings.
+    static func migrateAutoDates() {
+        guard defaults.object(forKey: "notes.autoSince") != nil else { return }
+        defaults.removeObject(forKey: "notes.autoSince")
+        if meetingTiming != .onRequest, meetingAutoSince == nil { meetingAutoSince = Date() }
+        if voiceTiming != .onRequest, voiceAutoSince == nil { voiceAutoSince = Date() }
     }
 
     static var waitForPower: Bool {

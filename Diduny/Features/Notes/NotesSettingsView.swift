@@ -465,16 +465,25 @@ private struct CLIToolRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: DS.Space.md) {
-                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(isSelected ? DS.Palette.accent : .secondary)
-                    .opacity(isApproved ? 1 : 0.4)
-                    .frame(width: 16)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(kind.label).font(DS.Font.body)
-                    Text(status).font(DS.Font.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                // A button, so the writer can be chosen with the keyboard and VoiceOver.
+                Button { selected = kind } label: {
+                    HStack(alignment: .center, spacing: DS.Space.md) {
+                        Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                            .foregroundStyle(isSelected ? DS.Palette.accent : .secondary)
+                            .opacity(isApproved ? 1 : 0.4)
+                            .frame(width: 16)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(kind.label).font(DS.Font.body)
+                            Text(status).font(DS.Font.callout).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: DS.Space.lg)
+                    }
+                    .contentShape(Rectangle())
                 }
-                Spacer(minLength: DS.Space.lg)
+                .buttonStyle(.plain)
+                .disabled(!isApproved)
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
                 if !searched {
                     ProgressView().controlSize(.small)
                 } else if path == nil {
@@ -490,9 +499,6 @@ private struct CLIToolRow: View {
             }
             .padding(.vertical, DS.Space.md)
             .padding(.horizontal, DS.Space.lg)
-            .contentShape(Rectangle())
-            .onTapGesture { if isApproved { selected = kind } }
-            .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             if isSelected, kind != .gemini {
                 ToolDetail {
                     DetailLine(label: "Model", note: "Counts toward your \(kind.label) plan.") { ModelTierPicker(kind: kind) }
@@ -568,20 +574,22 @@ private struct APIKeyRows: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: DS.Space.md) {
-                Image(systemName: selected == .apiKey ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(selected == .apiKey ? DS.Palette.accent : .secondary)
-                    .frame(width: 16)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("API key").font(DS.Font.body)
-                    Text("Paid per use, not by a plan.").font(DS.Font.callout).foregroundStyle(.secondary)
+            Button { selected = .apiKey } label: {
+                HStack(alignment: .center, spacing: DS.Space.md) {
+                    Image(systemName: selected == .apiKey ? "largecircle.fill.circle" : "circle")
+                        .foregroundStyle(selected == .apiKey ? DS.Palette.accent : .secondary)
+                        .frame(width: 16)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("API key").font(DS.Font.body)
+                        Text("Paid per use, not by a plan.").font(DS.Font.callout).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: DS.Space.lg)
                 }
-                Spacer(minLength: DS.Space.lg)
+                .padding(.vertical, DS.Space.md)
+                .padding(.horizontal, DS.Space.lg)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, DS.Space.md)
-            .padding(.horizontal, DS.Space.lg)
-            .contentShape(Rectangle())
-            .onTapGesture { selected = .apiKey }
+            .buttonStyle(.plain)
             .accessibilityAddTraits(selected == .apiKey ? [.isSelected] : [])
             if selected == .apiKey {
                 ToolDetail {

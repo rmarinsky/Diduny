@@ -144,6 +144,9 @@ extension RecordingsLibraryView {
     }
 
     func toggleSelection(_ id: UUID) {
+        // The other build's recordings are read-only: grouping, deleting and the inspector
+        // act only on this build's rows, so they cannot be selected.
+        guard !storage.isOtherBuildRecording(id) else { return }
         if selectedRecordingIds.contains(id) { selectedRecordingIds.remove(id) } else { selectedRecordingIds.insert(id) }
         if !selectedRecordingIds.isEmpty, inspectorSelection != .selection { requestInspectorSelection(.selection) }
     }

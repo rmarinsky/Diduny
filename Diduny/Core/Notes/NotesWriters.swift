@@ -178,17 +178,19 @@ struct APIKeyWriter: NotesWriter {
     func complete(prompt: String, schema: [String: Any]) async throws -> String {
         switch provider {
         case .anthropic:
+            // Current models reject a forced tool_choice, so the JSON comes from structured
+            // outputs: the first text block is valid JSON that follows the schema.
             let reply = try await HTTPJSON.post("https://api.anthropic.com/v1/messages", body: [
-                "model": model, "max_tokens": 8000,
-                "tools": [["name": "notes", "description": "Return the notes.", "input_schema": schema]],
-                "tool_choice": ["type": "tool", "name": "notes"],
-                "messages": [["role": "user", "content": prompt]]
+                "model": model, "max_tokens": 16000,
+                "messages": [["role": "user", "content": prompt]],
+                "output_config": ["format": ["type": "json_schema", "schema": schema]]
             ], headers: ["x-api-key": key, "anthropic-version": "2023-06-01"])
-            let input = ((reply["content"] as? [[String: Any]]) ?? []).first { $0["type"] as? String == "tool_use" }?["input"]
-            guard let input, let data = try? JSONSerialization.data(withJSONObject: input) else {
-                throw NotesError.unreadableAnswer
+            if reply["stop_reason"] as? String == "refusal" {
+                throw NotesError.server(String(localized: "The model declined to write notes for this recording."))
             }
-            return String(decoding: data, as: UTF8.self)
+            let text = ((reply["content"] as? [[String: Any]]) ?? []).first { $0["type"] as? String == "text" }?["text"] as? String
+            guard let text else { throw NotesError.unreadableAnswer }
+            return text
         case .openAI:
             return try await OpenAIChat.complete(address: "https://api.openai.com", key: key, model: model, prompt: prompt, schema: schema)
         case .other:
@@ -273,17 +275,9 @@ struct CLIWriter: NotesWriter {
             let schemaURL = work.appendingPathComponent("schema.json")
             let answerURL = work.appendingPathComponent("answer.json")
             try Data(JSONSchema.text(schema).utf8).write(to: schemaURL)
-            var arguments = ["exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only",
-                             "--config", "features.plugins=false", "--config", "features.apps=false",
-                             // No shell and no web search: a transcript that contains instructions
-                             // must not be able to make Codex read files or fetch pages.
-                             // Checked with codex-cli 0.166.0: without unified_exec off it still runs shell commands.
-                             "--config", "features.shell_tool=false", "--config", "features.unified_exec=false",
-                             "--config", "features.browser_use=false", "--config", "features.computer_use=false",
-                             "--config", "features.in_app_browser=false", "--config", "features.code_mode_host=false",
-                             "--config", "web_search=\"disabled\"",
-                             "--output-schema", schemaURL.path, "--output-last-message", answerURL.path]
-            if let mcpOff = Self.codexMCPServersOff() { arguments += ["--config", mcpOff] }
+            var arguments = ["exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only"] + Self.codexLockdown
+                + ["--output-schema", schemaURL.path, "--output-last-message", answerURL.path]
+            if let mcpOff = try await Self.codexMCPServersOff(executable: executable, in: work) { arguments += ["--config", mcpOff] }
             if let effort = tier.codexEffort { arguments += ["--config", "model_reasoning_effort=\"\(effort)\""] }
             arguments.append("-")
             let run = try await CLIRunner.run(executable, arguments, stdin: prompt, in: work)
@@ -313,21 +307,45 @@ struct CLIWriter: NotesWriter {
         }
     }
 
-    /// `mcp_servers={}` merges instead of replacing, so each configured server is turned off by name.
-    static func codexMCPServersOff() -> String? {
-        let home = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? "\(NSHomeDirectory())/.codex"
-        guard let config = try? String(contentsOfFile: "\(home)/config.toml", encoding: .utf8) else { return nil }
-        var names: [String] = []
-        for line in config.split(separator: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard trimmed.hasPrefix("[mcp_servers."), trimmed.hasSuffix("]") else { continue }
-            var name = String(trimmed.dropFirst("[mcp_servers.".count).dropLast())
-            if name.contains("."), !name.hasPrefix("\"") { continue } // a sub-table such as [mcp_servers.x.env]
-            name = name.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-            if !names.contains(name) { names.append(name) }
+    /// Settings that keep Codex from reading files, running commands or fetching pages.
+    /// No shell and no web search: a transcript that contains instructions must not be able to
+    /// make Codex read files or fetch pages. Checked with codex-cli 0.166.0: without
+    /// unified_exec off it still runs shell commands.
+    static let codexLockdown: [String] = [
+        "--config", "features.plugins=false", "--config", "features.apps=false",
+        "--config", "features.shell_tool=false", "--config", "features.unified_exec=false",
+        "--config", "features.browser_use=false", "--config", "features.computer_use=false",
+        "--config", "features.in_app_browser=false", "--config", "features.code_mode_host=false",
+        "--config", "web_search=\"disabled\""
+    ]
+
+    /// Every MCP server Codex would load, from Codex itself (`codex mcp list --json`, which
+    /// also covers servers from plugins and every TOML form), turned off by name. Codex is then
+    /// asked again with the override applied; if any server is still on, the run is refused.
+    /// `mcp_servers={}` merges instead of replacing, so servers must be named.
+    static func codexMCPServersOff(executable: String, in work: URL) async throws -> String? {
+        func enabledServers(_ extra: [String]) async throws -> [String] {
+            let run = try await CLIRunner.run(executable, ["mcp", "list", "--json"] + codexLockdown + extra,
+                                              stdin: nil, in: work, timeout: 30)
+            guard run.status == 0,
+                  let list = (try? JSONSerialization.jsonObject(with: Data(run.stdout.utf8))) as? [[String: Any]] else {
+                throw NotesError.tool(String(localized: "Diduny could not check Codex's MCP servers, so it did not send the transcript. \(run.errorSummary)"))
+            }
+            return list.filter { $0["enabled"] as? Bool != false }.compactMap { $0["name"] as? String }
         }
+        let names = try await enabledServers([])
         guard !names.isEmpty else { return nil }
-        return "mcp_servers={" + names.map { "\"\($0)\"={enabled=false}" }.joined(separator: ",") + "}"
+        let override = "mcp_servers={" + names.map { "\(tomlString($0))={enabled=false}" }.joined(separator: ",") + "}"
+        let stillOn = try await enabledServers(["--config", override])
+        guard stillOn.isEmpty else {
+            throw NotesError.tool(String(localized: "Diduny could not turn off these Codex MCP servers, so it did not send the transcript: \(stillOn.joined(separator: ", ")). Turn them off in Codex or choose another writer."))
+        }
+        return override
+    }
+
+    /// A TOML basic string: quotes and backslashes escaped.
+    static func tomlString(_ text: String) -> String {
+        "\"" + text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }
 
     /// Older CLIs print one result object; newer ones print every message as an array.
@@ -425,17 +443,82 @@ enum CLIRunner {
         timeout: TimeInterval = timeout
     ) async throws -> Result {
         let env: [String: String] = if let environment { environment } else { await self.environment() }
-        let process = Process()
-        // Cancel (the notes block's Cancel button) stops the tool.
+        let control = LaunchControl()
+        // Cancel (the notes block's Cancel button) stops the tool, and a cancel that comes
+        // before the launch keeps it from starting, so no transcript is sent.
         return try await withTaskCancellationHandler {
-            try await launch(process, executable, arguments, stdin: stdin, in: directory, environment: env, timeout: timeout)
+            try Task.checkCancellation()
+            return try await launch(control, executable, arguments, stdin: stdin, in: directory, environment: env, timeout: timeout)
         } onCancel: {
-            if process.isRunning { process.terminate() }
+            control.cancel()
+        }
+    }
+
+    /// Output read on other threads; a reader that is still running after the bounded wait
+    /// cannot race the result.
+    private final class Collected: @unchecked Sendable {
+        private let lock = NSLock()
+        private var outData = Data()
+        private var errData = Data()
+        func setOut(_ data: Data) { lock.lock(); outData = data; lock.unlock() }
+        func setErr(_ data: Data) { lock.lock(); errData = data; lock.unlock() }
+        var out: Data { lock.lock(); defer { lock.unlock() }; return outData }
+        var err: Data { lock.lock(); defer { lock.unlock() }; return errData }
+    }
+
+    /// Shared between the cancel handler, the timeout and the launch thread.
+    private final class LaunchControl: @unchecked Sendable {
+        private let lock = NSLock()
+        private var process: Process?
+        private var cancelled = false
+        private var timedOut = false
+
+        /// Both flags read together under the lock, after the process ended.
+        var outcome: (cancelled: Bool, timedOut: Bool) {
+            lock.lock()
+            defer { lock.unlock() }
+            return (cancelled, timedOut)
+        }
+
+        func cancel() {
+            lock.lock()
+            cancelled = true
+            lock.unlock()
+            stop()
+        }
+
+        func timeOut() {
+            lock.lock()
+            timedOut = true
+            lock.unlock()
+            stop()
+        }
+
+        /// SIGTERM first; a tool that ignores it gets SIGKILL 5 s later, which it cannot ignore.
+        private func stop() {
+            lock.lock()
+            let running = process
+            lock.unlock()
+            guard let running, running.isRunning else { return }
+            running.terminate()
+            let pid = running.processIdentifier
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                if running.isRunning { kill(pid, SIGKILL) }
+            }
+        }
+
+        /// Starts the process unless a cancel already came in.
+        func start(_ process: Process) throws {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !cancelled else { throw CancellationError() }
+            try process.run()
+            self.process = process
         }
     }
 
     private static func launch(
-        _ process: Process,
+        _ control: LaunchControl,
         _ executable: String,
         _ arguments: [String],
         stdin: String?,
@@ -445,6 +528,7 @@ enum CLIRunner {
     ) async throws -> Result {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
+                let process = Process()
                 process.executableURL = URL(fileURLWithPath: executable)
                 process.arguments = arguments
                 process.environment = env
@@ -455,33 +539,45 @@ enum CLIRunner {
                 process.standardInput = input
                 process.standardOutput = output
                 process.standardError = errors
-                var outData = Data()
-                var errData = Data()
+                // A tool that exits before reading the prompt must fail the job, not kill
+                // Diduny with SIGPIPE.
+                _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+                do {
+                    try control.start(process)
+                } catch {
+                    try? input.fileHandleForWriting.close()
+                    continuation.resume(throwing: error is CancellationError ? error : NotesError.notFound(executable))
+                    return
+                }
+                // The timeout runs from launch, so a tool that stops reading stdin is still stopped.
+                let timer = DispatchWorkItem { control.timeOut() }
+                DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timer)
+                let collected = Collected()
                 let group = DispatchGroup()
                 group.enter()
-                DispatchQueue.global().async { outData = output.fileHandleForReading.readDataToEndOfFile(); group.leave() }
+                DispatchQueue.global().async { collected.setOut(output.fileHandleForReading.readDataToEndOfFile()); group.leave() }
                 group.enter()
-                DispatchQueue.global().async { errData = errors.fileHandleForReading.readDataToEndOfFile(); group.leave() }
-                do {
-                    try process.run()
-                } catch {
-                    continuation.resume(throwing: NotesError.notFound(executable))
-                    return
+                DispatchQueue.global().async { collected.setErr(errors.fileHandleForReading.readDataToEndOfFile()); group.leave() }
+                // The prompt goes on its own thread: a full pipe blocks it, not the timeout.
+                DispatchQueue.global().async {
+                    if let stdin { try? input.fileHandleForWriting.write(contentsOf: Data(stdin.utf8)) }
+                    try? input.fileHandleForWriting.close()
                 }
-                if let stdin { input.fileHandleForWriting.write(Data(stdin.utf8)) }
-                try? input.fileHandleForWriting.close()
-                let timer = DispatchWorkItem { if process.isRunning { process.terminate() } }
-                DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timer)
                 process.waitUntilExit()
                 timer.cancel()
-                group.wait()
-                if process.terminationReason == .uncaughtSignal {
+                // A child the tool started can keep the pipes open after the tool exits; the
+                // result does not wait for it forever.
+                _ = group.wait(timeout: .now() + 10)
+                let outcome = control.outcome
+                if outcome.cancelled {
+                    continuation.resume(throwing: CancellationError())
+                } else if outcome.timedOut {
                     continuation.resume(throwing: NotesError.timedOut)
-                    return
+                } else {
+                    continuation.resume(returning: Result(status: process.terminationStatus,
+                                                          stdout: String(decoding: collected.out, as: UTF8.self),
+                                                          stderr: String(decoding: collected.err, as: UTF8.self)))
                 }
-                continuation.resume(returning: Result(status: process.terminationStatus,
-                                                      stdout: String(decoding: outData, as: UTF8.self),
-                                                      stderr: String(decoding: errData, as: UTF8.self)))
             }
         }
     }
