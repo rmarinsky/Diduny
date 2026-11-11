@@ -86,6 +86,29 @@ targets:
         Test:
           PRODUCT_BUNDLE_IDENTIFIER: ua.com.rmarinsky.diduny.test.uitests
 
+  DidunyCLI:
+    type: tool
+    platform: macOS
+    sources:
+      - path: DidunyCLI
+      # The CLI reads the library with the app's own model, so the formats never drift apart.
+      - path: Diduny/Core/Models/Recording.swift
+      - path: Diduny/Core/Models/AudioTrimRange.swift
+      - path: Diduny/Core/Models/MeetingChapter.swift
+      - path: Diduny/Core/Models/RemoteMediaModels.swift
+      - path: Diduny/Core/Models/ClipboardCopyBehavior.swift
+      - path: Diduny/Core/Models/SupportedLanguage.swift
+      - path: Diduny/Core/Calendar/CalendarMeeting.swift
+      - path: Diduny/Core/Calendar/CalendarConnection.swift
+      - path: Diduny/Core/Agents/AgentSettings.swift
+    settings:
+      base:
+        PRODUCT_NAME: diduny
+        PRODUCT_MODULE_NAME: DidunyCLI
+        PRODUCT_BUNDLE_IDENTIFIER: ua.com.rmarinsky.diduny.cli
+        # Archives must stay app archives; the tool is copied into the app instead.
+        SKIP_INSTALL: YES
+
   Diduny:
     type: application
     platform: macOS
@@ -103,6 +126,13 @@ targets:
       - package: FluidAudio
       - framework: Frameworks/whisper.xcframework
         embed: false
+      # `diduny` command line tool for local agents, shipped inside the app and signed with it.
+      - target: DidunyCLI
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
       - sdk: Accelerate.framework
       - sdk: Metal.framework
     settings:

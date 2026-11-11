@@ -34,11 +34,6 @@ enum MessageFormattingMode: String, CaseIterable, Identifiable {
     }
 }
 
-enum ClipboardCopyBehavior: Equatable {
-    case cleaned
-    case raw
-}
-
 enum ClipboardError: LocalizedError {
     case accessibilityNotGranted
     case pasteEventFailed
