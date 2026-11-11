@@ -53,6 +53,7 @@
 		1902EA588B0CE9EDA00126BB /* OnDeviceLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5760997DDCC08AA31E95ABD0 /* OnDeviceLanguageTests.swift */; };
 		195273016DFD9FA94A568865 /* MeetingAudioFanOut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65090DCDD288EC0592DFF592 /* MeetingAudioFanOut.swift */; };
 		19B81159DB04138CF1B83773 /* AppleLiveTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDF40894A493C54FD30164D7 /* AppleLiveTranscriptionService.swift */; };
+		1A52F0AEE54BDCE63844A168 /* GapSliderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF4A99A1B46DBD289DCC947 /* GapSliderTests.swift */; };
 		1CC15B4101578289FDDA2003 /* DidunyUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = E142ECDFB6C88CE1F7757B95 /* DidunyUITestCase.swift */; };
 		1D8F54C7E34D0BF458CDE89A /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D10CEDBC544B56C03986007 /* OverviewView.swift */; };
 		1EE3BDABAD85AE50C1A3E6A6 /* SettingsMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6D8F4C5FC5CDB3A9842F4F3 /* SettingsMigration.swift */; };
@@ -413,6 +414,7 @@
 		DCE7DF74A4C4AA7F15E0FD9E /* ProvidersSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50D2C55976D4BEC6F915827F /* ProvidersSettingsView.swift */; };
 		DD416AF5B6C2A0EB611FE98C /* Card.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75F0EB167B411A545F0E22B7 /* Card.swift */; };
 		DD4C5D99F4A10B64D260A49D /* GeneralSettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EED8174A1E06FDFCDB93B48 /* GeneralSettingsUITests.swift */; };
+		DD527211DA6EC60C9EDAEF0A /* GapSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 597560336B64CEFC887F8373 /* GapSlider.swift */; };
 		DDA86150D6B671266D004BEE /* LiveTranscriptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED4AC73DF15E8FB1B784BE2 /* LiveTranscriptStore.swift */; };
 		DE51034347AC539254418EF9 /* ProtectedLexiconServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7144FB4309E888B25A0048C8 /* ProtectedLexiconServiceTests.swift */; };
 		DEE6BFC7FC33767EDB94BFDE /* RecoveryStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2133D27EF1A261954A78BEB /* RecoveryStateManager.swift */; };
@@ -681,6 +683,7 @@
 		5881C39DBA8C08BA54CCF6E1 /* CalendarPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarPage.swift; sourceTree = "<group>"; };
 		590A8BDF972CD5FCDB6259E0 /* PickerMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PickerMenu.swift; sourceTree = "<group>"; };
 		5957BD5025B76B0A998E1C8A /* OnboardingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingUITests.swift; sourceTree = "<group>"; };
+		597560336B64CEFC887F8373 /* GapSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GapSlider.swift; sourceTree = "<group>"; };
 		5B4AFAFBB376B839E41C6BDA /* ObjCExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjCExceptionCatcher.h; sourceTree = "<group>"; };
 		5BB82C6AA65CCAE741DEE523 /* LogoBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogoBadgeView.swift; sourceTree = "<group>"; };
 		5BC620CF18F05B411A055C29 /* MeetingTracksWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTracksWriter.swift; sourceTree = "<group>"; };
@@ -1001,6 +1004,7 @@
 		FF92054605EBB746D157D7AF /* ProviderComparisonTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderComparisonTable.swift; sourceTree = "<group>"; };
 		FFC1393119DBC8D5FF125AAE /* BrowserCalendarReadAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserCalendarReadAccessTests.swift; sourceTree = "<group>"; };
 		FFCE4E033167376CFE6779D0 /* ParakeetModelStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetModelStoreTests.swift; sourceTree = "<group>"; };
+		FFF4A99A1B46DBD289DCC947 /* GapSliderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GapSliderTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1351,6 +1355,7 @@
 				5F25795C2F2968C3867D3D99 /* EmptyState.swift */,
 				BB65D5F96E9C329F3E47718C /* FloatingSurfacePanel.swift */,
 				1208C430C9A807D7ACFFED31 /* FloatingSurfacePresenter.swift */,
+				597560336B64CEFC887F8373 /* GapSlider.swift */,
 				4323994D05952C2AB0A25B85 /* KeyboardFocusRing.swift */,
 				B5183CF2E00CC45EE2C0B930 /* ModeSegments.swift */,
 				60C56616959878819C819143 /* MotionPolicy.swift */,
@@ -1725,6 +1730,7 @@
 				E952560A42AFC9A3F776B0FF /* FloatingSurfacePlacementTests.swift */,
 				B8D4B5CA9517D57996A838BD /* ForceSubmitPolicyTests.swift */,
 				0C0960019E63FB094EEC0785 /* ForceSubmitServiceTests.swift */,
+				FFF4A99A1B46DBD289DCC947 /* GapSliderTests.swift */,
 				2FE4239D5B53B34910F5EF75 /* GeneralSettingsTests.swift */,
 				E0E9BDE71C699E6C7D605D23 /* HotkeyServiceTests.swift */,
 				1023A30E21CD6C2DF35A832B /* ImportedMediaAudioPreparerTests.swift */,
@@ -2199,6 +2205,7 @@
 				711E62BC495FFA03AFB4A8C6 /* FloatingSurfacePanel.swift in Sources */,
 				EAB91E9BE4E8DC2F54CC76C4 /* FloatingSurfacePresenter.swift in Sources */,
 				26003C33E43B415E9C52238F /* ForceSubmitService.swift in Sources */,
+				DD527211DA6EC60C9EDAEF0A /* GapSlider.swift in Sources */,
 				E4DA7F7432AC5A880F8D5CE8 /* GeneralSettingsView.swift in Sources */,
 				57FF194266BABFA6EA107750 /* HTTPLogger.swift in Sources */,
 				48D234DA0A725C503B5DEA75 /* HistoryPaletteView.swift in Sources */,
@@ -2475,6 +2482,7 @@
 				A8412D1016322B81163D5543 /* FloatingSurfacePlacementTests.swift in Sources */,
 				E15B63E1525F544EB755DFAE /* ForceSubmitPolicyTests.swift in Sources */,
 				B86044FB2DC6096F0B0F6FA3 /* ForceSubmitServiceTests.swift in Sources */,
+				1A52F0AEE54BDCE63844A168 /* GapSliderTests.swift in Sources */,
 				769C471423A2083C9510248B /* GeneralSettingsTests.swift in Sources */,
 				211D110768BC9B7BE541DAFF /* HotkeyServiceTests.swift in Sources */,
 				A7F5CADFF3FC11FCA4261373 /* ImportedMediaAudioPreparerTests.swift in Sources */,

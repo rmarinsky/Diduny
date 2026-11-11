@@ -77,12 +77,12 @@ struct ModeExpander: View {
             .accessibilityIdentifier("\(id).hold")
         }
         SettingsLineRow(title: "Hold for", caption: "How long you hold the key before recording starts.") {
-            Slider(value: Binding(
+            GapSlider(value: Binding(
                 get: { ptt.holdDelaySeconds },
                 set: { seconds in model.updatePushToTalk(for: job) { $0.holdDelaySeconds = seconds } }
             ), in: 0.5 ... 2.0, step: 0.1)
-            .controlSize(.small)
             .frame(width: 140)
+            .accessibilityLabel(Text("Hold for"))
             .accessibilityIdentifier("\(id).holdFor")
             Text(verbatim: model.holdForLabel(ptt.holdDelaySeconds))
                 .font(DS.Font.callout.monospacedDigit())
