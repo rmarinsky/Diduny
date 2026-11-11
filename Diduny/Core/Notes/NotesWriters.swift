@@ -275,6 +275,13 @@ struct CLIWriter: NotesWriter {
             try Data(JSONSchema.text(schema).utf8).write(to: schemaURL)
             var arguments = ["exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only",
                              "--config", "features.plugins=false", "--config", "features.apps=false",
+                             // No shell and no web search: a transcript that contains instructions
+                             // must not be able to make Codex read files or fetch pages.
+                             // Checked with codex-cli 0.166.0: without unified_exec off it still runs shell commands.
+                             "--config", "features.shell_tool=false", "--config", "features.unified_exec=false",
+                             "--config", "features.browser_use=false", "--config", "features.computer_use=false",
+                             "--config", "features.in_app_browser=false", "--config", "features.code_mode_host=false",
+                             "--config", "web_search=\"disabled\"",
                              "--output-schema", schemaURL.path, "--output-last-message", answerURL.path]
             if let mcpOff = Self.codexMCPServersOff() { arguments += ["--config", mcpOff] }
             if let effort = tier.codexEffort { arguments += ["--config", "model_reasoning_effort=\"\(effort)\""] }
