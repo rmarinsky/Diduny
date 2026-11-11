@@ -140,6 +140,7 @@ private struct StatusItemLabel: View {
         items += [
             ActionMenuItem(String(localized: "Open Diduny")) { actions.openMainWindow(.overview) },
             ActionMenuItem(String(localized: "Recordings")) { actions.openMainWindow(.recordings) },
+            ActionMenuItem(String(localized: "Notes")) { actions.openMainWindow(.notes) },
             batchItem(),
             .separator(),
             ActionMenuItem(String(localized: "Check for Updates…")) { actions.checkForUpdates() },

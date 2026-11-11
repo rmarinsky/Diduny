@@ -233,6 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.current = self
         let launch = AppLaunchTracker.shared.begin()
         startRemoteDeletionQueue()
+        NotesService.shared.start()
         // Sudden termination can end the process at logout/shutdown without
         // applicationWillTerminate; those exits are clean, not crashes.
         powerOffObserver = NSWorkspace.shared.notificationCenter.addObserver(
