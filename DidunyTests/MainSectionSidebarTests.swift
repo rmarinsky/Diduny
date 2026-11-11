@@ -8,12 +8,12 @@ import Testing
 @MainActor
 struct MainSectionSidebarTests {
     @Test func mainItemsInOrder() {
-        #expect(MainSection.mainItems == [.overview, .recordings, .benchmark, .typingTest])
+        #expect(MainSection.mainItems == [.overview, .recordings, .notes, .benchmark, .typingTest])
     }
 
     @Test func settingsItemsInOrder() {
         #expect(MainSection.settingsItems == [
-            .general, .modes, .languages, .audioDictation, .meetings,
+            .general, .modes, .languages, .audioDictation, .meetings, .notesSettings,
             .models, .providers, .shortcuts, .account, .about,
         ])
     }
@@ -21,8 +21,8 @@ struct MainSectionSidebarTests {
     @Test func labels() {
         let labels = (MainSection.mainItems + MainSection.settingsItems).map(\.label)
         #expect(labels == [
-            "Overview", "Recordings", "Benchmark", "Typing test",
-            "General", "Modes", "Languages", "Audio", "Calendar & meetings",
+            "Overview", "Recordings", "Notes", "Benchmark", "Typing test",
+            "General", "Modes", "Languages", "Audio", "Calendar & meetings", "Notes settings",
             "Local models", "Providers", "Shortcuts", "Account", "About",
         ])
     }

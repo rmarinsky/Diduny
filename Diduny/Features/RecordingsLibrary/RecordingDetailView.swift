@@ -72,6 +72,7 @@ struct RecordingDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: DS.Space.md) {
                     result
+                    RecordingNotesSection(recording: currentRecording)
                     if currentRecording.remoteSource != nil { youtubeSourceSection }
                     captionsSection
                 }
