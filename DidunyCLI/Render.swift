@@ -99,7 +99,7 @@ enum Render {
             out += ["", "## Calendar event", untrusted("calendar-invitation", event.joined(separator: "\n"))]
         }
         if let chapters = recording.chapters, !chapters.isEmpty {
-            out += ["", "## Chapters"] + chapters.map { "- [\(time($0.timestampSeconds))] \($0.label)" }
+            out += ["", "## Chapters", untrusted("chapters", chapters.map { "- [\(time($0.timestampSeconds))] \($0.label)" }.joined(separator: "\n"))]
         }
         let versions = recording.resolvedTranscriptHistory
         if versions.count > 1 {
