@@ -37,7 +37,7 @@ struct NotesSettingsView: View {
                 whenSection
                 contentsSection
                 checkingSection
-                Text("The model only reads the transcript and writes text. Claude Code and Codex run with their tools, plugins and file access off. Gemini CLI runs in an empty folder and Diduny approves none of its actions.")
+                Text("The model only reads the transcript and writes text. Claude Code, Codex and Gemini CLI run with their tools, plugins and file access off, in an empty folder.")
                     .font(DS.Font.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -515,7 +515,7 @@ private struct CLIToolRow: View {
 
     private var approvalMessage: String {
         let lockdown = kind == .gemini
-            ? String(localized: "Gemini CLI cannot turn its tools off. Diduny runs it in an empty folder with extensions off and approves none of its actions.")
+            ? String(localized: "Diduny turns off its tools, extensions and MCP servers for these runs, whatever your Gemini settings say, and runs it in an empty folder.")
             : String(localized: "Diduny turns off the tool's tools, plugins and file access for these runs.")
         return String(localized: "The transcript of each recording you write notes for goes to \(kind.label).")
             + "\n" + String(localized: "\(kind.label) sends it to \(kind.vendor) under your account, and it counts toward your plan.")

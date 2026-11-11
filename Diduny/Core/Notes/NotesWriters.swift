@@ -285,10 +285,21 @@ struct CLIWriter: NotesWriter {
             }
             return answer
         case .gemini:
-            let arguments = ["-o", "json", "-e", "none", "--allowed-mcp-server-names", "diduny-none",
+            // The transcript is untrusted text, so Gemini runs with no tools at all, whatever the
+            // user's own Gemini settings say: `--approval-mode default` overrides an auto-approve
+            // default (headless default mode drops every tool that needs approval), and a system
+            // settings file, which Gemini CLI applies over user and workspace settings, limits the
+            // core tools to one that does not exist.
+            let settingsURL = work.appendingPathComponent("gemini-system-settings.json")
+            try Data(#"{"tools":{"core":["diduny_no_tools"]},"general":{"defaultApprovalMode":"default"}}"#.utf8)
+                .write(to: settingsURL)
+            var environment = await CLIRunner.environment()
+            environment["GEMINI_CLI_SYSTEM_SETTINGS_PATH"] = settingsURL.path
+            let arguments = ["-o", "json", "--approval-mode", "default", "-e", "none",
+                             "--allowed-mcp-server-names", "diduny-none",
                              "-p", "Answer only with one JSON object that follows this JSON schema, with no other text: "
                                  + JSONSchema.text(schema)]
-            let run = try await CLIRunner.run(executable, arguments, stdin: prompt, in: work)
+            let run = try await CLIRunner.run(executable, arguments, stdin: prompt, in: work, environment: environment)
             return try Self.parseGemini(run)
         default:
             throw NotesError.noWriter
