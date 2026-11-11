@@ -1,3 +1,4 @@
+import AppKit
 import LaunchAtLogin
 import SwiftUI
 
@@ -21,6 +22,7 @@ struct GeneralSettingsView: View {
                 afterRecordingGroup
                 whileRecordingGroup
                 historyGroup
+                AgentsGroup()
                 helpGroup
             }
         }
@@ -188,6 +190,79 @@ struct GeneralSettingsView: View {
         recordingFeedbackSurface = surface
         SettingsStorage.shared.recordingFeedbackSurface = surface
         EdgeCommandPanelController.shared.applySurfacePreference()
+    }
+}
+
+/// Agents: the `diduny` command, the skill for Claude Code and Codex, and the settings file.
+private struct AgentsGroup: View {
+    @State private var installed = AgentCommandLineTool.isInstalled
+    @State private var installSkill = AgentSkillInstaller.isEnabled
+    @State private var installError: String?
+
+    private var agentNames: String {
+        let names = AgentSkillInstaller.targets.map(\.agent)
+        return names.isEmpty ? String(localized: "none found on this Mac") : names.joined(separator: ", ")
+    }
+
+    var body: some View {
+        GeneralGroup(heading: "Agents") {
+            SettingsLineRow(
+                title: "Command line tool",
+                caption: installed
+                    ? "Installed as \(AgentCommandLineTool.commandName) in ~/.local/bin. Agents such as Claude Code and Codex use it to read your meetings."
+                    : "Lets Claude Code, Codex and other agents on this Mac read your meetings. It only reads.",
+                kind: .button
+            ) {
+                if installed {
+                    Button("Remove") {
+                        AgentCommandLineTool.uninstall()
+                        installed = AgentCommandLineTool.isInstalled
+                        AgentSkillInstaller.sync()
+                    }
+                    .buttonStyle(.bordered)
+                } else {
+                    Button("Install command line tool") {
+                        do {
+                            try AgentCommandLineTool.install()
+                            installError = nil
+                        } catch {
+                            installError = String(localized: "Could not install: \(AgentCommandLineTool.linkURL.path) already exists and is not Diduny's.")
+                        }
+                        installed = AgentCommandLineTool.isInstalled
+                        AgentSkillInstaller.sync()
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("general.agents.installCLI")
+                }
+            }
+            if let installError {
+                Text(installError).font(DS.Font.meta).foregroundStyle(.red)
+            }
+            SettingsLineRow(
+                title: "Teach agents about Diduny",
+                caption: "Adds a short Diduny skill to Claude Code and Codex, so they know how to find and read your meetings. Agents here: \(agentNames).",
+                kind: .toggle
+            ) {
+                SettingsSwitch(title: "Teach agents about Diduny", isOn: $installSkill)
+                    .accessibilityIdentifier("general.agents.skill")
+                    .onChange(of: installSkill) { _, value in
+                        AgentSkillInstaller.isEnabled = value
+                        AgentSkillInstaller.sync()
+                    }
+            }
+            SettingsLineRow(
+                title: "Settings agents can change",
+                caption: "Transcription words, languages, filler words, silence stop and sounds. Addresses, hotkeys, devices and history stay here.",
+                kind: .button,
+                showsHairline: false
+            ) {
+                Button("Show the file") {
+                    NSWorkspace.shared.activateFileViewerSelecting([AgentSettingsSync.shared.fileURL])
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .onAppear { installed = AgentCommandLineTool.isInstalled }
     }
 }
 

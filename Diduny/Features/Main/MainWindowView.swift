@@ -90,12 +90,16 @@ struct MainWindowView: View {
         case .recordings:
             RecordingsLibraryView()
                 .environment(audioDeviceManager)
+        case .notes:
+            NotesView()
         case .benchmark:
             BenchmarkView()
         case .typingTest:
             TypingTestView()
         case .meetings:
             MeetingSettingsView()
+        case .notesSettings:
+            NotesSettingsView()
         case .general:
             GeneralSettingsView()
         case .modes:

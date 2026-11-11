@@ -233,6 +233,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.current = self
         let launch = AppLaunchTracker.shared.begin()
         startRemoteDeletionQueue()
+        NotesService.shared.start()
+        // Local agents: the Diduny skill for Claude Code and Codex, and the settings file they may edit.
+        // Not while unit tests run: the test host would write skills for the test build.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            AgentSkillInstaller.sync()
+            AgentSettingsSync.shared.start()
+        }
         // Sudden termination can end the process at logout/shutdown without
         // applicationWillTerminate; those exits are clean, not crashes.
         powerOffObserver = NSWorkspace.shared.notificationCenter.addObserver(

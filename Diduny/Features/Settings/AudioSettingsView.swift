@@ -115,11 +115,9 @@ struct AudioSettingsView: View {
         save: @escaping (Float) -> Void
     ) -> some View {
         SettingsLineRow(title: title) {
-            Slider(value: value, in: 0 ... 2, step: 0.05) { editing in
+            GapSlider(value: value, in: 0 ... 2, step: 0.05) { editing in
                 if !editing { save(value.wrappedValue) }
             }
-            .labelsHidden()
-            .tint(DS.Palette.accent)
             .frame(width: 129)
             .accessibilityLabel(Text(title))
             .accessibilityIdentifier(identifier)
