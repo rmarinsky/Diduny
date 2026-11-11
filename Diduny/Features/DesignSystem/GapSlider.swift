@@ -64,7 +64,8 @@ struct GapSlider<Value: BinaryFloatingPoint>: View where Value.Stride: BinaryFlo
                     .offset(x: layout.handleX)
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: dragging)
             }
-            .frame(width: proxy.size.width, height: metrics.handle)
+            // Leading: the ZStack is only as wide as its widest part, and the parts are placed from x 0.
+            .frame(width: proxy.size.width, height: metrics.handle, alignment: .leading)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
