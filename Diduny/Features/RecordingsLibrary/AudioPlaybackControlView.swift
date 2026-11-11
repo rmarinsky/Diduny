@@ -36,7 +36,7 @@ struct AudioPlaybackControlView: View {
             .buttonStyle(.plain)
 
             // Always-visible slider
-            Slider(
+            GapSlider(
                 value: Binding(
                     get: { currentTime },
                     set: { playbackService.seek(to: $0) }
@@ -46,6 +46,8 @@ struct AudioPlaybackControlView: View {
                     playbackService.isSeeking = editing
                 }
             )
+            .controlSize(.small)
+            .accessibilityLabel(Text("Playback position"))
 
             // Time display: elapsed / total
             Text("\(formatTime(currentTime)) / \(formatTime(effectiveDuration))")
