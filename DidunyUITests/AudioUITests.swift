@@ -42,15 +42,19 @@ final class AudioUITests: DidunyUITestCase {
         waitForElement(play, toMatch: "label == 'Play'")
     }
 
-    /// XCUI drags sliders by pixels, so a drag lands within one 5 % step of the target (CI gave 145 %
-    /// and 150 % for the same 0.75). The text must show exactly where the slider is, and the slider must
-    /// be at the target or its neighbouring step. "150%" and "100%" themselves are `AudioSettingsTextTests`.
+    /// `GapSlider` is a custom view, not an NSSlider, so XCUI can't `adjust` it: click at the target
+    /// point instead (a zero-distance drag sets the value). Pixel rounding can land one 5 % step off.
+    /// The text must match the slider's own accessibility value (fraction of 0...200 %).
+    /// "150%" and "100%" themselves are `AudioSettingsTextTests`.
     private func adjust(_ id: String, to position: CGFloat, near percent: Int) {
         let slider = waitForElement(element(id))
-        slider.adjust(toNormalizedSliderPosition: position)
-        let shown = Int((slider.normalizedSliderPosition * 200 / 5).rounded()) * 5
-        XCTAssertLessThanOrEqual(abs(shown - percent), 5, "\(id) at \(shown)%")
-        waitForElement(element("\(id).value"), toMatch: "value == '\(shown)%'")
+        slider.coordinate(withNormalizedOffset: CGVector(dx: position, dy: 0.5)).click()
+        let label = element("\(id).value")
+        let allowed = [percent - 5, percent, percent + 5].map { "'\($0)%'" }.joined(separator: ",")
+        waitForElement(label, toMatch: "value IN {\(allowed)}")
+        let shown = Int((label.value as? String ?? "").dropLast()) ?? -1
+        let fraction = Int((slider.value as? String ?? "").split(separator: " ").first ?? "") ?? -1
+        XCTAssertLessThanOrEqual(abs(Double(fraction) - Double(shown) / 2), 1, "\(id) shows \(shown)% at \(fraction) percent")
     }
 
     func test_levelSlidersShowPercent() {
