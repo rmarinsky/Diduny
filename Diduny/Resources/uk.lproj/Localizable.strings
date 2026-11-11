@@ -2369,3 +2369,16 @@
 "Paused because you chose another writer. Stop and start again to confirm where the transcripts go." = "Призупинено, бо ви вибрали інший спосіб. Зупиніть і почніть знову, щоб підтвердити, куди підуть транскрипти.";
 "Notes could not be read, so Diduny will not change them. Restart Diduny to try again." = "Нотатки не вдалося прочитати, тому Diduny їх не змінюватиме. Перезапустіть Diduny, щоб спробувати знову.";
 "Diduny could not save the notes: %@" = "Diduny не вдалося зберегти нотатки: %@";
+
+/* Vocabulary & context (Soniox v6 user_context) */
+"Vocabulary & context" = "Словник і контекст";
+"Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud." = "Diduny Cloud отримує ці слова й опис на початку кожного запису і краще розпізнає імена та терміни. Діє лише для Diduny Cloud.";
+"Words and names" = "Слова й імена";
+"Add a word or name" = "Додати слово або ім'я";
+"%lld of 300. Write it the way it should appear in text." = "%lld з 300. Пишіть так, як має з'явитися в тексті.";
+"What you usually talk about" = "Про що ви зазвичай говорите";
+"Empty means software development." = "Порожнє поле означає «розробка програм».";
+"Translation glossary" = "Глосарій перекладу";
+"Used when translating." = "Діє під час перекладу.";
+"Use meeting title and attendee names from the calendar" = "Використовувати назву зустрічі й імена учасників з календаря";
+"The title and names go to Diduny Cloud only for that meeting's recording." = "Назва й імена йдуть у Diduny Cloud лише для запису цієї зустрічі.";

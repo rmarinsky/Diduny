@@ -138,6 +138,8 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
 
         await AuthService.shared.authenticatedRequest(&request)
 
+        var config = config
+        SpeechUserContext.current().apply(to: &config)
         let configData = try JSONSerialization.data(withJSONObject: config)
         let configString = String(data: configData, encoding: .utf8) ?? "{}"
 

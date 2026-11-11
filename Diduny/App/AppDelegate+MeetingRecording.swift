@@ -300,6 +300,7 @@ extension AppDelegate {
         activeMeetingTranscriptionSessionID = sessionID
         // The user's own live engine: ElevenLabs (their key) or Apple on this Mac; calendar meetings too (8A).
         activeMeetingTranslateTarget = translateTarget
+        activeMeetingCalendarMeeting = calendarMeeting
         // Calendar and Translate meeting starts pass only Cloud or Local: audio only, Whisper after Stop.
         activeMeetingStartRoute = startRoute ?? MeetingStartRoute(
             segment: requestedProvider == .cloud ? .cloud : .recordOnly,

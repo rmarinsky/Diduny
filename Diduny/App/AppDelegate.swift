@@ -209,6 +209,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Meeting translation on an on-device engine: target language for the one translation after Stop.
     /// Set per meeting session at start, cleared with the session; never carried into another meeting.
     var activeMeetingTranslateTarget: String?
+    /// The calendar event the current meeting started from; its title and attendees go to Diduny Cloud live.
+    var activeMeetingCalendarMeeting: CalendarMeeting?
     var remoteDeletionTimer: Timer?
     var localVoiceStreamingService: LocalWhisperStreamingService?
     var localMeetingStreamingService: LocalWhisperStreamingService?

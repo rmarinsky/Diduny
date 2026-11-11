@@ -2369,3 +2369,16 @@
 "Paused because you chose another writer. Stop and start again to confirm where the transcripts go." = "Paused because you chose another writer. Stop and start again to confirm where the transcripts go.";
 "Notes could not be read, so Diduny will not change them. Restart Diduny to try again." = "Notes could not be read, so Diduny will not change them. Restart Diduny to try again.";
 "Diduny could not save the notes: %@" = "Diduny could not save the notes: %@";
+
+/* Vocabulary & context (Soniox v6 user_context) */
+"Vocabulary & context" = "Vocabulary & context";
+"Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud." = "Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud.";
+"Words and names" = "Words and names";
+"Add a word or name" = "Add a word or name";
+"%lld of 300. Write it the way it should appear in text." = "%lld of 300. Write it the way it should appear in text.";
+"What you usually talk about" = "What you usually talk about";
+"Empty means software development." = "Empty means software development.";
+"Translation glossary" = "Translation glossary";
+"Used when translating." = "Used when translating.";
+"Use meeting title and attendee names from the calendar" = "Use meeting title and attendee names from the calendar";
+"The title and names go to Diduny Cloud only for that meeting's recording." = "The title and names go to Diduny Cloud only for that meeting's recording.";

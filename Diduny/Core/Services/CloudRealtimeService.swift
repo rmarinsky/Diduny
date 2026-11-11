@@ -74,6 +74,10 @@ final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unch
     /// Consumed by the next `connect`, so other sessions on this shared service don't inherit it.
     var nextSessionCleanupFillerWords: [String]?
     private var sessionCleanupFillerWords: [String]?
+    /// Set on a meeting's own instance: its title and attendees go into `user_context`.
+    var calendarMeeting: CalendarMeeting?
+    /// Read once per session, so a reconnect sends the same context.
+    private var sessionUserContext = SpeechUserContext()
     private let cleanedTextLock = NSLock()
     private var _serverCleanedText: String?
     /// False once the session reconnected: a "cleaned" frame then covers only the new socket's audio.
@@ -151,6 +155,7 @@ final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unch
         self.enableSpeakerDiarization = enableSpeakerDiarization
         sessionCleanupFillerWords = nextSessionCleanupFillerWords
         nextSessionCleanupFillerWords = nil
+        sessionUserContext = SpeechUserContext.current(calendarMeeting: calendarMeeting)
         cleanedTextLock.lock(); _serverCleanedText = nil; cleanedTextCoversSession = true; cleanedTextLock.unlock()
         // Fresh session: start buffering incoming audio right away, so speech
         // during the connect handshake is delivered once the socket is up.
@@ -255,13 +260,17 @@ final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unch
             audioConfig: audioConfig,
             translationConfig: translationConfig,
             enableSpeakerDiarization: enableSpeakerDiarization,
-            cleanupFillerWords: sessionCleanupFillerWords
+            cleanupFillerWords: sessionCleanupFillerWords,
+            userContext: sessionUserContext
         )
 
         let configData = try JSONSerialization.data(withJSONObject: config)
         let configString = String(data: configData, encoding: .utf8) ?? "{}"
 
-        NSLog("[Cloud RT] Sending config: %@", configString)
+        // The person's vocabulary and meeting names stay out of the log.
+        let loggedConfig = try JSONSerialization.data(withJSONObject: config.filter { $0.key != "user_context" })
+        NSLog("[Cloud RT] Sending config: %@, user_context: %@",
+              String(decoding: loggedConfig, as: UTF8.self), config["user_context"] == nil ? "none" : "set")
         metrics.begin(.configSend)
         do {
             try await task.send(.string(configString))
@@ -925,7 +934,8 @@ final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unch
         audioConfig: RealtimeAudioConfig,
         translationConfig: RealtimeTranslationConfig?,
         enableSpeakerDiarization: Bool,
-        cleanupFillerWords: [String]? = nil
+        cleanupFillerWords: [String]? = nil,
+        userContext: SpeechUserContext? = nil
     ) -> [String: Any] {
         var config: [String: Any] = [
             "audio_format": audioConfig.audioFormat,
@@ -948,6 +958,8 @@ final class CloudRealtimeService: NSObject, RealtimeTranscriptionProtocol, @unch
         if let cleanupFillerWords {
             config["cleanup"] = ["filler_words": cleanupFillerWords]
         }
+
+        userContext?.apply(to: &config)
 
         return config
     }

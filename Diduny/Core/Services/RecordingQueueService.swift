@@ -242,6 +242,7 @@ final class RecordingQueueService {
                         audioFileURL: audioURL,
                         config: buildCloudTranscriptionConfig(enableSpeakerDiarization: false),
                         source: recording.audioFileName,
+                        calendarMeeting: recording.calendarMeeting,
                         sourceDurationSeconds: recording.effectiveDurationSeconds,
                         itemID: item.id
                     )
@@ -265,6 +266,7 @@ final class RecordingQueueService {
                         audioFileURL: audioURL,
                         config: buildCloudTranscriptionConfig(enableSpeakerDiarization: true),
                         source: recording.audioFileName,
+                        calendarMeeting: recording.calendarMeeting,
                         sourceDurationSeconds: recording.effectiveDurationSeconds,
                         itemID: item.id
                     )
@@ -315,6 +317,7 @@ final class RecordingQueueService {
                         audioFileURL: audioURL,
                         config: config,
                         source: recording.audioFileName,
+                        calendarMeeting: recording.calendarMeeting,
                         sourceDurationSeconds: recording.effectiveDurationSeconds,
                         itemID: item.id
                     )
@@ -448,6 +451,7 @@ final class RecordingQueueService {
         QueueEngineRunner(
             cloud: { [unowned self] config in
                 try await transcribeViaJobs(audioFileURL: audioURL, config: config, source: recording.audioFileName,
+                                            calendarMeeting: recording.calendarMeeting,
                                             sourceDurationSeconds: recording.effectiveDurationSeconds, itemID: itemID)
             },
             whisper: { [unowned self] in try await service.transcribeDetailed(audioData: loadAudioData(from: audioURL)) },
@@ -518,9 +522,12 @@ final class RecordingQueueService {
         audioFileURL: URL,
         config: [String: Any],
         source: String,
+        calendarMeeting: CalendarMeeting?,
         sourceDurationSeconds: TimeInterval,
         itemID: UUID
     ) async throws -> GeneratedTranscript {
+        var config = config
+        SpeechUserContext.current(calendarMeeting: calendarMeeting).apply(to: &config)
         let asyncJobService = AsyncTranscriptionJobService()
         return try await asyncJobService.transcribeFileDetailedWithRetry(
             audioFileURL: audioFileURL,
