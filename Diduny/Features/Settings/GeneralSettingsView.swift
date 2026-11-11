@@ -34,6 +34,12 @@ struct GeneralSettingsView: View {
             dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
             meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
         }
+        // An agent can change these through the settings file while the page is open.
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            let storage = SettingsStorage.shared
+            if messageFormattingMode != storage.messageFormattingMode { messageFormattingMode = storage.messageFormattingMode }
+            if playSound != storage.playSoundOnCompletion { playSound = storage.playSoundOnCompletion }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
             typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
         }

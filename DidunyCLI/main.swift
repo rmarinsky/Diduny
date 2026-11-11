@@ -69,11 +69,8 @@ func run() throws {
         output(Guide.text(command: commandName))
 
     case "version", "--version":
-        let version = Library.enclosingAppBundleIdentifier().map { _ in
-            let app = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
-                .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            return Bundle(url: app)?.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
-        } ?? "unknown"
+        let version = Library.enclosingAppURL()
+            .flatMap { Bundle(url: $0)?.infoDictionary?["CFBundleShortVersionString"] as? String } ?? "unknown"
         output("\(commandName) \(version), library \(library.directory.path)\n")
 
     case "meetings", "recordings":

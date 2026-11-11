@@ -125,7 +125,9 @@ final class AgentSettingsSync {
     private func writeFile() {
         let data = AgentSettings.fileData(settings: Self.currentValues(), problems: lastProblems)
         guard data != (try? Data(contentsOf: url)) else {
-            lastWritten = data
+            // Setting UserDefaults posts didChangeNotification, which calls this again, so only
+            // a real change may write it.
+            if lastWritten != data { lastWritten = data }
             return
         }
         do {

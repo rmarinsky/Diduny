@@ -54,6 +54,9 @@ final class RecordingsLibraryStorage {
     }
 
     private(set) var recordings: [Recording] = []
+    /// True once the metadata file was read and decoded. While false, `recordings` being empty
+    /// says nothing about what is on disk, so nothing may treat it as "every recording was deleted".
+    private(set) var hasLoadedLibrary = false
     /// The other build's library (production ↔ DEV), read-only: never written, pruned or deleted from here.
     private(set) var otherBuildRecordings: [Recording] = []
     private var otherBuildIDs: Set<UUID> = []
@@ -1145,7 +1148,10 @@ final class RecordingsLibraryStorage {
             "\(id.uuidString).tracks.\(compressed.pathExtension)"
         )
         do {
-            if let existing = tracksFileURL(for: id) {
+            // Only this build's folder: the other build's tracks for the same id are never touched.
+            if let existing = ["flac", "wav"]
+                .map({ recordingsDir.appendingPathComponent("\(id.uuidString).tracks.\($0)") })
+                .first(where: { fileManager.fileExists(atPath: $0.path) }) {
                 try fileManager.removeItem(at: existing)
             }
             try fileManager.moveItem(at: compressed, to: destination)
@@ -1249,6 +1255,7 @@ final class RecordingsLibraryStorage {
         }
         if let result {
             recordings = result.recordings
+            hasLoadedLibrary = true
             if result.resetInterrupted {
                 saveMetadata()
             }

@@ -17,10 +17,17 @@ final class NotesStore {
         let appDirectory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first!.appendingPathComponent(Bundle.main.bundleIdentifier ?? "Diduny")
         fileURL = appDirectory.appendingPathComponent("notes.json")
-        if let data = try? Data(contentsOf: fileURL) {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            notes = (try? decoder.decode([RecordingNote].self, from: data)) ?? []
+        guard let data = try? Data(contentsOf: fileURL) else { return }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        if let decoded = try? decoder.decode([RecordingNote].self, from: data) {
+            notes = decoded
+        } else {
+            // Keep an unreadable file (for example from a newer build) instead of overwriting
+            // it with the next save.
+            let aside = fileURL.deletingPathExtension()
+                .appendingPathExtension("unreadable-\(Int(Date().timeIntervalSince1970)).json")
+            try? FileManager.default.moveItem(at: fileURL, to: aside)
         }
     }
 
@@ -28,37 +35,43 @@ final class NotesStore {
         notes.first { $0.recordingID == recordingID }
     }
 
-    func save(_ note: RecordingNote) {
-        notes.removeAll { $0.recordingID == note.recordingID }
-        notes.append(note)
-        persist()
+    /// Throws when the file could not be written; the notes in memory stay as they were.
+    func save(_ note: RecordingNote) throws {
+        var next = notes
+        next.removeAll { $0.recordingID == note.recordingID }
+        next.append(note)
+        try commit(next)
     }
 
     func delete(recordingID: UUID) {
-        notes.removeAll { $0.recordingID == recordingID }
-        persist()
+        var next = notes
+        next.removeAll { $0.recordingID == recordingID }
+        try? commit(next)
     }
 
     func setDone(_ done: Bool, item: UUID, in noteID: UUID) {
         guard let noteIndex = notes.firstIndex(where: { $0.id == noteID }),
               let itemIndex = notes[noteIndex].actionItems.firstIndex(where: { $0.id == item }) else { return }
-        notes[noteIndex].actionItems[itemIndex].done = done
-        persist()
+        var next = notes
+        next[noteIndex].actionItems[itemIndex].done = done
+        try? commit(next)
     }
 
     /// Drops notes whose recording was deleted.
+    /// Callers pass only a library that loaded; see `NotesService.queueAutomaticNotes`.
     func prune(keeping recordingIDs: Set<UUID>) {
-        let before = notes.count
-        notes.removeAll { !recordingIDs.contains($0.recordingID) }
-        if notes.count != before { persist() }
+        let next = notes.filter { recordingIDs.contains($0.recordingID) }
+        if next.count != notes.count { try? commit(next) }
     }
 
-    private func persist() {
+    /// Writes first, then updates memory, so a failed write changes nothing.
+    private func commit(_ next: [RecordingNote]) throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(notes) else { return }
-        try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? data.write(to: fileURL, options: .atomic)
+        let data = try encoder.encode(next)
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: fileURL, options: .atomic)
+        notes = next
     }
 }
 
@@ -94,6 +107,8 @@ final class NotesService {
         /// Why it paused on its own, e.g. several failures in a row.
         var pauseReason: String?
         var currentTitle: String?
+        /// The writer the user confirmed; a backfill never switches to another one.
+        var kind: NotesWriterKind = .off
         var startedAt = Date()
         var finishedAt: Date?
 
@@ -149,6 +164,7 @@ final class NotesService {
     /// Checks once a minute for new transcripts that should get notes automatically.
     func start() {
         NotesSettings.migrate()
+        NotesSettings.migrateAutoDates()
         autoTimer?.invalidate()
         autoTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
             Task { @MainActor in NotesService.shared.queueAutomaticNotes() }
@@ -164,16 +180,20 @@ final class NotesService {
     }
 
     private func queueAutomaticNotes() {
-        store.prune(keeping: Set(library.recordings.map(\.id)))
-        guard NotesSettings.writer != .off, let since = NotesSettings.autoNotesSince else { return }
-        for recording in library.recordings where recording.createdAt >= since
-            && Self.isReady(recording)
+        // Only an authoritative library: a failed or partial load must never read as
+        // "every recording was deleted" and wipe the notes.
+        if library.hasLoadedLibrary, !library.recordings.isEmpty {
+            store.prune(keeping: Set(library.recordings.map(\.id)))
+        }
+        guard NotesSettings.writer != .off else { return }
+        for recording in library.recordings where Self.isReady(recording)
             && store.note(for: recording.id) == nil && states[recording.id] == nil {
             if recording.type.isMeetingLike {
                 let timing = NotesSettings.meetingTiming
-                guard timing != .onRequest else { continue }
+                guard timing != .onRequest, let since = NotesSettings.meetingAutoSince, recording.createdAt >= since else { continue }
                 enqueue(Job(recordingID: recording.id, automatic: true, waitsForIdle: timing == .whenIdle))
             } else if let minimum = NotesSettings.voiceTiming.minimumSeconds,
+                      let since = NotesSettings.voiceAutoSince, recording.createdAt >= since,
                       recording.effectiveDurationSeconds > minimum {
                 enqueue(Job(recordingID: recording.id, automatic: true, waitsForIdle: false))
             }
@@ -199,13 +219,22 @@ final class NotesService {
     func startBackfill(_ recordingIDs: [UUID]) {
         guard !recordingIDs.isEmpty else { return }
         backlog = recordingIDs
-        backfill = Backfill(total: recordingIDs.count)
+        backfill = Backfill(total: recordingIDs.count, kind: NotesSettings.writer)
         consecutiveFailures = 0
         runNext()
     }
 
+    /// Nothing more is sent until Continue: queued backfill jobs go back to the backlog.
     func pauseBackfill() {
         backfill?.paused = true
+        returnQueuedBackfillJobs(toBacklog: true)
+    }
+
+    private func returnQueuedBackfillJobs(toBacklog: Bool) {
+        let queued = queue.filter(\.backfill).map(\.recordingID)
+        queue.removeAll { $0.backfill }
+        for id in queued { states[id] = nil }
+        if toBacklog { backlog.insert(contentsOf: queued, at: 0) }
     }
 
     func resumeBackfill() {
@@ -218,7 +247,7 @@ final class NotesService {
     /// Stops after the note being written now; notes already written stay.
     func stopBackfill() {
         backlog = []
-        queue.removeAll { $0.backfill }
+        returnQueuedBackfillJobs(toBacklog: false)
         backfill = nil
     }
 
@@ -240,7 +269,7 @@ final class NotesService {
                 continue
             }
             backfill = state
-            enqueue(Job(recordingID: next, automatic: true, waitsForIdle: NotesSettings.writer.isLocal, backfill: true))
+            enqueue(Job(recordingID: next, kind: state.kind, automatic: true, waitsForIdle: state.kind.isLocal, backfill: true))
             return
         }
         state.finishedAt = Date()
@@ -286,6 +315,19 @@ final class NotesService {
         guard running == nil else { return }
         if queue.isEmpty { feedBackfill() }
         guard running == nil, let job = queue.first else { return }
+        if job.backfill, let state = backfill {
+            if state.paused {
+                returnQueuedBackfillJobs(toBacklog: true)
+                return
+            }
+            // The confirmation named where the transcripts go; another writer needs a new one.
+            if NotesSettings.writer != state.kind {
+                backfill?.paused = true
+                backfill?.pauseReason = String(localized: "Paused because you chose another writer. Stop and start again to confirm where the transcripts go.")
+                returnQueuedBackfillJobs(toBacklog: true)
+                return
+            }
+        }
         if let reason = blocker(for: job) {
             states[job.recordingID] = .waiting(reason)
             if job.backfill { backfill?.currentTitle = nil }
@@ -324,7 +366,7 @@ final class NotesService {
             try Task.checkCancellation()
             let seconds = Int(Date().timeIntervalSince(started))
             note.seconds = seconds
-            store.save(note)
+            try store.save(note)
             states[job.recordingID] = nil
             NotesSettings.setLastRun(recording: recording, seconds: seconds, writer: writer.displayName, for: kind)
             logger.info("Notes written in \(seconds) s by \(writer.displayName, privacy: .public)")
