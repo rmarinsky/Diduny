@@ -243,6 +243,14 @@ extension CalendarMeeting {
         return now >= meeting.end.addingTimeInterval(60)
     }
 
+    /// "Stop after silence" waits while the meeting is still going on: the call is active, or the linked
+    /// calendar meeting has not ended yet. People can be quiet in a meeting for longer than the timeout.
+    static func silenceStopHeld(meeting: CalendarMeeting?, callActive: Bool, now: Date) -> Bool {
+        if callActive { return true }
+        guard let meeting else { return false }
+        return now < meeting.end
+    }
+
     static func copyLink(_ url: URL) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.absoluteString, forType: .string)
