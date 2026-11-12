@@ -53,8 +53,7 @@ struct RecordingDetailView: View {
     }
 
     private var currentQueueProgress: QueueProgress? {
-        guard queueService.currentRecordingId == currentRecording.id else { return nil }
-        return queueService.currentProgress
+        queueService.progress(for: currentRecording.id)
     }
 
     private var hasPlayableAudio: Bool {
@@ -73,6 +72,9 @@ struct RecordingDetailView: View {
                 VStack(alignment: .leading, spacing: DS.Space.md) {
                     result
                     RecordingNotesSection(recording: currentRecording)
+                    if !storage.isOtherBuildRecording(currentRecording.id) {
+                        RecordingOrganizeSection(recording: currentRecording)
+                    }
                     if currentRecording.remoteSource != nil { youtubeSourceSection }
                     captionsSection
                 }

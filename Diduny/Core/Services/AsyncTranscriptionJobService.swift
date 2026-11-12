@@ -51,6 +51,34 @@ private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
     }
 }
 
+/// The server no longer has the job (404/410): waiting longer cannot help.
+struct JobGoneError: LocalizedError, Equatable {
+    static let statusCodes: Set<Int> = [404, 410]
+    let statusCode: Int
+
+    var errorDescription: String? {
+        String(localized: "The transcription server no longer has this job. Transcribe the recording again.")
+    }
+}
+
+/// Waiting stopped while the job may still finish on the server: a retry resumes the same job.
+enum JobWaitInterruptedError: LocalizedError, Equatable {
+    case unreachable
+    case timedOut
+
+    var errorDescription: String? {
+        switch self {
+        case .unreachable: String(localized: "The transcription server could not be reached. Try again to pick up the same job.")
+        case .timedOut: String(localized: "The transcription is taking too long. Try again to pick up the same job.")
+        }
+    }
+
+    /// A network failure or an interrupted wait leaves the job alive; any other failure ends it.
+    static func jobMayStillFinish(after error: Error) -> Bool {
+        error is JobWaitInterruptedError || error is URLError
+    }
+}
+
 final class AsyncTranscriptionJobService {
     private var proxyBase: String {
         SettingsStorage.shared.proxyBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -203,6 +231,9 @@ final class AsyncTranscriptionJobService {
 
         let request = URLRequest(url: url)
         let (data, httpResponse) = try await performDataRequest(request)
+        if JobGoneError.statusCodes.contains(httpResponse.statusCode) {
+            throw JobGoneError(statusCode: httpResponse.statusCode)
+        }
         guard (200 ... 299).contains(httpResponse.statusCode) else {
             let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
             throw TranscriptionError.apiError("Failed to get job status (\(httpResponse.statusCode)): \(errorBody)")
@@ -256,17 +287,50 @@ final class AsyncTranscriptionJobService {
         preferSpeakerDiarization: Bool,
         onProgressUpdate: @escaping (JobProgressUpdate) -> Void
     ) async throws -> GeneratedTranscript {
-        var sseFailures = 0
-        let deadline = Date().addingTimeInterval(maxJobWaitSeconds)
+        let jobId = submission.jobId
+        return try await Self.waitLoop(
+            deadline: Date().addingTimeInterval(maxJobWaitSeconds),
+            stream: {
+                try await self.streamJobResult(jobId: jobId, onProgressUpdate: onProgressUpdate)
+                    .generatedTranscript(preferSpeakerDiarization: preferSpeakerDiarization)
+            },
+            status: { attempt in try await self.getJobStatusAfterDisconnect(jobId: jobId, sseAttempt: attempt) },
+            transcript: { $0.generatedTranscript(preferSpeakerDiarization: preferSpeakerDiarization) },
+            onProgressUpdate: onProgressUpdate
+        )
+    }
 
-        while Date() < deadline {
+    /// Rounds in a row where neither the event stream nor the status poll answered before the job is given up.
+    static let maxConsecutiveUnreachableRounds = 10
+
+    /// Waits for a submitted job: the event stream first, the status endpoint when the stream drops.
+    /// A job the server no longer knows (404/410) is final. After the deadline, which a Mac asleep
+    /// for hours passes without a single round, the status is read once more before giving up.
+    static func waitLoop(
+        deadline: Date,
+        now: () -> Date = Date.init,
+        stream: () async throws -> GeneratedTranscript,
+        status: (_ attempt: Int) async throws -> JobStatusResponse?,
+        transcript: (JobTranscriptionResult) -> GeneratedTranscript,
+        sleep: (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
+        onProgressUpdate: (JobProgressUpdate) -> Void
+    ) async throws -> GeneratedTranscript {
+        var sseFailures = 0
+        var unreachableRounds = 0
+
+        func finished(_ status: JobStatusResponse) throws -> GeneratedTranscript? {
+            if status.status == "completed", let result = status.result { return transcript(result) }
+            if status.status == "error" { throw TranscriptionError.apiError(status.error ?? "Transcription failed") }
+            if let parsed = JobStatus(rawValue: status.status) {
+                onProgressUpdate(JobProgressUpdate(status: parsed, progressPercent: status.progress))
+            }
+            return nil
+        }
+
+        while now() < deadline {
             try Task.checkCancellation()
             do {
-                let result = try await streamJobResult(
-                    jobId: submission.jobId,
-                    onProgressUpdate: onProgressUpdate
-                )
-                return result.generatedTranscript(preferSpeakerDiarization: preferSpeakerDiarization)
+                return try await stream()
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -274,31 +338,25 @@ final class AsyncTranscriptionJobService {
                 Log.transcription.warning("SSE stream failed (attempt \(sseFailures)): \(error)")
 
                 // Check if job finished while disconnected
-                if let status = try await getJobStatusAfterDisconnect(jobId: submission.jobId,
-                                                                      sseAttempt: sseFailures)
-                {
-                    if status.status == "completed", let result = status.result {
-                        return result.generatedTranscript(preferSpeakerDiarization: preferSpeakerDiarization)
-                    }
-                    if status.status == "error" {
-                        throw TranscriptionError.apiError(status.error ?? "Transcription failed")
-                    }
-                    if let parsed = JobStatus(rawValue: status.status) {
-                        onProgressUpdate(
-                            JobProgressUpdate(status: parsed, progressPercent: status.progress)
-                        )
+                if let current = try await status(sseFailures) {
+                    unreachableRounds = 0
+                    if let done = try finished(current) { return done }
+                } else {
+                    unreachableRounds += 1
+                    if unreachableRounds >= maxConsecutiveUnreachableRounds {
+                        throw JobWaitInterruptedError.unreachable
                     }
                 }
 
                 // Still in progress. SSE is best-effort; keep polling/retrying until
                 // the server-side job reaches a terminal state or the long job timeout.
                 try Task.checkCancellation()
-                let delaySeconds = min(Double(max(sseFailures, 1)) * 2, 30)
-                try await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+                try await sleep(min(Double(max(sseFailures, 1)) * 2, 30))
             }
         }
 
-        throw TranscriptionError.apiError("Timed out waiting for transcription result")
+        if let current = try await status(sseFailures + 1), let done = try finished(current) { return done }
+        throw JobWaitInterruptedError.timedOut
     }
 
     private func getJobStatusAfterDisconnect(jobId: String, sseAttempt: Int) async throws -> JobStatusResponse? {
@@ -312,6 +370,8 @@ final class AsyncTranscriptionJobService {
                 return try await getJobStatus(jobId: jobId)
             } catch is CancellationError {
                 throw CancellationError()
+            } catch let gone as JobGoneError {
+                throw gone
             } catch {
                 lastError = error
                 Log.transcription.warning(

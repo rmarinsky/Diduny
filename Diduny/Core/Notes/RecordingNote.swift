@@ -37,6 +37,37 @@ struct RecordingNote: Identifiable, Codable, Equatable {
     var unknownNames: [String]? = nil
     /// Seconds the model took.
     var seconds: Int? = nil
+    /// Blocks an agent added at the user's request. Kept apart from what the model wrote, and kept
+    /// when the notes are written again.
+    struct Addition: Codable, Equatable, Hashable {
+        var text: String
+        var addedAt: Date
+        /// "Claude", "Codex": who added it.
+        var author: String
+    }
+
+    var additions: [Addition]? = nil
+
+    /// `processedAt` of the transcript the notes were written from. Nil on notes from older builds.
+    var transcriptProcessedAt: Date? = nil
+
+    /// The recording's transcript was redone or edited after these notes were written.
+    func isStale(for recording: Recording) -> Bool {
+        guard let transcriptProcessedAt, let processedAt = recording.processedAt else { return false }
+        return abs(processedAt.timeIntervalSince(transcriptProcessedAt)) >= 1
+    }
+
+    /// The transcript a note was written from is no longer the recording's transcript.
+    /// Dates are compared to the second: notes.json stores them without fractions.
+    static func transcriptChanged(from written: Recording, to current: Recording?) -> Bool {
+        guard let current, NotesService.isReady(current) else { return true }
+        if current.transcriptionText != written.transcriptionText { return true }
+        switch (written.processedAt, current.processedAt) {
+        case (nil, nil): return false
+        case let (old?, new?): return abs(new.timeIntervalSince(old)) >= 1
+        default: return true
+        }
+    }
 
     var markdown: String {
         var lines = ["## " + String(localized: "Summary"), summary, ""]
@@ -51,12 +82,17 @@ struct RecordingNote: Identifiable, Codable, Equatable {
         section(String(localized: "Decisions"), decisions.map { $0.time.isEmpty ? $0.text : "\($0.text) [\($0.time)]" })
         section(String(localized: "Action items"), actionItems.map(\.markdownLine))
         section(String(localized: "Open questions"), openQuestions)
+        for addition in additions ?? [] {
+            lines.append("## " + String(localized: "Added by \(addition.author), \(addition.addedAt.formatted(date: .abbreviated, time: .shortened))"))
+            lines.append(addition.text)
+            lines.append("")
+        }
         return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var searchableText: String {
         ([writer, summary] + points + (topics ?? []) + decisions.map(\.text) + openQuestions
-            + actionItems.flatMap { [$0.owner, $0.task] })
+            + actionItems.flatMap { [$0.owner, $0.task] } + (additions ?? []).map(\.text))
             .joined(separator: "\u{0}").lowercased()
     }
 }

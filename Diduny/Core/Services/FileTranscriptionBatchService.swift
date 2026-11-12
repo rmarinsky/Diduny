@@ -1434,6 +1434,15 @@ final class FileTranscriptionBatchService {
             return result
         } catch {
             await permits.release()
+            // A failed job must not be resumed on retry; a cancelled or interrupted one may still finish.
+            if !(error is CancellationError), !JobWaitInterruptedError.jobMayStillFinish(after: error),
+               item(withID: itemID)?.cloudJobID != nil {
+                update(itemID) {
+                    $0.cloudJobID = nil
+                    $0.cloudJobTrimRange = nil
+                }
+                persistWorkItems()
+            }
             throw error
         }
     }

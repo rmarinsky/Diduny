@@ -5,6 +5,11 @@ struct RecordingDeletionStagedFile: Codable, Equatable {
     let stagedPath: String
 }
 
+extension Notification.Name {
+    /// Posted by `completeTranscription` with the recording's `id` in `userInfo`; the object is the storage.
+    static let recordingTranscriptCompleted = Notification.Name("ua.com.rmarinsky.diduny.recordingTranscriptCompleted")
+}
+
 struct RecordingDeletionRecovery: Codable, Equatable {
     let recordings: [Recording]
     let batches: [TranscriptionBatch]?
@@ -88,6 +93,8 @@ final class RecordingsLibraryStorage {
 
     private let fileManager = FileManager.default
     private let appSupportDir: URL
+    /// The folder with the library, notes and the queue journal.
+    var appDirectory: URL { appSupportDir }
     private let recordingsDir: URL
     private let otherBuildDir: URL?
     private let metadataURL: URL
@@ -494,7 +501,11 @@ final class RecordingsLibraryStorage {
             trimRange: previous.trimRange,
             calendarMeeting: previous.calendarMeeting,
             calendarCandidates: previous.calendarCandidates,
-            calendarLinkDeclined: previous.calendarLinkDeclined
+            calendarLinkDeclined: previous.calendarLinkDeclined,
+            project: previous.project,
+            tags: previous.tags,
+            people: previous.people,
+            speakerNames: previous.speakerNames
         )
 
         if forceSave {
@@ -556,7 +567,11 @@ final class RecordingsLibraryStorage {
                 trimRange: previous.trimRange,
             calendarMeeting: previous.calendarMeeting,
             calendarCandidates: previous.calendarCandidates,
-            calendarLinkDeclined: previous.calendarLinkDeclined
+            calendarLinkDeclined: previous.calendarLinkDeclined,
+            project: previous.project,
+            tags: previous.tags,
+            people: previous.people,
+            speakerNames: previous.speakerNames
             )
         }
         guard saveMetadataSynchronously() else {
@@ -959,6 +974,35 @@ final class RecordingsLibraryStorage {
         return true
     }
 
+    /// Project, tags, linked people and speaker names. Values are trimmed, empty ones dropped,
+    /// repeats removed (case-insensitive); an empty list is stored as nil.
+    @discardableResult
+    func updateOrganization(id: UUID, _ change: (inout Recording) -> Void) -> Bool {
+        guard allowsLibraryMutation() else { return false }
+        guard let index = recordings.firstIndex(where: { $0.id == id }) else { return false }
+        let previous = recordings[index]
+        change(&recordings[index])
+        recordings[index].project = recordings[index].project?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+        recordings[index].tags = Self.cleanNames(recordings[index].tags)
+        recordings[index].people = Self.cleanNames(recordings[index].people)
+        let speakers = (recordings[index].speakerNames ?? [:])
+            .mapValues { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.value.isEmpty }
+        recordings[index].speakerNames = speakers.isEmpty ? nil : speakers
+        guard recordings[index] != previous else { return true }
+        guard saveMetadataSynchronously() else {
+            recordings[index] = previous
+            return false
+        }
+        return true
+    }
+
+    nonisolated static func cleanNames(_ names: [String]?) -> [String]? {
+        var seen = Set<String>()
+        let cleaned = (names ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
     /// Persists only the selection. Failed writes restore the visible metadata.
     @discardableResult
     func updateTrimRange(id: UUID, range: AudioTrimRange?) -> Bool {
@@ -1064,6 +1108,8 @@ final class RecordingsLibraryStorage {
             recordings[index] = previous
             return
         }
+        // Automatic notes start now instead of at the next minute's check.
+        NotificationCenter.default.post(name: .recordingTranscriptCompleted, object: self, userInfo: ["id": id])
         if self === RecordingsLibraryStorage.shared, let provider, ["local", "cloud"].contains(provider) {
             let scenario = kind == .translation ? "translation" : previous.type == .meeting ? "meeting" : previous.type == .fileTranscription ? "file" : "dictation"
             Task { await AnalyticsService.shared.record(duration: previous.effectiveDurationSeconds, mode: provider, scenario: scenario) }
@@ -1196,11 +1242,10 @@ final class RecordingsLibraryStorage {
                             try? FileManager.default.moveItem(at: staged, to: original)
                         }
                     }
-                    guard recovery.stagedFiles.allSatisfy({
-                        FileManager.default.fileExists(atPath: $0.originalPath)
-                    }) else {
-                        Log.app.error("Recording deletion recovery still has missing media files")
-                        return nil
+                    // Files lost for good must not hide the whole library on every launch: the rows
+                    // without audio are dropped by the orphan scan below, the rest come back.
+                    if !recovery.stagedFiles.allSatisfy({ FileManager.default.fileExists(atPath: $0.originalPath) }) {
+                        Log.app.error("Recording deletion recovery has missing media files; restoring the rest")
                     }
                     if let batches = recovery.batches {
                         do {
@@ -1442,7 +1487,11 @@ final class RecordingsLibraryStorage {
                     trimRange: previous.trimRange,
             calendarMeeting: previous.calendarMeeting,
             calendarCandidates: previous.calendarCandidates,
-            calendarLinkDeclined: previous.calendarLinkDeclined
+            calendarLinkDeclined: previous.calendarLinkDeclined,
+            project: previous.project,
+            tags: previous.tags,
+            people: previous.people,
+            speakerNames: previous.speakerNames
                 )
                 didReset = true
             default:
@@ -1458,6 +1507,11 @@ final class RecordingsLibraryStorage {
         metadataWriteQueue.async {
             _ = Self.writeMetadataSnapshot(snapshot, to: url)
         }
+    }
+
+    /// Waits for metadata writes already queued, on quit, so the last change reaches the disk.
+    func flushPendingWrites() {
+        metadataWriteQueue.sync {}
     }
 
     private func saveMetadataSynchronously() -> Bool {
@@ -1586,7 +1640,11 @@ final class RecordingsLibraryStorage {
                 trimRange: recording.trimRange,
                 calendarMeeting: recording.calendarMeeting,
                 calendarCandidates: recording.calendarCandidates,
-                calendarLinkDeclined: recording.calendarLinkDeclined
+                calendarLinkDeclined: recording.calendarLinkDeclined,
+                project: recording.project,
+                tags: recording.tags,
+                people: recording.people,
+                speakerNames: recording.speakerNames
             )
             saveMetadata()
 
