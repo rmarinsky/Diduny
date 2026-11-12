@@ -37,6 +37,17 @@ struct RecordingNote: Identifiable, Codable, Equatable {
     var unknownNames: [String]? = nil
     /// Seconds the model took.
     var seconds: Int? = nil
+    /// Blocks an agent added at the user's request. Kept apart from what the model wrote, and kept
+    /// when the notes are written again.
+    struct Addition: Codable, Equatable, Hashable {
+        var text: String
+        var addedAt: Date
+        /// "Claude", "Codex": who added it.
+        var author: String
+    }
+
+    var additions: [Addition]? = nil
+
     /// `processedAt` of the transcript the notes were written from. Nil on notes from older builds.
     var transcriptProcessedAt: Date? = nil
 
@@ -71,12 +82,17 @@ struct RecordingNote: Identifiable, Codable, Equatable {
         section(String(localized: "Decisions"), decisions.map { $0.time.isEmpty ? $0.text : "\($0.text) [\($0.time)]" })
         section(String(localized: "Action items"), actionItems.map(\.markdownLine))
         section(String(localized: "Open questions"), openQuestions)
+        for addition in additions ?? [] {
+            lines.append("## " + String(localized: "Added by \(addition.author), \(addition.addedAt.formatted(date: .abbreviated, time: .shortened))"))
+            lines.append(addition.text)
+            lines.append("")
+        }
         return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var searchableText: String {
         ([writer, summary] + points + (topics ?? []) + decisions.map(\.text) + openQuestions
-            + actionItems.flatMap { [$0.owner, $0.task] })
+            + actionItems.flatMap { [$0.owner, $0.task] } + (additions ?? []).map(\.text))
             .joined(separator: "\u{0}").lowercased()
     }
 }

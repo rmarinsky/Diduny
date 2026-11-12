@@ -6,7 +6,7 @@ enum YouTubeRemoteMediaSource {
     static let provider = "youtube"
 }
 
-/// Read-only access to the Diduny library. Never writes to it.
+/// Reads the Diduny library. Never writes to it: changes go through the app (`AppCommands`).
 struct Library {
     let directory: URL
     let bundleIdentifier: String

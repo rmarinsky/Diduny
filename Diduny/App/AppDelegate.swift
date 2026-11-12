@@ -265,6 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
             AgentSkillInstaller.sync()
             AgentSettingsSync.shared.start()
+            AgentCommandCenter.shared.start()
         }
         // Sudden termination can end the process at logout/shutdown without
         // applicationWillTerminate; those exits are clean, not crashes.
