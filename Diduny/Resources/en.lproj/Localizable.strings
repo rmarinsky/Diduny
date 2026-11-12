@@ -1489,7 +1489,7 @@
 "Diduny asks ElevenLabs to delete each file transcript after use. ElevenLabs may keep backups for up to 30 days and in its logs; zero retention is not supported. Live (realtime) transcripts are not claimed to be deleted. Audio is sent to ElevenLabs only for jobs set to ElevenLabs." = "Diduny asks ElevenLabs to delete each file transcript after use. ElevenLabs may keep backups for up to 30 days and in its logs; zero retention is not supported. Live (realtime) transcripts are not claimed to be deleted. Audio is sent to ElevenLabs only for jobs set to ElevenLabs.";
 "Before you start" = "Before you start";
 "1. Create an API key in your ElevenLabs dashboard." = "1. Create an API key in your ElevenLabs dashboard.";
-"2. If you restrict the key, enable Speech to Text, and Usage (read) to see credits." = "2. If you restrict the key, enable Speech to Text, and Usage (read) to see credits.";
+"2. If you restrict the key, enable Speech to Text, and User (read) to see credits." = "2. If you restrict the key, enable Speech to Text, and User (read) to see credits.";
 "3. Accept the Scribe terms in your ElevenLabs dashboard before your first recording. Without this, ElevenLabs rejects live transcription." = "3. Accept the Scribe terms in your ElevenLabs dashboard before your first recording. Without this, ElevenLabs rejects live transcription.";
 "Remove the ElevenLabs key?" = "Remove the ElevenLabs key?";
 "Remove key" = "Remove key";

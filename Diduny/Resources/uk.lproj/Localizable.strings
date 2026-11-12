@@ -1489,7 +1489,7 @@
 "Diduny asks ElevenLabs to delete each file transcript after use. ElevenLabs may keep backups for up to 30 days and in its logs; zero retention is not supported. Live (realtime) transcripts are not claimed to be deleted. Audio is sent to ElevenLabs only for jobs set to ElevenLabs." = "Diduny просить ElevenLabs видаляти кожен транскрипт файлу після використання. ElevenLabs може зберігати резервні копії до 30 днів та у своїх журналах; режим нульового зберігання не підтримується. Транскрипти наживо (realtime) не заявляються як видалені. Аудіо надсилається до ElevenLabs лише для завдань, налаштованих на ElevenLabs.";
 "Before you start" = "Перед початком";
 "1. Create an API key in your ElevenLabs dashboard." = "1. Створіть API-ключ у вашій панелі ElevenLabs.";
-"2. If you restrict the key, enable Speech to Text, and Usage (read) to see credits." = "2. Якщо ви обмежуєте ключ, увімкніть Speech to Text і Usage (читання), щоб бачити кредити.";
+"2. If you restrict the key, enable Speech to Text, and User (read) to see credits." = "2. Якщо ви обмежуєте ключ, увімкніть Speech to Text і User (читання), щоб бачити кредити.";
 "3. Accept the Scribe terms in your ElevenLabs dashboard before your first recording. Without this, ElevenLabs rejects live transcription." = "3. Прийміть умови Scribe в панелі ElevenLabs перед першим записом. Без цього ElevenLabs відхилятиме транскрибування наживо.";
 "Remove the ElevenLabs key?" = "Видалити ключ ElevenLabs?";
 "Remove key" = "Видалити ключ";

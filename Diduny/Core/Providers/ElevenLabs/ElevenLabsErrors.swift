@@ -59,6 +59,8 @@ enum ElevenLabsError: Error, Equatable, LocalizedError {
             return .termsNotAccepted
         }
         if code == "quota_exceeded" || code == "insufficient_credits" { return .quotaExceeded }
+        // A restricted key answers 401 `missing_permissions`: the key is valid, a permission is off.
+        if code == "missing_permissions" { return .missingPermission }
         switch httpStatus {
         case 401: return .invalidKey
         case 402: return .quotaExceeded
