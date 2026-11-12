@@ -572,7 +572,6 @@
 "Open the selected browser and select its calendar tab." = "Відкрийте вибраний браузер і зробіть вкладку календаря активною.";
 "Opening the calendar in the selected profile. Connect its window after loading." = "Календар відкривається у вибраному профілі. Підключіть його вікно після завантаження.";
 "Opens the setup guide in a separate window" = "Відкриває початкове налаштування в окремому вікні";
-"Optional on Free and Pro. Shares duration, local/cloud mode and feature category, plus app launches and unexpected quits with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days. No audio, text or file names. Cloud limits, payments and necessary security records are handled separately." = "Необов’язково для Free та Pro. Передає тривалість, локальний чи хмарний режим і категорію функції, а також запуски й неочікувані завершення застосунку з версією Diduny, версією macOS і типом чипа Mac (Apple silicon чи Intel), пов’язані з обліковим записом; дані зберігаються 30 днів. Без аудіо, текстів і назв файлів. Облік хмарних лімітів, платежів і даних безпеки ведеться окремо.";
 "Or use Menu → Transcribe Meeting" = "Або виберіть у меню «Транскрибувати зустріч»";
 "Original %@" = "Оригінал %@";
 "Outlook" = "Outlook";
@@ -2386,3 +2385,13 @@
 /* Settings > Modes & shortcuts */
 "Modes & shortcuts" = "Режими та шорткати";
 "What runs each mode by default, how you start it, and the other shortcuts." = "Що за замовчуванням запускає кожен режим, як його ввімкнути, та інші шорткати.";
+"Optional on Free and Pro. Shares duration, local/cloud mode, feature category and the transcription engine, plus app launches, unexpected quits and error codes with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days (error codes 90 days). No audio, text or file names. Cloud limits, payments and necessary security records are handled separately." = "Необов’язково на Free і Pro. Надсилає тривалість, режим (локально чи в хмарі), тип функції та рушій розпізнавання, а також запуски застосунку, неочікувані завершення й коди помилок разом із версією Diduny, версією macOS і типом чипа Mac (Apple silicon чи Intel). Дані пов’язані з вашим акаунтом і зберігаються 30 днів (коди помилок — 90 днів). Без аудіо, тексту й назв файлів. Хмарні ліміти, платежі та потрібні записи безпеки обробляються окремо.";
+"The Diduny team sees how much time this account spends on each transcription engine and model, to help with support. Turn off sharing to stop it." = "Команда Diduny бачить, скільки часу цей акаунт використовує кожен рушій і модель розпізнавання, щоб допомагати з підтримкою. Вимкніть надсилання, щоб це припинити.";
+"Share anonymous feature usage" = "Надсилати анонімну статистику функцій";
+"On by default. Counts which features and shortcuts are used each day, without your account or anything you say or type, so we know what to improve." = "Увімкнено за замовчуванням. Рахує, якими функціями й комбінаціями клавіш користуються щодня, без вашого акаунта й без того, що ви кажете чи пишете, щоб ми знали, що покращувати.";
+"Export Diagnostics…" = "Експортувати діагностику…";
+"Export Diagnostics" = "Експорт діагностики";
+"Diagnostics" = "Діагностика";
+"Something went wrong? Export a diagnostics file and send it to support. It holds app events and error codes from this Mac: no audio, text, file names, email or keys. Nothing leaves your Mac until you send it." = "Щось пішло не так? Експортуйте файл діагностики й надішліть його в підтримку. У ньому лише події застосунку та коди помилок з цього Mac: без аудіо, тексту, назв файлів, пошти чи ключів. Нічого не залишає ваш Mac, доки ви самі його не надішлете.";
+"Contains app events and errors only: no audio, text, file names or keys." = "Лише події застосунку та помилки: без аудіо, тексту, назв файлів чи ключів.";
+"Could not export diagnostics" = "Не вдалося експортувати діагностику";

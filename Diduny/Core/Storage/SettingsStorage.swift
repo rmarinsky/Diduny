@@ -124,6 +124,7 @@ final class SettingsStorage {
         case preferredDeviceUID
         case microphoneSelectionStrategy
         case autoPaste
+        case shareFeatureUsage
         case messageFormattingMode
         case playSoundOnCompletion
         case launchAtLogin
@@ -306,6 +307,12 @@ final class SettingsStorage {
                 .flatMap(MessageFormattingMode.init(rawValue:)) ?? .chat
         }
         set { defaults.set(newValue.rawValue, forKey: Key.messageFormattingMode.rawValue) }
+    }
+
+    /// Anonymous feature and shortcut counters (no account link). On by default; Settings > Account turns it off.
+    var shareFeatureUsage: Bool {
+        get { defaults.object(forKey: Key.shareFeatureUsage.rawValue) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.shareFeatureUsage.rawValue) }
     }
 
     var autoPaste: Bool {

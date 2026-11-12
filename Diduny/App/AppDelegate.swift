@@ -265,6 +265,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             launch.previousExit.rawValue,
             launch.rebootedSinceLast ? 1 : 0
         )
+        let launchOS = ProcessInfo.processInfo.operatingSystemVersion
+        DiagnosticLog.shared.record(.appLaunch, [
+            .appVersion: .string(IncidentReporter.appVersion),
+            .osVersion: .string("\(launchOS.majorVersion).\(launchOS.minorVersion).\(launchOS.patchVersion)"),
+            .arch: .string(AppLaunchTracker.hardwareArchitecture()),
+            .previousExit: .string(launch.previousExit.rawValue),
+        ])
+        Task { await FeatureUsageCounter.shared.flush() }
         Task {
             guard AuthService.shared.isLoggedIn else { return }
             await AnalyticsService.shared.refresh()
@@ -297,11 +305,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainWindowController.shared.configure(appDelegate: self)
         statusMenuController = StatusMenuController(appState: appState) { [unowned self] in
             StatusMenuBuilder(appState: appState, audioDeviceManager: audioDeviceManager, connection: .shared, actions: .init(
-                toggleRecording: { self.toggleRecording() },
-                toggleTranslation: { self.toggleTranslationRecording() },
-                toggleMeeting: { self.toggleMeetingRecording() },
-                toggleMeetingTranslation: { self.toggleMeetingTranslationRecording() },
-                batchFilesAndURLs: { self.batchFilesAndURLs() },
+                toggleRecording: {
+                    FeatureUsageCounter.shared.record(.dictation, via: .menu)
+                    self.toggleRecording()
+                },
+                toggleTranslation: {
+                    FeatureUsageCounter.shared.record(.translation, via: .menu)
+                    self.toggleTranslationRecording()
+                },
+                toggleMeeting: {
+                    FeatureUsageCounter.shared.record(.meeting, via: .menu)
+                    self.toggleMeetingRecording()
+                },
+                toggleMeetingTranslation: {
+                    FeatureUsageCounter.shared.record(.meetingTranslation, via: .menu)
+                    self.toggleMeetingTranslationRecording()
+                },
+                batchFilesAndURLs: {
+                    FeatureUsageCounter.shared.record(.fileTranscription, via: .menu)
+                    self.batchFilesAndURLs()
+                },
                 openMainWindow: { self.openMainWindow(section: $0) },
                 checkForUpdates: { self.updaterManager.checkForUpdates() }
             ))
@@ -806,6 +829,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_: Notification) {
         AppLaunchTracker.shared.markCleanExit()
+        DiagnosticLog.shared.record(.appTerminate)
+        DiagnosticLog.shared.flush()
         CalendarConnection.shared.stop()
         BrowserCalendarConnection.shared.stop()
         calendarReminderController.dismiss()

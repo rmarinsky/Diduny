@@ -404,6 +404,7 @@ extension AppDelegate {
 
             // Show specific error message for timeout
             await MainActor.run {
+                reportFailure(error, job: .dictationTranslation)
                 appState.errorMessage = error.localizedDescription
                 appState.translationRecordingState = .error
                 appState.translationRecordingStartTime = nil
@@ -426,6 +427,7 @@ extension AppDelegate {
             }
 
             await MainActor.run {
+                reportFailure(error, job: .dictationTranslation)
                 appState.errorMessage = error.localizedDescription
                 appState.translationRecordingState = .error
                 appState.translationRecordingStartTime = nil
@@ -623,7 +625,8 @@ extension AppDelegate {
             Task { await AnalyticsService.shared.record(
                 duration: analyticsDuration,
                 mode: routedTranslationProvider.rawValue,
-                scenario: "translation"
+                scenario: "translation",
+                engine: analyticsEngine(for: .dictationTranslation)
             ) }
 
             let duration = recordingStartTime.map { stopTime.timeIntervalSince($0) } ?? 0
@@ -707,6 +710,7 @@ extension AppDelegate {
                 return
             }
             await MainActor.run {
+                reportFailure(error, job: .dictationTranslation)
                 appState.errorMessage = error.localizedDescription
                 appState.isEmptyTranscription = isEmptyTranscription
                 appState.translationRecordingState = .error

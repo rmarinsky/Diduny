@@ -7,26 +7,32 @@ extension AppDelegate {
     func setupHotkeys() {
         // Register all hotkeys - KeyboardShortcuts handles storage automatically
         hotkeyService.registerRecordingHotkey { [weak self] in
+            FeatureUsageCounter.shared.record(.dictation, via: .hotkey)
             self?.toggleRecording()
         }
 
         hotkeyService.registerTranslationHotkey { [weak self] in
+            FeatureUsageCounter.shared.record(.translation, via: .hotkey)
             self?.toggleTranslationRecording()
         }
 
         hotkeyService.registerMeetingHotkey { [weak self] in
+            FeatureUsageCounter.shared.record(.meeting, via: .hotkey)
             self?.toggleMeetingRecording()
         }
 
         hotkeyService.registerMeetingTranslationHotkey { [weak self] in
+            FeatureUsageCounter.shared.record(.meetingTranslation, via: .hotkey)
             self?.toggleMeetingTranslationRecording()
         }
 
         hotkeyService.registerHistoryPaletteHotkey {
+            FeatureUsageCounter.shared.record(.historyPalette, via: .hotkey)
             HistoryPaletteWindowController.shared.toggle()
         }
 
         hotkeyService.registerTranslateSelectedTextHotkey {
+            FeatureUsageCounter.shared.record(.selectionTranslation, via: .hotkey)
             Task {
                 do {
                     let text = try await ClipboardService.shared.captureSelectedText()
@@ -48,6 +54,7 @@ extension AppDelegate {
     func setupPushToTalk() {
         pushToTalkService.onKeyDown = { [weak self] in
             guard let self else { return }
+            FeatureUsageCounter.shared.record(.dictation, via: .pushToTalk)
             Task {
                 await self.startRecordingIfIdle()
             }
@@ -150,6 +157,7 @@ extension AppDelegate {
     func setupTranslationPushToTalk() {
         translationPushToTalkService.onKeyDown = { [weak self] in
             guard let self else { return }
+            FeatureUsageCounter.shared.record(.translation, via: .pushToTalk)
             Task {
                 await self.startTranslationRecordingIfIdle()
             }

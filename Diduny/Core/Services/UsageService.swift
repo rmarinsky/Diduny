@@ -122,6 +122,8 @@ struct UsageLimitErrorResponse: Decodable {
 final class AnalyticsService {
     static let shared = AnalyticsService()
     private(set) var enabled = false
+    /// The admin tracks this account's time per engine (shown to the user in Settings).
+    private(set) var engineTimeVisible = false
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     private var revision: String?
@@ -146,6 +148,7 @@ final class AnalyticsService {
         generation += 1
         operationID = nil
         enabled = false
+        engineTimeVisible = false
         revision = nil
         owner = nil
         isLoading = false
@@ -201,10 +204,11 @@ final class AnalyticsService {
             let (data, response) = try await transport(request)
             guard current == generation, account() == currentAccount else { return }
             guard response.statusCode == 200 else { throw URLError(.badServerResponse) }
-            struct Consent: Decodable { let enabled: Bool; let revision: String? }
+            struct Consent: Decodable { let enabled: Bool; let revision: String?; let engineTimeVisible: Bool? }
             let consent = try JSONDecoder().decode(Consent.self, from: data)
             UserDefaults.standard.removeObject(forKey: withdrawalKey)
             enabled = consent.enabled
+            engineTimeVisible = consent.engineTimeVisible ?? false
             revision = consent.revision
             errorMessage = nil
         } catch {
@@ -218,21 +222,65 @@ final class AnalyticsService {
         }
     }
 
-    func record(duration: TimeInterval, mode: String, scenario: String) async {
+    func record(duration: TimeInterval, mode: String, scenario: String, engine: String? = nil) async {
         guard enabled, owner == account(), owner != nil, let revision,
               duration.isFinite, duration > 0, duration <= 86400,
               ["local", "cloud"].contains(mode),
               ["dictation", "meeting", "file", "translation"].contains(scenario) else { return }
         struct Event: Encodable {
             let id: UUID; let revision: String; let durationMs: Int; let mode: String; let scenario: String
+            let engine: String?
         }
         await post(path: "events", Event(
             id: UUID(),
             revision: revision,
             durationMs: max(1, Int(duration * 1000)),
             mode: mode,
-            scenario: scenario
+            scenario: scenario,
+            engine: engine.flatMap(Self.engineLabel)
         ))
+    }
+
+    /// A failure on any engine, by code only (`IncidentReporter`). Needs the same consent.
+    func recordError(kind: String, engine: String, errorCode: String, requestId: String?, appVersion: String) async {
+        guard enabled, owner == account(), owner != nil, let revision,
+              let engine = Self.engineLabel(engine),
+              DiagnosticLog.isSafeToken(errorCode), errorCode.count <= 64 else { return }
+        struct Report: Encodable {
+            let id: UUID; let revision: String; let kind: String; let engine: String
+            let errorCode: String; let requestId: String?; let appVersion: String
+
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(id, forKey: .id)
+                try container.encode(revision, forKey: .revision)
+                try container.encode(kind, forKey: .kind)
+                try container.encode(engine, forKey: .engine)
+                try container.encode(errorCode, forKey: .errorCode)
+                // The backend requires the key; null means no server request was involved.
+                try container.encode(requestId, forKey: .requestId)
+                try container.encode(appVersion, forKey: .appVersion)
+            }
+
+            enum CodingKeys: String, CodingKey { case id, revision, kind, engine, errorCode, requestId, appVersion }
+        }
+        await post(path: "errors", Report(
+            id: UUID(),
+            revision: revision,
+            kind: kind,
+            engine: engine,
+            errorCode: errorCode.replacingOccurrences(of: "/", with: "-"),
+            requestId: requestId.flatMap { $0.count <= 64 ? $0 : nil },
+            appVersion: appVersion
+        ))
+    }
+
+    /// "<engine>" or "<engine>:<model>" in the backend's alphabet (lowercase, `_ . : -`), at most 64 chars.
+    nonisolated static func engineLabel(_ raw: String) -> String? {
+        let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789_.:-")
+        let label = String(raw.lowercased().map { allowed.contains($0) ? $0 : "-" }.prefix(64))
+        guard let first = label.first, first.isLetter || first.isNumber else { return nil }
+        return label
     }
 
     func recordLaunch(_ launch: AppLaunch, appVersion: String, osVersion: String, arch: String) async {

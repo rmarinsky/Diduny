@@ -559,6 +559,7 @@ extension AppDelegate {
             }
 
             await MainActor.run {
+                reportFailure(error, job: .meeting)
                 appState.errorMessage = error.localizedDescription
                 appState.meetingRecordingState = .error
                 handleMeetingStateChange(.error)
@@ -1114,6 +1115,7 @@ extension AppDelegate {
                 ?? (RecordingsLibraryStorage.shared.recordings.contains { $0.id == recordingId } ? recordingId : nil)
             await MainActor.run {
                 DictationOverlayController.shared.setOutcomeRecordingID(openableID)
+                reportFailure(error, job: .meeting)
                 appState.errorMessage = userMessage
                 appState.meetingRecordingState = .error
                 appState.meetingRecordingStartTime = nil

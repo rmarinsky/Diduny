@@ -19,6 +19,11 @@ struct DidunyApp: App {
                     }
                     .keyboardShortcut("b", modifiers: [.command, .shift])
                 }
+                CommandGroup(after: .help) {
+                    Button("Export Diagnostics…") {
+                        DiagnosticsExporter.exportInteractively(appDelegate: appDelegate)
+                    }
+                }
             }
     }
 }

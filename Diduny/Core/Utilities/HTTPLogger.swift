@@ -1,17 +1,30 @@
 import Foundation
 import os
 
-// MARK: - HTTP Debug Logger (DEV_BUILD only)
+// MARK: - HTTP Logger
+// Every build sends X-Request-Id and writes failed calls (status, path, request ID;
+// never bodies) to the exportable DiagnosticLog. Verbose logging is DEV_BUILD only.
 
 enum HTTPLogger {
-    #if DEV_BUILD
-    /// Attaches an X-Request-Id header to the request for correlation.
+    /// Attaches an X-Request-Id header to the request for correlation with server logs.
     static func attachRequestId(_ request: inout URLRequest) -> String {
-        let requestId = UUID().uuidString
+        let requestId = UUID().uuidString.lowercased()
         request.setValue(requestId, forHTTPHeaderField: "X-Request-Id")
         return requestId
     }
 
+    /// Records a non-2xx response in the diagnostics log.
+    static func recordFailure(response: HTTPURLResponse, requestId: String) {
+        guard !(200 ... 299).contains(response.statusCode) else { return }
+        let serverRequestId = response.value(forHTTPHeaderField: "X-Request-Id") ?? requestId
+        DiagnosticLog.shared.record(.httpError, [
+            .httpStatus: .int(response.statusCode),
+            .path: .string(response.url?.path ?? ""),
+            .requestId: .string(serverRequestId),
+        ])
+    }
+
+    #if DEV_BUILD
     /// Logs outgoing request: method, path, and body size for multipart.
     static func logRequest(_ request: URLRequest, requestId: String) {
         let method = request.httpMethod ?? "GET"
@@ -33,6 +46,7 @@ enum HTTPLogger {
         requestId: String,
         startTime: ContinuousClock.Instant
     ) {
+        recordFailure(response: response, requestId: requestId)
         let duration = startTime.duration(to: .now)
         let ms = Int(duration.components.seconds * 1000 + duration.components.attoseconds / 1_000_000_000_000_000)
         let serverRequestId = response.value(forHTTPHeaderField: "X-Request-Id") ?? requestId.prefix(8).description
@@ -53,12 +67,10 @@ enum HTTPLogger {
     }
     #else
     @inline(__always)
-    static func attachRequestId(_ request: inout URLRequest) -> String { "" }
-
-    @inline(__always)
     static func logRequest(_: URLRequest, requestId _: String) {}
 
-    @inline(__always)
-    static func logResponse(data _: Data, response _: HTTPURLResponse, requestId _: String, startTime _: ContinuousClock.Instant) {}
+    static func logResponse(data _: Data, response: HTTPURLResponse, requestId: String, startTime _: ContinuousClock.Instant) {
+        recordFailure(response: response, requestId: requestId)
+    }
     #endif
 }
