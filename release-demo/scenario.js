@@ -35,6 +35,13 @@ window.SCENARIO = {
       uk: "Проєкт, теги й люди", en: "Project, tags and people",
       uk2: "і ваші імена для спікерів", en2: "and your names for speakers",
     },
+    {
+      frame: "diagnostics", duration: 3800, enter: "slide",
+      camera: [[0, "full"], [500, [20, 400, 860, 240]]],
+      highlight: { rect: [24, 488, 840, 82], at: 1200 },
+      uk: "Щось пішло не так? Експортуйте діагностику", en: "Something went wrong? Export diagnostics",
+      uk2: "файл для підтримки, без аудіо й тексту", en2: "a file for support, no audio or text",
+    },
     { end: true, duration: 2600, uk: "Онови Diduny → Check for Updates…", en: "Update: Diduny → Check for Updates…" },
   ],
 };
