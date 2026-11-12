@@ -49,7 +49,8 @@ final class RecordingsLibraryStorage {
         return (try? FileManager.default.contentsOfDirectory(atPath: recordingsURL.path).isEmpty) == false
     }
 
-    private nonisolated static var defaultAppDirectory: URL {
+    /// The app's library folder, known without loading the library (the instance lock lives there).
+    nonisolated static var defaultAppDirectory: URL {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -1242,9 +1243,16 @@ final class RecordingsLibraryStorage {
                             try? FileManager.default.moveItem(at: staged, to: original)
                         }
                     }
-                    // Files lost for good must not hide the whole library on every launch: the rows
+                    let missing = recovery.stagedFiles.filter { !FileManager.default.fileExists(atPath: $0.originalPath) }
+                    // A file still waiting in the staging folder can be restored next time: keep the recovery
+                    // pending, so the cleanup never deletes it.
+                    guard !missing.contains(where: { FileManager.default.fileExists(atPath: $0.stagedPath) }) else {
+                        Log.app.error("Recording deletion recovery could not move media files back; will retry")
+                        return nil
+                    }
+                    // Files lost from both places must not hide the whole library on every launch: the rows
                     // without audio are dropped by the orphan scan below, the rest come back.
-                    if !recovery.stagedFiles.allSatisfy({ FileManager.default.fileExists(atPath: $0.originalPath) }) {
+                    if !missing.isEmpty {
                         Log.app.error("Recording deletion recovery has missing media files; restoring the rest")
                     }
                     if let batches = recovery.batches {

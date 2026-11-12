@@ -30,6 +30,11 @@ enum AgentCommandProtocol {
         /// Whisper model for `retranscribe`; nil uses the model chosen in Settings.
         var model: String?
         var createdAt = Date()
+        /// Seconds since 1970 with fractions: commands sent within one second keep their order,
+        /// which `createdAt` loses in ISO 8601. Nil in files from before it existed.
+        var order: Double? = Date().timeIntervalSince1970
+
+        var sortKey: Double { order ?? createdAt.timeIntervalSince1970 }
     }
 
     struct Result: Codable, Equatable {

@@ -76,7 +76,7 @@ struct ProcessingLanesTests {
         gate.openAll()
         await waitUntil { !queue.isProcessing }
         #expect(storage.recordings.filter { $0.status == .transcribed }.count == 3)
-        #expect(board.work.isEmpty)
+        #expect(board.isEmpty)
     }
 
     @Test func boardEndsOnlyTheKindThatFinished() {
@@ -85,9 +85,15 @@ struct ProcessingLanesTests {
         board.start(id, kind: .transcription, lane: .cloud)
         board.finish(id, kind: .notes)
         #expect(board.work(for: id)?.kind == .transcription)
+        // Notes and a new transcription of one recording are both shown.
+        board.start(id, kind: .notes, lane: .notes)
         board.update(id, notes: .checking)
+        #expect(board.ordered.count == 2)
         board.finish(id, kind: .transcription)
-        #expect(board.work(for: id) == nil)
+        #expect(board.work(for: id, kind: .notes)?.notes == .checking)
+        #expect(board.work(for: id, kind: .transcription) == nil)
+        board.finish(id, kind: .notes)
+        #expect(board.isEmpty)
     }
 
     @Test func completedTranscriptionAnnouncesItselfForNotes() throws {

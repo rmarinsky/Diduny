@@ -21,14 +21,14 @@ struct RecordingRowView: View {
     /// Progress while this recording is the queue's current item.
     private var queueProgress: QueueProgress? {
         guard recording.status == .processing else { return nil }
-        return queueService.progress(for: recording.id) ?? board.work(for: recording.id)?.progress
+        return queueService.progress(for: recording.id) ?? board.work(for: recording.id, kind: .transcription)?.progress
     }
 
     @State private var board = ProcessingBoard.shared
 
     /// "Writing notes, part 1 of 2." while notes are written for this recording.
     private var notesWork: String? {
-        guard let work = board.work(for: recording.id), work.kind == .notes else { return nil }
+        guard let work = board.work(for: recording.id, kind: .notes) else { return nil }
         if case let .writing(part, total) = work.notes, total > 1 {
             return String(localized: "Writing notes, part \(part) of \(total).")
         }

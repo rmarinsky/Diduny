@@ -14,20 +14,23 @@ final class AppInstanceLock {
         close(descriptor)
     }
 
-    /// Nil when another process holds the lock for this folder.
-    static func acquire(in directory: URL) -> AppInstanceLock? {
+    enum Outcome {
+        case acquired(AppInstanceLock)
+        /// Another process of this build holds it.
+        case heldElsewhere
+        /// The lock file could not be opened; nothing is known about other copies.
+        case unavailable(errno: Int32)
+    }
+
+    static func acquire(in directory: URL) -> Outcome {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let path = directory.appendingPathComponent(".lock").path
         let descriptor = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
-        guard descriptor >= 0 else {
-            // A lock that cannot be created must not stop the app from starting.
-            Log.app.error("Could not open the instance lock file: errno \(errno)")
-            return AppInstanceLock(descriptor: open("/dev/null", O_RDONLY))
-        }
+        guard descriptor >= 0 else { return .unavailable(errno: errno) }
         guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
             close(descriptor)
-            return nil
+            return .heldElsewhere
         }
-        return AppInstanceLock(descriptor: descriptor)
+        return .acquired(AppInstanceLock(descriptor: descriptor))
     }
 }

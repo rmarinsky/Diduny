@@ -31,30 +31,53 @@ final class ProcessingBoard {
         var startedAt = Date()
     }
 
-    private(set) var work: [UUID: Work] = [:]
+    /// Transcription (or translation) and notes are kept apart: a recording transcribed again while
+    /// its notes are written shows both.
+    private struct Key: Hashable {
+        let recordingID: UUID
+        let notes: Bool
 
+        init(_ recordingID: UUID, _ kind: Work.Kind) {
+            self.recordingID = recordingID
+            notes = kind == .notes
+        }
+    }
+
+    private var entries: [Key: Work] = [:]
+
+    var isEmpty: Bool { entries.isEmpty }
+
+    /// The transcription or translation of a recording, else its notes.
     func work(for recordingID: UUID) -> Work? {
-        work[recordingID]
+        entries[Key(recordingID, .transcription)] ?? entries[Key(recordingID, .notes)]
+    }
+
+    /// Only work of this kind; `.translation` and `.transcription` share one place.
+    func work(for recordingID: UUID, kind: Work.Kind) -> Work? {
+        entries[Key(recordingID, kind)]
     }
 
     func start(_ recordingID: UUID, kind: Work.Kind, lane: Work.Lane) {
-        work[recordingID] = Work(kind: kind, lane: lane)
+        entries[Key(recordingID, kind)] = Work(kind: kind, lane: lane)
     }
 
     func update(_ recordingID: UUID, progress: QueueProgress) {
-        guard work[recordingID] != nil, work[recordingID]?.progress != progress else { return }
-        work[recordingID]?.progress = progress
+        let key = Key(recordingID, .transcription)
+        guard entries[key] != nil, entries[key]?.progress != progress else { return }
+        entries[key]?.progress = progress
     }
 
     func update(_ recordingID: UUID, notes: NotesService.JobState) {
-        guard work[recordingID] != nil, work[recordingID]?.notes != notes else { return }
-        work[recordingID]?.notes = notes
+        let key = Key(recordingID, .notes)
+        guard entries[key] != nil, entries[key]?.notes != notes else { return }
+        entries[key]?.notes = notes
     }
 
-    /// Ends one kind of work only, so a late notes report cannot clear a transcription.
+    /// Ends one kind of work only, so finishing a transcription never clears notes being written.
     func finish(_ recordingID: UUID, kind: Work.Kind) {
-        guard work[recordingID]?.kind == kind else { return }
-        work[recordingID] = nil
+        let key = Key(recordingID, kind)
+        guard entries[key]?.kind == kind else { return }
+        entries[key] = nil
     }
 
     /// One line for the menu and the Notes page, e.g. `Transcribing "Weekly sync" on this Mac, 62%`.
@@ -86,6 +109,6 @@ final class ProcessingBoard {
 
     /// Recordings being worked on, oldest start first.
     var ordered: [(id: UUID, work: Work)] {
-        work.map { ($0.key, $0.value) }.sorted { $0.work.startedAt < $1.work.startedAt }
+        entries.map { ($0.key.recordingID, $0.value) }.sorted { $0.work.startedAt < $1.work.startedAt }
     }
 }

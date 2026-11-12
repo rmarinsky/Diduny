@@ -26,9 +26,11 @@ struct AgentCommandsTests {
                       summary: "We agreed.", decisions: [], actionItems: [], openQuestions: [])
     }
 
-    private func center(_ f: Fixture, retranscribed: ((UUID, String?) -> Bool)? = nil) -> AgentCommandCenter {
+    private func center(_ f: Fixture, retranscribed: ((UUID, String?) -> Bool)? = nil,
+                        modelReady: Bool = true) -> AgentCommandCenter {
         AgentCommandCenter(storage: f.storage, notes: f.notes, writeNotes: { _ in },
-                           retranscribe: retranscribed ?? { _, _ in true }, now: { Date(timeIntervalSince1970: 100) })
+                           retranscribe: retranscribed ?? { _, _ in true }, whisperModelReady: { _ in modelReady },
+                           now: { Date(timeIntervalSince1970: 100) })
     }
 
     @Test func addingToNotesAppendsABlockMarkedAsClaudesAndKeepsTheRest() throws {
@@ -38,7 +40,8 @@ struct AgentCommandsTests {
         #expect(result.ok)
         let saved = try #require(f.notes.note(for: f.id))
         #expect(saved.summary == "We agreed.")
-        #expect(saved.additions == [.init(text: "Follow up with Olena.", addedAt: Date(timeIntervalSince1970: 100), author: "Claude")])
+        #expect(saved.additions?.map(\.text) == ["Follow up with Olena."])
+        #expect(saved.additions?.first?.author == "Claude")
         #expect(saved.markdown.contains("Follow up with Olena."))
         // Kept on disk for the next launch.
         #expect(NotesStore(directory: f.folder).note(for: f.id)?.additions?.count == 1)
@@ -135,5 +138,62 @@ struct AgentCommandsTests {
         #expect(rows[0].tags == ["hiring"])
         #expect(rows[0].people == ["Olena"])
         #expect(rows[0].speakerNames == ["Speaker 1": "Olena"])
+    }
+
+    @Test func theSameCommandAddsToNotesOnce() throws {
+        let f = try fixture()
+        try f.notes.save(note(f.id))
+        let command = AgentCommandProtocol.Command(action: .addToNotes, recordingID: f.id, values: ["Once."])
+        #expect(center(f).apply(command).ok)
+        #expect(center(f).apply(command).ok)
+        #expect(f.notes.note(for: f.id)?.additions?.count == 1)
+    }
+
+    @Test func retranscribeWithAMissingModelLeavesTheRecordingAlone() throws {
+        let f = try fixture()
+        f.storage.completeTranscription(id: f.id, status: .transcribed, text: "done", segments: nil, kind: .cloud)
+        var queued = false
+        let result = center(f, retranscribed: { _, _ in queued = true; return true }, modelReady: false)
+            .apply(.init(action: .retranscribe, recordingID: f.id, model: "large-v9"))
+        #expect(!result.ok)
+        #expect(!queued)
+        #expect(f.storage.recordings.first { $0.id == f.id }?.status == .transcribed)
+    }
+
+    /// A command stays in the inbox until its answer is saved; one with an answer is not applied again.
+    @Test func answeredCommandIsNotAppliedAgain() throws {
+        let f = try fixture()
+        let center = center(f)
+        try FileManager.default.createDirectory(at: center.inboxURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: center.resultsURL, withIntermediateDirectories: true)
+        let command = AgentCommandProtocol.Command(action: .addTags, recordingID: f.id, values: ["once"])
+        let file = center.inboxURL.appendingPathComponent("\(command.id.uuidString).json")
+        try AgentCommandProtocol.encoder.encode(command).write(to: file)
+        try AgentCommandProtocol.encoder.encode(AgentCommandProtocol.Result(commandID: command.id, ok: true, message: "done"))
+            .write(to: center.resultsURL.appendingPathComponent("\(command.id.uuidString).json"))
+
+        center.processInbox()
+
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        #expect(f.storage.recordings.first { $0.id == f.id }?.tags == nil)
+    }
+
+    /// `tag` then `untag` sent within one second while Diduny was closed: the tag ends up removed.
+    @Test func commandsWithinOneSecondKeepTheirOrder() throws {
+        let f = try fixture()
+        let center = center(f)
+        try FileManager.default.createDirectory(at: center.inboxURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: center.resultsURL, withIntermediateDirectories: true)
+        let second = Date(timeIntervalSince1970: 2_000_000_000)
+        var tag = AgentCommandProtocol.Command(action: .addTags, recordingID: f.id, values: ["x"], createdAt: second)
+        tag.order = second.timeIntervalSince1970 + 0.1
+        var untag = AgentCommandProtocol.Command(action: .removeTags, recordingID: f.id, values: ["x"], createdAt: second)
+        untag.order = second.timeIntervalSince1970 + 0.2
+        // Written in reverse so file order cannot decide.
+        for command in [untag, tag] {
+            try AgentCommandProtocol.encoder.encode(command).write(to: center.inboxURL.appendingPathComponent("\(command.id.uuidString).json"))
+        }
+        center.processInbox()
+        #expect(f.storage.recordings.first { $0.id == f.id }?.tags == nil)
     }
 }

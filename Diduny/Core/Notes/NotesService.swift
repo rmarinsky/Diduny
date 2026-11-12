@@ -415,9 +415,15 @@ final class NotesService {
 
     private func run(_ job: Job) async {
         // A transcript that is being redone, or failed, gets notes once it is ready again.
-        guard let recording = library.recordings.first(where: { $0.id == job.recordingID }), Self.isReady(recording) else {
+        guard let recording = library.recordings.first(where: { $0.id == job.recordingID }) else {
             states[job.recordingID] = nil
             finishBackfillJob(job, error: nil)
+            return
+        }
+        guard Self.isReady(recording) else {
+            states[job.recordingID] = nil
+            // Not written: a backfill lists it as failed, so Retry can write it once the transcript is ready.
+            finishBackfillJob(job, error: job.backfill ? String(localized: "The transcript is not ready yet.") : nil)
             return
         }
         let started = Date()
@@ -436,6 +442,8 @@ final class NotesService {
             }
             let seconds = Int(Date().timeIntervalSince(started))
             note.seconds = seconds
+            // Blocks an agent added while the model wrote are kept.
+            note.additions = store.note(for: job.recordingID)?.additions
             try store.save(note)
             failures.clear(job.recordingID)
             states[job.recordingID] = nil

@@ -16,6 +16,8 @@ final class AgentCommandCenter {
     private let notes: NotesStore
     private let writeNotes: (UUID) -> Void
     private let retranscribe: (UUID, String?) -> Bool
+    /// Whether this Whisper model (nil: the one chosen in Settings) is downloaded.
+    private let whisperModelReady: (String?) -> Bool
     private let now: () -> Date
     private var source: DispatchSourceFileSystemObject?
     private var statusTimer: Timer?
@@ -26,6 +28,7 @@ final class AgentCommandCenter {
         notes: NotesStore? = nil,
         writeNotes: ((UUID) -> Void)? = nil,
         retranscribe: ((UUID, String?) -> Bool)? = nil,
+        whisperModelReady: ((String?) -> Bool)? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.storage = storage ?? .shared
@@ -35,6 +38,11 @@ final class AgentCommandCenter {
         self.retranscribe = retranscribe ?? { id, model in
             RecordingQueueService.shared.enqueue([id], action: .transcribeDiarize, providerOverride: .local,
                                                  whisperModelOverride: model, engineOverride: .whisper)
+        }
+        self.whisperModelReady = whisperModelReady ?? { name in
+            let manager = WhisperModelManager.shared
+            let model = name.map { name in WhisperModelManager.availableModels.first { $0.name == name } } ?? manager.selectedModel()
+            return model.map(manager.isModelDownloaded) ?? false
         }
         self.now = now
     }
@@ -59,17 +67,22 @@ final class AgentCommandCenter {
         let commands = files.filter { $0.pathExtension == "json" }.compactMap { url -> (URL, AgentCommandProtocol.Command?) in
             (url, try? AgentCommandProtocol.decoder.decode(AgentCommandProtocol.Command.self, from: Data(contentsOf: url)))
         }
-        for (url, command) in commands.sorted(by: { ($0.1?.createdAt ?? .distantPast) < ($1.1?.createdAt ?? .distantPast) }) {
-            try? FileManager.default.removeItem(at: url)
+        for (url, command) in commands.sorted(by: { ($0.1?.sortKey ?? 0) < ($1.1?.sortKey ?? 0) }) {
             guard let command else {
                 logger.error("Agent command file was not readable; removed")
+                try? FileManager.default.removeItem(at: url)
                 continue
             }
-            let result = apply(command)
-            logger.info("Agent command \(command.action.rawValue, privacy: .public): \(result.ok ? "done" : "refused", privacy: .public)")
-            if let data = try? AgentCommandProtocol.encoder.encode(result) {
-                try? data.write(to: resultsURL.appendingPathComponent("\(command.id.uuidString).json"), options: .atomic)
+            // The command stays in the inbox until its answer is on disk, so a quit in between
+            // applies it at the next launch. An answer already written means it was applied.
+            let resultURL = resultsURL.appendingPathComponent("\(command.id.uuidString).json")
+            if !FileManager.default.fileExists(atPath: resultURL.path) {
+                let result = apply(command)
+                logger.info("Agent command \(command.action.rawValue, privacy: .public): \(result.ok ? "done" : "refused", privacy: .public)")
+                guard let data = try? AgentCommandProtocol.encoder.encode(result),
+                      (try? data.write(to: resultURL, options: .atomic)) != nil else { continue }
             }
+            try? FileManager.default.removeItem(at: url)
         }
     }
 
@@ -92,7 +105,11 @@ final class AgentCommandCenter {
                 return refused("This recording has no notes yet. Write them first with `notes write`.")
             }
             do {
-                try notes.append(.init(text: text, addedAt: now(), author: "Claude"), to: recording.id)
+                // Applying the same command twice (a quit before its answer was saved) adds the block once.
+                if notes.note(for: recording.id)?.additions?.contains(where: { $0.commandID == command.id }) == true {
+                    return done("Already added to the notes of \"\(recording.displayTitle)\".")
+                }
+                try notes.append(.init(text: text, addedAt: now(), author: "Claude", commandID: command.id), to: recording.id)
                 return done("Added to the notes of \"\(recording.displayTitle)\", marked as added by Claude.")
             } catch {
                 return refused("Diduny could not save the notes: \(error.localizedDescription)")
@@ -120,6 +137,11 @@ final class AgentCommandCenter {
             guard storage.hasPlayableAudio(for: recording) else { return refused("The audio of this recording is not on this Mac.") }
             guard !recording.status.isInProgressCapture, recording.status != .needsRecovery else {
                 return refused("The recording is still being captured or needs recovery in Diduny first.")
+            }
+            // Checked here: a refused queue preflight would mark a finished recording as failed.
+            guard whisperModelReady(command.model) else {
+                return refused(command.model.map { "The Whisper model \($0) is not downloaded in Diduny." }
+                    ?? "No Whisper model is downloaded in Diduny.")
             }
             return retranscribe(recording.id, command.model)
                 ? done("Queued for Whisper on this Mac. The current transcript stays in the history. `status` shows progress.")

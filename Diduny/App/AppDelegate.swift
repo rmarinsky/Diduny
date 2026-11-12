@@ -245,14 +245,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Two copies of one build would both write the same library; the second one leaves.
         // Not under unit tests: the test host is the DEV build, which may be running.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
-            guard let lock = AppInstanceLock.acquire(in: RecordingsLibraryStorage.shared.appDirectory) else {
+            // Before anything loads the library: a second copy must not read or write it.
+            switch AppInstanceLock.acquire(in: RecordingsLibraryStorage.defaultAppDirectory) {
+            case let .acquired(lock):
+                instanceLock = lock
+            case .heldElsewhere:
                 Log.app.notice("Another copy of this build is running; activating it and quitting")
                 NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
                     .first { $0 != .current }?.activate()
                 NSApp.terminate(nil)
                 return
+            case let .unavailable(code):
+                // Not knowing must not keep Diduny from starting; it runs without the lock.
+                Log.app.error("Instance lock file could not be opened (errno \(code)); running without it")
             }
-            instanceLock = lock
             RecordingQueueService.shared.resumeInterrupted()
         }
         let launch = AppLaunchTracker.shared.begin()

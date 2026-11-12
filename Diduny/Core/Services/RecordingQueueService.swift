@@ -56,6 +56,10 @@ final class RecordingQueueService {
     }
 
     private var running: [UUID: Running] = [:]
+    /// The latest run of each recording. An older, cancelled run never writes over what a newer run did.
+    private var latestRunID: [UUID: UUID] = [:]
+    /// Recordings whose cloud wait was interrupted: their journal entry keeps the job ID for a retry.
+    private var keepsJournalEntry: Set<UUID> = []
     private var pendingItems: [QueueItem] = []
     private var activityToken: NSObjectProtocol?
     private let board: ProcessingBoard
@@ -111,7 +115,9 @@ final class RecordingQueueService {
                     resumeCloudJobID: entry.cloudJobID)
         }
         // Entries for recordings that were deleted or finished are dropped.
-        journalEntries.removeAll { entry in !pendingItems.contains { $0.id == entry.recordingID } }
+        journalEntries.removeAll { entry in
+            !pendingItems.contains { $0.id == entry.recordingID } && running[entry.recordingID] == nil
+        }
         journal.save(journalEntries)
     }
 
@@ -154,7 +160,10 @@ final class RecordingQueueService {
             }
             storage.updateRecording(id: item.id, status: .processing, error: nil)
             var item = item
-            item.cloudJobID = resumeCloudJobID
+            // A cloud job whose wait was interrupted is picked up again instead of uploading twice.
+            item.cloudJobID = resumeCloudJobID ?? journalEntries.first {
+                $0.recordingID == item.id && $0.action == QueueJournal.Entry.Action(item.action)
+            }?.cloudJobID
             pendingItems.append(item)
             writeJournal(item)
             admitted = true
@@ -241,6 +250,7 @@ final class RecordingQueueService {
         if activityToken == nil { activityToken = activity.begin("Transcribing recordings") }
         let run = Running(item: item, lane: lane)
         running[item.id] = run
+        latestRunID[item.id] = run.runID
         board.start(item.id, kind: Self.boardKind(item.action), lane: lane == .cloud ? .cloud : .onThisMac)
         let task = Task { [weak self] in
             guard let self else { return }
@@ -255,8 +265,8 @@ final class RecordingQueueService {
         run.tickTask?.cancel()
         progressByID[id] = nil
         board.finish(id, kind: Self.boardKind(run.item.action))
-        // A usage-limit retry went back into the queue and keeps its entry.
-        if !pendingItems.contains(where: { $0.id == id }) { removeFromJournal(id) }
+        // A usage-limit retry went back into the queue and keeps its entry, as does an interrupted cloud wait.
+        if keepsJournalEntry.remove(id) == nil, !pendingItems.contains(where: { $0.id == id }) { removeFromJournal(id) }
         endActivityIfIdle()
         schedule()
     }
@@ -295,6 +305,7 @@ final class RecordingQueueService {
     }
 
     private func processRecording(_ item: QueueItem) async {
+        let runID = latestRunID[item.id]
         guard let recording = storage.recordings.first(where: { $0.id == item.id }) else {
             return
         }
@@ -310,7 +321,8 @@ final class RecordingQueueService {
         }
 
         if case let .translateParts(parts, target) = item.action {
-            await processTranslateParts(parts, target: target, item: item, recording: recording, audioURL: originalAudioURL)
+            await processTranslateParts(parts, target: target, item: item, recording: recording, audioURL: originalAudioURL,
+                                        runID: runID)
             return
         }
 
@@ -478,7 +490,7 @@ final class RecordingQueueService {
             }
 
             guard !Task.isCancelled else {
-                if !isQueuedAgain(item.id) { storage.updateRecording(id: item.id, status: .unprocessed, error: nil) }
+                if mayWriteCancelled(item.id, runID: runID) { storage.updateRecording(id: item.id, status: .unprocessed, error: nil) }
                 Log.app.info("Queue cancelled recording \(item.id)")
                 return
             }
@@ -507,7 +519,7 @@ final class RecordingQueueService {
             )
             Log.app.info("Queue processed recording \(item.id): \(status.rawValue)")
         } catch is CancellationError {
-            if !isQueuedAgain(item.id) {
+            if mayWriteCancelled(item.id, runID: runID) {
                 storage.updateRecording(id: item.id, status: .unprocessed, text: item.textIfItFails, error: nil)
             }
             Log.app.info("Queue cancelled recording \(item.id)")
@@ -532,6 +544,7 @@ final class RecordingQueueService {
             writeJournal(localItem)
             Log.app.notice("Queue: cloud usage limit for \(item.id, privacy: .public), retrying on this Mac")
         } catch {
+            if JobWaitInterruptedError.jobMayStillFinish(after: error) { keepsJournalEntry.insert(item.id) }
             storage.updateRecording(id: item.id, status: .failed, text: item.textIfItFails, error: error.localizedDescription)
             Log.app.error("Queue failed for recording \(item.id): \(error.localizedDescription)")
         }
@@ -540,7 +553,7 @@ final class RecordingQueueService {
     /// Translates only the ranges without live text and joins them with the kept live text. A failed range keeps
     /// what is ready, with `.failed` and the error; the audio stays, so a whole translation can still run.
     private func processTranslateParts(
-        _ parts: [TranslatePart], target: String, item: QueueItem, recording: Recording, audioURL: URL
+        _ parts: [TranslatePart], target: String, item: QueueItem, recording: Recording, audioURL: URL, runID: UUID?
     ) async {
         let whisperModel = item.whisperModelOverride ?? SettingsStorage.shared.selectedWhisperModel
         let result = await QueueEngineRunner.translateParts(parts) { [self] range, engine in
@@ -556,7 +569,7 @@ final class RecordingQueueService {
             return try await runner.translate(engine, target: target, whisperModel: whisperModel).text
         }
         if result.error is CancellationError {
-            if !isQueuedAgain(item.id) { storage.updateRecording(id: item.id, status: .unprocessed, error: nil) }
+            if mayWriteCancelled(item.id, runID: runID) { storage.updateRecording(id: item.id, status: .unprocessed, error: nil) }
         } else if let error = result.error {
             storage.updateRecording(id: item.id, status: .failed, text: result.text.isEmpty ? nil : result.text,
                                     error: error.localizedDescription)
@@ -655,6 +668,7 @@ final class RecordingQueueService {
         var config = config
         SpeechUserContext.current(calendarMeeting: calendarMeeting).apply(to: &config)
         let asyncJobService = AsyncTranscriptionJobService()
+        let runID = latestRunID[itemID]
         let onStatus: (JobProgressUpdate) -> Void = { [weak self] update in
             Task { @MainActor in
                 self?.handleCloudJobStatus(update.status, totalSeconds: sourceDurationSeconds, itemID: itemID)
@@ -675,7 +689,11 @@ final class RecordingQueueService {
             source: source,
             sourceDurationSeconds: sourceDurationSeconds,
             onSubmitted: { [weak self] jobID in
-                Task { @MainActor in self?.recordSubmittedJob(jobID, for: itemID) }
+                Task { @MainActor in
+                    // A job submitted by a run that was cancelled and replaced is not the new run's job.
+                    guard let self, self.latestRunID[itemID] == runID, self.running[itemID] != nil else { return }
+                    self.recordSubmittedJob(jobID, for: itemID)
+                }
             },
             onUploadProgress: { [weak self] fraction in
                 Task { @MainActor in
@@ -712,10 +730,10 @@ final class RecordingQueueService {
         pendingItems.contains { $0.id == id }
     }
 
-    /// A cancelled run must not overwrite the status of the same recording queued again meanwhile.
-    /// `cancelAll` drops the runs it cancels, so a run of this recording that exists now is a newer one.
-    private func isQueuedAgain(_ id: UUID) -> Bool {
-        isQueued(id) || running[id] != nil
+    /// A cancelled run writes its recording's status only while it is the latest run and the recording
+    /// is not queued again: a newer run, finished or not, owns the status.
+    private func mayWriteCancelled(_ id: UUID, runID: UUID?) -> Bool {
+        runID != nil && latestRunID[id] == runID && !isQueued(id)
     }
 
     /// The transcript of one recording for the command panel outcome; another recording's

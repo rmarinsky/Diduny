@@ -202,11 +202,16 @@ struct ProcessingReliabilityTests {
 
     @Test func secondInstanceCannotTakeTheLock() throws {
         let folder = try directory()
-        var first = AppInstanceLock.acquire(in: folder)
+        var first: AppInstanceLock?
+        if case let .acquired(lock) = AppInstanceLock.acquire(in: folder) { first = lock }
         #expect(first != nil)
-        #expect(AppInstanceLock.acquire(in: folder) == nil)
+        guard case .heldElsewhere = AppInstanceLock.acquire(in: folder) else { Issue.record("second copy got the lock"); return }
         first = nil
-        #expect(AppInstanceLock.acquire(in: folder) != nil)
+        guard case .acquired = AppInstanceLock.acquire(in: folder) else { Issue.record("lock not released"); return }
+        // A folder the lock file cannot be created in reports that, never a lock it does not hold.
+        guard case .unavailable = AppInstanceLock.acquire(in: URL(fileURLWithPath: "/dev/null/nope")) else {
+            Issue.record("expected unavailable"); return
+        }
     }
 
     @Test func leftoverInProgressFolderOfAFinishedRecordingIsRemoved() async throws {
@@ -250,5 +255,52 @@ struct ProcessingReliabilityTests {
         CLIRunner.terminateAll()
         await #expect(throws: CancellationError.self) { _ = try await task.value }
         #expect(CLIRunner.runningCount == 0)
+    }
+
+    /// The old run of a recording, cancelled and replaced, ends after the new run finished: the
+    /// finished transcript stays.
+    @Test func cancelledRunEndingAfterTheNewRunLeavesItsResult() async throws {
+        let storage = try storage(try directory())
+        let id = try save(storage)
+        let calls = Calls()
+        let oldGate = Gate()
+        let queue = RecordingQueueService(storage: storage, localModelIsAvailable: { _ in true }, hasSession: { true },
+                                          makeRunner: { _ in runner(calls, whisper: {
+                                              if calls.whisper == 1 { await oldGate.wait() }
+                                              return "text"
+                                          }) })
+        #expect(queue.enqueue([id], action: .transcribe, engineOverride: .whisper, speakerLabels: false))
+        await waitUntil { calls.whisper == 1 }
+        queue.cancelAll()
+        #expect(queue.enqueue([id], action: .transcribe, engineOverride: .whisper, speakerLabels: false))
+        await waitUntil { storage.recordings.first { $0.id == id }?.status == .transcribed }
+        oldGate.openAll()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(storage.recordings.first { $0.id == id }?.status == .transcribed)
+    }
+
+    /// A file that is still in the staging folder keeps the deletion recovery pending, so it is not deleted.
+    @Test func deletionRecoveryWaitsForFilesStillStaged() throws {
+        let folder = try directory()
+        let first = try storage(folder)
+        let id = try save(first)
+        let recording = try #require(first.recordings.first { $0.id == id })
+        let original = first.audioFileURL(for: recording)
+        let staged = folder.appendingPathComponent("staged-audio")
+        try FileManager.default.moveItem(at: original, to: staged)
+        // Its original folder is gone, so moving it back fails and the file stays staged.
+        let unreachable = folder.appendingPathComponent("gone-folder/audio.m4a")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(RecordingDeletionRecovery(
+            recordings: first.recordings,
+            stagedFiles: [RecordingDeletionStagedFile(originalPath: unreachable.path, stagedPath: staged.path)]
+        )).write(to: folder.appendingPathComponent("recordings_delete_recovery.json"))
+
+        let next = try storage(folder)
+
+        #expect(!next.hasLoadedLibrary)
+        #expect(FileManager.default.fileExists(atPath: staged.path))
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("recordings_delete_recovery.json").path))
     }
 }

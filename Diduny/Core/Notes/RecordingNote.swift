@@ -44,6 +44,8 @@ struct RecordingNote: Identifiable, Codable, Equatable {
         var addedAt: Date
         /// "Claude", "Codex": who added it.
         var author: String
+        /// The `diduny` command that added it, so the same command never adds it twice.
+        var commandID: UUID? = nil
     }
 
     var additions: [Addition]? = nil

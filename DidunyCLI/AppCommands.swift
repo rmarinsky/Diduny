@@ -9,6 +9,9 @@ enum AppCommands {
     }
 
     static func send(_ command: AgentCommandProtocol.Command, library: Library, timeout: TimeInterval = 15) throws -> String {
+        guard library.isAppLibrary else {
+            throw CLIError("Changes work only in the library of the Diduny app this tool ships in. A --library or DIDUNY_LIBRARY folder can be read, not changed.")
+        }
         let inbox = library.directory.appendingPathComponent(AgentCommandProtocol.inboxFolder)
         let results = library.directory.appendingPathComponent(AgentCommandProtocol.resultsFolder)
         try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)

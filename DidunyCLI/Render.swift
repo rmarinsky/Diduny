@@ -95,7 +95,11 @@ enum Render {
         out.append("- length: \(minutes(recording))")
         out.append("- status: \(recording.status.rawValue)")
         out.append("- audio: \(audioPath)")
-        out += organizationLines(recording)
+        // Agents can copy these from a transcript or an invitation, so they are data too.
+        let organization = organizationLines(recording)
+        if !organization.isEmpty {
+            out += ["", "## Project and people", untrusted("organization", organization.joined(separator: "\n"))]
+        }
         if let description = recording.description?.nilIfBlank {
             out += ["", "## Description", untrusted("description", description)]
         }
