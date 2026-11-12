@@ -319,4 +319,17 @@ final class YourLanguagesTests {
         #expect(defaults.string(forKey: "voiceTranslationCommandPosition") == "anywhere")
         #expect(SettingsStorage(defaults: defaults, migrationEnvironment: Self.noLayouts).voiceTranslationCommandPosition == .anywhere)
     }
+
+    /// The default pair is Ukrainian to English: offered and selected in that direction while no pair
+    /// with those languages is stored; a stored pair keeps its own direction.
+    @Test func defaultPairKeepsItsDirection() throws {
+        let languages = try #require(YourLanguages(["en", "uk", "pl"]))
+        let uaEn = TranslationLanguagePair.defaultPair
+        let pair = try #require(languages.pair(defaultPair: uaEn, stored: []))
+        #expect(pair.languageA == "uk" && pair.languageB == "en")
+        #expect(languages.offeredPairs(stored: [uaEn]).contains { $0.languageA == "uk" && $0.languageB == "en" })
+        let stored = TranslationLanguagePair(languageA: "en", languageB: "uk")
+        let chosen = try #require(languages.pair(defaultPair: uaEn, stored: [stored]))
+        #expect(chosen.languageA == "en")
+    }
 }

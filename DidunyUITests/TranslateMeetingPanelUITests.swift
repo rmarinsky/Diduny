@@ -56,13 +56,13 @@ final class TranslateMeetingPanelUITests: DidunyUITestCase {
         waitForElement(element(app, "section.languages"))
     }
 
-    func test_T1_TM_24_nonLiveEngineTurnsThePanelRecordOnly() {
-        let app = openPanel(extra: ["--ui-testing-transcript-emit=0"])
+    /// Meeting translation is cloud only: engines on this Mac are not offered.
+    func test_T1_TM_24_engineMenuOffersOnlyCloudEngines() {
+        let app = openPanel()
         click(waitForElement(element(app, "livePanel.engine")))
-        click(waitForElement(element(app, "pickerMenu.row.local-whisper")))
-        waitForElement(element(app, "livePanel.calm"))
-        waitForElement(element(app, "livePanel.status"), toMatch: "label == 'Recording · no live text'")
-        XCTAssertFalse(app.buttons["livePanel.showOriginal"].exists)
-        waitForText("Translating meeting", identifier: "livePanel.title", in: app)
+        waitForElement(element(app, "pickerMenu.row.diduny-cloud"))
+        for id in ["local-whisper", "parakeet-v3", "apple-speech"] {
+            XCTAssertFalse(element(app, "pickerMenu.row.\(id)").exists, id)
+        }
     }
 }

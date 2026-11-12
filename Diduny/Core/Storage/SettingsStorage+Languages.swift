@@ -42,7 +42,8 @@ extension SettingsStorage {
 
     /// Every pair of Your languages, for the Between and "Pair for both directions" menus.
     var offeredTranslationPairs: [TranslationLanguagePair] {
-        yourLanguagesValue.offeredPairs(stored: translationLanguagePairs)
+        // The default pair keeps its direction in the menus too, so the selected pair is one of the items.
+        yourLanguagesValue.offeredPairs(stored: translationLanguagePairs + [defaultTranslationLanguagePair])
     }
 
     /// "Pair for both directions": Translate meeting, Translate in place, Modes, Languages, Shortcuts.
