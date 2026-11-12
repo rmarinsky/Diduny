@@ -444,6 +444,8 @@ enum CLIRunner {
     ) async throws -> Result {
         let env: [String: String] = if let environment { environment } else { await self.environment() }
         let control = LaunchControl()
+        running.insert(control)
+        defer { running.remove(control) }
         // Cancel (the notes block's Cancel button) stops the tool, and a cancel that comes
         // before the launch keeps it from starting, so no transcript is sent.
         return try await withTaskCancellationHandler {
@@ -452,6 +454,24 @@ enum CLIRunner {
         } onCancel: {
             control.cancel()
         }
+    }
+
+    /// Tools running now, so quitting Diduny can stop them instead of leaving them behind.
+    private final class Running: @unchecked Sendable {
+        private let lock = NSLock()
+        private var controls: [ObjectIdentifier: LaunchControl] = [:]
+        func insert(_ control: LaunchControl) { lock.withLock { controls[ObjectIdentifier(control)] = control } }
+        func remove(_ control: LaunchControl) { lock.withLock { controls[ObjectIdentifier(control)] = nil } }
+        var all: [LaunchControl] { lock.withLock { Array(controls.values) } }
+    }
+
+    private static let running = Running()
+
+    static var runningCount: Int { running.all.count }
+
+    /// Stops every tool Diduny started (notes writers), on quit. Their notes are not saved.
+    static func terminateAll() {
+        running.all.forEach { $0.cancel() }
     }
 
     /// Output read on other threads; a reader that is still running after the bounded wait

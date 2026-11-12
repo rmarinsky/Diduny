@@ -1,14 +1,18 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "ElevenLabs keys with limited permissions work",
+    "headline": "Steadier processing you can see",
     "highlights": [
+      "Recordings on Diduny Cloud no longer wait behind Whisper on this Mac, Recordings, Notes and the menu show which meeting is being transcribed or getting notes, and notes start as soon as a meeting is transcribed.",
+      "Quitting or a crash no longer loses work in progress: Diduny picks up cloud jobs and queued recordings at the next launch. Agents can add to notes, tag recordings by project and link people when you ask.",
       "An ElevenLabs key restricted to Speech to Text is no longer reported as rejected. Diduny accepts it and shows credits only when the key also has User (read)."
     ]
   },
   "uk": {
-    "headline": "Ключі ElevenLabs з обмеженими дозволами працюють",
+    "headline": "Надійніша обробка, яку видно",
     "highlights": [
+      "Записи в Diduny Cloud більше не чекають, поки Whisper закінчить на цьому Mac, «Записи», «Нотатки» і меню показують, яку зустріч зараз транскрибують чи для якої пишуть нотатки, а нотатки починаються одразу після транскрипції.",
+      "Вихід із Diduny чи збій більше не губить роботу: під час наступного запуску Diduny продовжує хмарні завдання і чергу. Агенти на ваше прохання доповнюють нотатки, ставлять проєкт і теги та додають людей до записів.",
       "Ключ ElevenLabs, обмежений до Speech to Text, більше не позначається як відхилений. Diduny приймає його, а кредити показує, лише коли ключ має ще й User (читання)."
     ]
   }

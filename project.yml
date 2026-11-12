@@ -101,6 +101,7 @@ targets:
       - path: Diduny/Core/Calendar/CalendarMeeting.swift
       - path: Diduny/Core/Calendar/CalendarConnection.swift
       - path: Diduny/Core/Agents/AgentSettings.swift
+      - path: Diduny/Core/Agents/AgentCommandProtocol.swift
     settings:
       base:
         PRODUCT_NAME: diduny

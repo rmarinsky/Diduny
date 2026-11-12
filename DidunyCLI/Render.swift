@@ -25,7 +25,7 @@ enum Render {
     }
 
     static func people(_ recording: Recording) -> [String] {
-        (recording.calendarMeeting?.attendees ?? []).map(\.displayName)
+        recording.allPeople
     }
 
     /// Text other people wrote or said (invitations, transcripts) is marked as data, so an
@@ -64,7 +64,24 @@ enum Render {
             "people": people(recording)
         ]
         if let meeting = recording.calendarMeeting { row["calendarTitle"] = meeting.title }
+        if let project = recording.project { row["project"] = project }
+        if let tags = recording.tags { row["tags"] = tags }
+        if let linked = recording.people { row["linkedPeople"] = linked }
+        if let speakers = recording.speakerNames { row["speakerNames"] = speakers }
         return row
+    }
+
+    /// Project, tags, linked people and speaker names: set in Diduny by the user or, on request, by an agent.
+    static func organizationLines(_ recording: Recording) -> [String] {
+        var lines: [String] = []
+        if let project = recording.project { lines.append("- project: \(project)") }
+        if let tags = recording.tags { lines.append("- tags: \(tags.joined(separator: ", "))") }
+        if let linked = recording.people { lines.append("- linked people: \(linked.joined(separator: ", "))") }
+        if let speakers = recording.speakerNames, !speakers.isEmpty {
+            lines.append("- speakers named by the user in Diduny:")
+            lines += speakers.sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }.map { "  - \($0.key) = \($0.value)" }
+        }
+        return lines
     }
 
     // MARK: - Show
@@ -78,6 +95,7 @@ enum Render {
         out.append("- length: \(minutes(recording))")
         out.append("- status: \(recording.status.rawValue)")
         out.append("- audio: \(audioPath)")
+        out += organizationLines(recording)
         if let description = recording.description?.nilIfBlank {
             out += ["", "## Description", untrusted("description", description)]
         }
@@ -182,9 +200,12 @@ enum Render {
                 hits.append(Hit(recording: recording, time: nil, speaker: nil, text: snippet(text, around: range)))
                 if hits.count >= limit { return hits }
             }
-            let meta = [recording.displayTitle, recording.description, recording.calendarMeeting?.notes].compactMap { $0 }
+            let attendees = (recording.calendarMeeting?.attendees ?? []).flatMap { [$0.name, $0.email].compactMap { $0 } }
+            let meta = [recording.displayTitle, recording.description, recording.calendarMeeting?.notes, recording.project]
+                .compactMap { $0 } + attendees + recording.allPeople + (recording.tags ?? [])
             if meta.contains(where: { $0.lowercased().contains(needle) }) {
-                hits.append(Hit(recording: recording, time: nil, speaker: nil, text: "(title, description or invitation)"))
+                hits.append(Hit(recording: recording, time: nil, speaker: nil,
+                                text: "(title, description, invitation, attendees, people, project or tags)"))
                 if hits.count >= limit { return hits }
             }
         }

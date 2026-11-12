@@ -11,7 +11,6 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
     private let stateLock = NSLock()
     private var whisperContext: WhisperContext?
     private var loadedModelPath: String?
-    private var pendingLoad: (path: String, task: Task<WhisperContext, Error>)?
     private var isHeldForRecording = false
     private var streamingHolds: Set<UUID> = []
 
@@ -209,42 +208,26 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
         let path = WhisperModelManager.shared.modelPath(for: model)
         let displayName = model.displayName
 
-        // Reuse the loaded context, or join a load already in flight for the same model
-        let task: Task<WhisperContext, Error> = stateLock.withLock {
-            if let context = whisperContext, loadedModelPath == path {
-                return Task { context }
-            }
-            if let pendingLoad, pendingLoad.path == path {
-                return pendingLoad.task
-            }
-            let task = Task.detached(priority: .userInitiated) {
-                Log.whisper.info("Loading Whisper model: \(displayName)")
-                let started = Date()
-                let context = try WhisperContext(modelPath: path)
-                Log.whisper.info("Whisper model loaded in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
-                return context
-            }
-            pendingLoad = (path, task)
-            return task
-        }
-
-        do {
-            let context = try await task.value
-            stateLock.withLock {
-                if pendingLoad?.path == path {
-                    pendingLoad = nil
-                    whisperContext = context
-                    loadedModelPath = path
-                }
-            }
+        // Reuse this service's context, or one another service loaded or is loading for the same model.
+        if let context = stateLock.withLock({ loadedModelPath == path ? whisperContext : nil }) {
             return context
-        } catch {
-            stateLock.withLock {
-                if pendingLoad?.path == path { pendingLoad = nil }
-            }
-            throw error
         }
+        let context = try await Self.contexts.value(for: path) {
+            Log.whisper.info("Loading Whisper model: \(displayName)")
+            let started = Date()
+            let context = try WhisperContext(modelPath: path)
+            Log.whisper.info("Whisper model loaded in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+            return context
+        }
+        stateLock.withLock {
+            whisperContext = context
+            loadedModelPath = path
+        }
+        return context
     }
+
+    /// Loaded models shared by every Whisper service in the app; freed when no service holds them.
+    static let contexts = SharedLoadRegistry<WhisperContext>()
 
     // MARK: - Model Unload Timer
 

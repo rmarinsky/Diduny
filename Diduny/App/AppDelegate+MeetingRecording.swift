@@ -983,7 +983,7 @@ extension AppDelegate {
                         provider: TranscriptionProvider.cloud.rawValue
                     )
                 } else if RecordingQueueService.shared.isQueued(savedRecordingID)
-                    || RecordingQueueService.shared.currentRecordingId == savedRecordingID
+                    || RecordingQueueService.shared.isRunning(savedRecordingID)
                 {
                     // Already handed to the queue before the panel update.
                 } else if recordingFailedAtHandOff(savedRecordingID) {
