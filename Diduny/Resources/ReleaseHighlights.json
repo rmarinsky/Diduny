@@ -5,8 +5,7 @@
     "highlights": [
       "New Vocabulary & context page: add names and terms, describe what you usually talk about, and keep a translation glossary. Diduny Cloud uses them to recognize you better, together with the meeting title and attendees from your calendar.",
       "Say \"comma\", \"new line\" or \"scratch that\" while dictating in Ukrainian, English or Polish, and Diduny applies it.",
-      "Quiet moments no longer end a meeting recording while the call is still on or the calendar meeting has not ended.",
-      "Pick the engine right in \"Looks like a meeting started\". Meetings on this Mac now use Whisper, which tells speakers apart, and meeting translation runs in Diduny Cloud."
+      "Meetings: silence no longer ends a recording while the call is on, you can pick the engine in \"Looks like a meeting started\", Whisper transcribes meetings on this Mac and tells speakers apart, and meeting translation runs in Diduny Cloud."
     ]
   },
   "uk": {
@@ -14,8 +13,7 @@
     "highlights": [
       "Нова сторінка «Словник і контекст»: додайте імена й терміни, опишіть, про що зазвичай говорите, і ведіть глосарій перекладу. Diduny Cloud краще вас розпізнає, а для зустрічей ще й бере назву та учасників з календаря.",
       "Кажіть «кома», «новий рядок» або «скасуй це» під час диктування українською, англійською чи польською, і Diduny це виконає.",
-      "Тиша більше не обриває запис зустрічі, поки дзвінок триває або зустріч у календарі ще не закінчилася.",
-      "Рушій можна вибрати просто у вікні «Looks like a meeting started». Зустрічі на цьому Mac тепер розпізнає Whisper, який розрізняє мовців, а переклад зустрічей працює в Diduny Cloud."
+      "Зустрічі: тиша не обриває запис, поки дзвінок триває, рушій можна вибрати у вікні «Looks like a meeting started», на цьому Mac зустрічі розпізнає Whisper і розрізняє мовців, а переклад зустрічей працює в Diduny Cloud."
     ]
   }
 }
