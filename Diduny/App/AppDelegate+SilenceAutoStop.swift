@@ -42,13 +42,32 @@ extension AppDelegate {
         let silence = SettingsStorage.shared.silenceAutoStop(for: job)
         guard silence.enabled else { return }
 
-        let monitor = SilenceAutoStopMonitor(timeout: silence.seconds) { decision in
-            Self.applySilenceDecision(decision, stop: stop)
+        let monitor = SilenceAutoStopMonitor(timeout: silence.seconds) { [weak self] decision in
+            guard let self, decision != .keepRecording, self.isMeetingStillGoingOn() else {
+                Self.applySilenceDecision(decision, stop: stop)
+                return
+            }
+            // The meeting is still going on: no countdown, and a due stop starts the silence timer over.
+            Self.applySilenceDecision(.keepRecording, stop: stop)
+            if decision == .stop {
+                Log.app.info("Silence auto-stop: meeting still going on, keeping the recording")
+                self.startMeetingSilenceMonitor(job: job, stop: stop)
+            }
         }
         meetingSilenceMonitor = monitor
         meetingRecorderService.onMixedSamples = { [weak monitor] samples in
             monitor?.append(samples: samples)
         }
+    }
+
+    /// The call is still active, or the calendar meeting linked to this recording has not ended.
+    private func isMeetingStillGoingOn(now: Date = Date()) -> Bool {
+        let stored = meetingRecorderService.currentRecordingId.flatMap { id in
+            RecordingsLibraryStorage.shared.recordings.first(where: { $0.id == id })?.calendarMeeting
+        }
+        // A meeting extended in Calendar after linking ends when Calendar now says.
+        let linked = stored.map { stored in CalendarConnection.shared.meetings.first(where: { $0.id == stored.id }) ?? stored }
+        return CalendarMeeting.silenceStopHeld(meeting: linked, callActive: meetingJoinMonitor.isCallActive, now: now)
     }
 
     func stopMeetingSilenceMonitor() {

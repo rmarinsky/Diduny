@@ -1,17 +1,17 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Updates install on their own",
+    "headline": "Quiet moments no longer end a meeting recording",
     "highlights": [
-      "From the next version on, Diduny installs updates in the background and relaunches itself, with no update window.",
-      "An update never interrupts you: it waits until no dictation, translation or meeting is being recorded or transcribed."
+      "While the call is still on, or the calendar meeting has not ended, Diduny keeps recording through silence.",
+      "Stop after silence still ends the recording once the meeting is over."
     ]
   },
   "uk": {
-    "headline": "Оновлення ставляться самі",
+    "headline": "Тиша більше не обриває запис зустрічі",
     "highlights": [
-      "Починаючи з наступної версії, Diduny сам встановлює оновлення у фоні й перезапускається, без вікна оновлення.",
-      "Оновлення вас не перерве: воно чекає, поки не йде запис чи розпізнавання диктування, перекладу або зустрічі."
+      "Поки дзвінок триває або зустріч у календарі ще не закінчилася, Diduny записує і під час тиші.",
+      "Зупинка після тиші, як і раніше, закінчує запис, коли зустріч уже позаду."
     ]
   }
 }
