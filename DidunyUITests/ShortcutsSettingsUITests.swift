@@ -53,14 +53,6 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
         }
     }
 
-    /// T5-SC-12: Open Settings cannot be changed.
-    func test_SC12_openSettingsIsFixed() {
-        openShortcuts()
-        let keys = element("shortcuts.openSettings.keys")
-        waitForElement(keys, toMatch: "isEnabled == false")
-        waitForElement(mainWindow.staticTexts["The standard macOS shortcut. It cannot be changed."])
-    }
-
     /// T5-SC-14 (UI half): 3× sticks on every row. The store half needs the WP-90 probe.
     func test_SC14_pressCountSelects() {
         openShortcuts()

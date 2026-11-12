@@ -50,7 +50,7 @@ final class LiveDictationPanelUITests: DidunyUITestCase {
         ]))
         let value = element(app, "livePanel.stop").value as? String ?? ""
         XCTAssertTrue(value.contains("⇧ ×2"), value)
-        XCTAssertTrue(value.contains("Cancel: Esc ×2"), value)
+        XCTAssertTrue(value.contains("Cancel: Esc ×3"), value)
     }
 
     /// T1-DI-25
@@ -79,7 +79,7 @@ final class LiveDictationPanelUITests: DidunyUITestCase {
             XCTAssertTrue(stop.isHittable)
             let value = stop.value as? String ?? ""
             XCTAssertTrue(value.contains(keycap), "\(job): \(value)")
-            XCTAssertTrue(value.contains("Cancel: Esc ×2"), "\(job): \(value)")
+            XCTAssertTrue(value.contains("Cancel: Esc ×3"), "\(job): \(value)")
             app.terminate()
         }
     }

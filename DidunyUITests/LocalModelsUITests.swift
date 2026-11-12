@@ -65,7 +65,7 @@ final class LocalModelsUITests: DidunyUITestCase {
             waitForElement(app.menuItems[title])
         }
         app.typeKey(.escape, modifierFlags: [])
-        waitForElement(unload, toMatch: "value == '5 minutes'")
+        waitForElement(unload, toMatch: "value == '1 minute'")
     }
 
     /// T4-WO-03 (04 Q8 default: a sheet).

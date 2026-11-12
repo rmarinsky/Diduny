@@ -60,8 +60,9 @@ struct YourLanguages: Equatable {
 
     /// The one pair: the default pair if it is offered, else the first offered pair; nil with fewer
     /// than two translatable languages.
+    /// The default pair keeps its direction (uk to en) until a pair with its languages is stored.
     func pair(defaultPair: TranslationLanguagePair, stored: [TranslationLanguagePair]) -> TranslationLanguagePair? {
-        let offered = offeredPairs(stored: stored)
+        let offered = offeredPairs(stored: stored + [defaultPair])
         return offered.first { $0.hasSameLanguages(as: defaultPair) } ?? offered.first
     }
 
