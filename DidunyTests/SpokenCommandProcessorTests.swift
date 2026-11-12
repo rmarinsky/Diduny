@@ -59,6 +59,11 @@ struct SpokenCommandProcessorTests {
         #expect(SpokenCommandProcessor.apply("Тут ця кома зайва крапка") == "Тут ця кома зайва.")
     }
 
+    @Test("Scratch that keeps a decimal number in the sentence it removes")
+    func scratchKeepsDecimals() {
+        #expect(SpokenCommandProcessor.apply("Amount is 3.14 scratch that use 3.15") == "Use 3.15")
+    }
+
     @Test("Text without commands passes through unchanged")
     func passthrough() {
         let text = "Just a normal sentence, nothing to do here.\nSecond line."

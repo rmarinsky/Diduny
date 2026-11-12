@@ -115,9 +115,17 @@ struct VocabularySettingsView: View {
     }
 
     private func addPair() {
-        guard let source = newSource.nilIfBlank, let target = newTarget.nilIfBlank,
-              glossary.count < SpeechUserContext.translationTermsLimit else { return }
-        setGlossary(glossary + [SpeechTranslationTerm(source: source, target: target)])
+        guard let source = newSource.nilIfBlank, let target = newTarget.nilIfBlank else { return }
+        let pair = SpeechTranslationTerm(source: source, target: target)
+        // One translation per original: a new pair for the same original replaces the old one, as it is sent.
+        if let index = glossary.firstIndex(where: { $0.source.caseInsensitiveCompare(source) == .orderedSame }) {
+            var updated = glossary
+            updated[index] = pair
+            setGlossary(updated)
+        } else {
+            guard glossary.count < SpeechUserContext.translationTermsLimit else { return }
+            setGlossary(glossary + [pair])
+        }
         newSource = ""
         newTarget = ""
     }

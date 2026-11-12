@@ -143,10 +143,15 @@ final class CloudTranscriptionService: TranscriptionServiceProtocol {
         let configData = try JSONSerialization.data(withJSONObject: config)
         let configString = String(data: configData, encoding: .utf8) ?? "{}"
 
+        // user_context holds personal terms and attendee names: keep it out of the log.
+        var loggedConfig = config
+        loggedConfig.removeValue(forKey: "user_context")
+        let loggedConfigString = (try? JSONSerialization.data(withJSONObject: loggedConfig))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
         let (filename, contentType) = detectAudioFormat(optimizedData)
         Log.transcription
             .info(
-                "proxyTranscribe: audio format=\(contentType), original=\(audioData.count) bytes, optimized=\(optimizedData.count) bytes, config=\(configString)"
+                "proxyTranscribe: audio format=\(contentType), original=\(audioData.count) bytes, optimized=\(optimizedData.count) bytes, config=\(loggedConfigString)"
             )
 
         // Build multipart body: audio + config

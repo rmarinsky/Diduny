@@ -42,13 +42,36 @@ enum SpokenCommandProcessor {
         "ta", "ten", "każda", "każdy", "jedna", "jeden", "moja", "mój"
     ]
 
+    /// Looks only at the word right before `location`, scanning back from it.
     private static func followsDeterminer(_ location: Int, in text: NSString) -> Bool {
-        let before = text.substring(to: location)
-        guard let word = before.split(whereSeparator: { !$0.isLetter }).last else { return false }
-        return determiners.contains(word.lowercased())
+        let letters = CharacterSet.letters
+        func isLetter(_ index: Int) -> Bool {
+            guard let scalar = UnicodeScalar(text.character(at: index)) else { return true } // surrogate half
+            return letters.contains(scalar)
+        }
+        var end = location
+        while end > 0, !isLetter(end - 1) { end -= 1 }
+        var start = end
+        while start > 0, isLetter(start - 1) { start -= 1 }
+        guard start < end else { return false }
+        return determiners.contains(text.substring(with: NSRange(location: start, length: end - start)).lowercased())
     }
 
     private static let attachedPunctuation = Set(",.;:!?…")
+
+    /// The last . ? ! or newline that ends a sentence; a period between digits (3.14) is not one.
+    private static func lastSentenceBoundary(in text: String) -> String.Index? {
+        var index = text.endIndex
+        while index > text.startIndex {
+            index = text.index(before: index)
+            let char = text[index]
+            guard sentenceEnds.contains(char) || char == "\n" else { continue }
+            if char == ".", index > text.startIndex, text[text.index(before: index)].isNumber,
+               text.index(after: index) < text.endIndex, text[text.index(after: index)].isNumber { continue }
+            return index
+        }
+        return nil
+    }
     private static let sentenceEnds = Set(".?!")
 
     static func apply(_ text: String) -> String {
@@ -83,7 +106,7 @@ enum SpokenCommandProcessor {
             case .deleteSentence:
                 trimEnd(&output) { $0.isWhitespace || $0 == "," || $0 == ";" || $0 == ":" }
                 trimEnd(&output) { sentenceEnds.contains($0) }
-                if let end = output.lastIndex(where: { sentenceEnds.contains($0) || $0 == "\n" }) {
+                if let end = lastSentenceBoundary(in: output) {
                     output = String(output[...end])
                 } else {
                     output = ""

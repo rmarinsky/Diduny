@@ -74,7 +74,7 @@ struct BrowserCalendarSettingsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Read this browser calendar").font(.title2.bold())
                 Text("Allow Diduny to read titles, dates, times and meeting links from this window every minute, including after restart, until you disconnect. This includes accounts you switch to in this window. The browser must remain open with the calendar tab selected.")
-                Text("Diduny names this window to recognize it later. Browser, profile, calendar view address, window name and consent time are saved locally. Events and meeting links remain in memory. No passwords, cookies or authorization tokens are copied. Calendar data is not sent to Diduny servers.")
+                Text("Diduny names this window to recognize it later. Browser, profile, calendar view address, window name and consent time are saved locally. Events and meeting links remain in memory. No passwords, cookies or authorization tokens are copied. Only a meeting's title and attendee names go to Diduny Cloud with its recording, and you can turn that off in Vocabulary & context.")
                 Text("Chrome and Edge are verified browser families. Other browsers and profile layouts may be unsupported. A missing or changed window pauses reading.").foregroundStyle(.secondary)
                 Toggle("I am allowed to read these calendars and approve ongoing local access.", isOn: $approved)
                 HStack {

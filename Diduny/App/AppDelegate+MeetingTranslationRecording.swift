@@ -175,6 +175,8 @@ extension AppDelegate {
                 return
             }
             let pair = requestedPair ?? SettingsStorage.shared.resolveTranslationLanguagePair()
+            // A translation meeting does not start from a calendar event: drop the previous meeting's details.
+            activeMeetingCalendarMeeting = nil
             SettingsStorage.shared.markTranslationLanguagePairUsed(pair)
             toggleMeetingRecording(provider: .local, translateTarget: pair.languageB,
                                    startRoute: RunTimeRouting.meetingTranslationAfterStop(translateRoute))
