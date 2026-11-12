@@ -25,9 +25,6 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
     /// T5-SC-01: rows and defaults. Values are spoken as spec 4.14 says ("Option Command B").
     func test_SC01_rowsAndDefaults() {
         openShortcuts()
-        for heading in ["While recording", "Text", "App"] {
-            waitForElement(mainWindow.staticTexts[heading])
-        }
         let defaults = [
             "escapeCancel": "Escape", "forceSubmit": "Command Return", "addMeetingChapter": "Option Command B",
             "translateSelectedText": "Option Command T", "inplaceTranslation": "Option Command",
@@ -39,7 +36,6 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
         }
         waitForElement(element("shortcuts.escapeCancelSaveAudio"), toMatch: "value == 1")
         waitForElement(element("shortcuts.inplaceTranslationPair"), toMatch: "value == 'Ukrainian ↔ English'")
-        waitForElement(element("shortcuts.openSettings.keys"), toMatch: "value == 'Command ,'")
     }
 
     /// T5-SC-02: a switch off disables its keys and count and keeps the keys.

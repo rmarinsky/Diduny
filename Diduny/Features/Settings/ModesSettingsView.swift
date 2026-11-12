@@ -40,7 +40,6 @@ struct ModesSettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .onGeometryChange(for: CGFloat.self, of: \.size.width) { contentWidth = $0 }
                 footer.padding(.top, 12)
-                ShortcutsSettingsView().padding(.top, DS.Space.sm)
             }
         }
         .onAppear {
@@ -95,6 +94,7 @@ struct ModesSettingsView: View {
                     Rectangle().fill(DS.Palette.line).frame(height: 1)
                 }
             }
+            ShortcutsSettingsView(widths: widths)
         }
     }
 

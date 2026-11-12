@@ -1,28 +1,28 @@
 import KeyboardShortcuts
 import SwiftUI
 
-/// The shortcut groups of Settings > Modes & shortcuts (design-spec 7.15, 05 §2.5), shown under the
-/// modes table. Mode shortcuts and push-to-talk keys are in the table above.
+/// The other shortcuts as rows of the Settings > Modes & shortcuts table (design-spec 7.15, 05 §2.5):
+/// the keys sit in the Shortcut column, presses and the switch in the second column.
 struct ShortcutsSettingsView: View {
     @State private var model: ShortcutsSettingsModel
     @State private var recordingRow: ShortcutRow?
+    let widths: (engine: CGFloat, second: CGFloat)
 
     /// - Parameter store: nil reads the stored shortcuts (`SettingsShortcutsStore`).
     @MainActor
-    init(store: ShortcutsSettingsStore? = nil) {
+    init(store: ShortcutsSettingsStore? = nil, widths: (engine: CGFloat, second: CGFloat)) {
         _model = State(initialValue: ShortcutsSettingsModel(store: store ?? SettingsShortcutsStore()))
+        self.widths = widths
     }
+
+    /// Every item but "Open Settings", which cannot be changed.
+    private static let items = ShortcutsSettingsModel.groups.flatMap(\.items).filter { $0 != .openSettings }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(ShortcutsSettingsModel.groups) { group in
-                Text(Self.title(of: group.id))
-                    .font(DS.Font.groupHeading)
-                    .foregroundStyle(DS.Palette.text)
-                    .padding(.top, 18)
-                ForEach(group.items) { item in
-                    row(item)
-                }
+            ForEach(Self.items) { item in
+                row(item)
+                Rectangle().fill(DS.Palette.line).frame(height: 1)
             }
         }
     }
@@ -32,50 +32,68 @@ struct ShortcutsSettingsView: View {
     @ViewBuilder private func row(_ item: ShortcutsSettingsModel.Item) -> some View {
         switch item {
         case let .shortcut(row):
-            SettingsLineRow(title: Self.title(of: row), caption: Self.caption(of: row), kind: .segmented) {
-                shortcutCluster(row)
+            gridRow(title: Self.title(of: row), caption: Self.caption(of: row)) {
+                controls(row)
+            } keys: {
+                keysField(row, isOn: model.isEnabled(row)).disabled(!model.isEnabled(row))
             }
             if row == .inplaceTranslation, model.inplaceBlocked {
                 Text("Unavailable while modifier-key shortcuts use both Option keys or both Command keys.")
                     .font(DS.Font.meta)
                     .foregroundStyle(DS.Palette.secondary)
-                    .padding(.vertical, 6)
+                    .padding(.leading, ModesGrid.detailIndent)
+                    .padding(.bottom, 6)
                     .accessibilityIdentifier("shortcuts.inplaceTranslation.blocked")
             }
         case .keepAudioWhenCancelled:
-            SettingsLineRow(title: "Keep the audio when cancelled", kind: .toggle) {
+            gridRow(title: "Keep the audio when cancelled", caption: nil) {
                 SettingsSwitch(
                     title: "Keep the audio when cancelled",
                     isOn: Binding(get: { model.keepsAudioWhenCancelled }, set: { model.keepsAudioWhenCancelled = $0 })
                 )
                 .accessibilityIdentifier("shortcuts.escapeCancelSaveAudio")
-            }
+            } keys: { EmptyView() }
         case .inplacePair:
-            SettingsLineRow(
+            gridRow(
                 title: "Translate in place between",
-                caption: "Works in both directions: the direction follows the language of the selected text.",
-                kind: .popUp
+                caption: "Works in both directions: the direction follows the language of the selected text."
             ) {
                 pairPicker
-            }
+            } keys: { EmptyView() }
         case .openSettings:
-            SettingsLineRow(
-                title: "Open Settings",
-                caption: "The standard macOS shortcut. It cannot be changed.",
-                kind: .button
-            ) {
-                ShortcutField(shortcut: "⌘,", rowLabel: String(localized: "Open Settings"))
-                    .disabled(true)
-                    .accessibilityIdentifier("shortcuts.openSettings.keys")
-            }
+            EmptyView()
         }
     }
 
-    /// Keys field, 1× 2× 3×, switch (spec 4.14). Switch off: field and count disabled at 0.45.
-    @ViewBuilder private func shortcutCluster(_ row: ShortcutRow) -> some View {
+    /// Name and caption across the Mode and Engine columns, then the second column, then the Shortcut column.
+    private func gridRow(
+        title: LocalizedStringKey, caption: LocalizedStringKey?,
+        @ViewBuilder second: () -> some View, @ViewBuilder keys: () -> some View
+    ) -> some View {
+        HStack(alignment: .center, spacing: ModesGrid.gap) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(DS.Font.body).foregroundStyle(DS.Palette.text)
+                if let caption {
+                    Text(caption).font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+                }
+            }
+            .frame(width: ModesGrid.modeColumn + ModesGrid.gap + widths.engine, alignment: .leading)
+            HStack(spacing: DS.Space.sm) { second() }
+                .frame(width: widths.second, alignment: .leading)
+            ZStack(alignment: .leading) {
+                Color.clear.frame(height: 1)
+                keys().fixedSize(horizontal: true, vertical: false)
+            }
+            .frame(width: ModesGrid.shortcutColumn, alignment: .leading)
+            Color.clear.frame(width: DS.Size.expander, height: 1)
+        }
+        .frame(minHeight: ModesGrid.cellMinHeight)
+        .padding(.vertical, ModesGrid.rowPadding)
+    }
+
+    /// 1× 2× 3× and the switch (spec 4.14). Switch off: keys and count disabled at 0.45.
+    @ViewBuilder private func controls(_ row: ShortcutRow) -> some View {
         let isOn = model.isEnabled(row)
-        keysField(row, isOn: isOn)
-            .disabled(!isOn)
         ShortcutPressCountPicker(
             selection: Binding(
                 get: { model.displayedPressCount(for: row) },
@@ -166,14 +184,6 @@ struct ShortcutsSettingsView: View {
 
     // MARK: - Copy (spec 8.9)
 
-    private static func title(of group: ShortcutsSettingsModel.GroupID) -> LocalizedStringKey {
-        switch group {
-        case .whileRecording: "While recording"
-        case .text: "Text"
-        case .app: "App"
-        }
-    }
-
     private static func titleResource(of row: ShortcutRow) -> LocalizedStringResource {
         switch row {
         case .cancelRecording: "Cancel recording"
@@ -200,7 +210,7 @@ struct ShortcutsSettingsView: View {
 }
 
 #Preview {
-    ShortcutsSettingsView(store: FakePreviewShortcutsStore())
+    ShortcutsSettingsView(store: FakePreviewShortcutsStore(), widths: (engine: 200, second: 180))
         .frame(width: 757, height: 760)
 }
 

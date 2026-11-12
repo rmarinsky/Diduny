@@ -62,8 +62,12 @@ struct ModeRow<Second: View>: View {
             }
             .frame(width: widths.engine, alignment: .leading)
 
-            second()
-                .frame(width: widths.second, alignment: .leading)
+            // Color.clear keeps the column when a mode has no second choice (EmptyView takes no space).
+            ZStack(alignment: .leading) {
+                Color.clear.frame(height: 1)
+                second()
+            }
+            .frame(width: widths.second, alignment: .leading)
 
             shortcutCell
                 .frame(width: ModesGrid.shortcutColumn, alignment: .leading)
