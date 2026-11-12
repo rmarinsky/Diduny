@@ -248,6 +248,7 @@ struct NotesView: View {
 
     @State private var store = NotesStore.shared
     @State private var library = RecordingsLibraryStorage.shared
+    @State private var service = NotesService.shared
     @State private var search = ""
     @State private var tab: Tab = .notes
     @State private var selection: UUID?
@@ -261,12 +262,47 @@ struct NotesView: View {
             .sorted { $0.recording.createdAt > $1.recording.createdAt }
     }
 
+    /// Recordings of the current batch without notes yet: shown in the list with what happens to each.
+    private var pendingRows: [(recording: Recording, status: String, isWriting: Bool)] {
+        guard let batch = service.backfill else { return [] }
+        let recordings = Dictionary(uniqueKeysWithValues: library.recordings.map { ($0.id, $0) })
+        let pending = service.pendingBackfillIDs.compactMap { id in
+            recordings[id].map { ($0, Self.status(service.states[id]), Self.isWriting(service.states[id])) }
+        }
+        let failed = batch.failed.compactMap { id, error in
+            recordings[id].map { ($0, String(localized: "Failed: \(error)"), false) }
+        }
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return (pending + failed)
+            .filter { store.note(for: $0.0.id) == nil }
+            .filter { query.isEmpty || $0.0.displayTitle.lowercased().contains(query) }
+    }
+
+    private static func status(_ state: NotesService.JobState?) -> String {
+        switch state {
+        case let .writing(part, of) where of > 1: String(localized: "Writing notes, part \(part) of \(of)")
+        case .writing: String(localized: "Writing notes")
+        case .checking: String(localized: "Checking the notes")
+        case let .failed(error): String(localized: "Failed: \(error)")
+        case let .waiting(reason?): reason
+        case .waiting, nil: String(localized: "Waiting")
+        }
+    }
+
+    private static func isWriting(_ state: NotesService.JobState?) -> Bool {
+        switch state {
+        case .writing, .checking: true
+        default: false
+        }
+    }
+
     var body: some View {
         PageScaffold(title: "Notes", scrolls: false) {
             VStack(alignment: .leading, spacing: DS.Space.md) {
-                if store.notes.isEmpty {
+                if store.notes.isEmpty, service.backfill == nil {
                     NotesEmptyState()
                 } else {
+                    if let batch = service.backfill { BackfillBar(batch: batch, service: service) }
                     HStack {
                         Picker("Show", selection: $tab) {
                             Text("Notes").tag(Tab.notes)
@@ -288,18 +324,46 @@ struct NotesView: View {
 
     private var notesList: some View {
         HStack(alignment: .top, spacing: DS.Space.lg) {
-            List(rows, id: \.note.id, selection: $selection) { row in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(row.recording.displayTitle).font(DS.Font.headline).lineLimit(1)
-                    Text(row.recording.createdAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(DS.Font.caption).foregroundStyle(.secondary)
-                    Text(row.note.summary).font(DS.Font.callout).foregroundStyle(.secondary).lineLimit(2)
+            List(selection: $selection) {
+                ForEach(pendingRows, id: \.recording.id) { row in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.recording.displayTitle).font(DS.Font.headline).lineLimit(1)
+                        Text(row.recording.createdAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(DS.Font.caption).foregroundStyle(.secondary)
+                        HStack(spacing: DS.Space.xs) {
+                            if row.isWriting { ProgressView().controlSize(.mini) }
+                            Text(verbatim: row.status).font(DS.Font.callout)
+                                .foregroundStyle(row.isWriting ? DS.Palette.text : DS.Palette.secondary).lineLimit(2)
+                        }
+                    }
+                    .padding(.vertical, DS.Space.xs)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("notes.pending.\(row.recording.id)")
                 }
-                .padding(.vertical, DS.Space.xs)
+                ForEach(rows, id: \.note.id) { row in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.recording.displayTitle).font(DS.Font.headline).lineLimit(1)
+                        Text(row.recording.createdAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(DS.Font.caption).foregroundStyle(.secondary)
+                        Text(row.note.summary).font(DS.Font.callout).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                    .padding(.vertical, DS.Space.xs)
+                    .tag(row.note.id)
+                }
             }
             .frame(width: 280)
             ScrollView {
-                if let row = rows.first(where: { $0.note.id == selection }) ?? rows.first {
+                if let pending = pendingRows.first(where: { $0.recording.id == selection }) {
+                    VStack(alignment: .leading, spacing: DS.Space.sm) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(pending.recording.displayTitle).font(DS.Font.groupHeading)
+                            Spacer()
+                            Button("Open recording") { MainWindowController.shared.showRecording(id: pending.recording.id) }
+                        }
+                        Text(verbatim: pending.status).font(DS.Font.body).foregroundStyle(DS.Palette.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else if let row = rows.first(where: { $0.note.id == selection }) ?? rows.first {
                     VStack(alignment: .leading, spacing: DS.Space.md) {
                         HStack(alignment: .firstTextBaseline) {
                             Text(row.recording.displayTitle).font(DS.Font.groupHeading)
@@ -331,6 +395,13 @@ struct NotesView: View {
 private struct NotesEmptyState: View {
     @State private var service = NotesService.shared
     @State private var library = RecordingsLibraryStorage.shared
+    @State private var confirming = false
+
+    /// Meetings, newest first; voice notes only when there are no meetings.
+    private func batch(_ waiting: [Recording]) -> [Recording] {
+        let meetings = waiting.filter(\.type.isMeetingLike)
+        return meetings.isEmpty ? waiting : meetings
+    }
 
     var body: some View {
         let waiting = service.recordingsWithoutNotes(meetingsOnly: false, since: nil)
@@ -349,11 +420,21 @@ private struct NotesEmptyState: View {
                     .font(DS.Font.body).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: DS.Space.sm) {
-                    Button("Write notes for earlier recordings") { MainWindowController.shared.showWindow(section: .notesSettings) }
-                        .buttonStyle(.borderedProminent).tint(DS.Palette.accent)
+                    Button(meetings > 0 ? "Write notes for \(meetings) meetings" : "Write notes for \(waiting.count) voice notes") {
+                        confirming = true
+                    }
+                    .buttonStyle(.borderedProminent).tint(DS.Palette.accent)
+                    .accessibilityIdentifier("notes.empty.writeEarlier")
                     Button("Open a recording") { MainWindowController.shared.showWindow(section: .recordings) }
                 }
                 .padding(.top, DS.Space.xs)
+                .alert("Write notes for \(batch(waiting).count) earlier recordings?", isPresented: $confirming) {
+                    Button("Start") { service.startBackfill(batch(waiting).map(\.id)) }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(NotesBackfillCopy.whereText(NotesSettings.writer) + "\n\n"
+                        + String(localized: "You can pause or stop at any time. Notes already written stay."))
+                }
             } else {
                 Text("Notes appear here after a meeting is transcribed. \(NotesSettings.writer.label) writes them.")
                     .font(DS.Font.body).foregroundStyle(.secondary)
@@ -362,5 +443,35 @@ private struct NotesEmptyState: View {
         }
         .frame(maxWidth: 520, alignment: .leading)
         .padding(.top, DS.Space.xl)
+    }
+}
+
+/// The batch of earlier recordings being written: how far it is, and pause, continue or stop.
+private struct BackfillBar: View {
+    let batch: NotesService.Backfill
+    let service: NotesService
+
+    var body: some View {
+        HStack(spacing: DS.Space.sm) {
+            Text(verbatim: line).font(DS.Font.callout).monospacedDigit()
+                .foregroundStyle(batch.pauseReason == nil ? DS.Palette.text : DS.Palette.secondary)
+            Spacer()
+            if batch.isFinished {
+                Button("Done") { service.clearFinishedBackfill() }
+            } else {
+                Button(batch.paused ? "Continue" : "Pause") {
+                    if batch.paused { service.resumeBackfill() } else { service.pauseBackfill() }
+                }
+                Button("Stop") { service.stopBackfill() }
+            }
+        }
+        .accessibilityIdentifier("notes.backfill")
+    }
+
+    private var line: String {
+        if let reason = batch.pauseReason { return reason }
+        if batch.isFinished { return String(localized: "\(batch.written) of \(batch.total) written") }
+        if batch.paused { return String(localized: "Paused, \(batch.written) of \(batch.total) written") }
+        return String(localized: "Writing notes: \(batch.written) of \(batch.total) written")
     }
 }

@@ -235,6 +235,12 @@ final class NotesService {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
+    /// Recordings of the current batch still to write, in order: the one being written, queued, then the backlog.
+    var pendingBackfillIDs: [UUID] {
+        let current = running.flatMap { $0.backfill ? [$0.recordingID] : nil } ?? []
+        return current + queue.filter(\.backfill).map(\.recordingID) + backlog
+    }
+
     func startBackfill(_ recordingIDs: [UUID]) {
         guard !recordingIDs.isEmpty else { return }
         backlog = recordingIDs

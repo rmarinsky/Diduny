@@ -847,16 +847,7 @@ private struct EarlierRecordingsSection: View {
     }
 
     private var confirmMessage: String {
-        let whereText: String
-        switch kind {
-        case .ollama, .lmStudio, .openAICompatible:
-            whereText = String(localized: "The transcripts stay on this Mac. The Mac is slow while a note is written, so notes are written only when it is idle and, if you chose so, on the power adapter.")
-        case .apiKey:
-            whereText = String(localized: "Each transcript goes to \(NotesSettings.apiProvider.label) with your key and is paid per use.")
-        default:
-            whereText = String(localized: "Each transcript goes to \(kind.vendor) under your account and counts toward your \(kind.label) plan. After 3 failures in a row, for example at the plan limit, writing pauses.")
-        }
-        return whereText + "\n\n" + estimate + "\n\n"
+        NotesBackfillCopy.whereText(kind) + "\n\n" + estimate + "\n\n"
             + String(localized: "You can pause or stop at any time. Notes already written stay.")
     }
 
@@ -926,5 +917,19 @@ private struct EarlierRecordingsSection: View {
         if state.paused { return String(localized: "Paused by you. Nothing is sent until you continue.") }
         if let current = state.currentTitle { return String(localized: "Now: \(current). Waits while you record.") }
         return String(localized: "Waiting to start. Writing stops while you record.")
+    }
+}
+
+/// Where the transcripts go when earlier recordings get notes; shared by Settings and the Notes page.
+enum NotesBackfillCopy {
+    static func whereText(_ kind: NotesWriterKind) -> String {
+        switch kind {
+        case .ollama, .lmStudio, .openAICompatible:
+            String(localized: "The transcripts stay on this Mac. The Mac is slow while a note is written, so notes are written only when it is idle and, if you chose so, on the power adapter.")
+        case .apiKey:
+            String(localized: "Each transcript goes to \(NotesSettings.apiProvider.label) with your key and is paid per use.")
+        default:
+            String(localized: "Each transcript goes to \(kind.vendor) under your account and counts toward your \(kind.label) plan. After 3 failures in a row, for example at the plan limit, writing pauses.")
+        }
     }
 }
