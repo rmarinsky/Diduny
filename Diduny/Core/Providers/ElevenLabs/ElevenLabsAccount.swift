@@ -41,6 +41,9 @@ struct ElevenLabsAccountService {
     func testConnection(apiKey: String) async -> ProviderHealth {
         do {
             return .ok(planName: try await fetchUsage(apiKey: apiKey).planName)
+        } catch ElevenLabsError.missingPermission {
+            // The subscription call needs User (read); a key restricted to Speech to Text still transcribes.
+            return .ok(planName: "")
         } catch {
             return .failed(ElevenLabsError.from(transportError: error))
         }

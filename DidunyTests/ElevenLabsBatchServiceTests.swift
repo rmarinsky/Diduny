@@ -204,6 +204,18 @@ final class ElevenLabsAccountServiceTests: XCTestCase {
         let network = await service.testConnection(apiKey: sentinel)
         XCTAssertEqual(network, .failed(.network))
     }
+
+    /// A key restricted to Speech to Text has no User (read): ElevenLabs answers 401 missing_permissions
+    /// on the subscription call. The key is valid, so the test passes without a plan name.
+    func testRestrictedKeyWithoutUserReadStillWorks() async {
+        StubURLProtocol.reset()
+        let service = ElevenLabsAccountService(session: StubURLProtocol.session())
+        let body = #"{"detail":{"status":"missing_permissions","message":"The API key you used is missing the permission user_read to execute this operation."}}"#
+        StubURLProtocol.responses = [(401, body)]
+        let health = await service.testConnection(apiKey: sentinel)
+        XCTAssertEqual(health, .ok(planName: ""))
+        XCTAssertEqual(ElevenLabsError.from(httpStatus: 401, body: Data(body.utf8)), .missingPermission)
+    }
 }
 
 final class ElevenLabsCapabilitiesTests: XCTestCase {

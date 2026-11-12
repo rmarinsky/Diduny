@@ -152,7 +152,7 @@ private struct ElevenLabsKeyGuidance: View {
             DisclosureGroup("Before you start", isExpanded: $expanded) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("1. Create an API key in your ElevenLabs dashboard.")
-                    Text("2. If you restrict the key, enable Speech to Text, and Usage (read) to see credits.")
+                    Text("2. If you restrict the key, enable Speech to Text, and User (read) to see credits.")
                     Text("3. Accept the Scribe terms in your ElevenLabs dashboard before your first recording. Without this, ElevenLabs rejects live transcription.")
                     Link("Open ElevenLabs dashboard", destination: dashboardURL)
                         .buttonStyle(.bordered)
