@@ -21,7 +21,7 @@ struct RecordingRowView: View {
     /// Progress while this recording is the queue's current item.
     private var queueProgress: QueueProgress? {
         guard recording.status == .processing else { return nil }
-        return queueService.progress(for: recording.id)
+        return queueService.progress(for: recording.id) ?? board.work(for: recording.id)?.progress
     }
 
     @State private var board = ProcessingBoard.shared

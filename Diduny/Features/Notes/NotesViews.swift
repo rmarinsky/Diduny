@@ -144,6 +144,13 @@ struct NoteBody: View {
                 }
             }
             list("Open questions", note.openQuestions.map { ($0, "") })
+            ForEach(Array((note.additions ?? []).enumerated()), id: \.offset) { _, addition in
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                    Text("Added by \(addition.author), \(addition.addedAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(DS.Font.headline)
+                    Text(addition.text).font(DS.Font.body).textSelection(.enabled)
+                }
+            }
             if let removed = note.removedItems, !removed.isEmpty {
                 VStack(alignment: .leading, spacing: DS.Space.xs) {
                     Button(showRemoved ? "Hide removed items" : "The check removed \(removed.count) items. Show them") {
@@ -329,16 +336,19 @@ struct NotesView: View {
 }
 
 /// Meetings being transcribed or getting notes now, one line each; hidden when nothing runs.
-private struct NotesWorkStrip: View {
+struct NotesWorkStrip: View {
     @State private var board = ProcessingBoard.shared
     @State private var library = RecordingsLibraryStorage.shared
+    /// Titles for recordings the library does not have (demo frames); nil reads the library.
+    var titles: [UUID: String]?
 
     var body: some View {
         let ordered = board.ordered
         if !ordered.isEmpty {
             VStack(alignment: .leading, spacing: DS.Space.xs) {
                 ForEach(ordered, id: \.id) { entry in
-                    let title = library.recordings.first { $0.id == entry.id }?.displayTitle ?? String(localized: "Recording")
+                    let title = titles?[entry.id] ?? library.recordings.first { $0.id == entry.id }?.displayTitle
+                        ?? String(localized: "Recording")
                     HStack(spacing: DS.Space.sm) {
                         ProgressView().controlSize(.small)
                         Text(ProcessingBoard.line(entry.work, title: title))

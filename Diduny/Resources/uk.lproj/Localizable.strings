@@ -2405,3 +2405,4 @@
 "Comma-separated" = "Через кому";
 "Name" = "Ім'я";
 "Diduny could not save the change." = "Diduny не вдалося зберегти зміну.";
+"Added by %@, %@" = "Додав %@, %@";
