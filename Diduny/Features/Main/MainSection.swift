@@ -17,7 +17,6 @@ enum MainSection: String, CaseIterable, Hashable {
     case notesSettings
     case models
     case providers
-    case shortcuts
     case account
     case about
 
@@ -34,13 +33,12 @@ enum MainSection: String, CaseIterable, Hashable {
         case .meetings: String(localized: "Calendar & meetings")
         case .notesSettings: String(localized: "Notes settings")
         case .general: String(localized: "General")
-        case .modes: String(localized: "Modes")
+        case .modes: String(localized: "Modes & shortcuts")
         case .languages: String(localized: "Languages")
         case .vocabulary: String(localized: "Vocabulary & context")
         case .audioDictation: String(localized: "Audio")
         case .models: String(localized: "Local models")
         case .providers: String(localized: "Providers")
-        case .shortcuts: String(localized: "Shortcuts")
         case .account: String(localized: "Account")
         case .about: String(localized: "About")
         }
@@ -62,7 +60,6 @@ enum MainSection: String, CaseIterable, Hashable {
         case .audioDictation: "waveform.and.mic"
         case .models: "cpu"
         case .providers: "key.horizontal"
-        case .shortcuts: "command"
         case .account: "person.crop.circle"
         case .about: "info.circle"
         }
@@ -70,7 +67,7 @@ enum MainSection: String, CaseIterable, Hashable {
 
     var isSettingsItem: Bool {
         switch self {
-        case .meetings, .notesSettings, .general, .modes, .languages, .vocabulary, .audioDictation, .models, .providers, .shortcuts, .account, .about: true
+        case .meetings, .notesSettings, .general, .modes, .languages, .vocabulary, .audioDictation, .models, .providers, .account, .about: true
         default: false
         }
     }

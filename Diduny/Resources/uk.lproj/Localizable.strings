@@ -2382,3 +2382,7 @@
 "Used when translating." = "Діє під час перекладу.";
 "Use meeting title and attendee names from the calendar" = "Використовувати назву зустрічі й імена учасників з календаря";
 "The title and names go to Diduny Cloud only for that meeting's recording." = "Назва й імена йдуть у Diduny Cloud лише для запису цієї зустрічі.";
+
+/* Settings > Modes & shortcuts */
+"Modes & shortcuts" = "Режими та шорткати";
+"What runs each mode by default, how you start it, and the other shortcuts." = "Що за замовчуванням запускає кожен режим, як його ввімкнути, та інші шорткати.";

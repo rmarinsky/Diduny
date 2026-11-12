@@ -2382,3 +2382,7 @@
 "Used when translating." = "Used when translating.";
 "Use meeting title and attendee names from the calendar" = "Use meeting title and attendee names from the calendar";
 "The title and names go to Diduny Cloud only for that meeting's recording." = "The title and names go to Diduny Cloud only for that meeting's recording.";
+
+/* Settings > Modes & shortcuts */
+"Modes & shortcuts" = "Modes & shortcuts";
+"What runs each mode by default, how you start it, and the other shortcuts." = "What runs each mode by default, how you start it, and the other shortcuts.";

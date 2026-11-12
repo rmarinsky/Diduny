@@ -13,7 +13,7 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
     private func openShortcuts() {
         launchApp(freshInstall: true, onboardingCompleted: true)
         waitForElement(mainWindow, "Main window did not open")
-        mainWindow.buttons["Sidebar Shortcuts"].click()
+        mainWindow.buttons["Sidebar Modes & shortcuts"].click()
         waitForElement(element("shortcuts.forceSubmit.keys"), "Shortcuts page did not open")
     }
 

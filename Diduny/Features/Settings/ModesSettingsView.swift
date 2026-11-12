@@ -25,7 +25,7 @@ struct ModesSettingsView: View {
     }
 
     var body: some View {
-        PageScaffold(title: "Modes", subtitle: "What runs each mode by default, and how you start it.") {
+        PageScaffold(title: "Modes & shortcuts", subtitle: "What runs each mode by default, how you start it, and the other shortcuts.") {
             VStack(alignment: .leading, spacing: 0) {
                 if model.showsSignedOutNotice {
                     NoticeRow(text: "You are signed out. Recording and translation by Diduny need an account.", buttonTitle: "Sign in") {
@@ -40,6 +40,7 @@ struct ModesSettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .onGeometryChange(for: CGFloat.self, of: \.size.width) { contentWidth = $0 }
                 footer.padding(.top, 12)
+                ShortcutsSettingsView().padding(.top, DS.Space.sm)
             }
         }
         .onAppear {

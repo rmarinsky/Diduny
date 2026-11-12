@@ -1,8 +1,8 @@
 import KeyboardShortcuts
 import SwiftUI
 
-/// Settings > Shortcuts (design-spec 7.15, 05 §2.5, prototype.html:750-753). Mode shortcuts and
-/// push-to-talk keys live in Settings > Modes.
+/// The shortcut groups of Settings > Modes & shortcuts (design-spec 7.15, 05 §2.5), shown under the
+/// modes table. Mode shortcuts and push-to-talk keys are in the table above.
 struct ShortcutsSettingsView: View {
     @State private var model: ShortcutsSettingsModel
     @State private var recordingRow: ShortcutRow?
@@ -14,19 +14,14 @@ struct ShortcutsSettingsView: View {
     }
 
     var body: some View {
-        PageScaffold(
-            title: "Shortcuts",
-            subtitle: "Each one has its keys, how many times you press them, and a switch. Shortcuts that start a mode are in Modes."
-        ) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(ShortcutsSettingsModel.groups) { group in
-                    Text(Self.title(of: group.id))
-                        .font(DS.Font.groupHeading)
-                        .foregroundStyle(DS.Palette.text)
-                        .padding(.top, 18)
-                    ForEach(group.items) { item in
-                        row(item)
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(ShortcutsSettingsModel.groups) { group in
+                Text(Self.title(of: group.id))
+                    .font(DS.Font.groupHeading)
+                    .foregroundStyle(DS.Palette.text)
+                    .padding(.top, 18)
+                ForEach(group.items) { item in
+                    row(item)
                 }
             }
         }

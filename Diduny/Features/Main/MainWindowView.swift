@@ -115,8 +115,6 @@ struct MainWindowView: View {
             OfflineModelsSettingsView()
         case .providers:
             ProvidersSettingsView()
-        case .shortcuts:
-            ShortcutsSettingsView()
         case .account:
             AccountSettingsView()
         case .about:

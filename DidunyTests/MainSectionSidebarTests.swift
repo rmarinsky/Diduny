@@ -14,7 +14,7 @@ struct MainSectionSidebarTests {
     @Test func settingsItemsInOrder() {
         #expect(MainSection.settingsItems == [
             .general, .modes, .languages, .vocabulary, .audioDictation, .meetings, .notesSettings,
-            .models, .providers, .shortcuts, .account, .about,
+            .models, .providers, .account, .about,
         ])
     }
 
@@ -22,8 +22,8 @@ struct MainSectionSidebarTests {
         let labels = (MainSection.mainItems + MainSection.settingsItems).map(\.label)
         #expect(labels == [
             "Overview", "Recordings", "Notes", "Benchmark", "Typing test",
-            "General", "Modes", "Languages", "Vocabulary & context", "Audio", "Calendar & meetings", "Notes settings",
-            "Local models", "Providers", "Shortcuts", "Account", "About",
+            "General", "Modes & shortcuts", "Languages", "Vocabulary & context", "Audio", "Calendar & meetings", "Notes settings",
+            "Local models", "Providers", "Account", "About",
         ])
     }
 
