@@ -3,7 +3,9 @@ import Foundation
 /// Anonymous daily counters of which features run and how they were triggered.
 ///
 /// Counts are kept per UTC day in UserDefaults and sent once the day is over, as
-/// daily totals the server stores without any account reference. Nothing else
+/// daily totals the server stores without any account reference. The request is
+/// signed in (the endpoint only takes counts from Diduny accounts, against abuse);
+/// Settings says so next to the toggle. Nothing else
 /// (no text, no timing, no engine) is counted. Off when the user turns off
 /// "Share anonymous feature usage"; turning it off also drops unsent counts.
 @MainActor

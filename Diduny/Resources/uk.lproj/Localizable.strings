@@ -2388,7 +2388,6 @@
 "Optional on Free and Pro. Shares duration, local/cloud mode, feature category and the transcription engine, plus app launches, unexpected quits and error codes with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days (error codes 90 days). No audio, text or file names. Cloud limits, payments and necessary security records are handled separately." = "Необов’язково на Free і Pro. Надсилає тривалість, режим (локально чи в хмарі), тип функції та рушій розпізнавання, а також запуски застосунку, неочікувані завершення й коди помилок разом із версією Diduny, версією macOS і типом чипа Mac (Apple silicon чи Intel). Дані пов’язані з вашим акаунтом і зберігаються 30 днів (коди помилок — 90 днів). Без аудіо, тексту й назв файлів. Хмарні ліміти, платежі та потрібні записи безпеки обробляються окремо.";
 "The Diduny team sees how much time this account spends on each transcription engine and model, to help with support. Turn off sharing to stop it." = "Команда Diduny бачить, скільки часу цей акаунт використовує кожен рушій і модель розпізнавання, щоб допомагати з підтримкою. Вимкніть надсилання, щоб це припинити.";
 "Share anonymous feature usage" = "Надсилати анонімну статистику функцій";
-"On by default. Counts which features and shortcuts are used each day, without your account or anything you say or type, so we know what to improve." = "Увімкнено за замовчуванням. Рахує, якими функціями й комбінаціями клавіш користуються щодня, без вашого акаунта й без того, що ви кажете чи пишете, щоб ми знали, що покращувати.";
 "Export Diagnostics…" = "Експортувати діагностику…";
 "Export Diagnostics" = "Експорт діагностики";
 "Diagnostics" = "Діагностика";
@@ -2415,3 +2414,6 @@
 "Name" = "Ім'я";
 "Diduny could not save the change." = "Diduny не вдалося зберегти зміну.";
 "Added by %@, %@" = "Додав %@, %@";
+"On by default. Counts which features and shortcuts are used each day, so we know what to improve. Sent once a day while you are signed in, so only Diduny accounts can send counts; the server stores the daily totals without your account, and nothing you say or type." = "Увімкнено за замовчуванням. Рахує, якими функціями та шорткатами ви користуєтеся щодня, щоб ми знали, що покращувати. Надсилається раз на день, коли ви ввійшли, щоб лічильники могли надсилати лише акаунти Diduny; сервер зберігає денні суми без вашого акаунта і без того, що ви кажете чи пишете.";
+"The transcript is not ready yet." = "Транскрипт ще не готовий.";
+"Key lacks permission: user_read" = "Ключ не має дозволу: user_read";

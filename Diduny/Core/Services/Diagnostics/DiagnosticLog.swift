@@ -161,8 +161,14 @@ extension DiagnosticLog {
     static func errorCode(_ error: Error) -> String {
         let type = String(describing: Swift.type(of: error))
         let mirror = Mirror(reflecting: error)
-        let caseName: String = if mirror.displayStyle == .enum {
-            mirror.children.first?.label ?? String(describing: error).components(separatedBy: "(").first ?? ""
+        // Never derived from a description: a type that describes itself could print its message.
+        // A case with a payload names itself through the mirror; a case without one is named by
+        // `String(describing:)` only when the type does not override its description.
+        let describesItself = error is CustomStringConvertible || error is CustomDebugStringConvertible
+        let caseName: String = if mirror.displayStyle == .enum, let label = mirror.children.first?.label {
+            label
+        } else if mirror.displayStyle == .enum, !describesItself {
+            String(describing: error)
         } else {
             String((error as NSError).code)
         }

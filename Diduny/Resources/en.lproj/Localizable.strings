@@ -2388,7 +2388,6 @@
 "Optional on Free and Pro. Shares duration, local/cloud mode, feature category and the transcription engine, plus app launches, unexpected quits and error codes with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days (error codes 90 days). No audio, text or file names. Cloud limits, payments and necessary security records are handled separately." = "Optional on Free and Pro. Shares duration, local/cloud mode, feature category and the transcription engine, plus app launches, unexpected quits and error codes with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days (error codes 90 days). No audio, text or file names. Cloud limits, payments and necessary security records are handled separately.";
 "The Diduny team sees how much time this account spends on each transcription engine and model, to help with support. Turn off sharing to stop it." = "The Diduny team sees how much time this account spends on each transcription engine and model, to help with support. Turn off sharing to stop it.";
 "Share anonymous feature usage" = "Share anonymous feature usage";
-"On by default. Counts which features and shortcuts are used each day, without your account or anything you say or type, so we know what to improve." = "On by default. Counts which features and shortcuts are used each day, without your account or anything you say or type, so we know what to improve.";
 "Export Diagnostics…" = "Export Diagnostics…";
 "Export Diagnostics" = "Export Diagnostics";
 "Diagnostics" = "Diagnostics";
@@ -2415,3 +2414,6 @@
 "Name" = "Name";
 "Diduny could not save the change." = "Diduny could not save the change.";
 "Added by %@, %@" = "Added by %@, %@";
+"On by default. Counts which features and shortcuts are used each day, so we know what to improve. Sent once a day while you are signed in, so only Diduny accounts can send counts; the server stores the daily totals without your account, and nothing you say or type." = "On by default. Counts which features and shortcuts are used each day, so we know what to improve. Sent once a day while you are signed in, so only Diduny accounts can send counts; the server stores the daily totals without your account, and nothing you say or type.";
+"The transcript is not ready yet." = "The transcript is not ready yet.";
+"Key lacks permission: user_read" = "Key lacks permission: user_read";

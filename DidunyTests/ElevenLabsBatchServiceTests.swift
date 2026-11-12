@@ -163,7 +163,7 @@ final class ElevenLabsErrorMappingTests: XCTestCase {
     }
 
     func testMessagesHaveNoKeyAndAreNonEmpty() {
-        let all: [ElevenLabsError] = [.invalidKey, .missingPermission, .planOrModelNotAvailable, .termsNotAccepted,
+        let all: [ElevenLabsError] = [.invalidKey, .missingPermission, .userReadNotGranted, .planOrModelNotAvailable, .termsNotAccepted,
                                       .quotaExceeded, .rateLimited, .network, .invalidResponse,
                                       .unknown(status: 500, requestID: "r")]
         for error in all {
@@ -215,6 +215,15 @@ final class ElevenLabsAccountServiceTests: XCTestCase {
         let health = await service.testConnection(apiKey: sentinel)
         XCTAssertEqual(health, .ok(planName: ""))
         XCTAssertEqual(ElevenLabsError.from(httpStatus: 401, body: Data(body.utf8)), .missingPermission)
+    }
+
+    /// A 403 without the explicit code (e.g. the key's IP allowlist) is a failure, not a working key.
+    func testUnclassified403IsNotAWorkingKey() async {
+        StubURLProtocol.reset()
+        let service = ElevenLabsAccountService(session: StubURLProtocol.session())
+        StubURLProtocol.responses = [(403, #"{"detail":{"message":"IP not allowed"}}"#)]
+        let health = await service.testConnection(apiKey: sentinel)
+        XCTAssertEqual(health, .failed(.missingPermission))
     }
 }
 

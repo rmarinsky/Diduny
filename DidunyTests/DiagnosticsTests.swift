@@ -7,6 +7,12 @@ private enum SampleError: Error {
     case timeout
 }
 
+/// An error whose description is the message: the code must not come from it.
+private enum TalkativeError: Error, CustomStringConvertible {
+    case failed
+    var description: String { "the user's dictated sentence" }
+}
+
 private func tempDirectory() -> URL {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("diagnostics-tests-\(UUID().uuidString)")
     try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
@@ -35,6 +41,8 @@ struct DiagnosticLogTests {
         #expect(DiagnosticLog.errorCode(SampleError.timeout) == "SampleError.timeout")
         let fields = DiagnosticLog.errorFields(SampleError.serverError("secret transcript"))
         #expect(!String(describing: fields).contains("secret"))
+        #expect(!DiagnosticLog.errorCode(TalkativeError.failed).contains("dictated"))
+        #expect(DiagnosticLog.errorCode(TalkativeError.failed).hasPrefix("TalkativeError."))
     }
 
     @Test("Writes JSON lines, remembers the last request ID and rotates at the size limit")
@@ -59,13 +67,14 @@ struct DiagnosticLogTests {
 
     @Test("The export zip holds the log and the summary")
     @MainActor
-    func exportArchive() throws {
+    func exportArchive() async throws {
         let directory = tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let log = DiagnosticLog(directory: directory.appendingPathComponent("logs"))
         log.record(.appLaunch, [.appVersion: "1.2.3"])
         let zip = directory.appendingPathComponent("out.zip")
-        try DiagnosticsExporter.makeArchive(log: log, summary: ["appVersion": "1.2.3"], destination: zip)
+        try Data("previous".utf8).write(to: zip)
+        try await DiagnosticsExporter.makeArchive(log: log, summary: ["appVersion": "1.2.3"], destination: zip)
 
         let unzip = Process()
         unzip.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
@@ -77,6 +86,28 @@ struct DiagnosticLogTests {
         let listing = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         #expect(listing.contains("out/diagnostics.jsonl"))
         #expect(listing.contains("out/summary.json"))
+    }
+
+    @Test("A failed zip leaves the file already at the destination as it was")
+    func failedArchiveKeepsTheOldFile() throws {
+        let directory = tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let zip = directory.appendingPathComponent("out.zip")
+        try Data("previous".utf8).write(to: zip)
+        #expect(throws: (any Error).self) {
+            try DiagnosticsExporter.writeArchive(files: [], summary: Data("{}".utf8), destination: zip, ditto: "/usr/bin/false")
+        }
+        #expect(try String(contentsOf: zip, encoding: .utf8) == "previous")
+    }
+}
+
+struct HTTPLoggerRouteTests {
+    @Test("Failed calls keep the route, never ids or file names")
+    func routeTemplate() {
+        #expect(HTTPLogger.routeTemplate("/api/v1/jobs/7f3c2a/events") == "/api/v1/jobs/:x/events")
+        #expect(HTTPLogger.routeTemplate("/recordings/private-call.wav") == "/:x/:x")
+        #expect(HTTPLogger.routeTemplate("/api/v1/transcriptions") == "/api/v1/transcriptions")
+        #expect(HTTPLogger.routeTemplate("") == "")
     }
 }
 
@@ -143,6 +174,27 @@ struct FeatureUsageCounterTests {
         counter.record(.meeting, via: .menu)
         await counter.flush()
         #expect(counter.pending.isEmpty)
+    }
+
+    @Test("Signed out: counts stay on this Mac, nothing is sent")
+    func signedOutSendsNothing() async {
+        let defaults = makeDefaults()
+        var clock = Date(timeIntervalSince1970: 1_800_000_000)
+        let counter = FeatureUsageCounter(
+            defaults: defaults,
+            isEnabled: { true },
+            isSignedIn: { false },
+            baseURL: { "https://proxy.example" },
+            transport: { _ in
+                Issue.record("must not send while signed out")
+                throw URLError(.userAuthenticationRequired)
+            },
+            now: { clock }
+        )
+        counter.record(.dictation, via: .hotkey)
+        clock = clock.addingTimeInterval(86400)
+        await counter.flush()
+        #expect(!counter.pending.isEmpty)
     }
 
     @Test("Engine labels fit the backend alphabet")

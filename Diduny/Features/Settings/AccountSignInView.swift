@@ -218,7 +218,7 @@ struct AnalyticsSettingsSection: View {
             ))
             .onAppear { featureUsageOn = settings.shareFeatureUsage }
             Text(
-                "On by default. Counts which features and shortcuts are used each day, without your account or anything you say or type, so we know what to improve."
+                "On by default. Counts which features and shortcuts are used each day, so we know what to improve. Sent once a day while you are signed in, so only Diduny accounts can send counts; the server stores the daily totals without your account, and nothing you say or type."
             )
             .font(.caption).foregroundStyle(.secondary)
             if let error = analytics.errorMessage { Text(error).font(.caption).foregroundStyle(.red) }

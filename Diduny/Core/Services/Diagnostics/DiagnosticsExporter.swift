@@ -39,26 +39,41 @@ enum DiagnosticsExporter {
         ]
     }
 
-    /// Writes `<destination>` as a zip of the diagnostics files and `summary.json`.
-    static func makeArchive(log: DiagnosticLog, summary: [String: Any], destination: URL) throws {
+    /// Writes `<destination>` as a zip of the diagnostics files and `summary.json`. The zip is built
+    /// off the main actor; an existing file at `destination` is replaced only once the new zip is ready.
+    static func makeArchive(log: DiagnosticLog, summary: [String: Any], destination: URL) async throws {
         log.flush()
+        let files = log.files()
+        let data = try JSONSerialization.data(withJSONObject: summary, options: [.prettyPrinted, .sortedKeys])
+        try await Task.detached(priority: .userInitiated) {
+            try writeArchive(files: files, summary: data, destination: destination)
+        }.value
+    }
+
+    nonisolated static func writeArchive(
+        files: [URL], summary: Data, destination: URL, ditto dittoPath: String = "/usr/bin/ditto"
+    ) throws {
         let fm = FileManager.default
         let staging = fm.temporaryDirectory.appendingPathComponent("Diduny-diagnostics-\(UUID().uuidString)")
         let folder = staging.appendingPathComponent(destination.deletingPathExtension().lastPathComponent)
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: staging) }
-        for file in log.files() {
+        for file in files {
             try fm.copyItem(at: file, to: folder.appendingPathComponent(file.lastPathComponent))
         }
-        let data = try JSONSerialization.data(withJSONObject: summary, options: [.prettyPrinted, .sortedKeys])
-        try data.write(to: folder.appendingPathComponent("summary.json"))
-        try? fm.removeItem(at: destination)
+        try summary.write(to: folder.appendingPathComponent("summary.json"))
+        let zip = staging.appendingPathComponent("archive.zip")
         let ditto = Process()
-        ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        ditto.arguments = ["-c", "-k", "--keepParent", folder.path, destination.path]
+        ditto.executableURL = URL(fileURLWithPath: dittoPath)
+        ditto.arguments = ["-c", "-k", "--keepParent", folder.path, zip.path]
         try ditto.run()
         ditto.waitUntilExit()
         guard ditto.terminationStatus == 0 else { throw CocoaError(.fileWriteUnknown) }
+        if fm.fileExists(atPath: destination.path) {
+            _ = try fm.replaceItemAt(destination, withItemAt: zip)
+        } else {
+            try fm.moveItem(at: zip, to: destination)
+        }
     }
 
     /// Asks where to save, writes the zip and shows it in Finder.
@@ -73,14 +88,17 @@ enum DiagnosticsExporter {
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         DiagnosticLog.shared.record(.diagnosticsExported)
-        do {
-            try makeArchive(log: .shared, summary: summary(appDelegate: appDelegate), destination: url)
-            NSWorkspace.shared.activateFileViewerSelecting([url])
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = String(localized: "Could not export diagnostics")
-            alert.informativeText = error.localizedDescription
-            alert.runModal()
+        let summary = summary(appDelegate: appDelegate)
+        Task {
+            do {
+                try await makeArchive(log: .shared, summary: summary, destination: url)
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = String(localized: "Could not export diagnostics")
+                alert.informativeText = error.localizedDescription
+                alert.runModal()
+            }
         }
     }
 }
