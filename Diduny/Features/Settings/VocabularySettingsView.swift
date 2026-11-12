@@ -45,7 +45,7 @@ struct VocabularySettingsView: View {
                 hint("\(terms.count) of 300. Write it the way it should appear in text.")
 
                 group("What you usually talk about")
-                TextField("What you usually talk about", text: $domain, axis: .vertical)
+                TextField("What you usually talk about", text: $domain, prompt: Text(verbatim: ""), axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(3 ... 6)
                     .labelsHidden()
@@ -70,11 +70,14 @@ struct VocabularySettingsView: View {
                             }
                         }
                         RowSeparator()
-                        pairRow {
+                        HStack(spacing: DS.Space.sm) {
                             TextField("Original", text: $newSource).textFieldStyle(.roundedBorder).onSubmit(addPair)
-                        } target: {
                             TextField("Translation", text: $newTarget).textFieldStyle(.roundedBorder).onSubmit(addPair)
-                        } trailing: { Color.clear }
+                            Button("Add", action: addPair)
+                                .disabled(newSource.nilIfBlank == nil || newTarget.nilIfBlank == nil
+                                    || glossary.count >= SpeechUserContext.translationTermsLimit)
+                        }
+                        .padding(DS.Space.md)
                     }
                 }
                 hint("Used when translating.")
