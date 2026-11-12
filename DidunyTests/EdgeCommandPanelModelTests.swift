@@ -191,6 +191,26 @@ struct EdgeCommandPanelModelTests {
         #expect(model.meetingSuggestion?.defaults.startsIn == .cloud)
     }
 
+    @Test("An engine picked in the prompt applies to its segment and this meeting only")
+    func promptEnginePickScope() {
+        let model = EdgeCommandPanelModel()
+        model.presentMeetingSuggestion(.resolve(
+            meeting: DetectedMeeting(id: UUID(), client: .teams),
+            defaults: .standard,
+            cloudAvailable: true
+        ))
+        #expect(model.selectMeetingSuggestionSegment(.recordOnly))
+
+        model.selectMeetingSuggestionEngine(.whisper)
+
+        #expect(model.meetingSuggestion?.start == MeetingPromptStart(segment: .recordOnly, engine: .whisper))
+        #expect(model.meetingSuggestion?.defaults.engine(for: .recordOnly) == .parakeet)
+        #expect(model.selectMeetingSuggestionSegment(.cloud))
+        #expect(model.meetingSuggestion?.engine == .didunyCloud, "Other segments keep their engine")
+        #expect(model.selectMeetingSuggestionSegment(.recordOnly))
+        #expect(model.meetingSuggestion?.engine == .whisper, "The pick stays when coming back to the segment")
+    }
+
     @Test("T2-PR-03: Keep suggesting is the Settings value and posts one change")
     func keepSuggestingIsTheSameSetting() {
         let key = "meetingSuggestionsEnabled"
