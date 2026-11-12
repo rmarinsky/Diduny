@@ -10,7 +10,8 @@ extension KeyboardShortcuts.Name {
         "toggleMeetingTranslation",
         default: .init(.m, modifiers: [.command, .option, .shift])
     )
-    static let toggleTranslation = Self("toggleTranslation", default: .init(.slash, modifiers: [.command, .option]))
+    /// No default: translation starts with the Right Shift hold or double tap (Modes).
+    static let toggleTranslation = Self("toggleTranslation")
     static let addMeetingChapter = Self("addMeetingChapter", default: .init(.b, modifiers: [.command, .option]))
     static let toggleHistoryPalette = Self("toggleHistoryPalette", default: .init(.h, modifiers: [.command, .option]))
     static let forceSubmit = Self("forceSubmit", default: .init(.return, modifiers: [.command]))

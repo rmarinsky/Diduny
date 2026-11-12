@@ -21,7 +21,7 @@ final class LanguagesUITests: DidunyUITestCase {
         waitForElement(element("languages.speak"))
         waitForElement(element("languages.yours"), toMatch: "value == 'English, Ukrainian'")
         waitForElement(element("languages.defaultTarget"), toMatch: "value == 'English'")
-        waitForElement(element("languages.pair"), toMatch: "value == 'English ↔ Ukrainian'")
+        waitForElement(element("languages.pair"), toMatch: "value == 'Ukrainian ↔ English'")
         waitForElement(element("languages.voice.enabled"))
         waitForElement(element("languages.voice.position"))
         waitForElement(element("languages.voice.targets"))

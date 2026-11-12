@@ -22,7 +22,7 @@ struct MeetingPanelState {
 
     /// Defaults per segment until WP-13 supplies the Settings > Modes values (Proto:499).
     static let defaultEngines: [MeetingSegment: EngineID] = [
-        .thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .parakeet,
+        .thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .whisper,
     ]
 
     static var batteryWarningText: String { String(localized: "On battery, live text on this Mac drains it fast.") }

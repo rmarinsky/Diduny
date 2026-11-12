@@ -17,8 +17,11 @@ enum ModeEngineRules {
         let thisMac = ordered.filter { $0.traits.runsOn == .thisMac }.map(\.id)
         let groups: [Group]
         switch job {
-        case .dictation, .dictationTranslation, .meetingTranslation:
+        case .dictation, .dictationTranslation:
             groups = [Group(kind: .cloud, engines: cloud), Group(kind: .onThisMac, engines: thisMac)]
+        case .meetingTranslation:
+            // Engines on this Mac record and transcribe a meeting but cannot translate it: cloud only.
+            groups = [Group(kind: .cloud, engines: cloud)]
         case .file:
             groups = [Group(kind: .onThisMac, engines: thisMac)]
         case .meeting:
@@ -75,7 +78,10 @@ enum ModeEngineRules {
     /// Meeting: "Starts in" and that segment's engine. Other segments, Into and the pair are untouched.
     static func useOneEngineForEverything(_ caps: EngineCapabilities) -> [ModeDefaults.Write] {
         let engine = caps.id
-        var writes: [ModeDefaults.Write] = [.dictation, .dictationTranslation, .meetingTranslation].map {
+        // Meeting translation is cloud only, so an engine on this Mac leaves it as it is.
+        let jobs: [STTJob] = caps.traits.runsOn == .cloud
+            ? [.dictation, .dictationTranslation, .meetingTranslation] : [.dictation, .dictationTranslation]
+        var writes: [ModeDefaults.Write] = jobs.map {
             .engine($0, selection(engine: engine, job: $0))
         }
         if caps.traits.runsOn == .thisMac {
@@ -97,8 +103,9 @@ enum ModeEngineRules {
     static func displayedUniformEngine(engine: (STTJob) -> EngineID, available: [EngineCapabilities]) -> EngineID? {
         let dictation = engine(.dictation)
         guard let caps = available.first(where: { $0.id == dictation }) else { return nil }
-        var jobs: [STTJob] = [.dictationTranslation, .meetingTranslation, .meeting]
-        if caps.traits.runsOn == .thisMac { jobs.append(.file) }
+        var jobs: [STTJob] = [.dictationTranslation, .meeting]
+        // Meeting translation is cloud only: it counts for a cloud engine; Files count for an engine on this Mac.
+        if caps.traits.runsOn == .thisMac { jobs.append(.file) } else { jobs.append(.meetingTranslation) }
         return jobs.allSatisfy { engine($0) == dictation } ? dictation : nil
     }
 }

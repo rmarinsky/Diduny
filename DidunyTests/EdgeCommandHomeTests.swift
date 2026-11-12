@@ -124,17 +124,17 @@ struct EdgeCommandHomeTests {
         #expect(withKey.groups.map(\.id) == ["asInSettings", "cloud", "onThisMac", "providers"])
         #expect(withKey.groups.map(\.header) == [nil, String(localized: "Cloud"), String(localized: "On this Mac"), nil])
         #expect(withKey.visibleRows.map(\.id) == [
-            "asInSettings", "diduny-cloud", "elevenlabs", "local-whisper", "parakeet-v3", "apple-speech", "providers",
+            "asInSettings", "diduny-cloud", "elevenlabs", "parakeet-v3", "local-whisper", "apple-speech", "providers",
         ])
         #expect(withKey.visibleRows.map(\.title) == [
-            "As in Settings", "Diduny Cloud", "ElevenLabs", "Whisper", "Parakeet V3", "Apple Speech", "Providers...",
+            "As in Settings", "Diduny Cloud", "ElevenLabs", "Parakeet V3", "Whisper", "Apple Speech", "Providers...",
         ])
         #expect(withKey.visibleRows.map(\.subline) == [
             "Each mode uses its own default",
             "Live text, speaker labels, 60 languages",
             "Live text, 94 languages. Your key",
-            "Live preview, 100 languages · Large v3 Turbo, recommended",
             "After Stop, 25 languages · recommended",
+            "Live preview, 100 languages · Large v3 Turbo, recommended",
             "Live text, macOS languages",
             "Compare engines, add a key",
         ])

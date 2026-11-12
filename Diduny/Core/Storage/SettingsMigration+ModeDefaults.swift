@@ -28,7 +28,7 @@ extension SettingsMigration {
         migrateDictationJob(.dictation, legacyLocal: transcriptionLocal, store: store, environment: environment)
         migrateDictationJob(.dictationTranslation, legacyLocal: translationLocal, store: store, environment: environment)
         migrateMeeting(defaults: defaults, store: store, transcriptionLocal: transcriptionLocal, environment: environment)
-        keepOnDevice(.meetingTranslation, else: .didunyCloud, store: store)
+        store.setSelection(selection(.didunyCloud), for: .meetingTranslation)
         keepOnDevice(.file, else: .whisper, store: store)
         copySilence(defaults: defaults)
     }
@@ -42,7 +42,9 @@ extension SettingsMigration {
         case .parakeet, .appleSpeech, .whisper: return
         case .elevenLabs where environment.hasProviderKey(STTProviderID.elevenLabs): return
         default:
-            store.setSelection(selection(legacyLocal ? .whisper : .didunyCloud), for: job)
+            // Offline dictation runs Parakeet V3 where it can (Apple silicon), else Whisper.
+            let offline: EngineID = environment.isAppleSilicon ? .parakeet : .whisper
+            store.setSelection(selection(legacyLocal ? offline : .didunyCloud), for: job)
         }
     }
 
@@ -60,7 +62,7 @@ extension SettingsMigration {
         var segments: [MeetingSegment: JobProviderSelection] = [
             .thisMac: selection(.whisper),
             .cloud: selection(.didunyCloud),
-            .recordOnly: selection(environment.isAppleSilicon ? .parakeet : .whisper),
+            .recordOnly: selection(.whisper),
         ]
         let startsIn: MeetingSegment
         switch stored.flatMap({ EngineID(rawValue: $0.providerID) }) {
@@ -104,6 +106,22 @@ extension SettingsMigration {
         }
         ModeDefaults(defaults: defaults).apply([.startsIn(startsIn)])
         migrateCalendarLocalRecording(defaults: defaults)
+    }
+
+    /// Schema 4: Record only defaults to Whisper (speaker labels). Earlier migrations stored Parakeet V3
+    /// there for most installs, so a stored Parakeet V3 moves to Whisper once.
+    static func migrateRecordOnlyToWhisper(defaults: UserDefaults) {
+        let store = ProviderDefaultsStore(defaults: defaults)
+        let key = ModeDefaults.storageKey(for: .recordOnly)
+        if store.storedSelection(forKey: key)?.providerID == EngineID.parakeet.rawValue {
+            store.setSelection(selection(.whisper), forKey: key)
+        }
+        // Meeting translation runs in the cloud only: an engine on this Mac moves to Diduny Cloud.
+        let translationKey = ProviderDefaultsStore.storageKey(for: .meetingTranslation)
+        if let stored = store.storedSelection(forKey: translationKey).flatMap({ EngineID(rawValue: $0.providerID) }),
+           [.whisper, .parakeet, .appleSpeech].contains(stored) {
+            store.setSelection(selection(.didunyCloud), forKey: translationKey)
+        }
     }
 
     /// 8A: calendar meetings now follow "Starts in". A calendar that recorded on this Mac moves a start

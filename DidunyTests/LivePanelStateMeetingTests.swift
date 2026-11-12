@@ -81,7 +81,7 @@ struct LivePanelStateMeetingTests {
         #expect(record.groups.map(\.header) == ["On this Mac, recommended", "Cloud"])
         #expect(record.groups[0].rows.map(\.id) == ["local-whisper", "parakeet-v3", "apple-speech"])
         #expect(record.groups[1].rows.map(\.id) == ["diduny-cloud", "elevenlabs"])
-        #expect(record.selectedID == "parakeet-v3")
+        #expect(record.selectedID == "local-whisper")
         #expect(!record.showsSearch)
         #expect(Self.state(.recordOnly).menu.groups[1].rows.map(\.id) == ["diduny-cloud"])
     }
@@ -154,7 +154,8 @@ struct LivePanelStateMeetingTests {
 
     @Test("Parakeet not downloaded: warning, size subline, value stays Parakeet V3")
     func parakeetMissing() {
-        let state = Self.state(.recordOnly, readiness: [.elevenLabs: .needsKey, .parakeet: .notDownloaded(bytes: Self.parakeetBytes)])
+        let state = Self.state(.recordOnly, engine: .parakeet,
+                               readiness: [.elevenLabs: .needsKey, .parakeet: .notDownloaded(bytes: Self.parakeetBytes)])
         #expect(state.engineName == "Parakeet V3")
         #expect(state.parakeetDownloadBytes == Self.parakeetBytes)
         #expect(MeetingPanelState.parakeetMissingText

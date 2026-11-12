@@ -40,8 +40,9 @@ extension LiveDictationOverlayStore {
 
     var translateMeetingPanelModel: TranslateMeetingPanelModel? {
         let readiness = LiveEngineReadinessSource()
+        // Meeting translation runs in the cloud only: engines on this Mac cannot translate a meeting.
         let options = EngineID.allCases.compactMap { id -> TranslateMeetingEngineOption? in
-            MeetingPanelState.registryCapabilities(id).map {
+            MeetingPanelState.registryCapabilities(id).flatMap { $0.traits.runsOn == .cloud ? $0 : nil }.map {
                 TranslateMeetingEngineOption(caps: $0, name: MeetingPanelState.name(id), readiness: readiness.readiness(of: id))
             }
         }

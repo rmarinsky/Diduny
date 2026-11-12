@@ -46,10 +46,10 @@ struct MeetingPromptDefaults: Equatable {
     var startsIn: MeetingSegment
     var engines: [MeetingSegment: EngineID]
 
-    /// Modes defaults (Proto:754): Cloud; This Mac Whisper, Cloud Diduny Cloud, Record only Parakeet V3.
+    /// Modes defaults: Cloud; This Mac Whisper, Cloud Diduny Cloud, Record only Whisper.
     static let standard = Self(
         startsIn: .cloud,
-        engines: [.thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .parakeet]
+        engines: [.thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .whisper]
     )
 
     func engine(for segment: MeetingSegment) -> EngineID {

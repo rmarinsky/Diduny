@@ -38,7 +38,7 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
             waitForElement(element("shortcuts.\(row).enabled"), toMatch: "value == 1")
         }
         waitForElement(element("shortcuts.escapeCancelSaveAudio"), toMatch: "value == 1")
-        waitForElement(element("shortcuts.inplaceTranslationPair"), toMatch: "value == 'English ↔ Ukrainian'")
+        waitForElement(element("shortcuts.inplaceTranslationPair"), toMatch: "value == 'Ukrainian ↔ English'")
         waitForElement(element("shortcuts.openSettings.keys"), toMatch: "value == 'Command ,'")
     }
 

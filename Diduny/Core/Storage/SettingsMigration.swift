@@ -21,7 +21,7 @@ enum SettingsMigration {
     }
 
     static let schemaVersionKey = "settingsSchemaVersion"
-    static let currentSchemaVersion = 3
+    static let currentSchemaVersion = 4
 
     /// ADR-0012 D5: keys that only an earlier build writes before this migration runs.
     private static let existingInstallKeys = [
@@ -40,13 +40,14 @@ enum SettingsMigration {
         let version = defaults.integer(forKey: schemaVersionKey)
         guard version < currentSchemaVersion else { return }
         seedYourLanguages(defaults: defaults, detected: environment.detectedKeyboardLanguages())
-        if version == 2 {
+        if version == 2 || version == 3 {
             // Already ran the mode-defaults step before 8A: only the calendar mapping is new.
-            migrateCalendarLocalRecording(defaults: defaults)
+            if version == 2 { migrateCalendarLocalRecording(defaults: defaults) }
         } else if isExistingInstall(defaults) {
             migrateModeDefaults(defaults: defaults, environment: environment)
             migrateLanguages(defaults: defaults)
         }
+        migrateRecordOnlyToWhisper(defaults: defaults)
         defaults.set(currentSchemaVersion, forKey: schemaVersionKey)
     }
 }

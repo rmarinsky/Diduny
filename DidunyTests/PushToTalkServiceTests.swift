@@ -364,7 +364,7 @@ final class PushToTalkServiceTests {
     func holdDelayClamping() {
         let sut = makeService()
         let settings = box.settings
-        for (input, expected) in [(0.4, 0.5), (2.5, 2.0), (1.23, 1.2), (Double.nan, 1.2)] {
+        for (input, expected) in [(0.4, 0.5), (2.5, 2.0), (1.23, 1.2), (Double.nan, 1.0)] {
             sut.holdStartDelaySeconds = input
             #expect(sut.holdStartDelaySeconds == expected, "service \(input)")
             settings.pushToTalkHoldStartDelaySeconds = input

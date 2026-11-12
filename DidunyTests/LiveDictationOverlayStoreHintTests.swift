@@ -37,6 +37,9 @@ final class LiveDictationOverlayStoreHintTests {
         #expect(makeStore(.voice).stopShortcutHint == text(.toggleRecording))
 
         settings.translationPushToTalkToggleEnabled = false
+        // Translation has no default chord, so there is no hint until one is set.
+        #expect(makeStore(.translation()).stopShortcutHint == nil)
+        registrar.setShortcut(.init(.slash, modifiers: [.command, .option]), for: .toggleTranslation)
         #expect(makeStore(.translation()).stopShortcutHint == text(.toggleTranslation))
         #expect(makeStore(.meeting).stopShortcutHint == text(.toggleMeetingRecording))
         #expect(makeStore(.meetingTranslation).stopShortcutHint == text(.toggleMeetingTranslation))

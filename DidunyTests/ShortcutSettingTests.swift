@@ -37,14 +37,14 @@ final class ShortcutSettingTests {
     @Test("T5-MIG-27 cancel defaults read Esc, 2x, on, with no write; stored values are kept")
     func cancelDefaults() {
         #expect(settings.escapeCancelShortcut == .defaultShortcut)
-        #expect(settings.escapeCancelPressCount == 2)
+        #expect(settings.escapeCancelPressCount == 3)
         #expect(settings.escapeCancelEnabled)
         #expect(defaults.object(forKey: "escapeCancelShortcut") == nil)
         #expect(defaults.object(forKey: "escapeCancelPressCount") == nil)
 
-        defaults.set(3, forKey: "escapeCancelPressCount")
+        defaults.set(1, forKey: "escapeCancelPressCount")
         defaults.set(false, forKey: "escapeCancelEnabled")
-        #expect(settings.escapeCancelPressCount == 3)
+        #expect(settings.escapeCancelPressCount == 1)
         #expect(!settings.escapeCancelEnabled)
     }
 
@@ -108,7 +108,7 @@ final class ShortcutSettingTests {
     @Test("Every Shortcuts row has keys, a press count and a switch, with today's defaults")
     func rowsHaveDefaults() {
         #expect(settings.shortcutSetting(for: .cancelRecording)
-            == ShortcutSetting(keys: .cancelKey(.defaultShortcut), pressCount: 2, enabled: true))
+            == ShortcutSetting(keys: .cancelKey(.defaultShortcut), pressCount: 3, enabled: true))
         #expect(settings.shortcutSetting(for: .forceSubmit)
             == ShortcutSetting(keys: .chord(.forceSubmit), pressCount: 1, enabled: true))
         #expect(settings.shortcutSetting(for: .addMeetingChapter)

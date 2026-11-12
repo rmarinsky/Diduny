@@ -38,7 +38,7 @@ final class MeetingPromptUITests: DidunyUITestCase {
         element("prompt.segment.recordOnly").click()
         let engine = element("prompt.engine")
         let text = engine.value as? String ?? engine.label
-        XCTAssertTrue(text.contains("Transcript after Stop") && text.contains("Parakeet V3"), text)
+        XCTAssertTrue(text.contains("Transcript after Stop") && text.contains("Whisper"), text)
         element("prompt.start").click()
         waitForElement(element("livePanel.title"), "The live meeting panel did not open")
     }

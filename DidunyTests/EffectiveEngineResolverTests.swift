@@ -45,6 +45,7 @@ struct EffectiveEngineResolverTests {
     func turboFallback() {
         let fake = FakeEngineReadinessSource([.parakeet: notDownloaded])
         let expected = EffectiveEngineResolver.Result.fallback(.whisper, modelID: turbo, because: notDownloaded)
+        modes.apply([.segmentEngine(.recordOnly, JobProviderSelection(providerID: EngineID.parakeet.rawValue))])
         #expect(resolve(.meeting, segment: .recordOnly, fake, downloaded: [turbo, "ggml-tiny"], selected: "ggml-tiny") == expected)
         #expect(resolve(.file, fake, downloaded: [turbo]) == expected)
     }

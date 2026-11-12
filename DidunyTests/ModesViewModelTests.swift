@@ -9,7 +9,7 @@ struct ModesViewModelTests {
         var engines: [STTJob: EngineID] = [
             .dictation: .didunyCloud, .dictationTranslation: .didunyCloud, .meetingTranslation: .didunyCloud, .file: .parakeet,
         ]
-        var segments: [MeetingSegment: EngineID] = [.thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .parakeet]
+        var segments: [MeetingSegment: EngineID] = [.thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .whisper]
         var meetingStartsIn: MeetingSegment = .cloud
         var dictationTranslationTarget = "en"
         var yourLanguages = ["en", "uk"]
@@ -64,9 +64,13 @@ struct ModesViewModelTests {
     func offeredEngines() throws {
         let withKey = try model()
         let cloud = ["diduny-cloud", "elevenlabs"], local = ["local-whisper", "parakeet-v3", "apple-speech"]
-        for job in [STTJob.dictation, .dictationTranslation, .meetingTranslation] {
-            #expect(rows(withKey.engineMenu(job: job, segment: nil)) == [cloud, local])
+        // Dictation menus list Parakeet V3 first on this Mac.
+        let dictationLocal = ["parakeet-v3", "local-whisper", "apple-speech"]
+        for job in [STTJob.dictation, .dictationTranslation] {
+            #expect(rows(withKey.engineMenu(job: job, segment: nil)) == [cloud, dictationLocal])
         }
+        // Meeting translation runs in the cloud only.
+        #expect(rows(withKey.engineMenu(job: .meetingTranslation, segment: nil)) == [cloud])
         #expect(rows(withKey.engineMenu(job: .file, segment: nil)) == [local])
         #expect(rows(withKey.engineMenu(job: .meeting, segment: .thisMac)) == [["local-whisper", "apple-speech"]])
         #expect(rows(withKey.engineMenu(job: .meeting, segment: .cloud)) == [cloud])
@@ -75,7 +79,7 @@ struct ModesViewModelTests {
         #expect(recordOnly.groups.map(\.header) == ["On this Mac, recommended", "Cloud"])
 
         let noKey = try model(readiness: [.elevenLabs: .needsKey])
-        #expect(rows(noKey.engineMenu(job: .dictation, segment: nil)) == [["diduny-cloud"], local])
+        #expect(rows(noKey.engineMenu(job: .dictation, segment: nil)) == [["diduny-cloud"], dictationLocal])
         // T5-MD-16: one engine left in the Cloud segment draws a static field.
         #expect(noKey.isStatic(job: .meeting, segment: .cloud))
         #expect(!withKey.isStatic(job: .meeting, segment: .cloud))
@@ -100,7 +104,7 @@ struct ModesViewModelTests {
         modes.pickEngine("elevenlabs", job: .meeting)
         modes.pickStartsIn("thisMac")
         modes.pickEngine("apple-speech", job: .meeting)
-        #expect(source.segments == [.cloud: .elevenLabs, .thisMac: .appleSpeech, .recordOnly: .parakeet])
+        #expect(source.segments == [.cloud: .elevenLabs, .thisMac: .appleSpeech, .recordOnly: .whisper])
         #expect(modes.meetingEngine(for: .cloud) == .elevenLabs)
         #expect(modes.engine(for: .meeting) == .appleSpeech)
         #expect(modes.caption(for: .meeting) == "Live text · no speaker labels")
@@ -121,16 +125,19 @@ struct ModesViewModelTests {
         source.engines[.file] = .appleSpeech
         source.dictationTranslationTarget = "pl"
         let modes = try model(source)
+        let meetingTranslationBefore = source.engines[.meetingTranslation]
         modes.pickUniformEngine(engine.rawValue)
 
-        for job in [STTJob.dictation, .dictationTranslation, .meetingTranslation] {
+        for job in [STTJob.dictation, .dictationTranslation] {
             #expect(source.engines[job] == engine)
         }
         let local = engine == .whisper || engine == .parakeet || engine == .appleSpeech
+        // Meeting translation is cloud only: an engine on this Mac leaves it as it was.
+        #expect(source.engines[.meetingTranslation] == (local ? meetingTranslationBefore : engine))
         #expect(source.engines[.file] == (local ? engine : .appleSpeech))
         #expect(source.meetingStartsIn == segment)
         #expect(source.segments[segment] == engine)
-        let defaults: [MeetingSegment: EngineID] = [.thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .parakeet]
+        let defaults: [MeetingSegment: EngineID] = [.thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .whisper]
         for other in MeetingSegment.allCases where other != segment {
             #expect(source.segments[other] == defaults[other])
         }
@@ -157,7 +164,7 @@ struct ModesViewModelTests {
         #expect(modes.engine(for: .dictation) == .didunyCloud)
         #expect(modes.intoValue == "English")
         #expect(modes.startsInValue == "Cloud")
-        #expect(modes.betweenValue == "EN ↔ UK")
+        #expect(modes.betweenValue == "UK ↔ EN")
         #expect(modes.engine(for: .file) == .parakeet)
         #expect(modes.engineName(.whisper) == "Whisper")
     }
@@ -183,7 +190,7 @@ struct ModesViewModelTests {
         source.offeredTranslationPairs = [.defaultPair, enPl]
         let modes = try model(source)
         let menu = modes.betweenMenu()
-        #expect(menu.groups[0].rows.map(\.title) == ["English ↔ Ukrainian", "English ↔ Polish"])
+        #expect(menu.groups[0].rows.map(\.title) == ["Ukrainian ↔ English", "English ↔ Polish"])
         #expect(menu.selectedID == TranslationLanguagePair.defaultPair.id)
         #expect(menu.groups[1].rows.map(\.id) == [ModesViewModel.otherPairRowID])
         #expect(modes.pickBetween(enPl.id))
@@ -272,7 +279,9 @@ struct ModesViewModelTests {
 
     @Test("T5-MD-18: Parakeet missing warns under Files and under Meeting's Record only")
     func parakeetWarning() throws {
-        let missing = try model(readiness: [.parakeet: .notDownloaded(bytes: 480_000_000)])
+        let source = FakeSource()
+        source.segments[.recordOnly] = .parakeet
+        let missing = try model(source, readiness: [.parakeet: .notDownloaded(bytes: 480_000_000)])
         #expect(missing.notDownloadedBytes(for: .file) == 480_000_000)
         #expect(missing.notDownloadedBytes(for: .meeting) == 480_000_000)
         #expect(missing.notDownloadedBytes(for: .dictation) == nil)
@@ -296,14 +305,14 @@ struct LiveModesSettingsSourceTests {
         let storage = try storage()
         storage.applyNewUserDefaultsIfMissing()
         let source = LiveModesSettingsSource(storage: storage, notifications: NotificationCenter())
-        #expect(source.pushToTalk(for: .dictation) == ModePushToTalk(key: .rightShift, toggleEnabled: true, tapCount: 2, holdEnabled: false, holdDelaySeconds: 1.2))
-        #expect(source.pushToTalk(for: .dictationTranslation) == ModePushToTalk(key: .rightOption, toggleEnabled: true, tapCount: 2, holdEnabled: false, holdDelaySeconds: 1.2))
+        #expect(source.pushToTalk(for: .dictation) == ModePushToTalk(key: .rightOption, toggleEnabled: true, tapCount: 2, holdEnabled: true, holdDelaySeconds: 1.0))
+        #expect(source.pushToTalk(for: .dictationTranslation) == ModePushToTalk(key: .rightShift, toggleEnabled: true, tapCount: 2, holdEnabled: false, holdDelaySeconds: 1.0))
         #expect(source.silence(for: .dictation) == ModeSilence(enabled: true, seconds: 5))
         #expect(source.silence(for: .meeting) == ModeSilence(enabled: true, seconds: 60))
         #expect(source.meetingSuggestionsEnabled)
         #expect(source.engine(for: .file) == .parakeet)
         #expect(source.meetingStartsIn == .cloud)
-        #expect(source.meetingEngine(for: .recordOnly) == .parakeet)
+        #expect(source.meetingEngine(for: .recordOnly) == .whisper)
     }
 
     @Test("T5-MD-11: Off and 2x write the two push-to-talk keys")

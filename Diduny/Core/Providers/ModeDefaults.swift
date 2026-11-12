@@ -30,7 +30,8 @@ struct ModeDefaults {
         switch segment {
         case .thisMac: .whisper
         case .cloud: .didunyCloud
-        case .recordOnly: .parakeet
+        // Meetings on this Mac default to Whisper: it labels speakers.
+        case .recordOnly: .whisper
         }
     }
 
@@ -91,7 +92,7 @@ struct ModeDefaults {
     }
 
     /// Key removal (05 2.1 proposal): modes on `engine` go back to their new-install default, so ElevenLabs
-    /// modes read Diduny Cloud and a Record only segment reads Parakeet V3. Returns the keys reset.
+    /// modes read Diduny Cloud and a Record only segment reads Whisper. Returns the keys reset.
     @discardableResult
     func resetModes(using engine: EngineID) -> [String] {
         let keys = [STTJob.dictation, .dictationTranslation, .meetingTranslation, .file]

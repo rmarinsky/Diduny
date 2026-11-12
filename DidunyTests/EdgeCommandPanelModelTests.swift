@@ -156,7 +156,7 @@ struct EdgeCommandPanelModelTests {
     @Test("T2-PR-01: the prompt is preset from Modes Starts in", arguments: [
         (MeetingSegment.thisMac, EngineID.whisper, "Whisper", false),
         (.cloud, .didunyCloud, "Diduny Cloud", false),
-        (.recordOnly, .parakeet, "Parakeet V3", true),
+        (.recordOnly, .whisper, "Whisper", true),
     ])
     func promptPresetFromModes(segment: MeetingSegment, engine: EngineID, name: String, afterStop: Bool) {
         var defaults = MeetingPromptDefaults.standard
@@ -187,7 +187,7 @@ struct EdgeCommandPanelModelTests {
         #expect(model.selectMeetingSuggestionSegment(.recordOnly))
 
         #expect(model.meetingSuggestion?.selectedSegment == .recordOnly)
-        #expect(model.meetingSuggestion?.engine == .parakeet)
+        #expect(model.meetingSuggestion?.engine == .whisper)
         #expect(model.meetingSuggestion?.defaults.startsIn == .cloud)
     }
 
@@ -201,14 +201,14 @@ struct EdgeCommandPanelModelTests {
         ))
         #expect(model.selectMeetingSuggestionSegment(.recordOnly))
 
-        model.selectMeetingSuggestionEngine(.whisper)
+        model.selectMeetingSuggestionEngine(.parakeet)
 
-        #expect(model.meetingSuggestion?.start == MeetingPromptStart(segment: .recordOnly, engine: .whisper))
-        #expect(model.meetingSuggestion?.defaults.engine(for: .recordOnly) == .parakeet)
+        #expect(model.meetingSuggestion?.start == MeetingPromptStart(segment: .recordOnly, engine: .parakeet))
+        #expect(model.meetingSuggestion?.defaults.engine(for: .recordOnly) == .whisper)
         #expect(model.selectMeetingSuggestionSegment(.cloud))
         #expect(model.meetingSuggestion?.engine == .didunyCloud, "Other segments keep their engine")
         #expect(model.selectMeetingSuggestionSegment(.recordOnly))
-        #expect(model.meetingSuggestion?.engine == .whisper, "The pick stays when coming back to the segment")
+        #expect(model.meetingSuggestion?.engine == .parakeet, "The pick stays when coming back to the segment")
     }
 
     @Test("T2-PR-03: Keep suggesting is the Settings value and posts one change")
@@ -242,7 +242,7 @@ struct EdgeCommandPanelModelTests {
         controller.selectMeetingSuggestionSegment(.recordOnly)
         controller.startMeetingRecording(fromSuggestionID: meeting.id)
 
-        #expect(starts == [MeetingPromptStart(segment: .recordOnly, engine: .parakeet)])
+        #expect(starts == [MeetingPromptStart(segment: .recordOnly, engine: .whisper)])
     }
 
     @Test("Cloud unavailable: the prompt opens on This Mac and Cloud cannot be chosen")
