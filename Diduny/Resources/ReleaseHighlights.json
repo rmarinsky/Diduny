@@ -1,17 +1,19 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Quiet moments no longer end a meeting recording",
+    "headline": "Your own words, spoken punctuation and steadier meetings",
     "highlights": [
-      "While the call is still on, or the calendar meeting has not ended, Diduny keeps recording through silence.",
-      "Stop after silence still ends the recording once the meeting is over."
+      "New Vocabulary & context page: add names and terms, describe what you usually talk about, and keep a translation glossary. Diduny Cloud uses them to recognize you better, together with the meeting title and attendees from your calendar.",
+      "Say \"comma\", \"new line\" or \"scratch that\" while dictating in Ukrainian, English or Polish, and Diduny applies it.",
+      "Quiet moments no longer end a meeting recording while the call is still on or the calendar meeting has not ended."
     ]
   },
   "uk": {
-    "headline": "Тиша більше не обриває запис зустрічі",
+    "headline": "Ваші слова, голосова пунктуація і надійніші зустрічі",
     "highlights": [
-      "Поки дзвінок триває або зустріч у календарі ще не закінчилася, Diduny записує і під час тиші.",
-      "Зупинка після тиші, як і раніше, закінчує запис, коли зустріч уже позаду."
+      "Нова сторінка «Словник і контекст»: додайте імена й терміни, опишіть, про що зазвичай говорите, і ведіть глосарій перекладу. Diduny Cloud краще вас розпізнає, а для зустрічей ще й бере назву та учасників з календаря.",
+      "Кажіть «кома», «новий рядок» або «скасуй це» під час диктування українською, англійською чи польською, і Diduny це виконає.",
+      "Тиша більше не обриває запис зустрічі, поки дзвінок триває або зустріч у календарі ще не закінчилася."
     ]
   }
 }
