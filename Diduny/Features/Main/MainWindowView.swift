@@ -106,6 +106,8 @@ struct MainWindowView: View {
             ModesSettingsView()
         case .languages:
             LanguagesSettingsView()
+        case .vocabulary:
+            VocabularySettingsView()
         case .audioDictation:
             AudioSettingsView()
                 .environment(audioDeviceManager)
@@ -113,8 +115,6 @@ struct MainWindowView: View {
             OfflineModelsSettingsView()
         case .providers:
             ProvidersSettingsView()
-        case .shortcuts:
-            ShortcutsSettingsView()
         case .account:
             AccountSettingsView()
         case .about:

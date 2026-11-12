@@ -2,7 +2,8 @@
 import Foundation
 import Testing
 
-/// 05 §4.3 / plan 6.4: every persona keeps the engine each mode runs today (T5-MIG-01 to 17, 32, 33, 35, 36).
+/// 05 §4.3 / plan 6.4: every persona keeps the engine each mode runs today (T5-MIG-01 to 17, 32, 33, 35, 36),
+/// except the new defaults: legacy local dictation runs Parakeet V3 on Apple silicon, and Record only runs Whisper.
 @Suite("Settings migration")
 struct SettingsMigrationTests {
     struct Persona: CustomTestStringConvertible {
@@ -21,36 +22,40 @@ struct SettingsMigrationTests {
 
     static let personas: [Persona] = [
         Persona(fixture: "cloud-default", dictation: .didunyCloud, translation: .didunyCloud, startsIn: .cloud,
-                segments: [.whisper, .didunyCloud, .parakeet], meetingTranslation: .didunyCloud, file: .whisper),
-        // T5-MIG-02, 10: the old picker stored diduny-cloud for Local Whisper.
-        Persona(fixture: "local-whisper-preview-on", dictation: .whisper, translation: .whisper, startsIn: .thisMac,
-                segments: [.whisper, .didunyCloud, .parakeet], meetingTranslation: .didunyCloud, file: .whisper),
-        // T5-MIG-11.
-        Persona(fixture: "local-whisper-preview-off", dictation: .whisper, translation: .didunyCloud, startsIn: .recordOnly,
                 segments: [.whisper, .didunyCloud, .whisper], meetingTranslation: .didunyCloud, file: .whisper),
+        // T5-MIG-02, 10: the old picker stored diduny-cloud for Local Whisper; local dictation now runs Parakeet V3.
+        Persona(fixture: "local-whisper-preview-on", dictation: .parakeet, translation: .parakeet, startsIn: .thisMac,
+                segments: [.whisper, .didunyCloud, .whisper], meetingTranslation: .didunyCloud, file: .whisper),
+        // T5-MIG-11.
+        Persona(fixture: "local-whisper-preview-off", dictation: .parakeet, translation: .didunyCloud, startsIn: .recordOnly,
+                segments: [.whisper, .didunyCloud, .whisper], meetingTranslation: .didunyCloud, file: .whisper),
+        // Intel: local dictation stays Whisper.
+        Persona(fixture: "local-whisper-preview-off", appleSilicon: false, dictation: .whisper, translation: .didunyCloud,
+                startsIn: .recordOnly, segments: [.whisper, .didunyCloud, .whisper], meetingTranslation: .didunyCloud,
+                file: .whisper),
         // T5-MIG-01, 05.
         Persona(fixture: "elevenlabs-meeting", hasKey: true, dictation: .elevenLabs, translation: .didunyCloud, startsIn: .cloud,
-                segments: [.whisper, .elevenLabs, .parakeet], meetingTranslation: .didunyCloud, file: .whisper),
+                segments: [.whisper, .elevenLabs, .whisper], meetingTranslation: .didunyCloud, file: .whisper),
         // T5-MIG-06: without a key ElevenLabs never ran.
         Persona(fixture: "elevenlabs-meeting", dictation: .didunyCloud, translation: .didunyCloud, startsIn: .cloud,
-                segments: [.whisper, .didunyCloud, .parakeet], meetingTranslation: .didunyCloud, file: .whisper),
-        // T5-MIG-08.
+                segments: [.whisper, .didunyCloud, .whisper], meetingTranslation: .didunyCloud, file: .whisper),
+        // T5-MIG-08; schema 4 moves its Record only from Parakeet V3 to Whisper.
         Persona(fixture: "parakeet-meeting", dictation: .didunyCloud, translation: .didunyCloud, startsIn: .recordOnly,
-                segments: [.whisper, .didunyCloud, .parakeet], meetingTranslation: .didunyCloud, file: .whisper),
-        // T5-MIG-07, 15.
+                segments: [.whisper, .didunyCloud, .whisper], meetingTranslation: .didunyCloud, file: .whisper),
+        // T5-MIG-07, 15; Translate meeting is cloud only, so its Apple Speech moves to Diduny Cloud.
         Persona(fixture: "apple-meeting", dictation: .didunyCloud, translation: .didunyCloud, startsIn: .thisMac,
-                segments: [.appleSpeech, .didunyCloud, .appleSpeech], meetingTranslation: .appleSpeech, file: .whisper),
+                segments: [.appleSpeech, .didunyCloud, .appleSpeech], meetingTranslation: .didunyCloud, file: .whisper),
         // T5-MIG-16.
         Persona(fixture: "files-diduny-cloud", dictation: .didunyCloud, translation: .didunyCloud, startsIn: .cloud,
-                segments: [.whisper, .didunyCloud, .parakeet], meetingTranslation: .didunyCloud, file: .whisper),
+                segments: [.whisper, .didunyCloud, .whisper], meetingTranslation: .didunyCloud, file: .whisper),
         Persona(fixture: "files-unset", dictation: .didunyCloud, translation: .didunyCloud, startsIn: .cloud,
-                segments: [.whisper, .didunyCloud, .parakeet], meetingTranslation: .didunyCloud, file: .whisper),
-        // T5-MIG-12: Intel gets Whisper for Record only.
+                segments: [.whisper, .didunyCloud, .whisper], meetingTranslation: .didunyCloud, file: .whisper),
+        // T5-MIG-12: Intel gets Whisper for Record only, like Apple silicon.
         Persona(fixture: "cloud-default", appleSilicon: false, dictation: .didunyCloud, translation: .didunyCloud, startsIn: .cloud,
                 segments: [.whisper, .didunyCloud, .whisper], meetingTranslation: .didunyCloud, file: .whisper),
         // T5-MIG-36.
-        Persona(fixture: "roman-setup", hasKey: true, dictation: .didunyCloud, translation: .whisper, startsIn: .cloud,
-                segments: [.whisper, .elevenLabs, .parakeet], meetingTranslation: .didunyCloud, file: .whisper),
+        Persona(fixture: "roman-setup", hasKey: true, dictation: .didunyCloud, translation: .parakeet, startsIn: .cloud,
+                segments: [.whisper, .elevenLabs, .whisper], meetingTranslation: .didunyCloud, file: .whisper),
     ]
 
     @Test("Each mode runs the same engine after the update", arguments: personas)
@@ -91,7 +96,7 @@ struct SettingsMigrationTests {
         #expect(modes.engine(for: .dictation) == .didunyCloud)
         #expect(modes.engine(for: .dictationTranslation) == .didunyCloud)
         #expect(modes.meetingStartsIn == .cloud)
-        #expect(MeetingSegment.allCases.map(modes.engine(for:)) == [.whisper, .didunyCloud, .parakeet])
+        #expect(MeetingSegment.allCases.map(modes.engine(for:)) == [.whisper, .didunyCloud, .whisper])
         #expect(modes.engine(for: .meetingTranslation) == .didunyCloud)
         #expect(modes.engine(for: .file) == .parakeet)
         // Legacy readers keep "unset = Diduny Cloud" (ADR-0012 D4).
@@ -128,7 +133,7 @@ struct SettingsMigrationTests {
         #expect(ModeDefaults(defaults: defaults).engine(for: .cloud) == .didunyCloud)
     }
 
-    @Test("Parakeet meeting with the legacy Cloud flag keeps Cloud live, Record only Parakeet")
+    @Test("Parakeet meeting with the legacy Cloud flag keeps Cloud live; Record only moves to Whisper (schema 4)")
     func parakeetMeetingWithCloudFlag() throws {
         let (defaults, _) = try Self.load("parakeet-meeting")
         defaults.set(true, forKey: "meetingRealtimeTranscriptionEnabled")
@@ -136,7 +141,7 @@ struct SettingsMigrationTests {
         let modes = ModeDefaults(defaults: defaults)
         #expect(modes.meetingStartsIn == .cloud)
         #expect(modes.engine(for: .cloud) == .didunyCloud)
-        #expect(modes.engine(for: .recordOnly) == .parakeet)
+        #expect(modes.engine(for: .recordOnly) == .whisper)
     }
 
     @Test("Stored local-whisper meeting routes Local today whatever the flag says")
@@ -155,8 +160,8 @@ struct SettingsMigrationTests {
         #expect(ModeDefaults(defaults: defaults).engine(for: .dictation) == .didunyCloud)
     }
 
-    @Test("Translate meeting and Files keep on-device choices (T5-MIG-15, 16)",
-          arguments: [(EngineID.parakeet, EngineID.parakeet, EngineID.parakeet), (.appleSpeech, .appleSpeech, .appleSpeech),
+    @Test("Files keep on-device choices; Translate meeting moves to Diduny Cloud (T5-MIG-15, 16)",
+          arguments: [(EngineID.parakeet, EngineID.didunyCloud, EngineID.parakeet), (.appleSpeech, .didunyCloud, .appleSpeech),
                       (.elevenLabs, .didunyCloud, .whisper), (.didunyCloud, .didunyCloud, .whisper)])
     func onDeviceKept(stored: EngineID, translateMeeting: EngineID, file: EngineID) throws {
         let (defaults, _) = try Self.load("cloud-default")
@@ -201,7 +206,7 @@ struct SettingsMigrationTests {
         #expect(defaults.data(forKey: "calendar.connection.v1") == blob)
     }
 
-    @Test("Schema 2 to 3 runs only the calendar mapping", arguments: [(true, MeetingSegment.thisMac), (false, .cloud)])
+    @Test("Schema 2 to 4 runs only the calendar mapping", arguments: [(true, MeetingSegment.thisMac), (false, .cloud)])
     func schemaTwoToThree(local: Bool, expected: MeetingSegment) throws {
         let (defaults, _) = try Self.load("cloud-default")
         defaults.set(2, forKey: SettingsMigration.schemaVersionKey)
@@ -212,9 +217,49 @@ struct SettingsMigrationTests {
         let before = Self.snapshot(defaults).filter { $0.key != ModeDefaults.meetingTranscriptModeKey && $0.key != SettingsMigration.schemaVersionKey }
         Self.migrate(defaults, hasKey: false, appleSilicon: true)
         #expect(ModeDefaults(defaults: defaults).meetingStartsIn == expected)
-        #expect(defaults.integer(forKey: SettingsMigration.schemaVersionKey) == 3)
+        #expect(defaults.integer(forKey: SettingsMigration.schemaVersionKey) == 4)
         let after = Self.snapshot(defaults).filter { $0.key != ModeDefaults.meetingTranscriptModeKey && $0.key != SettingsMigration.schemaVersionKey }
         #expect(after == before)
+    }
+
+    @Test("Schema 3 to 4 moves a stored Parakeet V3 Record only to Whisper and keeps other engines",
+          arguments: [(EngineID.parakeet, EngineID.whisper), (.appleSpeech, .appleSpeech)])
+    func recordOnlyToWhisper(stored: EngineID, expected: EngineID) throws {
+        let (defaults, _) = try Self.load("cloud-default")
+        defaults.set(3, forKey: SettingsMigration.schemaVersionKey)
+        ModeDefaults(defaults: defaults).apply([.segmentEngine(.recordOnly, JobProviderSelection(providerID: stored.rawValue))])
+        let before = Self.snapshot(defaults).filter {
+            $0.key != ModeDefaults.storageKey(for: .recordOnly) && $0.key != SettingsMigration.schemaVersionKey
+        }
+        Self.migrate(defaults, hasKey: false, appleSilicon: true)
+        #expect(ModeDefaults(defaults: defaults).engine(for: .recordOnly) == expected)
+        #expect(defaults.integer(forKey: SettingsMigration.schemaVersionKey) == 4)
+        let after = Self.snapshot(defaults).filter {
+            $0.key != ModeDefaults.storageKey(for: .recordOnly) && $0.key != SettingsMigration.schemaVersionKey
+        }
+        #expect(after == before, "Schema 3 runs only the Record only step")
+    }
+
+    @Test("Schema 3 to 4 moves an on-device Translate meeting engine to Diduny Cloud and keeps ElevenLabs",
+          arguments: [(EngineID.whisper, EngineID.didunyCloud), (.parakeet, .didunyCloud), (.appleSpeech, .didunyCloud),
+                      (.elevenLabs, .elevenLabs)])
+    func meetingTranslationToCloud(stored: EngineID, expected: EngineID) throws {
+        let (defaults, _) = try Self.load("cloud-default")
+        defaults.set(3, forKey: SettingsMigration.schemaVersionKey)
+        let selection = ModeEngineRules.selection(engine: stored, job: .meetingTranslation)
+        ProviderDefaultsStore(defaults: defaults).setSelection(selection, for: .meetingTranslation)
+        Self.migrate(defaults, hasKey: true, appleSilicon: true)
+        let after = ModeDefaults(defaults: defaults).selection(for: .meetingTranslation)
+        #expect(after.providerID == expected.rawValue)
+        if stored == .elevenLabs { #expect(after == selection, "ElevenLabs keeps its model") }
+    }
+
+    @Test("Record only step on a fresh install writes nothing")
+    func recordOnlyToWhisperFreshInstall() throws {
+        let (defaults, _) = try Self.load("fresh-install")
+        SettingsMigration.migrateRecordOnlyToWhisper(defaults: defaults)
+        #expect(Self.snapshot(defaults).isEmpty)
+        #expect(ModeDefaults(defaults: defaults).engine(for: .recordOnly) == .whisper)
     }
 
     @Test("A local calendar moves Record only on a cloud engine to This Mac, both paths",

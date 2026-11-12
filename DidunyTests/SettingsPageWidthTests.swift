@@ -82,7 +82,6 @@ struct SettingsPageWidthTests {
     @Test func wideGeneral() async { await expectGrows(GeneralSettingsView(), "General") }
     @Test func wideLanguages() async { await expectGrows(LanguagesSettingsView(), "Languages") }
     @Test func wideAudio() async { await expectGrows(AudioSettingsView(), "Audio") }
-    @Test func wideShortcuts() async { await expectGrows(ShortcutsSettingsView(), "Shortcuts") }
     @Test func wideAbout() async { await expectGrows(AboutSettingsView(), "About") }
 
     @Test func clampFitsTheWindowOnTheScreen() {
@@ -101,7 +100,6 @@ struct SettingsPageWidthTests {
     @Test func languages() async { await expectFits(LanguagesSettingsView(), "Languages") }
     @Test func audio() async { await expectFits(AudioSettingsView(), "Audio") }
     @Test func meetings() async { await expectFits(MeetingSettingsView(), limit: Self.pageWidth, "Calendar & meetings") }
-    @Test func shortcuts() async { await expectFits(ShortcutsSettingsView(), "Shortcuts") }
     @Test func account() async { await expectFits(AccountSettingsView(), limit: Self.pageWidth, "Account") }
     @Test func about() async { await expectFits(AboutSettingsView(), "About") }
 

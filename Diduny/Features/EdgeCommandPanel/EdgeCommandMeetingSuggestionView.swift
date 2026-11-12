@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// "Looks like a meeting started" (design-spec 7.8, 02 section 7): segments preset from Modes, a static
-/// engine field, the Keep suggesting switch, Not now / Start recording. 300 x 229.
+/// "Looks like a meeting started" (design-spec 7.8, 02 section 7): segments preset from Modes, the engine
+/// menu of the live panel, the Keep suggesting switch, Not now / Start recording. 300 x 229.
 struct MeetingSuggestionView: View {
     let model: EdgeCommandPanelModel
     let suggestion: MeetingSuggestion
@@ -49,12 +49,7 @@ struct MeetingSuggestionView: View {
                 )
             )
 
-            PickerField(
-                staticLabel: current.isEngineAfterStop ? "Transcript after Stop" : "Engine",
-                value: current.engineName,
-                layout: .stacked,
-                identifier: "prompt.engine"
-            )
+            engineField
 
             HStack(spacing: DS.Space.sm) {
                 Text("Keep suggesting when a meeting starts")
@@ -88,6 +83,27 @@ struct MeetingSuggestionView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Meeting recording suggestion")
         .accessibilityIdentifier("commandPanel.prompt")
+    }
+
+    /// The same engine menu as the meeting live panel, for this prompt's segment.
+    @ViewBuilder private var engineField: some View {
+        let state = MeetingPanelState(
+            segment: current.selectedSegment,
+            engines: current.engines,
+            readiness: LiveEngineReadinessSource(),
+            isOnBattery: false,
+            connection: .disconnected
+        )
+        let label: LocalizedStringKey = current.isEngineAfterStop ? "Transcript after Stop" : "Engine"
+        if state.isFieldStatic {
+            PickerField(staticLabel: label, value: state.engineName, layout: .stacked, identifier: "prompt.engine")
+        } else {
+            PickerField(
+                label: label, value: state.engineName, layout: .stacked, identifier: "prompt.engine",
+                menu: { state.menu },
+                onPick: { id in EngineID(rawValue: id).map(model.selectMeetingSuggestionEngine) }
+            )
+        }
     }
 
     static func title(for segment: MeetingSegment) -> LocalizedStringKey {

@@ -385,7 +385,9 @@ extension AppDelegate {
             else { return nil }
             return realtimeSession(service, translationPair: nil, preprocess: nil, callbacks: callbacks)
         case .didunyCloud:
-            return realtimeSession(CloudRealtimeService(), translationPair: translationPair, preprocess: preprocess, callbacks: callbacks)
+            let cloud = CloudRealtimeService()
+            cloud.calendarMeeting = activeMeetingCalendarMeeting
+            return realtimeSession(cloud, translationPair: translationPair, preprocess: preprocess, callbacks: callbacks)
         case .parakeet:
             return nil // Never live.
         }

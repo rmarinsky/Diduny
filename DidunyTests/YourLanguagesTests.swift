@@ -171,9 +171,9 @@ final class YourLanguagesTests {
     func pickedPairKeepsFavorites() {
         defaults.set(["de", "fr"], forKey: "favoriteLanguages")
         let store = storage()
-        #expect(store.yourLanguages == ["de", "fr", "en", "uk"])
+        #expect(store.yourLanguages == ["de", "fr", "uk", "en"])
         store.selectTranslationPair(pair("en", "pl"))
-        #expect(store.yourLanguages == ["de", "fr", "en", "uk", "pl"])
+        #expect(store.yourLanguages == ["de", "fr", "uk", "en", "pl"])
         #expect(store.translationPair?.id == "en-pl")
     }
 
@@ -248,9 +248,9 @@ final class YourLanguagesTests {
         defaults.set(["de", "fr"], forKey: "favoriteLanguages")
         SettingsMigration.migrateLanguages(defaults: defaults)
         let store = storage()
-        #expect(store.yourLanguages == ["de", "fr", "en", "uk"])
+        #expect(store.yourLanguages == ["de", "fr", "uk", "en"])
         #expect(store.translationPair?.id == store.defaultTranslationLanguagePair.id)
-        #expect(store.defaultTranslationTargetLanguage == "uk")
+        #expect(store.defaultTranslationTargetLanguage == "en")
     }
 
     @Test("T5-MIG-20 default target is Language B of the default pair; nothing else is written")

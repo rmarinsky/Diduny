@@ -225,7 +225,7 @@ struct TranslationLanguagePair: Identifiable, Codable, Hashable {
         return nil
     }
 
-    static let defaultPair = TranslationLanguagePair(languageA: "en", languageB: "uk")
+    static let defaultPair = TranslationLanguagePair(languageA: "uk", languageB: "en")
 
     private static func fallbackLanguage(opposite language: String) -> String {
         language == "en" ? "uk" : "en"

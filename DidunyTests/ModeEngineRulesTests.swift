@@ -16,16 +16,27 @@ struct ModeEngineRulesTests {
         let caps = try Self.all(withKey: withKey)
         let cloud: [EngineID] = withKey ? [.didunyCloud, .elevenLabs] : [.didunyCloud]
         let local: [EngineID] = [.whisper, .parakeet, .appleSpeech]
-        for job in [STTJob.dictation, .dictationTranslation, .meetingTranslation] {
+        for job in [STTJob.dictation, .dictationTranslation] {
             #expect(ModeEngineRules.offeredEngines(job: job, available: caps)
                 == [G(kind: .cloud, engines: cloud), G(kind: .onThisMac, engines: local)])
         }
+        #expect(ModeEngineRules.offeredEngines(job: .meetingTranslation, available: caps) == [G(kind: .cloud, engines: cloud)])
         #expect(ModeEngineRules.offeredEngines(job: .file, available: caps) == [G(kind: .onThisMac, engines: local)])
         #expect(ModeEngineRules.offeredEngines(job: .meeting, segment: .thisMac, available: caps)
             == [G(kind: .flat, engines: [.whisper, .appleSpeech])])
         #expect(ModeEngineRules.offeredEngines(job: .meeting, segment: .cloud, available: caps) == [G(kind: .flat, engines: cloud)])
         #expect(ModeEngineRules.offeredEngines(job: .meeting, segment: .recordOnly, available: caps)
             == [G(kind: .onThisMacRecommended, engines: local), G(kind: .cloud, engines: cloud)])
+    }
+
+    @Test("Translate meeting offers no engine on this Mac", arguments: [false, true])
+    func meetingTranslationCloudOnly(withKey: Bool) throws {
+        let caps = try Self.all(withKey: withKey)
+        for engine in [EngineID.whisper, .parakeet, .appleSpeech] {
+            #expect(!ModeEngineRules.offers(engine, job: .meetingTranslation, available: caps), "\(engine)")
+        }
+        #expect(ModeEngineRules.offers(.didunyCloud, job: .meetingTranslation, available: caps))
+        #expect(ModeEngineRules.offers(.elevenLabs, job: .meetingTranslation, available: caps) == withKey)
     }
 
     @Test("The segment an engine implies (05 §3 table)")
@@ -68,7 +79,7 @@ struct ModeEngineRulesTests {
         #expect(modes.engine(for: .cloud) == .elevenLabs)
         #expect(modes.selection(for: .cloud).modelID == ElevenLabsProvider.realtimeModelID)
         #expect(modes.engine(for: .thisMac) == .appleSpeech)
-        #expect(modes.engine(for: .recordOnly) == .parakeet)
+        #expect(modes.engine(for: .recordOnly) == .whisper)
     }
 
     @Test("Use one engine for everything writes each mode by the rule (T5-ALL-01)", arguments: EngineID.allCases)
@@ -77,9 +88,11 @@ struct ModeEngineRulesTests {
         let caps = try EngineCapabilitiesTests.capabilities(engine)
         modes.apply(ModeEngineRules.useOneEngineForEverything(caps))
         let segment = ModeEngineRules.segment(implyingEngine: caps)
-        for job in [STTJob.dictation, .dictationTranslation, .meetingTranslation] {
+        for job in [STTJob.dictation, .dictationTranslation] {
             #expect(modes.engine(for: job) == engine)
         }
+        // Meeting translation is cloud only: an engine on this Mac leaves it on its default.
+        #expect(modes.engine(for: .meetingTranslation) == (caps.traits.runsOn == .cloud ? engine : .didunyCloud))
         #expect(modes.engine(for: .file) == (caps.traits.runsOn == .thisMac ? engine : .parakeet))
         #expect(modes.meetingStartsIn == segment)
         for other in MeetingSegment.allCases {
@@ -108,7 +121,7 @@ struct ModeEngineRulesTests {
         modes.resetModes(using: .elevenLabs)
         #expect(modes.engine(for: .dictation) == .didunyCloud)
         #expect(modes.engine(for: .cloud) == .didunyCloud)
-        #expect(modes.engine(for: .recordOnly) == .parakeet)
+        #expect(modes.engine(for: .recordOnly) == .whisper)
     }
 
     static func suite() -> UserDefaults {

@@ -18,8 +18,8 @@ final class ModesSettingsUITests: DidunyUITestCase {
     /// T5-MD-20 (structure part) and T5-MD-29 (notice text).
     func test_modesPageShowsEveryRow() {
         let modes = openModes()
-        waitForElement(modes.staticTexts["Modes"])
-        waitForElement(modes.staticTexts["What runs each mode by default, and how you start it."])
+        waitForElement(modes.staticTexts["Modes & shortcuts"])
+        waitForElement(modes.staticTexts["What runs each mode by default, how you start it, and the other shortcuts."])
         waitForElement(modes.staticTexts["You are signed out. Recording and translation by Diduny need an account."])
         for job in ["dictation", "dictationTranslation", "meeting", "meetingTranslation", "file"] {
             waitForElement(element("modes.row.\(job)"), "row \(job) missing")

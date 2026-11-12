@@ -157,7 +157,9 @@ enum CommandHome {
         readiness: (EngineID) -> EngineReadiness
     ) -> PickerMenuModel {
         func rows(_ runsOn: EngineTraits.RunsOn) -> [PickerMenuRow] {
-            EngineID.allCases.compactMap { id in
+            // On this Mac, Parakeet V3 is the recommended dictation engine: it comes first.
+            let ids = runsOn == .thisMac ? [.parakeet] + EngineID.allCases.filter { $0 != .parakeet } : EngineID.allCases
+            return ids.compactMap { id in
                 guard let caps = caps(id), caps.traits.runsOn == runsOn else { return nil }
                 let state = readiness(id)
                 switch state {

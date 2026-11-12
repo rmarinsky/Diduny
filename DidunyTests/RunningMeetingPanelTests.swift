@@ -36,13 +36,15 @@ struct RunningMeetingPanelTests {
         #expect(!state.isFieldStatic)
     }
 
-    @Test("Translate meeting offers the switchable engines, with the running one selected")
+    @Test("Translate meeting offers only cloud engines, with the running one selected")
     func translateMeetingOffersEngines() throws {
         let store = LiveDictationOverlayStore()
         store.showRunningMeetingTranslation(engine: .didunyCloud)
         let model = try #require(store.translateMeetingPanelModel)
         #expect(model.engine.caps.id == .didunyCloud)
-        #expect(model.engines.map(\.caps.id).contains(.whisper))
+        #expect(!model.engines.isEmpty)
+        #expect(model.engines.allSatisfy { $0.caps.traits.runsOn == .cloud })
+        #expect(!model.engines.map(\.caps.id).contains(.whisper))
     }
 
     @Test("A click goes to the handler; the highlight follows the machine, not the click")

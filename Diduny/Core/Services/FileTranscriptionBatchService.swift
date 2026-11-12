@@ -1586,6 +1586,7 @@ private final class LiveFileTranscriptionBatchTranscriber: FileTranscriptionBatc
                 config["language_hints"] = settings.languageHints
                 config["language_hints_strict"] = true
             }
+            SpeechUserContext.current().apply(to: &config)
             let service = AsyncTranscriptionJobService()
             if let resumeJobID {
                 return try await service.resumeFileDetailed(

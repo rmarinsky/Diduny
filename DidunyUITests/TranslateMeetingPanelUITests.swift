@@ -21,7 +21,7 @@ final class TranslateMeetingPanelUITests: DidunyUITestCase {
     func test_T1_TM_20_opensLive() {
         let app = openPanel()
         waitForText("Translating meeting", identifier: "livePanel.title", in: app)
-        XCTAssertEqual(app.buttons["livePanel.between"].value as? String, "EN ↔ UK")
+        XCTAssertEqual(app.buttons["livePanel.between"].value as? String, "UK ↔ EN")
         let engine = element(app, "livePanel.engine")
         XCTAssertTrue("\(engine.label) \(engine.value as? String ?? "")".contains("Diduny Cloud"))
         waitForText("Live · both directions · speaker labels", identifier: "livePanel.caption", in: app)

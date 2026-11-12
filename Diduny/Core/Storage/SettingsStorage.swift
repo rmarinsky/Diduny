@@ -207,17 +207,17 @@ final class SettingsStorage {
 
     func applyNewUserDefaultsIfMissing() {
         let values: [Key: Any] = [
-            .pushToTalkKey: PushToTalkKey.rightShift.rawValue,
-            .pushToTalkHoldEnabled: false,
+            .pushToTalkKey: PushToTalkKey.rightOption.rawValue,
+            .pushToTalkHoldEnabled: true,
             .pushToTalkToggleEnabled: true,
-            .translationPushToTalkKey: PushToTalkKey.rightOption.rawValue,
+            .translationPushToTalkKey: PushToTalkKey.rightShift.rawValue,
             .translationPushToTalkHoldEnabled: false,
             .translationPushToTalkToggleEnabled: true,
-            .pushToTalkHoldStartDelaySeconds: 1.2,
-            .translationPushToTalkHoldStartDelaySeconds: 1.2,
+            .pushToTalkHoldStartDelaySeconds: 1.0,
+            .translationPushToTalkHoldStartDelaySeconds: 1.0,
             .pushToTalkToggleTapCount: 2,
             .translationPushToTalkToggleTapCount: 2,
-            .autoPaste: false,
+            .autoPaste: true,
             .transcriptionProvider: TranscriptionProvider.cloud.rawValue,
             .playSoundOnCompletion: true,
             .typingSpeedWordsPerMinute: 40.0
@@ -303,7 +303,7 @@ final class SettingsStorage {
     var messageFormattingMode: MessageFormattingMode {
         get {
             defaults.string(forKey: Key.messageFormattingMode.rawValue)
-                .flatMap(MessageFormattingMode.init(rawValue:)) ?? .normal
+                .flatMap(MessageFormattingMode.init(rawValue:)) ?? .chat
         }
         set { defaults.set(newValue.rawValue, forKey: Key.messageFormattingMode.rawValue) }
     }
@@ -458,8 +458,8 @@ final class SettingsStorage {
             guard let rawValue = defaults.string(forKey: Key.pushToTalkKey.rawValue),
                   let key = PushToTalkKey(rawValue: rawValue)
             else {
-                // Default to Right Shift for modifier-key shortcut mode
-                return .rightShift
+                // Default to Right Option for modifier-key shortcut mode
+                return .rightOption
             }
             return key
         }
@@ -698,8 +698,10 @@ final class SettingsStorage {
         set { defaults.set(newValue, forKey: Key.whisperLanguage.rawValue) }
     }
 
+    static let defaultWhisperPrompt = "remove all uh, e, and other mimic words"
+
     var whisperPrompt: String {
-        get { defaults.string(forKey: Key.whisperPrompt.rawValue) ?? "" }
+        get { defaults.string(forKey: Key.whisperPrompt.rawValue) ?? Self.defaultWhisperPrompt }
         set { defaults.set(newValue, forKey: Key.whisperPrompt.rawValue) }
     }
 
@@ -708,7 +710,7 @@ final class SettingsStorage {
             guard let rawValue = defaults.string(forKey: Key.whisperModelUnloadPolicy.rawValue),
                   let policy = WhisperModelUnloadPolicy(rawValue: rawValue)
             else {
-                return .minutes5
+                return .minutes1
             }
             return policy
         }
@@ -861,13 +863,13 @@ final class SettingsStorage {
         }
     }
 
-    /// Presses of the cancel key required to cancel an active recording: 1...3, unset 2.
+    /// Presses of the cancel key required to cancel an active recording: 1...3, unset 3.
     var escapeCancelPressCount: Int {
         get {
-            Self.validPressCount(defaults.object(forKey: Key.escapeCancelPressCount.rawValue) as? Int, fallback: 2)
+            Self.validPressCount(defaults.object(forKey: Key.escapeCancelPressCount.rawValue) as? Int, fallback: 3)
         }
         set {
-            defaults.set(Self.validPressCount(newValue, fallback: 2), forKey: Key.escapeCancelPressCount.rawValue)
+            defaults.set(Self.validPressCount(newValue, fallback: 3), forKey: Key.escapeCancelPressCount.rawValue)
         }
     }
 
@@ -1288,7 +1290,7 @@ final class SettingsStorage {
         return defaults.bool(forKey: Key.handsFreeModeEnabled.rawValue)
     }
 
-    private static let defaultHoldStartDelaySeconds: TimeInterval = 1.2
+    private static let defaultHoldStartDelaySeconds: TimeInterval = 1.0
 
     private static func sanitizedHoldStartDelaySeconds(_ value: TimeInterval) -> TimeInterval {
         guard value.isFinite else { return defaultHoldStartDelaySeconds }

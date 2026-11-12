@@ -35,27 +35,31 @@ struct RunTimeRoutingTests {
     static let personas: [Today] = [
         Today(fixture: "cloud-default", dictation: (.didunyCloud, .cloud), translation: (.didunyCloud, .cloud),
               meeting: cloudMeeting),
-        Today(fixture: "local-whisper-preview-on", dictation: (.whisper, .local), translation: (.whisper, .local),
+        // Legacy local dictation moves to Parakeet V3 on Apple silicon.
+        Today(fixture: "local-whisper-preview-on", dictation: (.parakeet, .cloud), translation: (.parakeet, .cloud),
               meeting: Meeting(segment: .thisMac, engine: .whisper, provider: .local, localPreview: true)),
-        Today(fixture: "local-whisper-preview-off", dictation: (.whisper, .local), translation: (.didunyCloud, .cloud),
+        Today(fixture: "local-whisper-preview-off", dictation: (.parakeet, .cloud), translation: (.didunyCloud, .cloud),
               meeting: Meeting(segment: .recordOnly, engine: .whisper, provider: .local)),
         Today(fixture: "elevenlabs-meeting", hasKey: true, dictation: (.elevenLabs, .cloud), translation: (.didunyCloud, .cloud),
               meeting: Meeting(segment: .cloud, engine: .elevenLabs, provider: .cloud)),
         Today(fixture: "elevenlabs-meeting", dictation: (.didunyCloud, .cloud), translation: (.didunyCloud, .cloud),
               meeting: cloudMeeting),
+        // Schema 4: Record only on Parakeet V3 moves to Whisper.
         Today(fixture: "parakeet-meeting", dictation: (.didunyCloud, .cloud), translation: (.didunyCloud, .cloud),
-              meeting: Meeting(segment: .recordOnly, engine: .parakeet, provider: .local, afterStop: .parakeet)),
+              meeting: Meeting(segment: .recordOnly, engine: .whisper, provider: .local)),
         Today(fixture: "apple-meeting", dictation: (.didunyCloud, .cloud), translation: (.didunyCloud, .cloud),
-              meeting: Meeting(segment: .thisMac, engine: .appleSpeech, provider: .local, afterStop: .appleSpeech),
-              meetingTranslation: .appleSpeech),
+              meeting: Meeting(segment: .thisMac, engine: .appleSpeech, provider: .local, afterStop: .appleSpeech)),
         Today(fixture: "files-diduny-cloud", dictation: (.didunyCloud, .cloud), translation: (.didunyCloud, .cloud),
               meeting: cloudMeeting),
         Today(fixture: "files-unset", dictation: (.didunyCloud, .cloud), translation: (.didunyCloud, .cloud),
               meeting: cloudMeeting),
         Today(fixture: "cloud-default", appleSilicon: false, dictation: (.didunyCloud, .cloud),
               translation: (.didunyCloud, .cloud), meeting: cloudMeeting),
-        // T5-MIG-36: legacy local translation stays Whisper on this Mac; meeting stays ElevenLabs live.
-        Today(fixture: "roman-setup", hasKey: true, dictation: (.didunyCloud, .cloud), translation: (.whisper, .local),
+        // Intel: legacy local dictation stays Whisper.
+        Today(fixture: "local-whisper-preview-off", appleSilicon: false, dictation: (.whisper, .local),
+              translation: (.didunyCloud, .cloud), meeting: Meeting(segment: .recordOnly, engine: .whisper, provider: .local)),
+        // T5-MIG-36: legacy local translation moves to Parakeet V3 on this Mac; meeting stays ElevenLabs live.
+        Today(fixture: "roman-setup", hasKey: true, dictation: (.didunyCloud, .cloud), translation: (.parakeet, .cloud),
               meeting: Meeting(segment: .cloud, engine: .elevenLabs, provider: .cloud)),
     ]
 

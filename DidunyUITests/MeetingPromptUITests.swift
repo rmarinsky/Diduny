@@ -38,9 +38,24 @@ final class MeetingPromptUITests: DidunyUITestCase {
         element("prompt.segment.recordOnly").click()
         let engine = element("prompt.engine")
         let text = engine.value as? String ?? engine.label
-        XCTAssertTrue(text.contains("Transcript after Stop") && text.contains("Parakeet V3"), text)
+        XCTAssertTrue(text.contains("Transcript after Stop") && text.contains("Whisper"), text)
         element("prompt.start").click()
         waitForElement(element("livePanel.title"), "The live meeting panel did not open")
+    }
+
+    func test_promptEngineIsPickedLikeTheLivePanel() throws {
+        try showPrompt()
+        element("prompt.segment.recordOnly").click()
+        let engine = element("prompt.engine")
+        waitForElement(engine, toMatch: "isHittable == true")
+        XCTAssertTrue(engine.isEnabled, "Record only offers several engines, so the field is a menu")
+        engine.click()
+        let cloud = element("pickerMenu.row.diduny-cloud")
+        waitForElement(cloud, toMatch: "isHittable == true")
+        XCTAssertTrue(element("pickerMenu.row.parakeet-v3").exists)
+        cloud.click()
+        let text = engine.value as? String ?? engine.label
+        XCTAssertTrue(text.contains("Diduny Cloud"), text)
     }
 
     func test_T2_PR_22_notNowCloseEscapeReturn() throws {

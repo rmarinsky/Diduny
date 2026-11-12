@@ -46,10 +46,10 @@ struct MeetingPromptDefaults: Equatable {
     var startsIn: MeetingSegment
     var engines: [MeetingSegment: EngineID]
 
-    /// Modes defaults (Proto:754): Cloud; This Mac Whisper, Cloud Diduny Cloud, Record only Parakeet V3.
+    /// Modes defaults: Cloud; This Mac Whisper, Cloud Diduny Cloud, Record only Whisper.
     static let standard = Self(
         startsIn: .cloud,
-        engines: [.thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .parakeet]
+        engines: [.thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .whisper]
     )
 
     func engine(for segment: MeetingSegment) -> EngineID {
@@ -69,9 +69,18 @@ struct MeetingSuggestion: Equatable {
     /// For this prompt only (02 Q8 default): a click does not write Modes.
     var selectedSegment: MeetingSegment
     var isCloudAvailable: Bool
+    /// Engines picked in this prompt, per segment; like the segment, they do not write Modes.
+    var pickedEngines: [MeetingSegment: EngineID] = [:]
 
     var engine: EngineID {
-        defaults.engine(for: selectedSegment)
+        pickedEngines[selectedSegment] ?? defaults.engine(for: selectedSegment)
+    }
+
+    /// Each segment's engine as this prompt would start it.
+    var engines: [MeetingSegment: EngineID] {
+        Dictionary(uniqueKeysWithValues: MeetingSegment.allCases.map { segment in
+            (segment, pickedEngines[segment] ?? defaults.engine(for: segment))
+        })
     }
 
     /// Field label "Transcript after Stop" instead of "Engine".
@@ -225,6 +234,12 @@ final class EdgeCommandPanelModel {
         suggestion.selectedSegment = segment
         meetingSuggestion = suggestion
         return true
+    }
+
+    func selectMeetingSuggestionEngine(_ engine: EngineID) {
+        guard var suggestion = meetingSuggestion else { return }
+        suggestion.pickedEngines[suggestion.selectedSegment] = engine
+        meetingSuggestion = suggestion
     }
 
     @discardableResult

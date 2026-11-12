@@ -26,6 +26,8 @@ final class HotkeyServiceTests {
     @Test("T5-HK-06 each name reaches its own handler with the count read at press time")
     func eachNameReachesItsHandler() {
         var calls: [String] = []
+        // Translation has no default chord: give it one so its handler can be reached.
+        registrar.setShortcut(.init(.slash, modifiers: [.command, .option]), for: .toggleTranslation)
         sut.registerRecordingHotkey { calls.append("dictation") }
         sut.registerTranslationHotkey { calls.append("translation") }
         sut.registerMeetingHotkey { calls.append("meeting") }

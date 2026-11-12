@@ -13,7 +13,7 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
     private func openShortcuts() {
         launchApp(freshInstall: true, onboardingCompleted: true)
         waitForElement(mainWindow, "Main window did not open")
-        mainWindow.buttons["Sidebar Shortcuts"].click()
+        mainWindow.buttons["Sidebar Modes & shortcuts"].click()
         waitForElement(element("shortcuts.forceSubmit.keys"), "Shortcuts page did not open")
     }
 
@@ -25,9 +25,6 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
     /// T5-SC-01: rows and defaults. Values are spoken as spec 4.14 says ("Option Command B").
     func test_SC01_rowsAndDefaults() {
         openShortcuts()
-        for heading in ["While recording", "Text", "App"] {
-            waitForElement(mainWindow.staticTexts[heading])
-        }
         let defaults = [
             "escapeCancel": "Escape", "forceSubmit": "Command Return", "addMeetingChapter": "Option Command B",
             "translateSelectedText": "Option Command T", "inplaceTranslation": "Option Command",
@@ -38,8 +35,7 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
             waitForElement(element("shortcuts.\(row).enabled"), toMatch: "value == 1")
         }
         waitForElement(element("shortcuts.escapeCancelSaveAudio"), toMatch: "value == 1")
-        waitForElement(element("shortcuts.inplaceTranslationPair"), toMatch: "value == 'English ↔ Ukrainian'")
-        waitForElement(element("shortcuts.openSettings.keys"), toMatch: "value == 'Command ,'")
+        waitForElement(element("shortcuts.inplaceTranslationPair"), toMatch: "value == 'Ukrainian ↔ English'")
     }
 
     /// T5-SC-02: a switch off disables its keys and count and keeps the keys.

@@ -428,6 +428,19 @@ final class CalendarMeetingTests: XCTestCase {
         XCTAssertEqual(CalendarMeeting.match(recordingStart: at(10, 0), recordingEnd: at(10, 0), events: [standup]), .none)
     }
 
+    func testSilenceStopWaitsWhileTheMeetingIsGoingOn() {
+        let end = Date(timeIntervalSince1970: 1_800_000_000)
+        let meeting = CalendarMeeting(id: "m", calendarID: "work", title: "Review", start: end.addingTimeInterval(-900), end: end)
+        XCTAssertTrue(CalendarMeeting.silenceStopHeld(meeting: meeting, callActive: false, now: end.addingTimeInterval(-60)),
+                      "Quiet before the calendar end: keep recording")
+        XCTAssertTrue(CalendarMeeting.silenceStopHeld(meeting: meeting, callActive: true, now: end.addingTimeInterval(160)),
+                      "The call runs past the calendar end: keep recording")
+        XCTAssertTrue(CalendarMeeting.silenceStopHeld(meeting: nil, callActive: true, now: end))
+        XCTAssertFalse(CalendarMeeting.silenceStopHeld(meeting: meeting, callActive: false, now: end.addingTimeInterval(160)))
+        XCTAssertFalse(CalendarMeeting.silenceStopHeld(meeting: nil, callActive: false, now: end),
+                       "No call and no calendar event: silence stops as before")
+    }
+
     func testStopIsOfferedOnceAMinuteAfterTheLinkedMeetingEnds() {
         let end = Date(timeIntervalSince1970: 1_800_000_000)
         let meeting = CalendarMeeting(id: "m", calendarID: "work", title: "Review", start: end.addingTimeInterval(-1800), end: end)

@@ -15,7 +15,7 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     private var readyWork: (any ScheduledWork)?
     private var pendingHoldStart: (any ScheduledWork)?
     private var hasStartedAfterHold = false
-    private var sanitizedHoldStartDelaySeconds: TimeInterval = 1.2
+    private var sanitizedHoldStartDelaySeconds: TimeInterval = 1.0
 
     // Multi-tap detection for toggle mode
     private var lastToggleTapTime: TimeInterval?
@@ -250,7 +250,7 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     }
 
     private static func sanitizedHoldStartDelaySeconds(_ value: TimeInterval) -> TimeInterval {
-        guard value.isFinite else { return 1.2 }
+        guard value.isFinite else { return 1.0 }
         let clamped = min(max(value, 0.5), 2.0)
         return (clamped * 10).rounded() / 10
     }

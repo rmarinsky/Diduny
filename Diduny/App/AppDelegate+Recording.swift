@@ -622,8 +622,11 @@ extension AppDelegate {
                     serverCleanup: !ownEngine
                 )
             }
+            // Soniox v6 leaves spoken punctuation ("period", «новий рядок») to the app: Diduny Cloud dictation only.
+            let commandedText = producedOutput == .original && !ownEngine && voiceTranscriptionProvider == .cloud
+                ? SpokenCommandProcessor.apply(cleanedRawText) : cleanedRawText
             let text = try requireNonemptyVoiceDictation(
-                ClipboardService.preparedMessageText(cleanedRawText)
+                ClipboardService.preparedMessageText(commandedText)
             )
             Log.app.info("stopRecording: Transcription received (\(text.count) chars)")
 

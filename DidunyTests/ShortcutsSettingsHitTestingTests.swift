@@ -37,7 +37,7 @@ struct ShortcutsSettingsHitTestingTests {
             self.store = store
             // Drop events left from a previous test so the next dequeue is ours.
             while NSApp.nextEvent(matching: .any, until: nil, inMode: .default, dequeue: true) != nil {}
-            let hostingView = NSHostingView(rootView: ShortcutsSettingsView(store: store))
+            let hostingView = NSHostingView(rootView: ShortcutsSettingsView(store: store, widths: (engine: 200, second: 180)))
             window = TestPanel(
                 contentRect: NSRect(origin: .zero, size: ShortcutsSettingsHitTestingTests.windowSize),
                 styleMask: [.titled, .nonactivatingPanel],

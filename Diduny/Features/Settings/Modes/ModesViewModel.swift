@@ -129,6 +129,14 @@ final class ModesViewModel {
                 PickerMenuGroup(id: "thisMac", header: String(localized: "On this Mac, recommended"), rows: local),
                 PickerMenuGroup(id: "cloud", header: String(localized: "Cloud"), rows: cloud),
             ]
+        case (.dictation, _), (.dictationTranslation, _):
+            // Dictation and its translation: Parakeet V3 first on this Mac.
+            [
+                PickerMenuGroup(id: "cloud", header: String(localized: "Cloud"), rows: cloud),
+                PickerMenuGroup(id: "thisMac", header: String(localized: "On this Mac"),
+                                rows: local.filter { $0.id == EngineID.parakeet.rawValue }
+                                    + local.filter { $0.id != EngineID.parakeet.rawValue }),
+            ]
         default:
             [
                 PickerMenuGroup(id: "cloud", header: String(localized: "Cloud"), rows: cloud),

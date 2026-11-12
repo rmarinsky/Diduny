@@ -68,19 +68,19 @@ final class SettingsStorageProviderTests: XCTestCase {
         XCTAssertEqual(Bundle.preferredLocalizations(from: ["en", "uk"], forPreferences: ["de-DE"]).first, "en")
     }
 
-    func test_messageModeDefaultsToNormalAndControlsPreparedDeliveryText() {
+    func test_messageModeDefaultsToChatAndControlsPreparedDeliveryText() {
         let key = "messageFormattingMode"
         let stored = UserDefaults.standard.object(forKey: key)
         defer { restore(stored, key: key) }
         UserDefaults.standard.removeObject(forKey: key)
-        XCTAssertEqual(SettingsStorage.shared.messageFormattingMode, .normal)
-        XCTAssertEqual(ClipboardService.preparedMessageText("Так."), "Так.")
-        SettingsStorage.shared.messageFormattingMode = .chat
-        XCTAssertEqual(UserDefaults.standard.string(forKey: key), "chat")
+        XCTAssertEqual(SettingsStorage.shared.messageFormattingMode, .chat)
         XCTAssertEqual(ClipboardService.preparedMessageText("Так."), "так")
         XCTAssertEqual(ClipboardService.preparedText("Так."), "Так.")
+        SettingsStorage.shared.messageFormattingMode = .normal
+        XCTAssertEqual(UserDefaults.standard.string(forKey: key), "normal")
+        XCTAssertEqual(ClipboardService.preparedMessageText("Так."), "Так.")
         UserDefaults.standard.set("unknown", forKey: key)
-        XCTAssertEqual(SettingsStorage.shared.messageFormattingMode, .normal)
+        XCTAssertEqual(SettingsStorage.shared.messageFormattingMode, .chat)
     }
 
     func test_unitTestsUseIsolatedPreferencesDomain() {
@@ -154,19 +154,19 @@ final class SettingsStorageProviderTests: XCTestCase {
         keys.forEach { defaults.removeObject(forKey: $0) }
         defaults.removeObject(forKey: onboardingKey)
         defaults.removeObject(forKey: meetingHotkeyMigrationKey)
-        SettingsStorage.shared.pushToTalkKey = .rightOption
+        SettingsStorage.shared.pushToTalkKey = .rightShift
         SettingsStorage.shared.pushToTalkHoldEnabled = false
         SettingsStorage.shared.translationPushToTalkKey = .leftOption
-        SettingsStorage.shared.autoPaste = true
+        SettingsStorage.shared.autoPaste = false
         SettingsStorage.shared.transcriptionProvider = .local
         SettingsStorage.shared.typingSpeedWordsPerMinute = 85
 
         SettingsStorage.shared.applyNewUserDefaultsIfMissing()
 
-        XCTAssertEqual(SettingsStorage.shared.pushToTalkKey, .rightOption)
+        XCTAssertEqual(SettingsStorage.shared.pushToTalkKey, .rightShift)
         XCTAssertFalse(SettingsStorage.shared.pushToTalkHoldEnabled)
         XCTAssertEqual(SettingsStorage.shared.translationPushToTalkKey, .leftOption)
-        XCTAssertTrue(SettingsStorage.shared.autoPaste)
+        XCTAssertFalse(SettingsStorage.shared.autoPaste)
         XCTAssertEqual(SettingsStorage.shared.transcriptionProvider, .local)
         XCTAssertEqual(SettingsStorage.shared.typingSpeedWordsPerMinute, 85)
     }
@@ -194,15 +194,15 @@ final class SettingsStorageProviderTests: XCTestCase {
 
         SettingsStorage.shared.applyNewUserDefaultsIfMissing()
 
-        XCTAssertEqual(SettingsStorage.shared.pushToTalkKey, .rightShift)
-        XCTAssertFalse(SettingsStorage.shared.pushToTalkHoldEnabled)
+        XCTAssertEqual(SettingsStorage.shared.pushToTalkKey, .rightOption)
+        XCTAssertTrue(SettingsStorage.shared.pushToTalkHoldEnabled)
         XCTAssertTrue(SettingsStorage.shared.pushToTalkToggleEnabled)
         XCTAssertEqual(SettingsStorage.shared.pushToTalkToggleTapCount, 2)
-        XCTAssertEqual(SettingsStorage.shared.translationPushToTalkKey, .rightOption)
+        XCTAssertEqual(SettingsStorage.shared.translationPushToTalkKey, .rightShift)
         XCTAssertFalse(SettingsStorage.shared.translationPushToTalkHoldEnabled)
         XCTAssertTrue(SettingsStorage.shared.translationPushToTalkToggleEnabled)
         XCTAssertEqual(SettingsStorage.shared.translationPushToTalkToggleTapCount, 2)
-        XCTAssertFalse(SettingsStorage.shared.autoPaste)
+        XCTAssertTrue(SettingsStorage.shared.autoPaste)
         XCTAssertEqual(SettingsStorage.shared.transcriptionProvider, .cloud)
     }
 
@@ -335,9 +335,11 @@ final class SettingsStorageProviderTests: XCTestCase {
 
         selection.select(.local)
         XCTAssertEqual(selection.provider, .local)
-        for job in [STTJob.dictation, .dictationTranslation, .meetingTranslation, .file] {
+        for job in [STTJob.dictation, .dictationTranslation, .file] {
             XCTAssertEqual(settings.modeDefaults.engine(for: job), .whisper, "\(job)")
         }
+        // Meeting translation is cloud only, so Local leaves it on Diduny Cloud.
+        XCTAssertEqual(settings.modeDefaults.engine(for: .meetingTranslation), .didunyCloud)
         XCTAssertEqual(settings.modeDefaults.meetingStartsIn, .thisMac)
         XCTAssertEqual(settings.modeDefaults.engine(for: .thisMac), .whisper)
 

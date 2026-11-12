@@ -25,7 +25,7 @@ struct ModesSettingsView: View {
     }
 
     var body: some View {
-        PageScaffold(title: "Modes", subtitle: "What runs each mode by default, and how you start it.") {
+        PageScaffold(title: "Modes & shortcuts", subtitle: "What runs each mode by default, how you start it, and the other shortcuts.") {
             VStack(alignment: .leading, spacing: 0) {
                 if model.showsSignedOutNotice {
                     NoticeRow(text: "You are signed out. Recording and translation by Diduny need an account.", buttonTitle: "Sign in") {
@@ -94,6 +94,7 @@ struct ModesSettingsView: View {
                     Rectangle().fill(DS.Palette.line).frame(height: 1)
                 }
             }
+            ShortcutsSettingsView(widths: widths)
         }
     }
 

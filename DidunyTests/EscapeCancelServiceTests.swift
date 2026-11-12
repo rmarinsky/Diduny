@@ -289,9 +289,9 @@ final class EscapeCancelServiceTests {
     @Test("T5-CA-09 count range: 0 and 4 fall back to 2; 1, 2 and 3 are kept")
     func countRange() {
         box.defaults.set(0, forKey: "escapeCancelPressCount")
-        #expect(settings.escapeCancelPressCount == 2)
+        #expect(settings.escapeCancelPressCount == 3)
         box.defaults.set(4, forKey: "escapeCancelPressCount")
-        #expect(settings.escapeCancelPressCount == 2)
+        #expect(settings.escapeCancelPressCount == 3)
         for count in 1 ... 3 {
             settings.escapeCancelPressCount = count
             #expect(settings.escapeCancelPressCount == count)

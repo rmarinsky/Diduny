@@ -16,7 +16,9 @@ extension AppDelegate {
     /// Record only never streams live; it records on this Mac and transcribes after Stop.
     func startMeetingRecording(from start: MeetingPromptStart) {
         guard appState.meetingRecordingState == .idle else { return }
-        startMeeting(meetingStartRoute(segment: start.segment))
+        // The engine picked in the prompt applies to this meeting only.
+        startMeeting(meetingStartRoute(segment: start.segment,
+                                       override: JobProviderSelection(providerID: start.engine.rawValue, modelID: nil)))
     }
 
     /// Starts in `route`'s segment with its engine; refuses an on-device engine that is not ready.
@@ -300,6 +302,7 @@ extension AppDelegate {
         activeMeetingTranscriptionSessionID = sessionID
         // The user's own live engine: ElevenLabs (their key) or Apple on this Mac; calendar meetings too (8A).
         activeMeetingTranslateTarget = translateTarget
+        activeMeetingCalendarMeeting = calendarMeeting
         // Calendar and Translate meeting starts pass only Cloud or Local: audio only, Whisper after Stop.
         activeMeetingStartRoute = startRoute ?? MeetingStartRoute(
             segment: requestedProvider == .cloud ? .cloud : .recordOnly,

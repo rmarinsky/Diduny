@@ -317,7 +317,8 @@ final class NotesService {
 
     /// Why the next job cannot start yet, or nil when it can.
     private func blocker(for job: Job) -> String? {
-        if library.recordings.contains(where: { $0.status.isInProgressCapture }) {
+        // Only a capture running now: a recording left to recover (`needsRecovery`) must not hold notes forever.
+        if library.recordings.contains(where: { $0.status == .recording }) {
             return String(localized: "Waits while you record.")
         }
         guard job.automatic else { return nil }

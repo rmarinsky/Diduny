@@ -54,7 +54,7 @@
             "general": std("settings.general"),
             "languages": std("settings.languages"),
             "audio": std("settings.audioDictation", ["--ui-testing-audio-devices=Test Mic A,Test Mic B"]),
-            "shortcuts": std("settings.shortcuts"),
+            "shortcuts": std("settings.modes"),
         ]
     }
 
