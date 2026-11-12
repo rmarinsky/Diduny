@@ -1121,7 +1121,7 @@ final class FileTranscriptionBatchServiceTests: XCTestCase {
     }
 
     func test_retryResumesSubmittedCloudJobWithoutUploadingAgain() async throws {
-        let transcriber = BatchTestTranscriber(failureCount: 1)
+        let transcriber = BatchTestTranscriber(failureCount: 1, failure: URLError(.networkConnectionLost))
         let service = FileTranscriptionBatchService(
             preparer: BatchTestPreparer(),
             transcriber: transcriber,
@@ -1137,6 +1137,26 @@ final class FileTranscriptionBatchServiceTests: XCTestCase {
         try await waitUntil { !service.isProcessing }
 
         XCTAssertEqual(transcriber.receivedResumeJobIDs, [nil, "test-job"])
+    }
+
+    func test_retryAfterFailedCloudJobUploadsAgainInsteadOfResumingIt() async throws {
+        let transcriber = BatchTestTranscriber(failureCount: 1, failure: JobGoneError(statusCode: 404))
+        let service = FileTranscriptionBatchService(
+            preparer: BatchTestPreparer(),
+            transcriber: transcriber,
+            recordingStore: BatchTestRecordingStore(),
+            batchPersistence: BatchTestPersistence(),
+            settingsSnapshot: { .testValue },
+            playCompletionSound: {}
+        )
+
+        service.beginBatch(urls: [URL(fileURLWithPath: "/tmp/upload.m4a")])
+        try await waitUntil { !service.isProcessing }
+        XCTAssertNil(service.items.first?.cloudJobID)
+        service.retryFailed()
+        try await waitUntil { !service.isProcessing }
+
+        XCTAssertEqual(transcriber.receivedResumeJobIDs, [nil, nil])
     }
 
     func test_beginBatchCombinesFilesURLsAndExistingLibraryRecordingsInOrder() throws {
@@ -2044,6 +2064,7 @@ private final class BatchTestTranscriber: FileTranscriptionBatchTranscribing {
     private(set) var receivedResumeJobIDs: [String?] = []
     private var concurrentCount = 0
     private var remainingFailures: Int
+    private let failure: Error
     private let delay: Duration
     private let preflightErrorMessage: String?
     private let progressUpdates: [JobProgressUpdate]
@@ -2055,6 +2076,7 @@ private final class BatchTestTranscriber: FileTranscriptionBatchTranscribing {
         delay: Duration = .milliseconds(20),
         preflightError: String? = nil,
         failureCount: Int = 0,
+        failure: Error = BatchTestError.transcriptionFailed,
         progressUpdates: [JobProgressUpdate] = [],
         waitsForRelease: Bool = false,
         transcript: GeneratedTranscript? = nil
@@ -2062,6 +2084,7 @@ private final class BatchTestTranscriber: FileTranscriptionBatchTranscribing {
         self.delay = delay
         preflightErrorMessage = preflightError
         remainingFailures = failureCount
+        self.failure = failure
         self.progressUpdates = progressUpdates
         self.waitsForRelease = waitsForRelease
         self.transcript = transcript
@@ -2101,7 +2124,7 @@ private final class BatchTestTranscriber: FileTranscriptionBatchTranscribing {
         }
         if remainingFailures > 0 {
             remainingFailures -= 1
-            throw BatchTestError.transcriptionFailed
+            throw failure
         }
         return transcript ?? GeneratedTranscript(
             text: "Transcript for \(audioFileURL.lastPathComponent)"

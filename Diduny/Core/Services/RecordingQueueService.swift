@@ -33,6 +33,8 @@ final class RecordingQueueService {
         var textIfItFails: String? = nil
         /// Local speaker labels for this run only; nil follows Settings > Audio (the global default stays as it is).
         var speakerLabels: Bool? = nil
+        /// A cloud job submitted before the app quit: waited for instead of uploading again.
+        var cloudJobID: String? = nil
     }
 
     private var processingTask: Task<Void, Never>?
@@ -47,15 +49,22 @@ final class RecordingQueueService {
     private let localModelIsAvailable: (String) -> Bool
     /// Tests replace the engines.
     private let makeRunner: (@MainActor (URL) -> QueueEngineRunner)?
+    private let journal: QueueJournal
+    /// Items still to finish, as written to `journal`; only actions that can be redone from the recording alone.
+    private var journalEntries: [QueueJournal.Entry] = []
+    private let activity: ProcessingActivity
 
     init(
         storage: RecordingsLibraryStorage? = nil,
         startsAutomatically: Bool = true,
         localModelIsAvailable: ((String) -> Bool)? = nil,
         hasSession: @escaping () -> Bool = { AuthService.hasStoredSession },
-        makeRunner: (@MainActor (URL) -> QueueEngineRunner)? = nil
+        makeRunner: (@MainActor (URL) -> QueueEngineRunner)? = nil,
+        activity: ProcessingActivity = .live
     ) {
         self.storage = storage ?? .shared
+        journal = QueueJournal(directory: self.storage.appDirectory)
+        self.activity = activity
         self.startsAutomatically = startsAutomatically
         self.hasSession = hasSession
         self.makeRunner = makeRunner
@@ -65,7 +74,26 @@ final class RecordingQueueService {
             }
             return WhisperModelManager.shared.isModelDownloaded(model)
         }
-        resetStaleProcessingStates()
+        // Interrupted rows were reset to `.unprocessed` when the library loaded; `resumeInterrupted()` queues them again.
+    }
+
+    /// Queues again what was being processed when the app quit, and waits for cloud jobs already submitted.
+    func resumeInterrupted() {
+        let entries = journal.load()
+        guard !entries.isEmpty else { return }
+        Log.app.notice("Queue resumes \(entries.count) interrupted item(s)")
+        for entry in entries {
+            guard let recording = storage.recordings.first(where: { $0.id == entry.recordingID }),
+                  recording.status != .transcribed, recording.status != .translated else { continue }
+            enqueue([entry.recordingID], action: entry.action.queueAction,
+                    providerOverride: entry.providerOverride.flatMap(TranscriptionProvider.init(rawValue:)),
+                    whisperModelOverride: entry.whisperModelOverride, targetLanguage: entry.targetLanguage,
+                    engineOverride: entry.engineOverride, speakerLabels: entry.speakerLabels,
+                    resumeCloudJobID: entry.cloudJobID)
+        }
+        // Entries for recordings that were deleted or finished are dropped.
+        journalEntries.removeAll { entry in !pendingItems.contains { $0.id == entry.recordingID } }
+        journal.save(journalEntries)
     }
 
     /// Returns true when at least one recording was added to the queue.
@@ -79,7 +107,8 @@ final class RecordingQueueService {
         localFallbackOnUsageLimit: Bool = false,
         engineOverride: EngineID? = nil,
         textIfItFails: String? = nil,
-        speakerLabels: Bool? = nil
+        speakerLabels: Bool? = nil,
+        resumeCloudJobID: String? = nil
     ) -> Bool {
         guard !ids.isEmpty else { return false }
 
@@ -105,7 +134,10 @@ final class RecordingQueueService {
                 continue
             }
             storage.updateRecording(id: item.id, status: .processing, error: nil)
+            var item = item
+            item.cloudJobID = resumeCloudJobID
             pendingItems.append(item)
+            writeJournal(item)
             admitted = true
         }
 
@@ -124,7 +156,38 @@ final class RecordingQueueService {
 
         pendingItems.removeAll()
         currentItem = nil
+        journalEntries.removeAll()
+        journal.save(journalEntries)
         refreshQueueState()
+    }
+
+    // MARK: - Journal
+
+    private func writeJournal(_ item: QueueItem) {
+        guard let action = QueueJournal.Entry.Action(item.action) else { return }
+        journalEntries.removeAll { $0.recordingID == item.id }
+        journalEntries.append(QueueJournal.Entry(
+            recordingID: item.id, action: action, providerOverride: item.providerOverride?.rawValue,
+            whisperModelOverride: item.whisperModelOverride, targetLanguage: item.targetLanguage,
+            engineOverride: item.engineOverride, speakerLabels: item.speakerLabels, cloudJobID: item.cloudJobID
+        ))
+        journal.save(journalEntries)
+    }
+
+    private func removeFromJournal(_ id: UUID) {
+        guard journalEntries.contains(where: { $0.recordingID == id }) else { return }
+        journalEntries.removeAll { $0.recordingID == id }
+        journal.save(journalEntries)
+    }
+
+    private func recordSubmittedJob(_ jobID: String?, for id: UUID) {
+        guard let index = journalEntries.firstIndex(where: { $0.recordingID == id }) else { return }
+        journalEntries[index].cloudJobID = jobID
+        journal.save(journalEntries)
+    }
+
+    func journalEntryForTesting(_ id: UUID) -> QueueJournal.Entry? {
+        journalEntries.first { $0.recordingID == id }
     }
 
     private func startProcessingIfNeeded() {
@@ -134,7 +197,7 @@ final class RecordingQueueService {
 
         processingTask = Task { [weak self] in
             guard let self else { return }
-            await processPendingItems()
+            await activity.run("Transcribing recordings") { await processPendingItems() }
         }
     }
 
@@ -157,6 +220,8 @@ final class RecordingQueueService {
             currentJobStatus = nil
 
             await processRecording(item)
+            // A usage-limit retry went back into the queue and keeps its entry.
+            if !pendingItems.contains(where: { $0.id == item.id }) { removeFromJournal(item.id) }
 
             stopProgressTicks()
             currentItem = nil
@@ -351,7 +416,7 @@ final class RecordingQueueService {
             }
 
             guard !Task.isCancelled else {
-                storage.updateRecording(id: item.id, status: .unprocessed, error: nil)
+                if !isQueuedAgain(item.id) { storage.updateRecording(id: item.id, status: .unprocessed, error: nil) }
                 Log.app.info("Queue cancelled recording \(item.id)")
                 return
             }
@@ -381,7 +446,9 @@ final class RecordingQueueService {
             currentJobStatus = nil
             Log.app.info("Queue processed recording \(item.id): \(status.rawValue)")
         } catch is CancellationError {
-            storage.updateRecording(id: item.id, status: .unprocessed, text: item.textIfItFails, error: nil)
+            if !isQueuedAgain(item.id) {
+                storage.updateRecording(id: item.id, status: .unprocessed, text: item.textIfItFails, error: nil)
+            }
             currentJobStatus = nil
             Log.app.info("Queue cancelled recording \(item.id)")
         } catch let error as TranscriptionError where Self.usageLimitFallbackProvider(
@@ -402,6 +469,7 @@ final class RecordingQueueService {
                 textIfItFails: item.textIfItFails
             )
             pendingItems.insert(localItem, at: 0)
+            writeJournal(localItem)
             currentJobStatus = nil
             Log.app.notice("Queue: cloud usage limit for \(item.id, privacy: .public), retrying on this Mac")
         } catch {
@@ -430,7 +498,7 @@ final class RecordingQueueService {
             return try await runner.translate(engine, target: target, whisperModel: whisperModel).text
         }
         if result.error is CancellationError {
-            storage.updateRecording(id: item.id, status: .unprocessed, error: nil)
+            if !isQueuedAgain(item.id) { storage.updateRecording(id: item.id, status: .unprocessed, error: nil) }
         } else if let error = result.error {
             storage.updateRecording(id: item.id, status: .failed, text: result.text.isEmpty ? nil : result.text,
                                     error: error.localizedDescription)
@@ -529,11 +597,29 @@ final class RecordingQueueService {
         var config = config
         SpeechUserContext.current(calendarMeeting: calendarMeeting).apply(to: &config)
         let asyncJobService = AsyncTranscriptionJobService()
+        let onStatus: (JobProgressUpdate) -> Void = { [weak self] update in
+            Task { @MainActor in
+                self?.currentJobStatus = update.status
+                self?.handleCloudJobStatus(update.status, totalSeconds: sourceDurationSeconds, itemID: itemID)
+            }
+        }
+        if let jobID = journalEntries.first(where: { $0.recordingID == itemID })?.cloudJobID {
+            do {
+                Log.app.notice("Queue waits for cloud job submitted before the app quit, \(itemID, privacy: .public)")
+                return try await asyncJobService.resumeFileDetailed(jobID: jobID, config: config, onProgressUpdate: onStatus)
+            } catch is JobGoneError {
+                // The server dropped the job: upload again below.
+                recordSubmittedJob(nil, for: itemID)
+            }
+        }
         return try await asyncJobService.transcribeFileDetailedWithRetry(
             audioFileURL: audioFileURL,
             config: config,
             source: source,
             sourceDurationSeconds: sourceDurationSeconds,
+            onSubmitted: { [weak self] jobID in
+                Task { @MainActor in self?.recordSubmittedJob(jobID, for: itemID) }
+            },
             onUploadProgress: { [weak self] fraction in
                 Task { @MainActor in
                     self?.publishProgress(
@@ -546,13 +632,9 @@ final class RecordingQueueService {
                         itemID: itemID
                     )
                 }
-            }
-        ) { [weak self] update in
-            Task { @MainActor in
-                self?.currentJobStatus = update.status
-                self?.handleCloudJobStatus(update.status, totalSeconds: sourceDurationSeconds, itemID: itemID)
-            }
-        }
+            },
+            onProgressUpdate: onStatus
+        )
     }
 
     // MARK: - Progress
@@ -571,6 +653,11 @@ final class RecordingQueueService {
 
     func isQueued(_ id: UUID) -> Bool {
         pendingItems.contains { $0.id == id }
+    }
+
+    /// A cancelled run must not overwrite the status of the same recording queued again meanwhile.
+    private func isQueuedAgain(_ id: UUID) -> Bool {
+        isQueued(id)
     }
 
     /// The transcript of one recording for the command panel outcome; another recording's
@@ -809,10 +896,23 @@ final class RecordingQueueService {
             currentJobStatus = nil
         }
     }
+}
 
-    private func resetStaleProcessingStates() {
-        for recording in storage.recordings where recording.status == .processing {
-            storage.updateRecording(id: recording.id, status: .unprocessed, error: nil)
+extension QueueJournal.Entry.Action {
+    init?(_ action: RecordingQueueService.QueueAction) {
+        switch action {
+        case .transcribe: self = .transcribe
+        case .transcribeDiarize: self = .transcribeDiarize
+        case .translate: self = .translate
+        case .translateParts: return nil
+        }
+    }
+
+    var queueAction: RecordingQueueService.QueueAction {
+        switch self {
+        case .transcribe: .transcribe
+        case .transcribeDiarize: .transcribeDiarize
+        case .translate: .translate
         }
     }
 }

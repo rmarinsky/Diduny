@@ -88,6 +88,8 @@ final class RecordingsLibraryStorage {
 
     private let fileManager = FileManager.default
     private let appSupportDir: URL
+    /// The folder with the library, notes and the queue journal.
+    var appDirectory: URL { appSupportDir }
     private let recordingsDir: URL
     private let otherBuildDir: URL?
     private let metadataURL: URL
@@ -1196,11 +1198,10 @@ final class RecordingsLibraryStorage {
                             try? FileManager.default.moveItem(at: staged, to: original)
                         }
                     }
-                    guard recovery.stagedFiles.allSatisfy({
-                        FileManager.default.fileExists(atPath: $0.originalPath)
-                    }) else {
-                        Log.app.error("Recording deletion recovery still has missing media files")
-                        return nil
+                    // Files lost for good must not hide the whole library on every launch: the rows
+                    // without audio are dropped by the orphan scan below, the rest come back.
+                    if !recovery.stagedFiles.allSatisfy({ FileManager.default.fileExists(atPath: $0.originalPath) }) {
+                        Log.app.error("Recording deletion recovery has missing media files; restoring the rest")
                     }
                     if let batches = recovery.batches {
                         do {
@@ -1458,6 +1459,11 @@ final class RecordingsLibraryStorage {
         metadataWriteQueue.async {
             _ = Self.writeMetadataSnapshot(snapshot, to: url)
         }
+    }
+
+    /// Waits for metadata writes already queued, on quit, so the last change reaches the disk.
+    func flushPendingWrites() {
+        metadataWriteQueue.sync {}
     }
 
     private func saveMetadataSynchronously() -> Bool {

@@ -194,6 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The running app's delegate. NSApp.delegate is SwiftUI's adaptor, not this class.
     static weak var current: AppDelegate?
     private var powerOffObserver: NSObjectProtocol?
+    private var instanceLock: AppInstanceLock?
     lazy var realtimeTranscriptionService: RealtimeTranscriptionProtocol = CloudRealtimeService()
     /// BYOK realtime engine for the current dictation; nil = `realtimeTranscriptionService`.
     var dictationRealtimeService: RealtimeTranscriptionProtocol?
@@ -241,9 +242,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_: Notification) {
         Self.current = self
+        // Two copies of one build would both write the same library; the second one leaves.
+        // Not under unit tests: the test host is the DEV build, which may be running.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            guard let lock = AppInstanceLock.acquire(in: RecordingsLibraryStorage.shared.appDirectory) else {
+                Log.app.notice("Another copy of this build is running; activating it and quitting")
+                NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+                    .first { $0 != .current }?.activate()
+                NSApp.terminate(nil)
+                return
+            }
+            instanceLock = lock
+            RecordingQueueService.shared.resumeInterrupted()
+        }
         let launch = AppLaunchTracker.shared.begin()
         startRemoteDeletionQueue()
-        NotesService.shared.start()
+        NotesService.shared.start(isCapturing: { [appState] in
+            appState.meetingRecordingState == .recording || appState.meetingTranslationRecordingState == .recording
+        })
         // Local agents: the Diduny skill for Claude Code and Codex, and the settings file they may edit.
         // Not while unit tests run: the test host would write skills for the test build.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
@@ -527,6 +543,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var promotedIDs = Set<UUID>()
         for id in ids {
             if let existing = storage.recordings.first(where: { $0.id == id }) {
+                // A finished meeting whose chunks were never removed: its audio is in the library.
+                if !existing.status.isInProgressCapture, existing.status != .needsRecovery,
+                   storage.hasPlayableAudio(for: existing)
+                {
+                    do {
+                        try await store.cleanup(recordingId: id)
+                        Log.app.notice("Removed leftover in-progress folder of a finished recording \(id, privacy: .public)")
+                    } catch {
+                        Log.app.error("Could not remove leftover in-progress folder: \(error.localizedDescription)")
+                    }
+                    continue
+                }
                 if existing.status == .needsRecovery
                     || (existing.status == .recording && storage.markNeedsRecovery(id: id))
                 {
@@ -824,6 +852,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let token = meetingActivityToken { ProcessInfo.processInfo.endActivity(token) }
         if let token = meetingTranslationActivityToken { ProcessInfo.processInfo.endActivity(token) }
         sleepFlushCoordinator = nil
+        CLIRunner.terminateAll()
+        RecordingsLibraryStorage.shared.flushPendingWrites()
     }
 
     func loadAudioData(from url: URL) async throws -> Data {

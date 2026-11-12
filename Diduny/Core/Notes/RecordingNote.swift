@@ -37,6 +37,26 @@ struct RecordingNote: Identifiable, Codable, Equatable {
     var unknownNames: [String]? = nil
     /// Seconds the model took.
     var seconds: Int? = nil
+    /// `processedAt` of the transcript the notes were written from. Nil on notes from older builds.
+    var transcriptProcessedAt: Date? = nil
+
+    /// The recording's transcript was redone or edited after these notes were written.
+    func isStale(for recording: Recording) -> Bool {
+        guard let transcriptProcessedAt, let processedAt = recording.processedAt else { return false }
+        return abs(processedAt.timeIntervalSince(transcriptProcessedAt)) >= 1
+    }
+
+    /// The transcript a note was written from is no longer the recording's transcript.
+    /// Dates are compared to the second: notes.json stores them without fractions.
+    static func transcriptChanged(from written: Recording, to current: Recording?) -> Bool {
+        guard let current, NotesService.isReady(current) else { return true }
+        if current.transcriptionText != written.transcriptionText { return true }
+        switch (written.processedAt, current.processedAt) {
+        case (nil, nil): return false
+        case let (old?, new?): return abs(new.timeIntervalSince(old)) >= 1
+        default: return true
+        }
+    }
 
     var markdown: String {
         var lines = ["## " + String(localized: "Summary"), summary, ""]

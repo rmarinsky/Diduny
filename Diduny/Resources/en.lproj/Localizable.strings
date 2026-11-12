@@ -2386,3 +2386,6 @@
 /* Settings > Modes & shortcuts */
 "Modes & shortcuts" = "Modes & shortcuts";
 "What runs each mode by default, how you start it, and the other shortcuts." = "What runs each mode by default, how you start it, and the other shortcuts.";
+"The transcription server no longer has this job. Transcribe the recording again." = "The transcription server no longer has this job. Transcribe the recording again.";
+"The transcription server could not be reached. Try again to pick up the same job." = "The transcription server could not be reached. Try again to pick up the same job.";
+"The transcription is taking too long. Try again to pick up the same job." = "The transcription is taking too long. Try again to pick up the same job.";

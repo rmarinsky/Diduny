@@ -2386,3 +2386,6 @@
 /* Settings > Modes & shortcuts */
 "Modes & shortcuts" = "Режими та шорткати";
 "What runs each mode by default, how you start it, and the other shortcuts." = "Що за замовчуванням запускає кожен режим, як його ввімкнути, та інші шорткати.";
+"The transcription server no longer has this job. Transcribe the recording again." = "Сервер транскрипції більше не має цього завдання. Транскрибуйте запис ще раз.";
+"The transcription server could not be reached. Try again to pick up the same job." = "Не вдалося зв'язатися із сервером транскрипції. Спробуйте ще раз, щоб продовжити те саме завдання.";
+"The transcription is taking too long. Try again to pick up the same job." = "Транскрипція триває задовго. Спробуйте ще раз, щоб продовжити те саме завдання.";
