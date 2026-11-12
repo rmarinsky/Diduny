@@ -110,7 +110,7 @@ final class YourLanguagesTests {
         #expect(store.translationPair?.id == "en-pl")
 
         store.yourLanguages = ["en", "uk"]
-        #expect(store.translationPair?.id == "en-uk")
+        #expect(store.translationPair?.id == "uk-en")
 
         store.yourLanguages = ["en"]
         #expect(store.translationPair == nil)
@@ -127,18 +127,18 @@ final class YourLanguagesTests {
 
     // MARK: - The one pair, shared by every place that edits it
 
-    @Test("T1-TM-01 Between menu rows: pairs of Your languages, the default selected, field EN ↔ UK")
+    @Test("T1-TM-01 Between menu rows: pairs of Your languages, the default selected, field UK ↔ EN")
     func betweenMenuRows() throws {
         let store = storage()
         store.yourLanguages = ["en", "uk", "pl", "de"]
         let english = Locale(identifier: "en")
         #expect(store.offeredTranslationPairs.map { $0.fullName(locale: english) } == [
-            "English ↔ Ukrainian", "English ↔ Polish", "English ↔ German",
+            "Ukrainian ↔ English", "English ↔ Polish", "English ↔ German",
             "Ukrainian ↔ Polish", "Ukrainian ↔ German", "Polish ↔ German"
         ])
         let selected = try #require(store.translationPair)
-        #expect(selected.id == "en-uk")
-        #expect(selected.shortLabel == "EN ↔ UK")
+        #expect(selected.id == "uk-en")
+        #expect(selected.shortLabel == "UK ↔ EN")
     }
 
     @Test("T5-MD-07 picking a pair not stored adds it; every reader sees the same pair")
@@ -148,14 +148,14 @@ final class YourLanguagesTests {
 
         store.selectTranslationPair(pair("en", "pl"))
         #expect(store.defaultTranslationLanguagePairID == "en-pl")
-        #expect(store.translationLanguagePairs.map(\.id) == ["en-uk", "en-pl"])
+        #expect(store.translationLanguagePairs.map(\.id) == ["uk-en", "en-pl"])
         #expect(store.translationPair?.id == "en-pl")
         #expect(SettingsStorage(defaults: defaults, migrationEnvironment: Self.noLayouts).translationPair?.id == "en-pl")
 
         // The same pair in the other direction selects the stored one, without a duplicate.
-        store.selectTranslationPair(pair("uk", "en"))
-        #expect(store.defaultTranslationLanguagePairID == "en-uk")
-        #expect(store.translationLanguagePairs.map(\.id) == ["en-uk", "en-pl"])
+        store.selectTranslationPair(pair("en", "uk"))
+        #expect(store.defaultTranslationLanguagePairID == "uk-en")
+        #expect(store.translationLanguagePairs.map(\.id) == ["uk-en", "en-pl"])
     }
 
     @Test("A picked pair adds missing languages to a stored Your languages")
@@ -188,12 +188,12 @@ final class YourLanguagesTests {
 
     // MARK: - Read-time defaults for users who never saw the new keys
 
-    @Test("Fresh install: Your languages English, Ukrainian; target English; pair EN ↔ UK")
+    @Test("Fresh install: Your languages English, Ukrainian; target English; pair UK ↔ EN")
     func freshInstallDefaults() {
         let store = storage()
         #expect(store.yourLanguages == ["en", "uk"])
         #expect(store.defaultTranslationTargetLanguage == "en")
-        #expect(store.translationPair?.id == "en-uk")
+        #expect(store.translationPair?.id == "uk-en")
         #expect(defaults.object(forKey: "yourLanguages") == nil)
         #expect(defaults.object(forKey: "defaultTranslationTargetLanguage") == nil)
     }
@@ -331,5 +331,12 @@ final class YourLanguagesTests {
         let stored = TranslationLanguagePair(languageA: "en", languageB: "uk")
         let chosen = try #require(languages.pair(defaultPair: uaEn, stored: [stored]))
         #expect(chosen.languageA == "en")
+    }
+
+    /// With no pair stored, the stored list is the default pair, Ukrainian to English.
+    @Test func unsetPairsReadAsTheDefaultPair() {
+        let storage = storage()
+        #expect(storage.translationLanguagePairs.map(\.id) == [TranslationLanguagePair.defaultPair.id])
+        #expect(storage.translationPair?.languageA == "uk")
     }
 }

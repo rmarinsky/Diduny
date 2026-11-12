@@ -979,6 +979,10 @@ final class SettingsStorage {
                     return sanitized
                 }
             }
+            // Nothing stored at all: the default pair (Ukrainian to English), not the legacy en/uk keys' defaults.
+            guard defaults.object(forKey: Key.translationLanguageA.rawValue) != nil
+                || defaults.object(forKey: Key.translationLanguageB.rawValue) != nil
+            else { return [Self.defaultTranslationPair] }
             return Self.sanitizedTranslationPairs([
                 TranslationLanguagePair(languageA: translationLanguageA, languageB: translationLanguageB)
             ])

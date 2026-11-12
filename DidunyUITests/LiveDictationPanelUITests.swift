@@ -71,14 +71,15 @@ final class LiveDictationPanelUITests: DidunyUITestCase {
 
     /// T1-SH-05
     func test_stopButtonInAllFourLivePanels() {
-        let keycaps = ["dictation": "⌥⌘D", "dictationTranslation": "⌥⌘/", "meeting": "⌥⌘M", "meetingTranslation": "⌥⇧⌘M"]
+        // Voice translation has no default shortcut since #111, so its Stop shows no keycap.
+        let keycaps = ["dictation": "⌥⌘D", "dictationTranslation": "", "meeting": "⌥⌘M", "meetingTranslation": "⌥⇧⌘M"]
         for (job, keycap) in keycaps {
             let app = openLivePanel(job)
             let stop = element(app, "livePanel.stop")
             XCTAssertEqual(stop.label, "Stop")
             XCTAssertTrue(stop.isHittable)
             let value = stop.value as? String ?? ""
-            XCTAssertTrue(value.contains(keycap), "\(job): \(value)")
+            XCTAssertTrue(keycap.isEmpty ? !value.contains("⌥⌘/") : value.contains(keycap), "\(job): \(value)")
             XCTAssertTrue(value.contains("Cancel: Esc ×3"), "\(job): \(value)")
             app.terminate()
         }
