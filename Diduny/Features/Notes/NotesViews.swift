@@ -264,6 +264,7 @@ struct NotesView: View {
     var body: some View {
         PageScaffold(title: "Notes", scrolls: false) {
             VStack(alignment: .leading, spacing: DS.Space.md) {
+                NotesWorkStrip()
                 if store.notes.isEmpty {
                     NotesEmptyState()
                 } else {
@@ -322,6 +323,30 @@ struct NotesView: View {
             VStack(alignment: .leading, spacing: 2) {
                 ActionItemRow(item: entry.item, noteID: entry.row.note.id, recording: entry.row.recording)
                 Text(entry.row.recording.displayTitle).font(DS.Font.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// Meetings being transcribed or getting notes now, one line each; hidden when nothing runs.
+private struct NotesWorkStrip: View {
+    @State private var board = ProcessingBoard.shared
+    @State private var library = RecordingsLibraryStorage.shared
+
+    var body: some View {
+        let ordered = board.ordered
+        if !ordered.isEmpty {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                ForEach(ordered, id: \.id) { entry in
+                    let title = library.recordings.first { $0.id == entry.id }?.displayTitle ?? String(localized: "Recording")
+                    HStack(spacing: DS.Space.sm) {
+                        ProgressView().controlSize(.small)
+                        Text(ProcessingBoard.line(entry.work, title: title))
+                            .font(DS.Font.callout).foregroundStyle(.secondary).lineLimit(1)
+                        Button("Open recording") { MainWindowController.shared.showRecording(id: entry.id) }
+                            .buttonStyle(.link)
+                    }
+                }
             }
         }
     }

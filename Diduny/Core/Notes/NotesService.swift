@@ -50,6 +50,14 @@ final class NotesStore {
         try commit(next)
     }
 
+    /// Adds a block to the end of a recording's notes; nothing the model wrote changes.
+    func append(_ addition: RecordingNote.Addition, to recordingID: UUID) throws {
+        guard let index = notes.firstIndex(where: { $0.recordingID == recordingID }) else { throw NotesError.noTranscript }
+        var next = notes
+        next[index].additions = (next[index].additions ?? []) + [addition]
+        try commit(next)
+    }
+
     func delete(recordingID: UUID) throws {
         var next = notes
         next.removeAll { $0.recordingID == recordingID }
@@ -143,6 +151,7 @@ final class NotesService {
     private var running: Job?
     private var runningTask: Task<Void, Never>?
     private var autoTimer: Timer?
+    private var completionObserver: NSObjectProtocol?
     private var retryScheduled = false
     /// True while a meeting is being captured; set by the app delegate from the live recorder state.
     private var isCapturing: () -> Bool = { false }
@@ -157,6 +166,9 @@ final class NotesService {
     func write(_ recordingID: UUID, template: NotesTemplate? = nil, kind: NotesWriterKind? = nil) {
         enqueue(Job(recordingID: recordingID, template: template, kind: kind, automatic: false, waitsForIdle: false))
     }
+
+    /// Notes waiting to be written, for `diduny status`.
+    var queuedCount: Int { queue.count }
 
     func isBusy(_ recordingID: UUID) -> Bool {
         switch states[recordingID] {
@@ -189,8 +201,16 @@ final class NotesService {
         NotesSettings.migrate()
         NotesSettings.migrateAutoDates()
         autoTimer?.invalidate()
+        // The minute check retries failed notes and catches transcripts saved outside the queue.
         autoTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
             Task { @MainActor in NotesService.shared.queueAutomaticNotes() }
+        }
+        if completionObserver == nil {
+            completionObserver = NotificationCenter.default.addObserver(
+                forName: .recordingTranscriptCompleted, object: RecordingsLibraryStorage.shared, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { NotesService.shared.queueAutomaticNotes() }
+            }
         }
         queueAutomaticNotes()
     }
@@ -380,11 +400,13 @@ final class NotesService {
         let job = queue.remove(at: index)
         states[job.recordingID] = .waiting(nil)
         running = job
+        ProcessingBoard.shared.start(job.recordingID, kind: .notes, lane: .notes)
         if job.backfill {
             backfill?.currentTitle = library.recordings.first { $0.id == job.recordingID }?.displayTitle
         }
         runningTask = Task {
             await ProcessingActivity.live.run("Writing notes") { await run(job) }
+            ProcessingBoard.shared.finish(job.recordingID, kind: .notes)
             running = nil
             runningTask = nil
             runNext()
@@ -468,6 +490,7 @@ final class NotesService {
         var drafts: [NotesDraft] = []
         for (index, part) in parts.enumerated() {
             states[recording.id] = .writing(part: index + 1, of: parts.count)
+            ProcessingBoard.shared.update(recording.id, notes: .writing(part: index + 1, of: parts.count))
             let header = parts.count > 1
                 ? "\nThis is part \(index + 1) of \(parts.count) of the transcript. Write notes for this part only.\n"
                 : ""
@@ -493,6 +516,7 @@ final class NotesService {
         var note = Self.note(from: draft, recording: recording, template: template, writer: writer.displayName, withTimes: withTimes)
         if NotesSettings.checkAgainstTranscript {
             states[recording.id] = .checking
+            ProcessingBoard.shared.update(recording.id, notes: .checking)
             note = try await check(note, transcriptParts: parts, writer: writer)
         }
         if NotesSettings.markUnknownNames {
@@ -523,6 +547,7 @@ final class NotesService {
             openQuestions: sections.contains(.openQuestions) ? (draft.openQuestions ?? []).map(clean) : [],
             points: template == .voiceNote ? (draft.points ?? []).map(clean) : [],
             topics: sections.contains(.topics) && template != .voiceNote ? (draft.topics ?? []).map(clean) : nil,
+            additions: NotesStore.shared.note(for: recording.id)?.additions,
             transcriptProcessedAt: recording.processedAt
         )
     }

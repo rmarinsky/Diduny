@@ -20,8 +20,19 @@ struct RecordingRowView: View {
 
     /// Progress while this recording is the queue's current item.
     private var queueProgress: QueueProgress? {
-        guard recording.status == .processing, queueService.currentRecordingId == recording.id else { return nil }
-        return queueService.currentProgress
+        guard recording.status == .processing else { return nil }
+        return queueService.progress(for: recording.id)
+    }
+
+    @State private var board = ProcessingBoard.shared
+
+    /// "Writing notes, part 1 of 2." while notes are written for this recording.
+    private var notesWork: String? {
+        guard let work = board.work(for: recording.id), work.kind == .notes else { return nil }
+        if case let .writing(part, total) = work.notes, total > 1 {
+            return String(localized: "Writing notes, part \(part) of \(total).")
+        }
+        return work.notes == .checking ? String(localized: "Checking the notes against the transcript.") : String(localized: "Writing notes.")
     }
 
     private var isPlaying: Bool {
@@ -88,6 +99,11 @@ struct RecordingRowView: View {
             }
             if let queueProgress {
                 progressLine(queueProgress)
+            } else if let notesWork {
+                Text(notesWork)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
             } else {
                 Text(previewText)
                     .font(.system(size: 12))

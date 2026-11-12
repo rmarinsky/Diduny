@@ -13,6 +13,7 @@ struct ProcessingReliabilityTests {
         private var waiters: [CheckedContinuation<Void, Never>] = []
         func wait() async { await withCheckedContinuation { waiters.append($0) } }
         func openAll() { let all = waiters; waiters = []; all.forEach { $0.resume() } }
+        func openFirst() { if !waiters.isEmpty { waiters.removeFirst().resume() } }
     }
 
     private struct EchoTranslator: TextTranslationProtocol {
@@ -82,19 +83,24 @@ struct ProcessingReliabilityTests {
         let id = try save(storage)
         let calls = Calls()
         let gate = Gate()
+        var returned = 0
         let queue = RecordingQueueService(storage: storage, localModelIsAvailable: { _ in true }, hasSession: { true },
-                                          makeRunner: { _ in runner(calls, whisper: { await gate.wait(); return "late" }) })
+                                          makeRunner: { _ in runner(calls, whisper: { await gate.wait(); returned += 1; return "late" }) })
         #expect(queue.enqueue([id], action: .transcribe, engineOverride: .whisper, speakerLabels: false))
         await waitUntil { calls.whisper == 1 }
 
         queue.cancelAll()
         #expect(queue.enqueue([id], action: .transcribe, engineOverride: .whisper, speakerLabels: false))
-        gate.openAll() // The cancelled run finishes only now, after the recording was queued again.
         await waitUntil { calls.whisper == 2 }
+        gate.openFirst() // The cancelled run finishes only now, while the new run is still working.
+        await waitUntil { returned == 1 }
+        try await Task.sleep(for: .milliseconds(50))
 
         #expect(storage.recordings.first { $0.id == id }?.status == .processing)
-        queue.cancelAll()
+        #expect(queue.isRunning(id))
         gate.openAll()
+        await waitUntil { !queue.isProcessing }
+        #expect(storage.recordings.first { $0.id == id }?.status == .transcribed)
     }
 
     // MARK: - Fix 7: what the queue works on survives quitting

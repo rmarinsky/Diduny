@@ -131,11 +131,13 @@ private struct StatusItemLabel: View {
     var reusedRecordingItems: [NSMenuItem]?
     /// Where the recording items' shortcuts are read; tests inject a fake (test-plan T5-HK-40).
     var hotkeys: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared
+    var board: ProcessingBoard = .shared
 
     func items() -> [NSMenuItem] {
         var items = calendarItems()
         if !items.isEmpty { items.append(.separator()) }
         items += recordingItems()
+        items += workItems()
         items += [.separator(), inputItem(), .separator()]
         items += [
             ActionMenuItem(String(localized: "Open Diduny")) { actions.openMainWindow(.overview) },
@@ -269,6 +271,22 @@ private struct StatusItemLabel: View {
         view.frame = NSRect(origin: .zero, size: size)
         item.view = view
         return item
+    }
+
+    /// Which recordings are being transcribed or getting notes; each opens its recording.
+    func workItems() -> [NSMenuItem] {
+        let ordered = board.ordered
+        guard !ordered.isEmpty else { return [] }
+        var items: [NSMenuItem] = [.separator(), .sectionHeader(title: String(localized: "Working on"))]
+        for (id, work) in ordered {
+            let title = RecordingsLibraryStorage.shared.recordings.first { $0.id == id }?.displayTitle ?? String(localized: "Recording")
+            let short = title.count > 40 ? String(title.prefix(39)) + "…" : title
+            let item = ActionMenuItem(ProcessingBoard.line(work, title: short)) { MainWindowController.shared.showRecording(id: id) }
+            item.image = NSImage(systemSymbolName: work.kind == .notes ? "list.bullet.rectangle" : "waveform",
+                                 accessibilityDescription: nil)
+            items.append(item)
+        }
+        return items
     }
 
     private func disabled(_ title: String) -> NSMenuItem {
