@@ -1,7 +1,7 @@
 import Foundation
 
-/// `diduny`: read-only access to Diduny meetings for local agents, plus the settings agents
-/// may change. Markdown by default, JSON with `--json`.
+/// `diduny`: Diduny meetings for local agents. Reads the library directly; changes (notes,
+/// tags, people, transcribing again, settings) go through the app. Markdown by default, JSON with `--json`.
 
 struct Arguments {
     var positional: [String] = []
@@ -9,7 +9,7 @@ struct Arguments {
     var options: [String: String] = [:]
 
     init(_ raw: [String]) throws {
-        let valued: Set<String> = ["--since", "--type", "--limit", "--library"]
+        let valued: Set<String> = ["--since", "--type", "--limit", "--library", "--person", "--project", "--tag", "--model"]
         var index = 0
         while index < raw.count {
             let item = raw[index]
@@ -39,9 +39,20 @@ let usage = """
 Usage: \(commandName) <command>
 
   meetings list [--since 7d] [--type meetings|voice|translations|files|all] [--limit N] [--json]
+               [--person <name>] [--project <name>] [--tag <tag>]
   meetings show <id|latest> [--no-transcript] [--json]
-  search "<text>" [--since 7d] [--type ...] [--limit N] [--json]
+  search "<text>" [--since 7d] [--type ...] [--person ...] [--project ...] [--limit N] [--json]
   audio <id|latest>
+  notes show <id|latest> [--json]
+  status [--json]               What Diduny is transcribing and writing notes for now
+
+Changes (only when the user asked for them in the conversation; Diduny applies them):
+  notes add <id> "<text>"       Adds a block marked "Added by Claude"; nothing else changes
+  notes write <id>              Writes notes with the writer chosen in Diduny
+  tag <id> <tag>...             untag <id> <tag>...
+  project <id> "<name>"         project <id> --clear
+  people <id> add|remove "<name>"...
+  retranscribe <id> [--model <whisper model>]   Transcribes again with Whisper on this Mac
   guide                         Instructions for agents: how to find, read and summarize meetings
   settings list [--json]        Settings agents may change, with current values
   settings get <key>
@@ -123,6 +134,39 @@ func run() throws {
     case "settings":
         try SettingsCommand.run(rest, json: args.json, bundleIdentifier: library.bundleIdentifier)
 
+    case "notes":
+        try NotesCommand.run(rest, args: args, library: library)
+
+    case "status":
+        output(try AppCommands.status(library: library, json: args.json))
+
+    case "tag", "untag", "project", "people", "retranscribe":
+        guard let reference = rest.first else { throw CLIError("Usage: \(commandName) \(command) <id> ...") }
+        let all = try library.load()
+        let recording = try library.find(reference, in: reference == "latest" ? try filtered(all, args) : all)
+        var values = Array(rest.dropFirst())
+        let action: AgentCommandProtocol.Command.Action
+        switch command {
+        case "tag": action = .addTags
+        case "untag": action = .removeTags
+        case "project":
+            action = .setProject
+            if args.flags.contains("--clear") { values = [] } else if values.isEmpty {
+                throw CLIError("Usage: \(commandName) project <id> \"<name>\" or --clear")
+            }
+            values = values.isEmpty ? [] : [values.joined(separator: " ")]
+        case "people":
+            guard let verb = values.first, ["add", "remove"].contains(verb), values.count > 1 else {
+                throw CLIError("Usage: \(commandName) people <id> add|remove \"<name>\"...")
+            }
+            action = verb == "add" ? .addPeople : .removePeople
+            values.removeFirst()
+        default: action = .retranscribe
+        }
+        if [.addTags, .removeTags].contains(action), values.isEmpty { throw CLIError("Give at least one tag.") }
+        output(try AppCommands.send(.init(action: action, recordingID: recording.id, values: values,
+                                          model: args.options["--model"]), library: library))
+
     default:
         throw CLIError("Unknown command \(command).\n\n\(usage)")
     }
@@ -134,7 +178,15 @@ func filtered(_ recordings: [Recording], _ args: Arguments) throws -> [Recording
         throw CLIError("--type takes \(TypeFilter.allCases.map(\.rawValue).joined(separator: ", ")).")
     }
     let since = try args.options["--since"].map(parseSince)
-    return recordings.filter { type.includes($0.type) && (since == nil || $0.createdAt >= since!) }
+    let person = args.options["--person"]
+    let project = args.options["--project"]?.lowercased()
+    let tag = args.options["--tag"]?.lowercased()
+    return recordings.filter { recording in
+        type.includes(recording.type) && (since == nil || recording.createdAt >= since!)
+            && (person == nil || recording.involves(person: person!))
+            && (project == nil || recording.project?.lowercased() == project)
+            && (tag == nil || (recording.tags ?? []).contains { $0.lowercased() == tag })
+    }
 }
 
 do {

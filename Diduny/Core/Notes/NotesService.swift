@@ -50,6 +50,14 @@ final class NotesStore {
         try commit(next)
     }
 
+    /// Adds a block to the end of a recording's notes; nothing the model wrote changes.
+    func append(_ addition: RecordingNote.Addition, to recordingID: UUID) throws {
+        guard let index = notes.firstIndex(where: { $0.recordingID == recordingID }) else { throw NotesError.noTranscript }
+        var next = notes
+        next[index].additions = (next[index].additions ?? []) + [addition]
+        try commit(next)
+    }
+
     func delete(recordingID: UUID) throws {
         var next = notes
         next.removeAll { $0.recordingID == recordingID }
@@ -143,7 +151,11 @@ final class NotesService {
     private var running: Job?
     private var runningTask: Task<Void, Never>?
     private var autoTimer: Timer?
+    private var completionObserver: NSObjectProtocol?
     private var retryScheduled = false
+    /// True while a meeting is being captured; set by the app delegate from the live recorder state.
+    private var isCapturing: () -> Bool = { false }
+    private let failures = AutomaticNotesFailures()
     private let logger = Logger(subsystem: "ua.com.rmarinsky.diduny", category: "Notes")
 
     private var store: NotesStore { .shared }
@@ -154,6 +166,9 @@ final class NotesService {
     func write(_ recordingID: UUID, template: NotesTemplate? = nil, kind: NotesWriterKind? = nil) {
         enqueue(Job(recordingID: recordingID, template: template, kind: kind, automatic: false, waitsForIdle: false))
     }
+
+    /// Notes waiting to be written, for `diduny status`.
+    var queuedCount: Int { queue.count }
 
     func isBusy(_ recordingID: UUID) -> Bool {
         switch states[recordingID] {
@@ -181,12 +196,21 @@ final class NotesService {
     }
 
     /// Checks once a minute for new transcripts that should get notes automatically.
-    func start() {
+    func start(isCapturing: @escaping () -> Bool) {
+        self.isCapturing = isCapturing
         NotesSettings.migrate()
         NotesSettings.migrateAutoDates()
         autoTimer?.invalidate()
+        // The minute check retries failed notes and catches transcripts saved outside the queue.
         autoTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
             Task { @MainActor in NotesService.shared.queueAutomaticNotes() }
+        }
+        if completionObserver == nil {
+            completionObserver = NotificationCenter.default.addObserver(
+                forName: .recordingTranscriptCompleted, object: RecordingsLibraryStorage.shared, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { NotesService.shared.queueAutomaticNotes() }
+            }
         }
         queueAutomaticNotes()
     }
@@ -205,8 +229,11 @@ final class NotesService {
             store.prune(keeping: Set(library.recordings.map(\.id)))
         }
         guard NotesSettings.writer != .off else { return }
-        for recording in library.recordings where Self.isReady(recording)
-            && store.note(for: recording.id) == nil && states[recording.id] == nil {
+        for recording in library.recordings where Self.isReady(recording) && store.note(for: recording.id) == nil {
+            if case .failed = states[recording.id], failures.isRetryDue(recording.id) {
+                states[recording.id] = nil
+            }
+            guard states[recording.id] == nil, failures.isRetryDue(recording.id) else { continue }
             if recording.type.isMeetingLike {
                 let timing = NotesSettings.meetingTiming
                 guard timing != .onRequest, let since = NotesSettings.meetingAutoSince, recording.createdAt >= since else { continue }
@@ -220,7 +247,7 @@ final class NotesService {
         runNext()
     }
 
-    static func isReady(_ recording: Recording) -> Bool {
+    nonisolated static func isReady(_ recording: Recording) -> Bool {
         NotesTranscript.hasTranscript(recording) && (recording.status == .transcribed || recording.status == .translated)
     }
 
@@ -315,42 +342,53 @@ final class NotesService {
 
     // MARK: - Queue
 
-    /// Why the next job cannot start yet, or nil when it can.
-    private func blocker(for job: Job) -> String? {
-        // Only a capture running now: a recording left to recover (`needsRecovery`) must not hold notes forever.
-        if library.recordings.contains(where: { $0.status == .recording }) {
-            return String(localized: "Waits while you record.")
-        }
-        guard job.automatic else { return nil }
-        if NotesSettings.waitForPower, !Self.isOnPowerAdapter {
-            return String(localized: "Waits for the power adapter.")
-        }
-        if job.waitsForIdle, Self.idleSeconds < 120 {
-            return String(localized: "Waits until the Mac is idle.")
-        }
+    /// Why a job cannot start yet, or nil when it can. Reads the live recorder, never library rows:
+    /// a row left in `.recording` or `.needsRecovery` by a crash must not hold notes forever.
+    static func blocker(automatic: Bool, waitsForIdle: Bool, isCapturing: Bool,
+                        waitForPower: Bool, isOnPower: Bool, idleSeconds: TimeInterval) -> String? {
+        if isCapturing { return String(localized: "Waits while you record.") }
+        guard automatic else { return nil }
+        if waitForPower, !isOnPower { return String(localized: "Waits for the power adapter.") }
+        if waitsForIdle, idleSeconds < 120 { return String(localized: "Waits until the Mac is idle.") }
         return nil
+    }
+
+    private func blocker(for job: Job) -> String? {
+        Self.blocker(automatic: job.automatic, waitsForIdle: job.waitsForIdle, isCapturing: isCapturing(),
+                     waitForPower: NotesSettings.waitForPower, isOnPower: Self.isOnPowerAdapter,
+                     idleSeconds: job.waitsForIdle ? Self.idleSeconds : .infinity)
+    }
+
+    /// The first job that may start now: a requested note never waits behind an automatic one
+    /// that is waiting for idle time or the power adapter.
+    static func firstRunnable(_ blockers: [String?]) -> Int? {
+        blockers.firstIndex { $0 == nil }
     }
 
     private func runNext() {
         guard running == nil else { return }
         if queue.isEmpty { feedBackfill() }
-        guard running == nil, let job = queue.first else { return }
-        if job.backfill, let state = backfill {
+        guard running == nil, !queue.isEmpty else { return }
+        if queue.contains(where: \.backfill), let state = backfill {
             if state.paused {
                 returnQueuedBackfillJobs(toBacklog: true)
-                return
+                return runNext()
             }
             // The confirmation named where the transcripts go; another writer needs a new one.
             if NotesSettings.writer != state.kind {
                 backfill?.paused = true
                 backfill?.pauseReason = String(localized: "Paused because you chose another writer. Stop and start again to confirm where the transcripts go.")
                 returnQueuedBackfillJobs(toBacklog: true)
-                return
+                return runNext()
             }
         }
-        if let reason = blocker(for: job) {
+        guard !queue.isEmpty else { return }
+        let blockers = queue.map(blocker(for:))
+        for (job, reason) in zip(queue, blockers) where reason != nil {
             states[job.recordingID] = .waiting(reason)
             if job.backfill { backfill?.currentTitle = nil }
+        }
+        guard let index = Self.firstRunnable(blockers) else {
             guard !retryScheduled else { return }
             retryScheduled = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
@@ -359,13 +397,16 @@ final class NotesService {
             }
             return
         }
-        queue.removeFirst()
+        let job = queue.remove(at: index)
+        states[job.recordingID] = .waiting(nil)
         running = job
+        ProcessingBoard.shared.start(job.recordingID, kind: .notes, lane: .notes)
         if job.backfill {
             backfill?.currentTitle = library.recordings.first { $0.id == job.recordingID }?.displayTitle
         }
         runningTask = Task {
-            await run(job)
+            await ProcessingActivity.live.run("Writing notes") { await run(job) }
+            ProcessingBoard.shared.finish(job.recordingID, kind: .notes)
             running = nil
             runningTask = nil
             runNext()
@@ -373,9 +414,16 @@ final class NotesService {
     }
 
     private func run(_ job: Job) async {
+        // A transcript that is being redone, or failed, gets notes once it is ready again.
         guard let recording = library.recordings.first(where: { $0.id == job.recordingID }) else {
             states[job.recordingID] = nil
             finishBackfillJob(job, error: nil)
+            return
+        }
+        guard Self.isReady(recording) else {
+            states[job.recordingID] = nil
+            // Not written: a backfill lists it as failed, so Retry can write it once the transcript is ready.
+            finishBackfillJob(job, error: job.backfill ? String(localized: "The transcript is not ready yet.") : nil)
             return
         }
         let started = Date()
@@ -384,9 +432,20 @@ final class NotesService {
             let writer = try await Self.makeWriter(kind: kind)
             var note = try await write(recording, with: writer, template: job.template)
             try Task.checkCancellation()
+            // The transcript changed while the model wrote: these notes describe the old one.
+            if RecordingNote.transcriptChanged(from: recording, to: library.recordings.first { $0.id == job.recordingID }) {
+                logger.info("Transcript changed while writing notes; writing them again")
+                states[job.recordingID] = nil
+                queue.insert(job, at: 0)
+                states[job.recordingID] = .waiting(nil)
+                return
+            }
             let seconds = Int(Date().timeIntervalSince(started))
             note.seconds = seconds
+            // Blocks an agent added while the model wrote are kept.
+            note.additions = store.note(for: job.recordingID)?.additions
             try store.save(note)
+            failures.clear(job.recordingID)
             states[job.recordingID] = nil
             NotesSettings.setLastRun(recording: recording, seconds: seconds, writer: writer.displayName, for: kind)
             logger.info("Notes written in \(seconds) s by \(writer.displayName, privacy: .public)")
@@ -398,6 +457,7 @@ final class NotesService {
                 return
             }
             states[job.recordingID] = .failed(error.localizedDescription)
+            if job.automatic, !job.backfill { failures.record(job.recordingID) }
             finishBackfillJob(job, error: error.localizedDescription)
             logger.error("Notes failed after \(Int(Date().timeIntervalSince(started))) s")
         }
@@ -438,6 +498,7 @@ final class NotesService {
         var drafts: [NotesDraft] = []
         for (index, part) in parts.enumerated() {
             states[recording.id] = .writing(part: index + 1, of: parts.count)
+            ProcessingBoard.shared.update(recording.id, notes: .writing(part: index + 1, of: parts.count))
             let header = parts.count > 1
                 ? "\nThis is part \(index + 1) of \(parts.count) of the transcript. Write notes for this part only.\n"
                 : ""
@@ -463,6 +524,7 @@ final class NotesService {
         var note = Self.note(from: draft, recording: recording, template: template, writer: writer.displayName, withTimes: withTimes)
         if NotesSettings.checkAgainstTranscript {
             states[recording.id] = .checking
+            ProcessingBoard.shared.update(recording.id, notes: .checking)
             note = try await check(note, transcriptParts: parts, writer: writer)
         }
         if NotesSettings.markUnknownNames {
@@ -492,7 +554,9 @@ final class NotesService {
             actionItems: sections.contains(.actionItems) || template == .voiceNote ? actions : [],
             openQuestions: sections.contains(.openQuestions) ? (draft.openQuestions ?? []).map(clean) : [],
             points: template == .voiceNote ? (draft.points ?? []).map(clean) : [],
-            topics: sections.contains(.topics) && template != .voiceNote ? (draft.topics ?? []).map(clean) : nil
+            topics: sections.contains(.topics) && template != .voiceNote ? (draft.topics ?? []).map(clean) : nil,
+            additions: NotesStore.shared.note(for: recording.id)?.additions,
+            transcriptProcessedAt: recording.processedAt
         )
     }
 
@@ -615,5 +679,57 @@ final class NotesService {
         content.title = String(localized: "Notes are ready")
         content.body = title
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+}
+
+/// Automatic notes that failed: when and how often, kept across launches so a writer that keeps
+/// failing is tried again later with growing pauses and then left alone.
+@MainActor
+final class AutomaticNotesFailures {
+    struct Failure: Codable, Equatable {
+        var failedAt: Date
+        var attempts: Int
+    }
+
+    static let maxAttempts = 4
+    /// 5, 10, then 20 minutes after the latest failure.
+    static func delay(afterAttempts attempts: Int) -> TimeInterval {
+        300 * pow(2, Double(max(attempts - 1, 0)))
+    }
+
+    static func isRetryDue(_ failure: Failure?, now: Date) -> Bool {
+        guard let failure else { return true }
+        return failure.attempts < maxAttempts && now >= failure.failedAt.addingTimeInterval(delay(afterAttempts: failure.attempts))
+    }
+
+    private let defaults: UserDefaults
+    private let key = "notes.automaticFailures"
+    private let now: () -> Date
+
+    init(defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init) {
+        self.defaults = defaults
+        self.now = now
+    }
+
+    private(set) var all: [UUID: Failure] {
+        get {
+            guard let data = defaults.data(forKey: key),
+                  let decoded = try? JSONDecoder().decode([UUID: Failure].self, from: data) else { return [:] }
+            return decoded
+        }
+        set { defaults.set(try? JSONEncoder().encode(newValue), forKey: key) }
+    }
+
+    func isRetryDue(_ recordingID: UUID) -> Bool {
+        Self.isRetryDue(all[recordingID], now: now())
+    }
+
+    func record(_ recordingID: UUID) {
+        all[recordingID] = Failure(failedAt: now(), attempts: (all[recordingID]?.attempts ?? 0) + 1)
+    }
+
+    func clear(_ recordingID: UUID) {
+        guard all[recordingID] != nil else { return }
+        all[recordingID] = nil
     }
 }

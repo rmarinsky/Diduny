@@ -215,8 +215,8 @@ private struct AgentsGroup: View {
             SettingsLineRow(
                 title: "Command line tool",
                 caption: installed
-                    ? "Installed as \(AgentCommandLineTool.commandName) in ~/.local/bin. Agents such as Claude Code and Codex use it to read your meetings."
-                    : "Lets Claude Code, Codex and other agents on this Mac read your meetings. It only reads.",
+                    ? "Installed as \(AgentCommandLineTool.commandName) in ~/.local/bin. Agents such as Claude Code and Codex use it to read your meetings and, when you ask them, to add to notes or tag recordings."
+                    : "Lets Claude Code, Codex and other agents on this Mac read your meetings. When you ask, they can add to notes, tag recordings and transcribe again; they never delete anything.",
                 kind: .button
             ) {
                 if installed {

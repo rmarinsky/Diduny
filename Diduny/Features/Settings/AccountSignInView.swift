@@ -189,6 +189,9 @@ struct AccountSignInView: View {
 @MainActor
 struct AnalyticsSettingsSection: View {
     var analytics: AnalyticsService = .shared
+    var settings: SettingsStorage = .shared
+    /// SettingsStorage is not observable; this mirrors the toggle so it redraws.
+    @State private var featureUsageOn = true
     var body: some View {
         Section("Privacy") {
             Toggle("Share usage statistics", isOn: Binding(get: { analytics.enabled }, set: { value in
@@ -196,7 +199,26 @@ struct AnalyticsSettingsSection: View {
             }))
             .disabled(analytics.isLoading && !analytics.enabled)
             Text(
-                "Optional on Free and Pro. Shares duration, local/cloud mode and feature category, plus app launches and unexpected quits with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days. No audio, text or file names. Cloud limits, payments and necessary security records are handled separately."
+                "Optional on Free and Pro. Shares duration, local/cloud mode, feature category and the transcription engine, plus app launches, unexpected quits and error codes with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days (error codes 90 days). No audio, text or file names. Cloud limits, payments and necessary security records are handled separately."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+            if analytics.enabled, analytics.engineTimeVisible {
+                Text(
+                    "The Diduny team sees how much time this account spends on each transcription engine and model, to help with support. Turn off sharing to stop it."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+            }
+            Toggle("Share anonymous feature usage", isOn: Binding(
+                get: { featureUsageOn },
+                set: { value in
+                    settings.shareFeatureUsage = value
+                    if !value { FeatureUsageCounter.shared.discardPending() }
+                    featureUsageOn = value
+                }
+            ))
+            .onAppear { featureUsageOn = settings.shareFeatureUsage }
+            Text(
+                "On by default. Counts which features and shortcuts are used each day, so we know what to improve. Sent once a day while you are signed in, so only Diduny accounts can send counts; the server stores the daily totals without your account, and nothing you say or type."
             )
             .font(.caption).foregroundStyle(.secondary)
             if let error = analytics.errorMessage { Text(error).font(.caption).foregroundStyle(.red) }

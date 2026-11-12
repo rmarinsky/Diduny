@@ -117,6 +117,10 @@ final class KeyPopupState {
             let value = try await account.fetchUsage(apiKey: key)
             connection = .works(plan: value.planName)
             usage = .loaded(value)
+        } catch ElevenLabsError.userReadNotGranted {
+            // Works for transcription; credits need the User (read) permission.
+            connection = .works(plan: "")
+            usage = .unavailable
         } catch {
             connection = .failed(error as? ElevenLabsError ?? .network)
             usage = .unavailable

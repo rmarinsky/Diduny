@@ -475,6 +475,7 @@ extension AppDelegate {
 
             // Show specific error message for timeout
             await MainActor.run {
+                reportFailure(error, job: .dictation)
                 appState.errorMessage = error.localizedDescription
                 appState.recordingState = .error
                 appState.recordingStartTime = nil
@@ -495,6 +496,7 @@ extension AppDelegate {
             }
 
             await MainActor.run {
+                reportFailure(error, job: .dictation)
                 appState.errorMessage = error.localizedDescription
                 appState.recordingState = .error
                 appState.recordingStartTime = nil
@@ -653,7 +655,8 @@ extension AppDelegate {
             Task { await AnalyticsService.shared.record(
                 duration: duration,
                 mode: provider.rawValue,
-                scenario: "dictation"
+                scenario: "dictation",
+                engine: analyticsEngine(for: .dictation)
             ) }
             let shouldCompleteSetup = !OnboardingManager.shared.hasCompletedOnboarding
                 && provider == .cloud
@@ -711,6 +714,7 @@ extension AppDelegate {
             _ = await realtimeStopTask.value
             Log.app.error("stopRecording: \(error.localizedDescription)")
             await MainActor.run {
+                reportFailure(error, job: .dictation)
                 appState.errorMessage = error.localizedDescription
                 appState.isEmptyTranscription = false
                 appState.deviceFallbackWarning = nil
@@ -858,6 +862,7 @@ extension AppDelegate {
                 return
             }
             await MainActor.run {
+                reportFailure(error, job: .dictation)
                 appState.errorMessage = error.localizedDescription
                 appState.isEmptyTranscription = isEmptyTranscription
                 appState.deviceFallbackWarning = nil

@@ -6,7 +6,7 @@ enum YouTubeRemoteMediaSource {
     static let provider = "youtube"
 }
 
-/// Read-only access to the Diduny library. Never writes to it.
+/// Reads the Diduny library. Never writes to it: changes go through the app (`AppCommands`).
 struct Library {
     let directory: URL
     let bundleIdentifier: String
@@ -16,11 +16,14 @@ struct Library {
     /// `DIDUNY_LIBRARY` or `--library` points at another folder.
     static func locate(override: String?) -> Library {
         let bundleID = enclosingAppBundleIdentifier() ?? "ua.com.rmarinsky.diduny"
-        if let path = override ?? ProcessInfo.processInfo.environment["DIDUNY_LIBRARY"] {
-            return Library(directory: URL(fileURLWithPath: (path as NSString).expandingTildeInPath), bundleIdentifier: bundleID)
-        }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return Library(directory: support.appendingPathComponent(bundleID), bundleIdentifier: bundleID)
+        let appDirectory = support.appendingPathComponent(bundleID)
+        if let path = override ?? ProcessInfo.processInfo.environment["DIDUNY_LIBRARY"] {
+            let directory = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+            return Library(directory: directory, bundleIdentifier: bundleID,
+                           isAppLibrary: directory.standardizedFileURL.path == appDirectory.standardizedFileURL.path)
+        }
+        return Library(directory: appDirectory, bundleIdentifier: bundleID, isAppLibrary: true)
     }
 
     /// `Diduny.app/Contents/Helpers/diduny`, reached directly or through a symlink in PATH.
@@ -40,6 +43,10 @@ struct Library {
         let app = executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         return app.pathExtension == "app" ? app : nil
     }
+
+    /// True for the library of the app this tool ships in, the only one a running Diduny watches for
+    /// changes. `--library` and `DIDUNY_LIBRARY` folders can be read, not changed.
+    let isAppLibrary: Bool
 
     var metadataURL: URL { directory.appendingPathComponent("recordings_metadata.json") }
 

@@ -184,6 +184,29 @@ struct Recording: Identifiable, Codable, Equatable {
     var calendarCandidates: [CalendarMeeting]? = nil
     /// The person removed the link, so automatic linking leaves this recording alone.
     var calendarLinkDeclined: Bool? = nil
+    /// Free-text project, e.g. "Diduny". Set in the recording or by an agent the user asked.
+    var project: String? = nil
+    /// Free-text topics.
+    var tags: [String]? = nil
+    /// People this recording is about or with, beyond the calendar attendees.
+    var people: [String]? = nil
+    /// Recognizer speaker label ("Speaker 1") to a person's name. Set only by the user in the app.
+    var speakerNames: [String: String]? = nil
+
+    /// Attendees, linked people and named speakers, without repeats, in that order.
+    var allPeople: [String] {
+        var seen = Set<String>()
+        let names = (calendarMeeting?.attendees ?? []).compactMap { $0.name ?? $0.email }
+            + (people ?? []) + (speakerNames.map { Array($0.values).sorted() } ?? [])
+        return names.filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+    }
+
+    /// Whether the person's name is among the attendees, linked people or named speakers (case-insensitive part match).
+    func involves(person: String) -> Bool {
+        let query = person.lowercased()
+        let emails = (calendarMeeting?.attendees ?? []).compactMap(\.email)
+        return (allPeople + emails).contains { $0.lowercased().contains(query) }
+    }
 
     var effectiveDurationSeconds: TimeInterval {
         guard let trimRange, trimRange.isValid(for: durationSeconds) else { return durationSeconds }
@@ -429,8 +452,10 @@ extension Recording {
         let meeting = calendarMeeting
         let fields: [String?] = [displayTitle, libraryDisplayName, description, sourceFileName,
                                  remoteSource?.channelName, remoteSource?.description,
-                                 meeting?.title, meeting?.notes, meeting?.location, meeting?.calendarTitle]
+                                 meeting?.title, meeting?.notes, meeting?.location, meeting?.calendarTitle, project]
             + (meeting?.attendees ?? []).flatMap { [$0.name, $0.email] }
+            + (tags ?? []).map(Optional.some) + (people ?? []).map(Optional.some)
+            + (speakerNames.map { Array($0.values) } ?? []).map(Optional.some)
             + resolvedTranscriptHistory.map(\.text)
         // NUL separator keeps a query from matching across two fields.
         return fields.compactMap { $0?.lowercased() }.joined(separator: "\u{0}")

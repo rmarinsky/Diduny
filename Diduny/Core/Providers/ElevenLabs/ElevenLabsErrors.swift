@@ -4,6 +4,9 @@ import Foundation
 enum ElevenLabsError: Error, Equatable, LocalizedError {
     case invalidKey
     case missingPermission
+    /// The subscription call answered the explicit `missing_permissions` code: the key is valid but has
+    /// no User (read). Thrown only by `ElevenLabsAccountService.fetchUsage`; such a key still transcribes.
+    case userReadNotGranted
     case planOrModelNotAvailable
     case termsNotAccepted
     case quotaExceeded
@@ -22,6 +25,8 @@ enum ElevenLabsError: Error, Equatable, LocalizedError {
             String(localized: "ElevenLabs rejected the API key")
         case .missingPermission:
             String(localized: "Key lacks permission: speech_to_text")
+        case .userReadNotGranted:
+            String(localized: "Key lacks permission: user_read")
         case .planOrModelNotAvailable:
             String(localized: "Your ElevenLabs plan doesn't include this model")
         case .termsNotAccepted:
@@ -59,6 +64,8 @@ enum ElevenLabsError: Error, Equatable, LocalizedError {
             return .termsNotAccepted
         }
         if code == "quota_exceeded" || code == "insufficient_credits" { return .quotaExceeded }
+        // A restricted key answers 401 `missing_permissions`: the key is valid, a permission is off.
+        if code == "missing_permissions" { return .missingPermission }
         switch httpStatus {
         case 401: return .invalidKey
         case 402: return .quotaExceeded
@@ -68,6 +75,12 @@ enum ElevenLabsError: Error, Equatable, LocalizedError {
         case 429: return .rateLimited
         default: return .unknown(status: httpStatus, requestID: requestID)
         }
+    }
+
+    /// True only for the explicit `missing_permissions` code; a bare 403 (e.g. an IP allowlist) is not it.
+    static func isMissingPermissionsCode(_ body: Data) -> Bool {
+        let detail = (try? JSONSerialization.jsonObject(with: body) as? [String: Any])?["detail"] as? [String: Any]
+        return ((detail?["code"] as? String) ?? (detail?["status"] as? String)) == "missing_permissions"
     }
 
     static func from(transportError error: Error) -> ElevenLabsError {

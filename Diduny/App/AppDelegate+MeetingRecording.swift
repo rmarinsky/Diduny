@@ -559,6 +559,7 @@ extension AppDelegate {
             }
 
             await MainActor.run {
+                reportFailure(error, job: .meeting)
                 appState.errorMessage = error.localizedDescription
                 appState.meetingRecordingState = .error
                 handleMeetingStateChange(.error)
@@ -983,7 +984,7 @@ extension AppDelegate {
                         provider: TranscriptionProvider.cloud.rawValue
                     )
                 } else if RecordingQueueService.shared.isQueued(savedRecordingID)
-                    || RecordingQueueService.shared.currentRecordingId == savedRecordingID
+                    || RecordingQueueService.shared.isRunning(savedRecordingID)
                 {
                     // Already handed to the queue before the panel update.
                 } else if recordingFailedAtHandOff(savedRecordingID) {
@@ -1114,6 +1115,7 @@ extension AppDelegate {
                 ?? (RecordingsLibraryStorage.shared.recordings.contains { $0.id == recordingId } ? recordingId : nil)
             await MainActor.run {
                 DictationOverlayController.shared.setOutcomeRecordingID(openableID)
+                reportFailure(error, job: .meeting)
                 appState.errorMessage = userMessage
                 appState.meetingRecordingState = .error
                 appState.meetingRecordingStartTime = nil

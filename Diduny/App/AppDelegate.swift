@@ -194,6 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The running app's delegate. NSApp.delegate is SwiftUI's adaptor, not this class.
     static weak var current: AppDelegate?
     private var powerOffObserver: NSObjectProtocol?
+    private var instanceLock: AppInstanceLock?
     lazy var realtimeTranscriptionService: RealtimeTranscriptionProtocol = CloudRealtimeService()
     /// BYOK realtime engine for the current dictation; nil = `realtimeTranscriptionService`.
     var dictationRealtimeService: RealtimeTranscriptionProtocol?
@@ -241,14 +242,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_: Notification) {
         Self.current = self
+        // Two copies of one build would both write the same library; the second one leaves.
+        // Not under unit tests: the test host is the DEV build, which may be running.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            // Before anything loads the library: a second copy must not read or write it.
+            switch AppInstanceLock.acquire(in: RecordingsLibraryStorage.defaultAppDirectory) {
+            case let .acquired(lock):
+                instanceLock = lock
+            case .heldElsewhere:
+                Log.app.notice("Another copy of this build is running; activating it and quitting")
+                NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+                    .first { $0 != .current }?.activate()
+                NSApp.terminate(nil)
+                return
+            case let .unavailable(code):
+                // Not knowing must not keep Diduny from starting; it runs without the lock.
+                Log.app.error("Instance lock file could not be opened (errno \(code)); running without it")
+            }
+            RecordingQueueService.shared.resumeInterrupted()
+        }
         let launch = AppLaunchTracker.shared.begin()
         startRemoteDeletionQueue()
-        NotesService.shared.start()
+        NotesService.shared.start(isCapturing: { [appState] in
+            appState.meetingRecordingState == .recording || appState.meetingTranslationRecordingState == .recording
+        })
         // Local agents: the Diduny skill for Claude Code and Codex, and the settings file they may edit.
         // Not while unit tests run: the test host would write skills for the test build.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
             AgentSkillInstaller.sync()
             AgentSettingsSync.shared.start()
+            AgentCommandCenter.shared.start()
         }
         // Sudden termination can end the process at logout/shutdown without
         // applicationWillTerminate; those exits are clean, not crashes.
@@ -265,6 +288,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             launch.previousExit.rawValue,
             launch.rebootedSinceLast ? 1 : 0
         )
+        let launchOS = ProcessInfo.processInfo.operatingSystemVersion
+        DiagnosticLog.shared.record(.appLaunch, [
+            .appVersion: .string(IncidentReporter.appVersion),
+            .osVersion: .string("\(launchOS.majorVersion).\(launchOS.minorVersion).\(launchOS.patchVersion)"),
+            .arch: .string(AppLaunchTracker.hardwareArchitecture()),
+            .previousExit: .string(launch.previousExit.rawValue),
+        ])
+        Task { await FeatureUsageCounter.shared.flush() }
         Task {
             guard AuthService.shared.isLoggedIn else { return }
             await AnalyticsService.shared.refresh()
@@ -297,11 +328,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainWindowController.shared.configure(appDelegate: self)
         statusMenuController = StatusMenuController(appState: appState) { [unowned self] in
             StatusMenuBuilder(appState: appState, audioDeviceManager: audioDeviceManager, connection: .shared, actions: .init(
-                toggleRecording: { self.toggleRecording() },
-                toggleTranslation: { self.toggleTranslationRecording() },
-                toggleMeeting: { self.toggleMeetingRecording() },
-                toggleMeetingTranslation: { self.toggleMeetingTranslationRecording() },
-                batchFilesAndURLs: { self.batchFilesAndURLs() },
+                toggleRecording: {
+                    FeatureUsageCounter.shared.record(.dictation, via: .menu)
+                    self.toggleRecording()
+                },
+                toggleTranslation: {
+                    FeatureUsageCounter.shared.record(.translation, via: .menu)
+                    self.toggleTranslationRecording()
+                },
+                toggleMeeting: {
+                    FeatureUsageCounter.shared.record(.meeting, via: .menu)
+                    self.toggleMeetingRecording()
+                },
+                toggleMeetingTranslation: {
+                    FeatureUsageCounter.shared.record(.meetingTranslation, via: .menu)
+                    self.toggleMeetingTranslationRecording()
+                },
+                batchFilesAndURLs: {
+                    FeatureUsageCounter.shared.record(.fileTranscription, via: .menu)
+                    self.batchFilesAndURLs()
+                },
                 openMainWindow: { self.openMainWindow(section: $0) },
                 checkForUpdates: { self.updaterManager.checkForUpdates() }
             ))
@@ -527,6 +573,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var promotedIDs = Set<UUID>()
         for id in ids {
             if let existing = storage.recordings.first(where: { $0.id == id }) {
+                // A finished meeting whose chunks were never removed: its audio is in the library.
+                if !existing.status.isInProgressCapture, existing.status != .needsRecovery,
+                   storage.hasPlayableAudio(for: existing)
+                {
+                    do {
+                        try await store.cleanup(recordingId: id)
+                        Log.app.notice("Removed leftover in-progress folder of a finished recording \(id, privacy: .public)")
+                    } catch {
+                        Log.app.error("Could not remove leftover in-progress folder: \(error.localizedDescription)")
+                    }
+                    continue
+                }
                 if existing.status == .needsRecovery
                     || (existing.status == .recording && storage.markNeedsRecovery(id: id))
                 {
@@ -806,6 +864,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_: Notification) {
         AppLaunchTracker.shared.markCleanExit()
+        DiagnosticLog.shared.record(.appTerminate)
+        DiagnosticLog.shared.flush()
         CalendarConnection.shared.stop()
         BrowserCalendarConnection.shared.stop()
         calendarReminderController.dismiss()
@@ -824,6 +884,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let token = meetingActivityToken { ProcessInfo.processInfo.endActivity(token) }
         if let token = meetingTranslationActivityToken { ProcessInfo.processInfo.endActivity(token) }
         sleepFlushCoordinator = nil
+        CLIRunner.terminateAll()
+        RecordingsLibraryStorage.shared.flushPendingWrites()
     }
 
     func loadAudioData(from url: URL) async throws -> Data {

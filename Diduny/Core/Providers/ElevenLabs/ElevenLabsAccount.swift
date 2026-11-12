@@ -41,6 +41,9 @@ struct ElevenLabsAccountService {
     func testConnection(apiKey: String) async -> ProviderHealth {
         do {
             return .ok(planName: try await fetchUsage(apiKey: apiKey).planName)
+        } catch ElevenLabsError.userReadNotGranted {
+            // The subscription call needs User (read); a key restricted to Speech to Text still transcribes.
+            return .ok(planName: "")
         } catch {
             return .failed(ElevenLabsError.from(transportError: error))
         }
@@ -57,7 +60,11 @@ struct ElevenLabsAccountService {
             throw ElevenLabsError.network
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200 ..< 300).contains(status) else { throw ElevenLabsError.from(httpStatus: status, body: data) }
+        guard (200 ..< 300).contains(status) else {
+            // Only the explicit code means "valid key without User (read)"; any other 403 stays a failure.
+            if ElevenLabsError.isMissingPermissionsCode(data) { throw ElevenLabsError.userReadNotGranted }
+            throw ElevenLabsError.from(httpStatus: status, body: data)
+        }
         guard let subscription = try? JSONDecoder().decode(Subscription.self, from: data) else {
             throw ElevenLabsError.invalidResponse
         }

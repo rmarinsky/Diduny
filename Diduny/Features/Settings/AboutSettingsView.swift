@@ -24,6 +24,7 @@ struct AboutSettingsView: View {
                 }
                 hero
                 appGrid
+                diagnosticsCard
                 authorCard
                 Text("Made in Ukraine · © 2024–2026 Roman Marinsky")
                     .font(DS.Font.callout)
@@ -32,6 +33,29 @@ struct AboutSettingsView: View {
             }
         }
         .task { await loadLatestVersion() }
+    }
+
+    private var diagnosticsCard: some View {
+        HStack(alignment: .center, spacing: DS.Space.lg) {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                Text("Diagnostics")
+                    .font(DS.Font.headline)
+                Text(
+                    "Something went wrong? Export a diagnostics file and send it to support. It holds app events and error codes from this Mac: no audio, text, file names, email or keys. Nothing leaves your Mac until you send it."
+                )
+                .font(DS.Font.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: DS.Space.lg)
+            Button("Export Diagnostics…") {
+                DiagnosticsExporter.exportInteractively(appDelegate: NSApp.delegate as? AppDelegate)
+            }
+        }
+        .padding(DS.Space.lg)
+        .background(
+            RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous).fill(Color.primary.opacity(0.04))
+        )
     }
 
     private var currentProduct: AboutProduct {

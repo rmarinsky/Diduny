@@ -163,7 +163,7 @@ final class ElevenLabsErrorMappingTests: XCTestCase {
     }
 
     func testMessagesHaveNoKeyAndAreNonEmpty() {
-        let all: [ElevenLabsError] = [.invalidKey, .missingPermission, .planOrModelNotAvailable, .termsNotAccepted,
+        let all: [ElevenLabsError] = [.invalidKey, .missingPermission, .userReadNotGranted, .planOrModelNotAvailable, .termsNotAccepted,
                                       .quotaExceeded, .rateLimited, .network, .invalidResponse,
                                       .unknown(status: 500, requestID: "r")]
         for error in all {
@@ -203,6 +203,27 @@ final class ElevenLabsAccountServiceTests: XCTestCase {
         StubURLProtocol.failWith = URLError(.timedOut)
         let network = await service.testConnection(apiKey: sentinel)
         XCTAssertEqual(network, .failed(.network))
+    }
+
+    /// A key restricted to Speech to Text has no User (read): ElevenLabs answers 401 missing_permissions
+    /// on the subscription call. The key is valid, so the test passes without a plan name.
+    func testRestrictedKeyWithoutUserReadStillWorks() async {
+        StubURLProtocol.reset()
+        let service = ElevenLabsAccountService(session: StubURLProtocol.session())
+        let body = #"{"detail":{"status":"missing_permissions","message":"The API key you used is missing the permission user_read to execute this operation."}}"#
+        StubURLProtocol.responses = [(401, body)]
+        let health = await service.testConnection(apiKey: sentinel)
+        XCTAssertEqual(health, .ok(planName: ""))
+        XCTAssertEqual(ElevenLabsError.from(httpStatus: 401, body: Data(body.utf8)), .missingPermission)
+    }
+
+    /// A 403 without the explicit code (e.g. the key's IP allowlist) is a failure, not a working key.
+    func testUnclassified403IsNotAWorkingKey() async {
+        StubURLProtocol.reset()
+        let service = ElevenLabsAccountService(session: StubURLProtocol.session())
+        StubURLProtocol.responses = [(403, #"{"detail":{"message":"IP not allowed"}}"#)]
+        let health = await service.testConnection(apiKey: sentinel)
+        XCTAssertEqual(health, .failed(.missingPermission))
     }
 }
 

@@ -321,6 +321,7 @@ extension AppDelegate {
             }
 
             await MainActor.run {
+                reportFailure(error, job: .meetingTranslation)
                 appState.errorMessage = error.localizedDescription
                 appState.meetingTranslationRecordingState = .error
                 handleMeetingTranslationStateChange(.error)
@@ -693,6 +694,7 @@ extension AppDelegate {
             }
 
             await MainActor.run {
+                reportFailure(error, job: .meetingTranslation)
                 appState.errorMessage = userMessage
                 appState.meetingTranslationRecordingState = .error
                 appState.meetingTranslationRecordingStartTime = nil

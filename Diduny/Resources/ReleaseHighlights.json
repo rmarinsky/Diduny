@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Your own words, spoken punctuation and steadier meetings",
+    "headline": "Steadier processing you can see, and diagnostics you can send",
     "highlights": [
-      "New Vocabulary & context page: add names and terms, describe what you usually talk about, and keep a translation glossary. Diduny Cloud uses them to recognize you better, together with the meeting title and attendees from your calendar.",
-      "Say \"comma\", \"new line\" or \"scratch that\" while dictating in Ukrainian, English or Polish, and Diduny applies it.",
-      "Meetings: silence no longer ends a recording while the call is on, you can pick the engine in \"Looks like a meeting started\", Whisper transcribes meetings on this Mac and tells speakers apart, and meeting translation runs in Diduny Cloud."
+      "Recordings on Diduny Cloud no longer wait behind Whisper on this Mac, Recordings, Notes and the menu show what is being transcribed, and notes start as soon as a meeting is transcribed. Failed automatic notes are tried again later.",
+      "Quitting or a crash no longer loses work in progress: Diduny picks up cloud jobs and queued recordings at the next launch. Agents can now add to notes, tag recordings by project and link people when you ask.",
+      "Something went wrong? Help → Export Diagnostics… saves a file for support, with no audio or text. Diduny now counts which features are used, anonymously (Settings → Account to turn off), and ElevenLabs keys restricted to Speech to Text work."
     ]
   },
   "uk": {
-    "headline": "Ваші слова, голосова пунктуація і надійніші зустрічі",
+    "headline": "Надійніша обробка, яку видно, і діагностика, яку можна надіслати",
     "highlights": [
-      "Нова сторінка «Словник і контекст»: додайте імена й терміни, опишіть, про що зазвичай говорите, і ведіть глосарій перекладу. Diduny Cloud краще вас розпізнає, а для зустрічей ще й бере назву та учасників з календаря.",
-      "Кажіть «кома», «новий рядок» або «скасуй це» під час диктування українською, англійською чи польською, і Diduny це виконає.",
-      "Зустрічі: тиша не обриває запис, поки дзвінок триває, рушій можна вибрати у вікні «Looks like a meeting started», на цьому Mac зустрічі розпізнає Whisper і розрізняє мовців, а переклад зустрічей працює в Diduny Cloud."
+      "Записи в Diduny Cloud більше не чекають, поки Whisper закінчить на цьому Mac, «Записи», «Нотатки» і меню показують, що зараз транскрибується, а нотатки починаються одразу після транскрипції зустрічі. Невдалі автоматичні нотатки Diduny повторює пізніше.",
+      "Вихід із Diduny чи збій більше не губить роботу: під час наступного запуску Diduny продовжує хмарні завдання і чергу. Агенти на ваше прохання доповнюють нотатки, ставлять проєкт і теги та додають людей до записів.",
+      "Щось пішло не так? Help → «Експортувати діагностику…» зберігає файл для підтримки, без аудіо й тексту. Diduny тепер анонімно рахує, якими функціями користуються (вимкнути: Налаштування → Акаунт), а ключі ElevenLabs, обмежені до Speech to Text, працюють."
     ]
   }
 }

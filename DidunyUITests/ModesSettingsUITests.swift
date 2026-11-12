@@ -11,7 +11,7 @@ final class ModesSettingsUITests: DidunyUITestCase {
 
     private func openModes() -> XCUIElement {
         launchApp(onboardingCompleted: true)
-        waitForElement(mainWindow.buttons["Sidebar Modes"]).click()
+        waitForElement(mainWindow.buttons["Sidebar Modes & shortcuts"]).click()
         return waitForElement(element("section.modes"), "Modes did not open")
     }
 
