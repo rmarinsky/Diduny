@@ -125,15 +125,15 @@ struct SidebarView: View {
         Button {
             selectedSection = section
         } label: {
-            SidebarRow(section: section, isSelected: selectedSection == section)
+            SidebarRow(section: section, isSelected: selectedSection.tabs.first == section)
         }
         .buttonStyle(.plain)
         // The window gives the first row keyboard focus on open; its ring read as a second selection.
         .focusEffectDisabled()
-        .accessibilityLabel(Text(section.label))
-        .accessibilityValue(Text(selectedSection == section ? "Selected" : ""))
-        .accessibilityIdentifier("Sidebar \(section.label)")
-        .help(section.label)
+        .accessibilityLabel(Text(section.sidebarLabel))
+        .accessibilityValue(Text(selectedSection.tabs.first == section ? "Selected" : ""))
+        .accessibilityIdentifier("Sidebar \(section.sidebarLabel)")
+        .help(section.sidebarLabel)
     }
 }
 
@@ -149,7 +149,7 @@ private struct SidebarRow: View {
                 .font(.system(size: 13, weight: .regular))
                 .frame(width: 18)
                 .foregroundColor(iconColor)
-            Text(section.label)
+            Text(section.sidebarLabel)
                 .font(.system(size: 13))
                 .foregroundColor(textColor)
             Spacer()

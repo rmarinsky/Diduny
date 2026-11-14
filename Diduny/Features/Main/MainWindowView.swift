@@ -51,6 +51,9 @@ struct MainWindowView: View {
             detailView
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("section.\(selectedSection.rawValue)")
+                .overlay(alignment: .topLeading) {
+                    if selectedSection.tabs.count > 1 { tabSwitch }
+                }
         }
         .background(DS.Palette.window)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
@@ -80,6 +83,20 @@ struct MainWindowView: View {
         guard section != selectedSection else { return }
         guard RecordingTrimNavigation.shared.requestLeave() else { return }
         selectedSection = section
+    }
+
+    /// The pages of the open sidebar row. Sits above the page title, in the window's title bar zone.
+    private var tabSwitch: some View {
+        Picker(selectedSection.tabs[0].sidebarLabel, selection: Binding(
+            get: { selectedSection },
+            set: { requestSection($0) }
+        )) {
+            ForEach(selectedSection.tabs, id: \.self) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.segmented).labelsHidden().fixedSize()
+        .accessibilityIdentifier("section.tabs")
+        .padding(.top, DS.Space.md)
+        .padding(.leading, DS.Layout.pagePadding)
     }
 
     @ViewBuilder

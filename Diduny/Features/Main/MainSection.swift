@@ -20,8 +20,29 @@ enum MainSection: String, CaseIterable, Hashable {
     case account
     case about
 
-    static let mainItems = allCases.filter { !$0.isSettingsItem }
-    static let settingsItems = allCases.filter(\.isSettingsItem)
+    /// Sidebar rows. A row is named by its first page; `tabs` lists the pages it holds.
+    static let mainItems: [MainSection] = [.overview, .recordings, .notes, .typingTest]
+    static let settingsItems: [MainSection] = [.general, .modes, .vocabulary, .meetings, .models, .account, .about]
+
+    /// The pages that share this page's sidebar row, in tab order. One page: no switch.
+    var tabs: [MainSection] {
+        switch self {
+        case .modes, .languages, .audioDictation: [.modes, .languages, .audioDictation]
+        case .meetings, .notesSettings: [.meetings, .notesSettings]
+        case .models, .providers, .benchmark: [.models, .providers, .benchmark]
+        default: [self]
+        }
+    }
+
+    /// The sidebar row's label; `label` stays the page and tab label.
+    var sidebarLabel: String {
+        switch self {
+        case .modes: String(localized: "Dictation")
+        case .meetings: String(localized: "Meetings & notes")
+        case .models: String(localized: "Models")
+        default: label
+        }
+    }
 
     var label: String {
         switch self {
@@ -62,13 +83,6 @@ enum MainSection: String, CaseIterable, Hashable {
         case .providers: "key.horizontal"
         case .account: "person.crop.circle"
         case .about: "info.circle"
-        }
-    }
-
-    var isSettingsItem: Bool {
-        switch self {
-        case .meetings, .notesSettings, .general, .modes, .languages, .vocabulary, .audioDictation, .models, .providers, .account, .about: true
-        default: false
         }
     }
 }

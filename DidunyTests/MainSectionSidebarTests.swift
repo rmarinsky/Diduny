@@ -8,23 +8,70 @@ import Testing
 @MainActor
 struct MainSectionSidebarTests {
     @Test func mainItemsInOrder() {
-        #expect(MainSection.mainItems == [.overview, .recordings, .notes, .benchmark, .typingTest])
+        #expect(MainSection.mainItems == [.overview, .recordings, .notes, .typingTest])
     }
 
     @Test func settingsItemsInOrder() {
-        #expect(MainSection.settingsItems == [
-            .general, .modes, .languages, .vocabulary, .audioDictation, .meetings, .notesSettings,
-            .models, .providers, .account, .about,
+        #expect(MainSection.settingsItems == [.general, .modes, .vocabulary, .meetings, .models, .account, .about])
+    }
+
+    @Test func sidebarLabels() {
+        let labels = (MainSection.mainItems + MainSection.settingsItems).map(\.sidebarLabel)
+        #expect(labels == [
+            "Overview", "Recordings", "Notes", "Typing test",
+            "General", "Dictation", "Vocabulary & context", "Meetings & notes", "Models", "Account", "About",
         ])
     }
 
-    @Test func labels() {
-        let labels = (MainSection.mainItems + MainSection.settingsItems).map(\.label)
-        #expect(labels == [
-            "Overview", "Recordings", "Notes", "Benchmark", "Typing test",
-            "General", "Modes & shortcuts", "Languages", "Vocabulary & context", "Audio", "Calendar & meetings", "Notes settings",
-            "Local models", "Providers", "Account", "About",
-        ])
+    @Test func tabsOfEachRowInOrder() {
+        #expect(MainSection.modes.tabs.map(\.label) == ["Modes & shortcuts", "Languages", "Audio"])
+        #expect(MainSection.meetings.tabs.map(\.label) == ["Calendar & meetings", "Notes settings"])
+        #expect(MainSection.models.tabs.map(\.label) == ["Local models", "Providers", "Benchmark"])
+        let single: [MainSection] = [.overview, .recordings, .notes, .typingTest, .general, .vocabulary, .account, .about]
+        for row in single {
+            #expect(row.tabs == [row])
+        }
+    }
+
+    /// Every page sits under exactly one sidebar row, and the pages of a row share one tab list.
+    @Test func everyPageBelongsToOneRow() {
+        let rows = MainSection.mainItems + MainSection.settingsItems
+        #expect(Set(rows).count == rows.count)
+        #expect(Set(rows.flatMap(\.tabs)) == Set(MainSection.allCases))
+        #expect(rows.flatMap(\.tabs).count == MainSection.allCases.count)
+        for page in MainSection.allCases {
+            #expect(page.tabs.contains(page))
+            #expect(rows.filter { $0 == page.tabs.first }.count == 1)
+            #expect(page.tabs.first?.tabs == page.tabs)
+        }
+    }
+
+    /// The sidebar fills the row `tabs.first`; the switch shows `tabs` with the page itself selected.
+    @Test func openingAPageSelectsItsRowAndTab() {
+        let expected: [MainSection: MainSection] = [
+            .overview: .overview, .recordings: .recordings, .notes: .notes, .typingTest: .typingTest,
+            .general: .general, .modes: .modes, .languages: .modes, .audioDictation: .modes, .vocabulary: .vocabulary,
+            .meetings: .meetings, .notesSettings: .meetings,
+            .models: .models, .providers: .models, .benchmark: .models,
+            .account: .account, .about: .about,
+        ]
+        #expect(expected.count == MainSection.allCases.count)
+        for (page, row) in expected {
+            #expect(page.tabs.first == row)
+        }
+    }
+
+    /// A sidebar click selects the row, which is its own first tab.
+    @Test func aRowOpensOnItsFirstTab() {
+        for row in MainSection.mainItems + MainSection.settingsItems {
+            #expect(row.tabs.first == row)
+        }
+    }
+
+    @Test func pageLabelsStay() {
+        #expect(MainSection.modes.label == "Modes & shortcuts")
+        #expect(MainSection.meetings.label == "Calendar & meetings")
+        #expect(MainSection.models.label == "Local models")
     }
 
     @Test func newItemIcons() {

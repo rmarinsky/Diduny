@@ -1,7 +1,7 @@
 import XCTest
 
-/// WP-53 Settings > Languages (test-plan T5-LA-20, 21, 26, 27). Needs WP-50's "Sidebar Languages" item and
-/// `section.languages`. T5-LA-22 to 25 and 28 wait for the seed, probe and bridge helpers (test-plan 7.4).
+/// WP-53 Settings > Languages (test-plan T5-LA-20, 21, 26, 27). Needs the "Sidebar Dictation" item, its
+/// "Languages" tab and `section.languages`. T5-LA-22 to 25 and 28 wait for the seed, probe and bridge helpers (test-plan 7.4).
 final class LanguagesUITests: DidunyUITestCase {
     private var mainWindow: XCUIElement { app.windows["Diduny"] }
 
@@ -11,8 +11,9 @@ final class LanguagesUITests: DidunyUITestCase {
 
     private func openLanguages() -> XCUIElement {
         launchApp(onboardingCompleted: true)
-        let item = waitForElement(mainWindow.buttons["Sidebar Languages"])
+        let item = waitForElement(mainWindow.buttons["Sidebar Dictation"])
         item.click()
+        waitForElement(element("section.tabs")).radioButtons["Languages"].click()
         return waitForElement(mainWindow.descendants(matching: .any)["section.languages"])
     }
 
@@ -68,8 +69,8 @@ final class LanguagesUITests: DidunyUITestCase {
         search.click()
         search.typeText("zzz")
         waitForElement(element("popup.empty"))
-        // Outside the popup: the sidebar item of the page already shown, so the click changes nothing else.
-        let outside = mainWindow.buttons["Sidebar Languages"]
+        // Outside the popup: the tab of the page already shown, so the click changes nothing else.
+        let outside = element("section.tabs").radioButtons["Languages"]
         waitForElement(outside, toMatch: "isHittable == true")
         outside.click()
         waitForDisappearance(popup)

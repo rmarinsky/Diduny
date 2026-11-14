@@ -23,33 +23,45 @@ final class MainWindowUITests: DidunyUITestCase {
         waitForElement(section("overview"))
 
         // Sidebar label → section id and an element only that section shows.
-        // T5-SB-02: sidebar label → section id and an element only that section shows.
-        let sections: [(label: String, id: String, marker: (XCUIElement) -> XCUIElement)] = [
-            ("General", "general", { $0.staticTexts["After a recording"] }),
-            ("Modes & shortcuts", "modes", { $0.staticTexts["Use one engine for everything"] }),
-            ("Languages", "languages", { $0.staticTexts["Your languages"] }),
-            ("Audio", "audioDictation", { $0.staticTexts["Test the microphone"] }),
-            ("Calendar & meetings", "meetings", { $0.staticTexts["Calendars"] }),
-            ("Local models", "models", { $0.descendants(matching: .any)["models.table"] }),
-            ("Providers", "providers", { $0.staticTexts["In Diduny"] }),
-            ("Account", "account", { $0.textFields["account.email"] }),
-            ("About", "about", { $0.staticTexts["Author"] }),
-            ("Benchmark", "benchmark", { $0.staticTexts["Benchmark"] }),
-            ("Typing test", "typingTest", { $0.staticTexts["Typing Speed Test"] }),
-            ("Recordings", "recordings", { $0.staticTexts["No Recordings Yet"] }),
-            ("Overview", "overview", { $0.staticTexts["Overview"] }),
+        // T5-SB-02: sidebar row, tab inside the row (nil: the row's first page) → section id and an
+        // element only that section shows.
+        let sections: [(label: String, tab: String?, id: String, marker: (XCUIElement) -> XCUIElement)] = [
+            ("General", nil, "general", { $0.staticTexts["After a recording"] }),
+            ("Dictation", nil, "modes", { $0.staticTexts["Use one engine for everything"] }),
+            ("Dictation", "Languages", "languages", { $0.staticTexts["Your languages"] }),
+            ("Dictation", "Audio", "audioDictation", { $0.staticTexts["Test the microphone"] }),
+            ("Meetings & notes", nil, "meetings", { $0.staticTexts["Calendars"] }),
+            ("Meetings & notes", "Notes settings", "notesSettings", { $0.staticTexts["Notes settings"] }),
+            ("Models", nil, "models", { $0.descendants(matching: .any)["models.table"] }),
+            ("Models", "Providers", "providers", { $0.staticTexts["In Diduny"] }),
+            ("Account", nil, "account", { $0.textFields["account.email"] }),
+            ("About", nil, "about", { $0.staticTexts["Author"] }),
+            ("Models", "Benchmark", "benchmark", { $0.staticTexts["Benchmark"] }),
+            ("Typing test", nil, "typingTest", { $0.staticTexts["Typing Speed Test"] }),
+            ("Recordings", nil, "recordings", { $0.staticTexts["No Recordings Yet"] }),
+            ("Overview", nil, "overview", { $0.staticTexts["Overview"] }),
         ]
+        let tabs = mainWindow.descendants(matching: .any)["section.tabs"]
 
         var previous = (label: "Overview", id: "overview")
         for entry in sections {
             let item = waitForElement(mainWindow.buttons["Sidebar \(entry.label)"])
             item.click()
+            if let tab = entry.tab {
+                let segment = waitForElement(tabs.radioButtons[tab])
+                segment.click()
+                waitForElement(segment, toMatch: "value == 1")
+            }
 
             let container = waitForElement(section(entry.id), "\(entry.label) did not show its section")
+            // Only a row with several pages shows the switch.
+            XCTAssertEqual(tabs.exists, ["Dictation", "Meetings & notes", "Models"].contains(entry.label))
             waitForElement(entry.marker(container), "\(entry.label) is missing its content")
             waitForElement(item, toMatch: "value == 'Selected'")
             if previous.id != entry.id {
                 waitForDisappearance(section(previous.id))
+            }
+            if previous.label != entry.label {
                 waitForElement(mainWindow.buttons["Sidebar \(previous.label)"], toMatch: "value != 'Selected'")
             }
             previous = (entry.label, entry.id)

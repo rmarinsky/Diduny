@@ -15,8 +15,9 @@ final class AudioUITests: DidunyUITestCase {
     private func openAudio() {
         launchApp(onboardingCompleted: true, profile: LaunchProfile.standard.adding("--ui-testing-audio-devices=Test Mic A,Test Mic B"))
         waitForElement(mainWindow)
-        let item = waitForElement(mainWindow.buttons["Sidebar Audio"])
+        let item = waitForElement(mainWindow.buttons["Sidebar Dictation"])
         item.click()
+        waitForElement(element("section.tabs")).radioButtons["Audio"].click()
         waitForElement(element("section.audioDictation"))
     }
 
