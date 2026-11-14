@@ -3,40 +3,42 @@ import Foundation
 /// The Papuga settings the typing engine reads, as one value. Each property is named after its
 /// Papuga key and defaults to Papuga's default (`papuga/Models/AppSettings.swift`).
 /// The host owns the storage; the engine reads a fresh value through the provider it was given.
-struct TypingSettings: Equatable {
-    var autoFixAlgorithm: String = LanguageScorerAlgorithm.appleNL.rawValue
+public struct TypingSettings: Equatable {
+    public var autoFixAlgorithm: String = LanguageScorerAlgorithm.appleNL.rawValue
     /// Must stay in sync with `AutoFixSensitivityPreset.balanced`.
-    var autoFixThreshold: Double = 0.35
-    var autoFixCandidateSeparation: Double = 0.15
-    var autoFixMinWordLength: Int = 2
-    var autoFixBlocklist: [String] = []
-    var autoFixAllowlist: [String] = []
-    var autoFixToastEnabled: Bool = true
-    var autoFixConservativeEditingGuard: Bool = true
-    var autoFixSpellingTypoGuardEnabled: Bool = true
-    var autoFixSpellingTypoGuardMinWordLength: Int = 4
-    var autoFixSpellingTypoGuardMaxEditDistance: Int = 1
-    var autoFixProposalEnabled: Bool = true
+    public var autoFixThreshold: Double = 0.35
+    public var autoFixCandidateSeparation: Double = 0.15
+    public var autoFixMinWordLength: Int = 2
+    public var autoFixBlocklist: [String] = []
+    public var autoFixAllowlist: [String] = []
+    public var autoFixToastEnabled: Bool = true
+    public var autoFixConservativeEditingGuard: Bool = true
+    public var autoFixSpellingTypoGuardEnabled: Bool = true
+    public var autoFixSpellingTypoGuardMinWordLength: Int = 4
+    public var autoFixSpellingTypoGuardMaxEditDistance: Int = 1
+    public var autoFixProposalEnabled: Bool = true
     /// Must stay in sync with `AutoFixSensitivityPreset.balanced`.
-    var autoFixProposalWindow: Double = 0.22
-    var autoFixAppPolicyOverrides: [String: String] = [:]
-    var autoFixLayoutSwitchPolicy: String = AutoFixLayoutSwitchPolicy.alwaysSwitchToReplacementLayout.rawValue
-    var customAutoReplaceRules: [CustomAutoReplaceRule] = []
+    public var autoFixProposalWindow: Double = 0.22
+    public var autoFixAppPolicyOverrides: [String: String] = [:]
+    public var autoFixLayoutSwitchPolicy: String = AutoFixLayoutSwitchPolicy.alwaysSwitchToReplacementLayout.rawValue
+    public var customAutoReplaceRules: [CustomAutoReplaceRule] = []
     /// Net WPM from the typing-speed test. 0 = not measured.
-    var measuredTypingWPM: Double = 0
+    public var measuredTypingWPM: Double = 0
     /// Smoothed inter-keystroke gap from `TypingCadenceTracker`. 0 = never measured.
-    var typingCadenceAverageGap: Double = 0
+    public var typingCadenceAverageGap: Double = 0
     /// Read by `LayoutManager`.
-    var layoutOrder: [String] = []
+    public var layoutOrder: [String] = []
     /// Read by `LayoutManager`.
-    var disabledLayouts: [String] = []
+    public var disabledLayouts: [String] = []
     /// Read by `ReplacementHistoryStore` and `AutoFixDecisionHistoryStore`.
-    var replacementHistoryEnabled: Bool = true
+    public var replacementHistoryEnabled: Bool = true
     /// Read by `ReplacementHistoryStore` and `AutoFixDecisionHistoryStore`.
-    var replacementHistoryRetention: String = ReplacementHistoryRetention.oneMonth.rawValue
+    public var replacementHistoryRetention: String = ReplacementHistoryRetention.oneMonth.rawValue
+
+    public init() {}
 
     /// The values Papuga's Settings picker writes for a preset; every other value is kept.
-    func applying(_ preset: AutoFixSensitivityPreset) -> TypingSettings {
+    public func applying(_ preset: AutoFixSensitivityPreset) -> TypingSettings {
         var copy = self
         copy.autoFixMinWordLength = preset.minWordLength
         copy.autoFixThreshold = preset.threshold
@@ -61,12 +63,12 @@ struct TypingSettings: Equatable {
 ///
 /// `balanced` is the shipped default; keep it in sync with
 /// `TypingSettings.autoFixThreshold` / `.autoFixProposalWindow`.
-enum AutoFixSensitivityPreset: String, CaseIterable, Identifiable {
+public enum AutoFixSensitivityPreset: String, CaseIterable, Identifiable {
     case careful
     case balanced
     case moreHints
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
     var minWordLength: Int {
         switch self {

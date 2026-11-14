@@ -21,6 +21,8 @@ packages:
   FluidAudio:
     url: https://github.com/FluidInference/FluidAudio
     exactVersion: 0.17.7
+  PapugaKit:
+    path: Packages/PapugaKit
 
 configs:
   Debug: debug
@@ -125,6 +127,7 @@ targets:
       - package: LaunchAtLogin
       - package: Sparkle
       - package: FluidAudio
+      - package: PapugaKit
       - framework: Frameworks/whisper.xcframework
         embed: false
       # `diduny` command line tool for local agents, shipped inside the app and signed with it.

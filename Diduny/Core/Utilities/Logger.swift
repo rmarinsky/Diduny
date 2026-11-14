@@ -18,7 +18,7 @@ import os
 /// - `audio` - Audio device and capture operations
 /// - `permissions` - Permission requests and checks
 enum Log {
-    private static let subsystem = "ua.com.rmarinsky.diduny"
+    static let subsystem = "ua.com.rmarinsky.diduny"
 
     static let app = Logger(subsystem: subsystem, category: "app")
     static let recording = Logger(subsystem: subsystem, category: "recording")

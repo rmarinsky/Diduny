@@ -182,6 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var pushToTalkService = PushToTalkService()
     lazy var translationPushToTalkService = PushToTalkService()
     lazy var inplaceTranslationMonitor = InplaceTranslationHotkeyMonitor()
+    lazy var typingEngineHost = TypingEngineHost()
     lazy var meetingRecorderService = MeetingRecorderService()
     lazy var meetingJoinMonitor = MeetingJoinMonitor()
     let calendarReminderController = CalendarReminderController()
@@ -455,6 +456,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupPushToTalk()
         setupTranslationPushToTalk()
         setupInplaceTranslation()
+        // Fixes while typing; off unless `typing.enabled`. Not under unit tests: the test host is the
+        // DEV build with its real settings, and it must not tap the keyboard.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            typingEngineHost.activate(clipboard: clipboardService)
+        }
 
         // Setup sleep handling for all recording modes (RLR-M2).
         // Must be registered before OrphanedRecordingDetector (M5a) to ensure the
@@ -877,6 +883,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushToTalkService.stop()
         translationPushToTalkService.stop()
         inplaceTranslationMonitor.stop()
+        typingEngineHost.stop()
         NotificationCenter.default.removeObserver(self)
         // Release all activity tokens on termination to avoid leaking wake locks.
         if let token = recordingActivityToken { ProcessInfo.processInfo.endActivity(token) }

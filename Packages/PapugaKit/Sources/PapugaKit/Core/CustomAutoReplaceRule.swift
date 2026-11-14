@@ -1,16 +1,16 @@
 import Foundation
 
-struct CustomAutoReplaceRule: Codable, Identifiable, Hashable {
-    let id: UUID
-    var source: String
-    var target: String
-    var createdAt: Date
-    var createdFromRecommendation: Bool
+public struct CustomAutoReplaceRule: Codable, Identifiable, Hashable {
+    public let id: UUID
+    public var source: String
+    public var target: String
+    public var createdAt: Date
+    public var createdFromRecommendation: Bool
     /// `nil` decodes old rules as core-matching; `true` is reserved for exact
     /// layout mappings such as `nfrj; -> також`, where `;` is a letter key.
-    var matchesFullToken: Bool?
+    public var matchesFullToken: Bool?
 
-    init(
+    public init(
         id: UUID = UUID(),
         source: String,
         target: String,

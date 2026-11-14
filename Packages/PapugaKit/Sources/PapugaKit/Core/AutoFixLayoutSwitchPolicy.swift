@@ -1,6 +1,6 @@
 import Foundation
 
-enum AutoFixLayoutSwitchPolicy: String, Codable, CaseIterable {
+public enum AutoFixLayoutSwitchPolicy: String, Codable, CaseIterable {
     case alwaysSwitchToReplacementLayout
     case keepCurrentLayout
     case adaptive

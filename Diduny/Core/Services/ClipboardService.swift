@@ -64,6 +64,9 @@ final class ClipboardService {
     /// Set when ⌘V is posted; cleared when a paste starts, so a failed paste leaves nil.
     private(set) var lastPaste: Date?
 
+    /// Called after every shortcut Diduny posts (paste, copy, submit). Set by `TypingEngineHost`.
+    var onShortcutPosted: (@MainActor @Sendable () -> Void)?
+
     static func preparedText(_ text: String, behavior: ClipboardCopyBehavior = .cleaned) -> String {
         switch behavior {
         case .cleaned:
@@ -223,6 +226,8 @@ final class ClipboardService {
 
         keyDown.post(tap: .cgAnnotatedSessionEventTap)
         defer { keyUp.post(tap: .cgAnnotatedSessionEventTap) }
+        // Not awaited: the key hold below must not wait for the main actor.
+        if let onShortcutPosted { Task { @MainActor in onShortcutPosted() } }
 
         // Suspend rather than park the thread for the key-hold interval.
         try await Task.sleep(for: .milliseconds(12))
