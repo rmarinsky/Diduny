@@ -154,8 +154,9 @@ targets:
           - "-lc++"
       configs:
         Debug:
-          PRODUCT_NAME: "Diduny DEV"
-          PRODUCT_BUNDLE_IDENTIFIER: ua.com.rmarinsky.diduny.dev
+          # dev_install.sh can set DEV_APP_NAME and DEV_BUNDLE_ID to install a second DEV app next to "Diduny DEV".
+          PRODUCT_NAME: "$(DEV_APP_NAME:default=Diduny DEV)"
+          PRODUCT_BUNDLE_IDENTIFIER: "$(DEV_BUNDLE_ID:default=ua.com.rmarinsky.diduny.dev)"
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEV_BUILD DEBUG
         Test:
           PRODUCT_NAME: "Diduny TEST"

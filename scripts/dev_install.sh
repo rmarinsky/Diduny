@@ -12,8 +12,10 @@ cd "$PROJECT_DIR"
 PROJECT_NAME="Diduny"
 SCHEME="Diduny DEV"
 CONFIG="Debug"
-APP_NAME="Diduny DEV"
-BUNDLE_ID="ua.com.rmarinsky.diduny.dev"
+# Override both to install a second DEV app, for example:
+#   DEV_APP_NAME="Diduny Papuga" DEV_BUNDLE_ID=ua.com.rmarinsky.diduny.papuga ./scripts/dev_install.sh
+APP_NAME="${DEV_APP_NAME:-Diduny DEV}"
+BUNDLE_ID="${DEV_BUNDLE_ID:-ua.com.rmarinsky.diduny.dev}"
 BUILD_DIR="$PROJECT_DIR/build/dev-install"
 APP_PATH="$BUILD_DIR/Build/Products/${CONFIG}/${APP_NAME}.app"
 INSTALL_PATH="/Applications/${APP_NAME}.app"
@@ -87,6 +89,8 @@ if ! xcodebuild \
     -destination "$DESTINATION" \
     -derivedDataPath "$BUILD_DIR" \
     MARKETING_VERSION="$MARKETING_VERSION" \
+    DEV_APP_NAME="$APP_NAME" \
+    DEV_BUNDLE_ID="$BUNDLE_ID" \
     clean build \
     | tee "$BUILD_DIR/xcodebuild.log"; then
     echo ""

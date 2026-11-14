@@ -3401,9 +3401,9 @@
 				OTHER_LDFLAGS = (
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = ua.com.rmarinsky.diduny.dev;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(DEV_BUNDLE_ID:default=ua.com.rmarinsky.diduny.dev)";
 				PRODUCT_MODULE_NAME = Diduny;
-				PRODUCT_NAME = "Diduny DEV";
+				PRODUCT_NAME = "$(DEV_APP_NAME:default=Diduny DEV)";
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEV_BUILD DEBUG";
 				SWIFT_OBJC_BRIDGING_HEADER = Diduny/Core/Whisper/WhisperBridge.h;
