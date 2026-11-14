@@ -2376,7 +2376,6 @@
 
 /* Vocabulary & context (Soniox v6 user_context) */
 "Vocabulary & context" = "Словник і контекст";
-"Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud." = "Diduny Cloud отримує ці слова й опис на початку кожного запису і краще розпізнає імена та терміни. Діє лише для Diduny Cloud.";
 "Words and names" = "Слова й імена";
 "Add a word or name" = "Додати слово або ім'я";
 "%lld of 300. Write it the way it should appear in text." = "%lld з 300. Пишіть так, як має з'явитися в тексті.";
@@ -2492,3 +2491,27 @@
 "Nothing copied in 1Password, Keychain and similar apps is kept." = "Скопійоване в 1Password, Keychain та подібних застосунках не зберігається.";
 "Clear the clipboard history" = "Очистити історію буфера обміну";
 "Clear everything" = "Очистити все";
+
+/* Vocabulary: words from typing */
+"Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud. Layout fixes never change these words." = "Diduny Cloud отримує ці слова й опис на початку кожного запису і краще розпізнає імена та терміни. Діє лише для Diduny Cloud. Виправлення розкладки ніколи не змінюють ці слова.";
+"Waiting for you" = "Чекає на вас";
+"Found while you typed and dictated. Nothing here is used until you add it." = "Знайдено, поки ви набирали й диктували. Нічого звідси не використовується, доки ви не додасте.";
+"Replacements" = "Заміни";
+"No replacements." = "Замін немає.";
+"A replacement changes your text as you type or dictate. It is never added without your click." = "Заміна змінює ваш текст під час набору чи диктування. Вона ніколи не додається без вашого кліку.";
+"Replace \"%@\" with \"%@\" as you type" = "Замінювати \"%@\" на \"%@\" під час набору";
+"Ignore" = "Ігнорувати";
+"Add %@" = "Додати %@";
+"Ignore %@" = "Ігнорувати %@";
+"From typing" = "З набору тексту";
+"Added automatically, %@. Layout fix undone %lld times" = "Додано автоматично, %@. Виправлення розкладки скасовано разів: %lld";
+"Added automatically, %@. Typed %lld times on %lld days" = "Додано автоматично, %@. Набрано разів: %lld, днів: %lld";
+"You undid its layout fix %lld times." = "Ви скасовували виправлення розкладки цього слова разів: %lld.";
+"Typed %lld times on %lld days." = "Набрано разів: %lld, днів: %lld.";
+"You switched it by hand %lld times. Replacements change your text, so they are never added without you." = "Ви перемикали це вручну разів: %lld. Заміни змінюють ваш текст, тому без вас вони не додаються.";
+"Vocabulary" = "Словник";
+"Add words I keep typing to Vocabulary" = "Додавати до словника слова, які я часто набираю";
+"Only words seen several times. Nothing from password fields. Sent to Diduny Cloud only as hints for cloud dictation." = "Лише слова, які траплялися кілька разів. Нічого з полів паролів. До Diduny Cloud надсилаються лише як підказки для хмарної диктовки.";
+"%lld of 300" = "%lld з 300";
+"%lld of 300, %lld waiting for you" = "%lld з 300, %lld чекає на вас";
+"Open Vocabulary" = "Відкрити словник";

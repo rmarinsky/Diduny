@@ -41,6 +41,20 @@ protocol TypingStatsRecording: AnyObject {
     func recordReplacement(text: String)
     /// Reverses a previous `recordReplacement` when the user undoes a fix.
     func reverseReplacement(text: String)
+    /// A word the host may learn from: typed and left alone, or a fix the user undid.
+    func observe(_ observation: TypingWordObservation)
+}
+
+extension TypingStatsRecording {
+    func observe(_ observation: TypingWordObservation) {}
+}
+
+/// What the engine saw that tells the host a word may belong to the user's vocabulary.
+public enum TypingWordObservation: Equatable, Sendable {
+    /// A finished word the engine judged and did not change.
+    case typed(word: String, language: String)
+    /// The user undid a fix: `original` is what they typed and kept.
+    case undone(original: String, replacement: String)
 }
 
 // MARK: - Undo shortcut

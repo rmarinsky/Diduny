@@ -83,7 +83,8 @@ final class TypingEngineHost {
                 onCadenceGapWritten: { settings.typingCadenceAverageGap = $0 },
                 onRulesWritten: { settings.typingCustomReplaceRules = $0 },
                 onWordAdded: { settings.addTypingNeverFixWord($0) },
-                onWordRemoved: { settings.removeTypingNeverFixWord($0) }
+                onWordRemoved: { settings.removeTypingNeverFixWord($0) },
+                onWordObserved: { observation in MainActor.assumeIsolated { VocabularyStore.shared.observe(observation) } }
             )
         }
         convertMonitor.onTrigger = { [weak self] in
@@ -171,6 +172,7 @@ final class TypingEngineHost {
                 }
                 if let conversion {
                     engine.finishLayoutConversion(conversion)
+                    VocabularyStore.shared.observeManualSwitch(from: conversion.original, to: conversion.converted)
                 } else {
                     Log.app.info("[Typing] convert: nothing selected or no other layout")
                 }

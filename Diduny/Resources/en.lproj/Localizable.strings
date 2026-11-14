@@ -2376,7 +2376,6 @@
 
 /* Vocabulary & context (Soniox v6 user_context) */
 "Vocabulary & context" = "Vocabulary & context";
-"Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud." = "Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud.";
 "Words and names" = "Words and names";
 "Add a word or name" = "Add a word or name";
 "%lld of 300. Write it the way it should appear in text." = "%lld of 300. Write it the way it should appear in text.";
@@ -2492,3 +2491,27 @@
 "Nothing copied in 1Password, Keychain and similar apps is kept." = "Nothing copied in 1Password, Keychain and similar apps is kept.";
 "Clear the clipboard history" = "Clear the clipboard history";
 "Clear everything" = "Clear everything";
+
+/* Vocabulary: words from typing */
+"Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud. Layout fixes never change these words." = "Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud. Layout fixes never change these words.";
+"Waiting for you" = "Waiting for you";
+"Found while you typed and dictated. Nothing here is used until you add it." = "Found while you typed and dictated. Nothing here is used until you add it.";
+"Replacements" = "Replacements";
+"No replacements." = "No replacements.";
+"A replacement changes your text as you type or dictate. It is never added without your click." = "A replacement changes your text as you type or dictate. It is never added without your click.";
+"Replace \"%@\" with \"%@\" as you type" = "Replace \"%@\" with \"%@\" as you type";
+"Ignore" = "Ignore";
+"Add %@" = "Add %@";
+"Ignore %@" = "Ignore %@";
+"From typing" = "From typing";
+"Added automatically, %@. Layout fix undone %lld times" = "Added automatically, %@. Layout fix undone %lld times";
+"Added automatically, %@. Typed %lld times on %lld days" = "Added automatically, %@. Typed %lld times on %lld days";
+"You undid its layout fix %lld times." = "You undid its layout fix %lld times.";
+"Typed %lld times on %lld days." = "Typed %lld times on %lld days.";
+"You switched it by hand %lld times. Replacements change your text, so they are never added without you." = "You switched it by hand %lld times. Replacements change your text, so they are never added without you.";
+"Vocabulary" = "Vocabulary";
+"Add words I keep typing to Vocabulary" = "Add words I keep typing to Vocabulary";
+"Only words seen several times. Nothing from password fields. Sent to Diduny Cloud only as hints for cloud dictation." = "Only words seen several times. Nothing from password fields. Sent to Diduny Cloud only as hints for cloud dictation.";
+"%lld of 300" = "%lld of 300";
+"%lld of 300, %lld waiting for you" = "%lld of 300, %lld waiting for you";
+"Open Vocabulary" = "Open Vocabulary";

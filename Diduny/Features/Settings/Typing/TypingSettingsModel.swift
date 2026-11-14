@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import SwiftUI
 import PapugaKit
 
 /// What stops fixes while typing; the Typing page shows one row for it, or none.
@@ -40,6 +41,7 @@ final class TypingSettingsModel {
     private(set) var sensitivity: AutoFixSensitivityPreset = .balanced
     private(set) var switchLayoutAfterFix = true
     private(set) var undoHintEnabled = true
+    private(set) var learnVocabulary = true
     /// Bundle IDs, in the order they were added.
     private(set) var disabledApps: [String] = []
     private(set) var typingSpeedWordsPerMinute: Double = 0
@@ -67,6 +69,7 @@ final class TypingSettingsModel {
         sensitivity = store.typingSensitivity
         switchLayoutAfterFix = store.typingSwitchLayoutAfterFix
         undoHintEnabled = store.typingUndoHintEnabled
+        learnVocabulary = store.typingLearnVocabulary
         disabledApps = store.typingDisabledApps
         typingSpeedWordsPerMinute = store.typingSpeedWordsPerMinute
         accessibilityGranted = isAccessibilityGranted()
@@ -118,6 +121,18 @@ final class TypingSettingsModel {
     func setUndoHintEnabled(_ value: Bool) {
         store.typingUndoHintEnabled = value
         undoHintEnabled = value
+    }
+
+    /// Off also deletes the typed-word counters (spec 03, 4.4).
+    func setLearnVocabulary(_ value: Bool, vocabulary: VocabularyStore = .shared) {
+        store.typingLearnVocabulary = value
+        learnVocabulary = value
+        if !value { vocabulary.clearTypedEvidence() }
+    }
+
+    /// "{n} of 300", plus what waits on the Vocabulary page.
+    static func vocabularyCount(terms: Int, waiting: Int) -> LocalizedStringKey {
+        waiting == 0 ? "\(terms) of 300" : "\(terms) of 300, \(waiting) waiting for you"
     }
 
     // MARK: - Apps

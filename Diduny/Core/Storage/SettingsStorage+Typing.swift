@@ -20,6 +20,7 @@ extension SettingsStorage {
         case customReplaceRules = "typing.customReplaceRules"
         case convertEnabled = "typing.convertEnabled"
         case convertPair = "typing.convertPair"
+        case learnVocabulary = "typing.learnVocabulary"
     }
 
     /// "Fix as I type". Off until the user turns it on.
@@ -51,6 +52,12 @@ extension SettingsStorage {
     var typingUndoHintEnabled: Bool {
         get { defaults.object(forKey: TypingKey.undoHintEnabled.rawValue) as? Bool ?? true }
         set { setTyping(newValue, .undoHintEnabled) }
+    }
+
+    /// "Add words I keep typing to Vocabulary": on until the user turns it off.
+    var typingLearnVocabulary: Bool {
+        get { defaults.object(forKey: TypingKey.learnVocabulary.rawValue) as? Bool ?? true }
+        set { setTyping(newValue, .learnVocabulary) }
     }
 
     /// "Convert the selection to the other layout": on until the user turns it off.

@@ -170,9 +170,13 @@ final class ProtectedLexiconMatcher {
 }
 
 enum ProtectedLexiconPromptBuilder {
-    static func mergedPrompt(userPrompt: String, language: String?) -> String? {
+    /// `userTerms`: the words from Vocabulary & context. The newest go first, then the built-in names, 32 in all.
+    static func mergedPrompt(userPrompt: String, language: String?, userTerms: [String] = []) -> String? {
         let trimmedUserPrompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hints = ProtectedLexiconService.shared.vocabularyHints(language: language, limit: 32)
+        var seen = Set<String>()
+        let hints = (userTerms.reversed() + ProtectedLexiconService.shared.vocabularyHints(language: language, limit: 32))
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+            .prefix(32)
         guard !hints.isEmpty else {
             return trimmedUserPrompt.isEmpty ? nil : trimmedUserPrompt
         }

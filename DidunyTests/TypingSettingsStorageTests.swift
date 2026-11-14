@@ -19,6 +19,7 @@ final class TypingSettingsStorageTests {
         #expect(settings.typingCadenceAverageGap == 0)
         #expect(settings.typingConvertEnabled)
         #expect(settings.typingConvertPair == .optionShift)
+        #expect(settings.typingLearnVocabulary)
         #expect(settings.typingSettings == TypingSettings())
     }
 
@@ -37,6 +38,7 @@ final class TypingSettingsStorageTests {
         settings.typingCustomReplaceRules = [CustomAutoReplaceRule(source: "nfrj;", target: "також")]
         settings.typingConvertEnabled = false
         settings.typingConvertPair = .commandShift
+        settings.typingLearnVocabulary = false
 
         let written = Set(box.defaults.dictionaryRepresentation().keys).subtracting(before)
         #expect(written == Set(SettingsStorage.TypingKey.allCases.map(\.rawValue)))

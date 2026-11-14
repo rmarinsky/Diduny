@@ -41,7 +41,8 @@ public final class TypingEngine {
         onCadenceGapWritten: ((Double) -> Void)? = nil,
         onRulesWritten: (([CustomAutoReplaceRule]) -> Void)? = nil,
         onWordAdded: ((String) -> Void)? = nil,
-        onWordRemoved: ((String) -> Void)? = nil
+        onWordRemoved: ((String) -> Void)? = nil,
+        onWordObserved: ((TypingWordObservation) -> Void)? = nil
     ) {
         self.settings = settings
         hostCalls = HostCalls(
@@ -50,7 +51,8 @@ public final class TypingEngine {
             onCadenceGapWritten: onCadenceGapWritten,
             onRulesWritten: onRulesWritten,
             onWordAdded: onWordAdded,
-            onWordRemoved: onWordRemoved
+            onWordRemoved: onWordRemoved,
+            onWordObserved: onWordObserved
         )
         AppLogger.subsystem = logSubsystem
         let initial = settings()
@@ -154,6 +156,16 @@ public final class TypingEngine {
         controller.noteExternalEdit()
     }
 
+    /// True for a token that may become a Vocabulary word: looks like a word (letters, a vowel, at most
+    /// 20 characters) and not like an email, a URL, a domain, a tag or a variable.
+    public nonisolated static func isVocabularyCandidate(_ token: String) -> Bool {
+        let word = ProtectedLexiconMatcher.normalizedToken(token)
+        return word.count <= 20 && !word.hasPrefix("#") && !word.hasPrefix("$")
+            && WordPlausibility.isWordLike(word)
+            && !ProtectedLexiconMatcher.isEmailLike(word) && !ProtectedLexiconMatcher.isURLLike(word)
+            && !ProtectedLexiconMatcher.isDomainLike(word)
+    }
+
     /// Call after `replacementHistoryEnabled` or `replacementHistoryRetention` changed.
     public func applyHistorySettings() {
         let current = settings()
@@ -181,6 +193,7 @@ private final class HostCalls: TypingSettingsWriting, TypingStatsRecording, Word
     private let onRulesWritten: (([CustomAutoReplaceRule]) -> Void)?
     private let onWordAdded: ((String) -> Void)?
     private let onWordRemoved: ((String) -> Void)?
+    private let onWordObserved: ((TypingWordObservation) -> Void)?
 
     init(
         onReplacementRecorded: ((String) -> Void)?,
@@ -188,7 +201,8 @@ private final class HostCalls: TypingSettingsWriting, TypingStatsRecording, Word
         onCadenceGapWritten: ((Double) -> Void)?,
         onRulesWritten: (([CustomAutoReplaceRule]) -> Void)?,
         onWordAdded: ((String) -> Void)?,
-        onWordRemoved: ((String) -> Void)?
+        onWordRemoved: ((String) -> Void)?,
+        onWordObserved: ((TypingWordObservation) -> Void)?
     ) {
         self.onReplacementRecorded = onReplacementRecorded
         self.onReplacementReversed = onReplacementReversed
@@ -196,6 +210,7 @@ private final class HostCalls: TypingSettingsWriting, TypingStatsRecording, Word
         self.onRulesWritten = onRulesWritten
         self.onWordAdded = onWordAdded
         self.onWordRemoved = onWordRemoved
+        self.onWordObserved = onWordObserved
     }
 
     func setTypingCadenceAverageGap(_ gap: Double) { onCadenceGapWritten?(gap) }
@@ -204,4 +219,5 @@ private final class HostCalls: TypingSettingsWriting, TypingStatsRecording, Word
     func reverseReplacement(text: String) { onReplacementReversed?(text) }
     func add(_ rawWord: String) { onWordAdded?(rawWord) }
     func remove(_ rawWord: String) { onWordRemoved?(rawWord) }
+    func observe(_ observation: TypingWordObservation) { onWordObserved?(observation) }
 }

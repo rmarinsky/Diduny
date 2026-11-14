@@ -463,6 +463,7 @@ final class AutoFixController {
             layoutManager.switchTo(pending.fromLayoutID)
         }
         stats.reverseReplacement(text: pending.replacement)
+        stats.observe(.undone(original: pending.original, replacement: pending.replacement))
 
         eventLog.track(AnalyticsEvent(
             kind: AnalyticsKind.autoFixUndone,
@@ -668,10 +669,12 @@ final class AutoFixController {
         if case .keep(let reason) = evaluation.disposition {
             logSkip(reason, word: word, bundleID: bundleID, layoutID: currentID)
             resetLayoutIncident()
+            if reason != .likelySpellingTypo { stats.observe(.typed(word: word, language: currentLang)) }
             return
         }
         guard let selection = evaluation.selection else {
             resetLayoutIncident()
+            stats.observe(.typed(word: word, language: currentLang))
             return
         }
 

@@ -5,6 +5,7 @@ import SwiftUI
 struct TypingSettingsView: View {
     @State private var model: TypingSettingsModel
     private let presenter: FloatingSurfacePresenter
+    private let vocabulary: VocabularyStore = .shared
     private let accessibilityTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     init(model: TypingSettingsModel? = nil, presenter: FloatingSurfacePresenter = .shared) {
@@ -26,6 +27,29 @@ struct TypingSettingsView: View {
                     TypingAppsButton(model: model, presenter: presenter)
                 }
                 .accessibilityIdentifier("typing.apps")
+                group("Vocabulary")
+                SettingsLineRow(
+                    title: "Add words I keep typing to Vocabulary",
+                    caption: "Only words seen several times. Nothing from password fields. Sent to Diduny Cloud only as hints for cloud dictation.",
+                    kind: .toggle
+                ) {
+                    SettingsSwitch(title: "Add words I keep typing to Vocabulary", isOn: Binding(
+                        get: { model.learnVocabulary }, set: { model.setLearnVocabulary($0) }
+                    ))
+                    .accessibilityIdentifier("typing.learnVocabulary")
+                }
+                SettingsLineRow(title: "Words and names", kind: .button) {
+                    Text(TypingSettingsModel.vocabularyCount(
+                        terms: vocabulary.termCount,
+                        waiting: vocabulary.pendingCount
+                    ))
+                    .font(DS.Font.meta)
+                    .foregroundStyle(DS.Palette.secondary)
+                    .monospacedDigit()
+                    Button("Open Vocabulary") { MainWindowController.shared.showWindow(section: .vocabulary) }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("typing.openVocabulary")
+                }
                 group("Typing speed")
                 SettingsLineRow(
                     title: "Typing speed",
