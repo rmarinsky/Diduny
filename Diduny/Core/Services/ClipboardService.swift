@@ -103,7 +103,8 @@ final class ClipboardService {
         AXIsProcessTrusted()
     }
 
-    /// - Parameter expectedProcessIdentifier: when set, ⌘V is posted only if that app is still frontmost after the delay.
+    /// - Parameter expectedProcessIdentifier: when set, ⌘V is posted only if that app is still frontmost after the
+    /// delay.
     func paste() async throws {
         try await paste(expectedProcessIdentifier: nil)
     }
@@ -131,7 +132,8 @@ final class ClipboardService {
         try await Task.sleep(nanoseconds: Self.pasteReadinessDelayNanoseconds)
 
         if let expectedProcessIdentifier,
-           NSWorkspace.shared.frontmostApplication?.processIdentifier != expectedProcessIdentifier {
+           NSWorkspace.shared.frontmostApplication?.processIdentifier != expectedProcessIdentifier
+        {
             throw ClipboardError.pasteEventFailed
         }
 
@@ -189,31 +191,35 @@ final class ClipboardService {
         try await postCommandShortcut(keyCode: keyCode, flags: flags, error: .pasteEventFailed)
     }
 
+    /// Marks every key event Diduny posts ("DIDUNY" in ASCII), so a key event tap can tell them from real typing.
+    static let syntheticEventMarker: Int64 = 0x4449_4455_4E59
+
+    /// The key-down and key-up pair for a shortcut, both carrying `syntheticEventMarker`.
+    static func makeShortcutEvents(keyCode: CGKeyCode, flags: CGEventFlags) -> (keyDown: CGEvent, keyUp: CGEvent)? {
+        guard let source = CGEventSource(stateID: .hidSystemState),
+              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
+        else { return nil }
+        for event in [keyDown, keyUp] {
+            event.flags = flags
+            event.setIntegerValueField(.eventSourceUserData, value: syntheticEventMarker)
+        }
+        return (keyDown, keyUp)
+    }
+
     private func postCommandShortcut(
         keyCode: CGKeyCode,
         flags: CGEventFlags = .maskCommand,
         error: ClipboardError
     ) async throws {
-        guard let source = CGEventSource(stateID: .hidSystemState) else {
-            Log.app.error("Failed to create event source")
-            throw error
-        }
-
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true) else {
-            Log.app.error("Failed to create keyDown event")
-            throw error
-        }
-        keyDown.flags = flags
-
-        // Build the key-up up front and post it via defer so it always fires —
+        // The key-up is built up front and posted via defer so it always fires,
         // even if the hold-interval sleep below is cancelled (e.g. the user
         // re-triggers recording mid-paste). Otherwise the virtual ⌘ stays
         // "held" in the target app until the next real key event.
-        guard let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
-            Log.app.error("Failed to create keyUp event")
+        guard let (keyDown, keyUp) = Self.makeShortcutEvents(keyCode: keyCode, flags: flags) else {
+            Log.app.error("Failed to create shortcut events")
             throw error
         }
-        keyUp.flags = flags
 
         keyDown.post(tap: .cgAnnotatedSessionEventTap)
         defer { keyUp.post(tap: .cgAnnotatedSessionEventTap) }
