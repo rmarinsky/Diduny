@@ -19,9 +19,11 @@ final class TypingSettingsModelTests {
     private let box = IsolatedSettings("TypingSettingsModelTests")
     private let engine = StubTypingEngine()
     private var accessibility = true
+    private var papugaRunning = false
     private var running: [App] = [App(bundleID: "com.apple.dt.Xcode", name: "Xcode"), App(bundleID: "com.apple.Safari", name: "Safari")]
     private lazy var host = TypingEngineHost(
-        settings: box.settings, isAccessibilityGranted: { [unowned self] in accessibility }, makeEngine: { [unowned self] in engine }
+        settings: box.settings, isAccessibilityGranted: { [unowned self] in accessibility },
+        isPapugaRunning: { [unowned self] in papugaRunning }, makeEngine: { [unowned self] in engine }
     )
 
     private func model() -> TypingSettingsModel {
@@ -40,7 +42,8 @@ final class TypingSettingsModelTests {
         #expect(TypingStatus.current(accessibilityGranted: true, hostState: .stopped) == nil)
         #expect(TypingStatus.current(accessibilityGranted: true, hostState: .running) == nil)
         #expect(TypingStatus.current(accessibilityGranted: true, hostState: .startFailed) == .startFailed)
-        for state in [TypingEngineHost.State.stopped, .running, .startFailed] {
+        #expect(TypingStatus.current(accessibilityGranted: true, hostState: .papugaRunning) == .papugaRunning)
+        for state in [TypingEngineHost.State.stopped, .running, .startFailed, .papugaRunning] {
             #expect(TypingStatus.current(accessibilityGranted: false, hostState: state) == .accessibilityNeeded)
         }
     }
@@ -53,6 +56,38 @@ final class TypingSettingsModelTests {
 
         accessibility = true
         model.reload()
+        #expect(model.status == nil)
+    }
+
+    @Test("the row follows Accessibility without a reload, and the engine starts once it is given")
+    func accessibilityRefreshWhileOpen() {
+        accessibility = false
+        let model = model()
+        model.setEnabled(true)
+        host.reconcile()
+        #expect(model.status == .accessibilityNeeded)
+
+        accessibility = true
+        model.refreshAccessibility()
+        #expect(model.status == nil)
+        #expect(host.state == .running)
+
+        accessibility = false
+        model.refreshAccessibility()
+        #expect(model.status == .accessibilityNeeded)
+        #expect(host.state == .stopped)
+    }
+
+    @Test("a running Papuga shows its row, which goes when Papuga quits")
+    func papugaRowFollowsTheHost() {
+        papugaRunning = true
+        let model = model()
+        model.setEnabled(true)
+        host.reconcile()
+        #expect(model.status == .papugaRunning)
+
+        papugaRunning = false
+        host.reconcile()
         #expect(model.status == nil)
     }
 

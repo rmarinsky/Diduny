@@ -5,6 +5,7 @@ import SwiftUI
 struct TypingSettingsView: View {
     @State private var model: TypingSettingsModel
     private let presenter: FloatingSurfacePresenter
+    private let accessibilityTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     init(model: TypingSettingsModel? = nil, presenter: FloatingSurfacePresenter = .shared) {
         _model = State(initialValue: model ?? TypingSettingsModel())
@@ -48,6 +49,7 @@ struct TypingSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.reload()
         }
+        .onReceive(accessibilityTimer) { _ in model.refreshAccessibility() }
         .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
             model.reload()
         }
@@ -85,6 +87,11 @@ struct TypingSettingsView: View {
                     .accessibilityIdentifier("typing.startFailed.tryAgain")
             }
             .accessibilityIdentifier("typing.status.startFailed")
+        case .papugaRunning:
+            SettingsLineRow(title: "Papuga is running. Diduny fixes typing only while Papuga is closed.") {
+                EmptyView()
+            }
+            .accessibilityIdentifier("typing.status.papugaRunning")
         case nil:
             EmptyView()
         }

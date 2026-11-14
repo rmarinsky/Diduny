@@ -12,7 +12,11 @@ extension SettingsStorage {
     /// Words and names the engine should expect, in the person's order.
     var speechVocabularyTerms: [String] {
         get { defaults.stringArray(forKey: SpeechContextKey.speechVocabularyTerms.rawValue) ?? [] }
-        set { defaults.set(newValue, forKey: SpeechContextKey.speechVocabularyTerms.rawValue) }
+        set {
+            defaults.set(newValue, forKey: SpeechContextKey.speechVocabularyTerms.rawValue)
+            // The typing engine never fixes these words.
+            typingSettingsCache.value = nil
+        }
     }
 
     /// What the person usually talks about. Empty leaves the backend default.

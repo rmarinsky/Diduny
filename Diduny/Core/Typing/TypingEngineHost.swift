@@ -12,7 +12,8 @@ protocol TypingEngineControlling: AnyObject {
 
 extension TypingEngine: TypingEngineControlling {}
 
-/// Runs the typing engine (fixes while typing) while `typing.enabled` is on and Accessibility is granted.
+/// Runs the typing engine (fixes while typing) while `typing.enabled` is on, Accessibility is granted and no
+/// standalone Papuga is running.
 /// `reconcile()` is the only place that starts or stops it.
 @MainActor
 @Observable
@@ -26,12 +27,17 @@ final class TypingEngineHost {
         /// The setting is on and Accessibility is granted, but the system refused the key event tap.
         /// The next `reconcile()` tries again.
         case startFailed
+        /// A standalone Papuga is running. Two engines must never fix the same word, so this one waits.
+        case papugaRunning
     }
+
+    nonisolated static let papugaBundleIDs = ["ua.com.rmarinsky.papuga", "ua.com.rmarinsky.papuga.dev"]
 
     private(set) var state: State = .stopped
 
     @ObservationIgnored private let settings: SettingsStorage
     @ObservationIgnored private let isAccessibilityGranted: () -> Bool
+    @ObservationIgnored private let isPapugaRunning: () -> Bool
     @ObservationIgnored private let makeEngine: @MainActor () -> TypingEngineControlling
     /// Built on the first start, so a user who never turns Typing on pays nothing.
     @ObservationIgnored private var engine: TypingEngineControlling?
@@ -40,28 +46,41 @@ final class TypingEngineHost {
     init(
         settings: SettingsStorage = .shared,
         isAccessibilityGranted: @escaping () -> Bool = ClipboardService.isAccessibilityGranted,
+        isPapugaRunning: @escaping () -> Bool = TypingEngineHost.isStandalonePapugaRunning,
         makeEngine: (@MainActor () -> TypingEngineControlling)? = nil
     ) {
         self.settings = settings
         self.isAccessibilityGranted = isAccessibilityGranted
+        self.isPapugaRunning = isPapugaRunning
         self.makeEngine = makeEngine ?? {
             TypingEngine(
                 storageDirectory: RecordingsLibraryStorage.defaultAppDirectory.appendingPathComponent("Typing"),
                 settings: { settings.typingSettings },
                 logSubsystem: Log.subsystem,
                 hintPresenter: TypingHintPresenter(settings: settings),
-                onCadenceGapWritten: { settings.typingCadenceAverageGap = $0 }
+                onCadenceGapWritten: { settings.typingCadenceAverageGap = $0 },
+                onRulesWritten: { settings.typingCustomReplaceRules = $0 },
+                onWordAdded: { settings.addTypingNeverFixWord($0) },
+                onWordRemoved: { settings.removeTypingNeverFixWord($0) }
             )
         }
     }
 
-    /// Starts following the setting, app activation (a permission may have changed) and Diduny's own
-    /// pastes, then reconciles once.
+    /// Starts following the setting, app activation (a permission may have changed), Papuga launching or
+    /// quitting and Diduny's own pastes, then reconciles once.
     func activate(clipboard: ClipboardService) {
         clipboard.onShortcutPosted = { [weak self] in self?.noteExternalEdit() }
         guard observers.isEmpty else { return }
         for name in [Notification.Name.typingSettingsChanged, NSApplication.didBecomeActiveNotification] {
             let observer = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reconcile() }
+            }
+            observers.append(observer)
+        }
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+            let observer = NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                guard let bundleID = app?.bundleIdentifier, Self.papugaBundleIDs.contains(bundleID) else { return }
                 MainActor.assumeIsolated { self?.reconcile() }
             }
             observers.append(observer)
@@ -72,6 +91,11 @@ final class TypingEngineHost {
     func reconcile() {
         guard settings.typingEnabled, isAccessibilityGranted() else {
             stop()
+            return
+        }
+        guard !isPapugaRunning() else {
+            stop()
+            state = .papugaRunning
             return
         }
         guard state != .running else { return }
@@ -92,6 +116,12 @@ final class TypingEngineHost {
             Log.app.info("[Typing] engine stopped")
         }
         state = .stopped
+    }
+
+    nonisolated static func isStandalonePapugaRunning() -> Bool {
+        papugaBundleIDs.contains { bundleID in
+            NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).contains { !$0.isTerminated }
+        }
     }
 
     /// Diduny changed the focused text itself (paste, copy, submit): the engine drops the word it was following.

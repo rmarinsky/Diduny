@@ -15,6 +15,8 @@ extension SettingsStorage {
         case undoHintEnabled = "typing.undoHintEnabled"
         case disabledApps = "typing.disabledApps"
         case cadenceAverageGap = "typing.cadenceAverageGap"
+        case neverFixWords = "typing.neverFixWords"
+        case customReplaceRules = "typing.customReplaceRules"
     }
 
     /// "Fix as I type". Off until the user turns it on.
@@ -58,6 +60,41 @@ extension SettingsStorage {
         }
     }
 
+    /// The words marked "Never replace", in the order they were added. Written by the engine, which
+    /// reads them back at once, so it posts no change notification.
+    var typingNeverFixWords: [String] {
+        get { defaults.stringArray(forKey: TypingKey.neverFixWords.rawValue) ?? [] }
+        set {
+            defaults.set(newValue, forKey: TypingKey.neverFixWords.rawValue)
+            typingSettingsCache.value = nil
+        }
+    }
+
+    func addTypingNeverFixWord(_ rawWord: String) {
+        let word = rawWord.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty,
+              !typingNeverFixWords.contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }) else { return }
+        typingNeverFixWords.append(word)
+    }
+
+    func removeTypingNeverFixWord(_ rawWord: String) {
+        let word = rawWord.trimmingCharacters(in: .whitespacesAndNewlines)
+        typingNeverFixWords.removeAll { $0.caseInsensitiveCompare(word) == .orderedSame }
+    }
+
+    /// The replace rules made from accepted proposals, stored as JSON. Written by the engine, like
+    /// `typingNeverFixWords`.
+    var typingCustomReplaceRules: [CustomAutoReplaceRule] {
+        get {
+            guard let data = defaults.data(forKey: TypingKey.customReplaceRules.rawValue) else { return [] }
+            return (try? JSONDecoder().decode([CustomAutoReplaceRule].self, from: data)) ?? []
+        }
+        set {
+            defaults.set(try? JSONEncoder().encode(newValue), forKey: TypingKey.customReplaceRules.rawValue)
+            typingSettingsCache.value = nil
+        }
+    }
+
     /// What the engine reads. Built once and kept until a typing key is written through this type.
     var typingSettings: TypingSettings {
         if let cached = typingSettingsCache.value { return cached }
@@ -67,6 +104,10 @@ extension SettingsStorage {
         settings.autoFixToastEnabled = typingUndoHintEnabled
         settings.autoFixBlocklist = typingDisabledApps
         settings.typingCadenceAverageGap = typingCadenceAverageGap
+        // The engine must never "fix" a Vocabulary word either.
+        var seen = Set<String>()
+        settings.autoFixAllowlist = (typingNeverFixWords + speechVocabularyTerms).filter { seen.insert($0.lowercased()).inserted }
+        settings.customAutoReplaceRules = typingCustomReplaceRules
         typingSettingsCache.value = settings
         return settings
     }

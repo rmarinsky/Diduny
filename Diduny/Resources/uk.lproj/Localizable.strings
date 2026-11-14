@@ -2426,6 +2426,7 @@
 "Fixes text typed in the wrong keyboard layout." = "Виправляє текст, набраний не в тій розкладці клавіатури.";
 "Needed to fix what you type. Not allowed yet." = "Потрібно, щоб виправляти те, що ви набираєте. Ще не дозволено.";
 "Diduny could not start watching the keyboard." = "Diduny не зміг почати стежити за клавіатурою.";
+"Papuga is running. Diduny fixes typing only while Papuga is closed." = "Papuga запущено. Diduny виправляє набір лише тоді, коли Papuga закрито.";
 "Fix wrong-layout text as I type" = "Виправляти текст у не тій розкладці, поки я набираю";
 "How often to fix" = "Як часто виправляти";
 "Careful" = "Обережно";

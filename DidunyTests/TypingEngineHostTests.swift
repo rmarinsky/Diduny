@@ -30,10 +30,12 @@ final class TypingEngineHostTests {
     private let box = IsolatedSettings("TypingEngineHostTests")
     private let engine = FakeTypingEngine()
     private var accessibilityGranted = true
+    private var papugaRunning = false
     private var enginesBuilt = 0
     private lazy var sut = TypingEngineHost(
         settings: box.settings,
         isAccessibilityGranted: { [unowned self] in accessibilityGranted },
+        isPapugaRunning: { [unowned self] in papugaRunning },
         makeEngine: { [unowned self] in
             enginesBuilt += 1
             return engine
@@ -58,6 +60,62 @@ final class TypingEngineHostTests {
         #expect(engine.isRunning == (expected == .running))
         // The engine is not even built until the setting and the permission allow it.
         #expect(enginesBuilt == (enabled && accessibility ? 1 : 0))
+        #expect(engine.stops == 0)
+    }
+
+    @Test("a running Papuga keeps the engine off, whatever else is true", arguments: [
+        (enabled: false, accessibility: true, expected: TypingEngineHost.State.stopped),
+        (enabled: true, accessibility: false, expected: .stopped),
+        (enabled: true, accessibility: true, expected: .papugaRunning)
+    ])
+    func truthTableWithPapuga(enabled: Bool, accessibility: Bool, expected: TypingEngineHost.State) {
+        box.settings.typingEnabled = enabled
+        accessibilityGranted = accessibility
+        papugaRunning = true
+
+        sut.reconcile()
+
+        #expect(sut.state == expected)
+        #expect(enginesBuilt == 0)
+        #expect(engine.starts == 0)
+    }
+
+    @Test("Papuga launching stops the engine once, Papuga quitting starts it again")
+    func papugaLaunchAndQuit() {
+        box.settings.typingEnabled = true
+        sut.reconcile()
+        #expect(sut.state == .running)
+
+        papugaRunning = true
+        sut.reconcile()
+        sut.reconcile()
+        #expect(sut.state == .papugaRunning)
+        #expect(!engine.isRunning)
+        #expect(engine.stops == 1)
+
+        papugaRunning = false
+        sut.reconcile()
+        #expect(sut.state == .running)
+        #expect(engine.starts == 2)
+
+        papugaRunning = true
+        sut.reconcile()
+        #expect(sut.state == .papugaRunning)
+        #expect(engine.stops == 2)
+        #expect(enginesBuilt == 1)
+    }
+
+    @Test("turning the setting off while Papuga runs ends as stopped; a pasted shortcut tells nobody")
+    func papugaThenSettingOff() {
+        box.settings.typingEnabled = true
+        papugaRunning = true
+        sut.reconcile()
+        sut.noteExternalEdit()
+        #expect(engine.externalEdits == 0)
+
+        box.settings.typingEnabled = false
+        sut.reconcile()
+        #expect(sut.state == .stopped)
         #expect(engine.stops == 0)
     }
 

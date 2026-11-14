@@ -2426,6 +2426,7 @@
 "Fixes text typed in the wrong keyboard layout." = "Fixes text typed in the wrong keyboard layout.";
 "Needed to fix what you type. Not allowed yet." = "Needed to fix what you type. Not allowed yet.";
 "Diduny could not start watching the keyboard." = "Diduny could not start watching the keyboard.";
+"Papuga is running. Diduny fixes typing only while Papuga is closed." = "Papuga is running. Diduny fixes typing only while Papuga is closed.";
 "Fix wrong-layout text as I type" = "Fix wrong-layout text as I type";
 "How often to fix" = "How often to fix";
 "Careful" = "Careful";

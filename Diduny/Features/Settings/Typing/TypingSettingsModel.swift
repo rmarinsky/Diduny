@@ -7,10 +7,16 @@ enum TypingStatus: Equatable {
     case accessibilityNeeded
     /// The setting is on and Accessibility is granted, but the system refused the key event tap.
     case startFailed
+    /// A standalone Papuga is running, so Diduny's engine waits.
+    case papugaRunning
 
     static func current(accessibilityGranted: Bool, hostState: TypingEngineHost.State) -> TypingStatus? {
         if !accessibilityGranted { return .accessibilityNeeded }
-        return hostState == .startFailed ? .startFailed : nil
+        switch hostState {
+        case .startFailed: return .startFailed
+        case .papugaRunning: return .papugaRunning
+        case .stopped, .running: return nil
+        }
     }
 }
 
@@ -69,8 +75,18 @@ final class TypingSettingsModel {
 
     // MARK: - Status
 
+    /// Reading `host.state` here makes the page follow the host by itself.
     var status: TypingStatus? {
         TypingStatus.current(accessibilityGranted: accessibilityGranted, hostState: host.state)
+    }
+
+    /// The page calls this every second while it is open: Accessibility changes in System Settings while
+    /// Diduny is not the active app, and nothing announces it.
+    func refreshAccessibility() {
+        let granted = isAccessibilityGranted()
+        guard granted != accessibilityGranted else { return }
+        accessibilityGranted = granted
+        host.reconcile()
     }
 
     func tryAgain() {
