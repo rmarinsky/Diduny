@@ -182,7 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var pushToTalkService = PushToTalkService()
     lazy var translationPushToTalkService = PushToTalkService()
     lazy var inplaceTranslationMonitor = InplaceTranslationHotkeyMonitor()
-    lazy var typingEngineHost = TypingEngineHost()
+    lazy var typingEngineHost = TypingEngineHost.shared
     lazy var meetingRecorderService = MeetingRecorderService()
     lazy var meetingJoinMonitor = MeetingJoinMonitor()
     let calendarReminderController = CalendarReminderController()

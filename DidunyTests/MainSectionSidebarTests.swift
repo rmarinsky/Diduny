@@ -8,26 +8,27 @@ import Testing
 @MainActor
 struct MainSectionSidebarTests {
     @Test func mainItemsInOrder() {
-        #expect(MainSection.mainItems == [.overview, .recordings, .notes, .typingTest])
+        #expect(MainSection.mainItems == [.overview, .recordings, .notes])
     }
 
     @Test func settingsItemsInOrder() {
-        #expect(MainSection.settingsItems == [.general, .modes, .vocabulary, .meetings, .models, .account, .about])
+        #expect(MainSection.settingsItems == [.general, .modes, .vocabulary, .typing, .meetings, .models, .account, .about])
     }
 
     @Test func sidebarLabels() {
         let labels = (MainSection.mainItems + MainSection.settingsItems).map(\.sidebarLabel)
         #expect(labels == [
-            "Overview", "Recordings", "Notes", "Typing test",
-            "General", "Dictation", "Vocabulary & context", "Meetings & notes", "Models", "Account", "About",
+            "Overview", "Recordings", "Notes",
+            "General", "Dictation", "Vocabulary & context", "Typing", "Meetings & notes", "Models", "Account", "About",
         ])
     }
 
     @Test func tabsOfEachRowInOrder() {
         #expect(MainSection.modes.tabs.map(\.label) == ["Modes & shortcuts", "Languages", "Audio"])
+        #expect(MainSection.typing.tabs.map(\.label) == ["Layout fixes", "Typing test"])
         #expect(MainSection.meetings.tabs.map(\.label) == ["Calendar & meetings", "Notes settings"])
         #expect(MainSection.models.tabs.map(\.label) == ["Local models", "Providers", "Benchmark"])
-        let single: [MainSection] = [.overview, .recordings, .notes, .typingTest, .general, .vocabulary, .account, .about]
+        let single: [MainSection] = [.overview, .recordings, .notes, .general, .vocabulary, .account, .about]
         for row in single {
             #expect(row.tabs == [row])
         }
@@ -49,8 +50,9 @@ struct MainSectionSidebarTests {
     /// The sidebar fills the row `tabs.first`; the switch shows `tabs` with the page itself selected.
     @Test func openingAPageSelectsItsRowAndTab() {
         let expected: [MainSection: MainSection] = [
-            .overview: .overview, .recordings: .recordings, .notes: .notes, .typingTest: .typingTest,
+            .overview: .overview, .recordings: .recordings, .notes: .notes,
             .general: .general, .modes: .modes, .languages: .modes, .audioDictation: .modes, .vocabulary: .vocabulary,
+            .typing: .typing, .typingTest: .typing,
             .meetings: .meetings, .notesSettings: .meetings,
             .models: .models, .providers: .models, .benchmark: .models,
             .account: .account, .about: .about,
@@ -72,16 +74,24 @@ struct MainSectionSidebarTests {
         #expect(MainSection.modes.label == "Modes & shortcuts")
         #expect(MainSection.meetings.label == "Calendar & meetings")
         #expect(MainSection.models.label == "Local models")
+        #expect(MainSection.typingTest.label == "Typing test")
     }
 
     @Test func newItemIcons() {
         #expect(MainSection.modes.iconName == "slider.horizontal.3")
         #expect(MainSection.languages.iconName == "globe")
         #expect(MainSection.audioDictation.iconName == "waveform.and.mic")
+        #expect(MainSection.typing.iconName == "keyboard")
     }
 
     @Test func audioKeepsItsRawValue() {
         #expect(MainSection.audioDictation.rawValue == "audioDictation")
+    }
+
+    /// `section.typingTest` and `--ui-testing-open=settings.typing` depend on these.
+    @Test func typingRawValues() {
+        #expect(MainSection.typing.rawValue == "typing")
+        #expect(MainSection.typingTest.rawValue == "typingTest")
     }
 
     @Test func footerShortcutDefault() {

@@ -125,6 +125,8 @@ struct MainWindowView: View {
             LanguagesSettingsView()
         case .vocabulary:
             VocabularySettingsView()
+        case .typing:
+            TypingSettingsView()
         case .audioDictation:
             AudioSettingsView()
                 .environment(audioDeviceManager)

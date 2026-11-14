@@ -37,7 +37,8 @@ final class MainWindowUITests: DidunyUITestCase {
             ("Account", nil, "account", { $0.textFields["account.email"] }),
             ("About", nil, "about", { $0.staticTexts["Author"] }),
             ("Models", "Benchmark", "benchmark", { $0.staticTexts["Benchmark"] }),
-            ("Typing test", nil, "typingTest", { $0.staticTexts["Typing Speed Test"] }),
+            ("Typing", nil, "typing", { $0.staticTexts["Apps where fixes are off"] }),
+            ("Typing", "Typing test", "typingTest", { $0.staticTexts["Typing Speed Test"] }),
             ("Recordings", nil, "recordings", { $0.staticTexts["No Recordings Yet"] }),
             ("Overview", nil, "overview", { $0.staticTexts["Overview"] }),
         ]
@@ -55,7 +56,7 @@ final class MainWindowUITests: DidunyUITestCase {
 
             let container = waitForElement(section(entry.id), "\(entry.label) did not show its section")
             // Only a row with several pages shows the switch.
-            XCTAssertEqual(tabs.exists, ["Dictation", "Meetings & notes", "Models"].contains(entry.label))
+            XCTAssertEqual(tabs.exists, ["Dictation", "Typing", "Meetings & notes", "Models"].contains(entry.label))
             waitForElement(entry.marker(container), "\(entry.label) is missing its content")
             waitForElement(item, toMatch: "value == 'Selected'")
             if previous.id != entry.id {

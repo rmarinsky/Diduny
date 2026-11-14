@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import PapugaKit
 
 /// What the host needs from the typing engine; `TypingEngine` in the app, a fake in tests.
@@ -14,7 +15,11 @@ extension TypingEngine: TypingEngineControlling {}
 /// Runs the typing engine (fixes while typing) while `typing.enabled` is on and Accessibility is granted.
 /// `reconcile()` is the only place that starts or stops it.
 @MainActor
+@Observable
 final class TypingEngineHost {
+    /// The app's host; `AppDelegate` activates it and the Typing page reads its `state`.
+    static let shared = TypingEngineHost()
+
     enum State: Equatable {
         case stopped
         case running
@@ -25,12 +30,12 @@ final class TypingEngineHost {
 
     private(set) var state: State = .stopped
 
-    private let settings: SettingsStorage
-    private let isAccessibilityGranted: () -> Bool
-    private let makeEngine: @MainActor () -> TypingEngineControlling
+    @ObservationIgnored private let settings: SettingsStorage
+    @ObservationIgnored private let isAccessibilityGranted: () -> Bool
+    @ObservationIgnored private let makeEngine: @MainActor () -> TypingEngineControlling
     /// Built on the first start, so a user who never turns Typing on pays nothing.
-    private var engine: TypingEngineControlling?
-    private var observers: [NSObjectProtocol] = []
+    @ObservationIgnored private var engine: TypingEngineControlling?
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
     init(
         settings: SettingsStorage = .shared,

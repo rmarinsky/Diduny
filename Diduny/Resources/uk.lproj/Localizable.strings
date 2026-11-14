@@ -2419,3 +2419,25 @@
 "Key lacks permission: user_read" = "Ключ не має дозволу: user_read";
 "Meetings & notes" = "Зустрічі й нотатки";
 "Models" = "Моделі";
+
+/* Settings > Typing (layout fixes) */
+"Typing" = "Набір тексту";
+"Layout fixes" = "Виправлення розкладки";
+"Fixes text typed in the wrong keyboard layout." = "Виправляє текст, набраний не в тій розкладці клавіатури.";
+"Needed to fix what you type. Not allowed yet." = "Потрібно, щоб виправляти те, що ви набираєте. Ще не дозволено.";
+"Diduny could not start watching the keyboard." = "Diduny не зміг почати стежити за клавіатурою.";
+"Fix wrong-layout text as I type" = "Виправляти текст у не тій розкладці, поки я набираю";
+"How often to fix" = "Як часто виправляти";
+"Careful" = "Обережно";
+"Balanced" = "Збалансовано";
+"More hints" = "Більше підказок";
+"Careful fixes only clear cases. More hints asks before unclear ones." = "«Обережно» виправляє лише очевидні випадки. «Більше підказок» питає перед неочевидними.";
+"Switch the keyboard layout after a fix" = "Перемикати розкладку клавіатури після виправлення";
+"Show an undo hint at the cursor" = "Показувати підказку скасування біля курсора";
+"Apps" = "Програми";
+"Apps where fixes are off" = "Програми, де виправлення вимкнено";
+"Fixes work in every app." = "Виправлення працюють у всіх програмах.";
+"Diduny does not change what you type in these apps" = "У цих програмах Diduny не змінює те, що ви набираєте";
+"Fixes are off in" = "Виправлення вимкнено в";
+"Other apps" = "Інші програми";
+"Used to count the time saved in Overview." = "За нею рахується заощаджений час в Огляді.";

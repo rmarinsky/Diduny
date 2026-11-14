@@ -11,6 +11,8 @@ enum MainSection: String, CaseIterable, Hashable {
     case modes
     case languages
     case vocabulary
+    /// Label "Layout fixes"; the sidebar row reads "Typing".
+    case typing
     /// Label "Audio"; the raw value stays so `section.audioDictation` is stable.
     case audioDictation
     case meetings
@@ -21,13 +23,14 @@ enum MainSection: String, CaseIterable, Hashable {
     case about
 
     /// Sidebar rows. A row is named by its first page; `tabs` lists the pages it holds.
-    static let mainItems: [MainSection] = [.overview, .recordings, .notes, .typingTest]
-    static let settingsItems: [MainSection] = [.general, .modes, .vocabulary, .meetings, .models, .account, .about]
+    static let mainItems: [MainSection] = [.overview, .recordings, .notes]
+    static let settingsItems: [MainSection] = [.general, .modes, .vocabulary, .typing, .meetings, .models, .account, .about]
 
     /// The pages that share this page's sidebar row, in tab order. One page: no switch.
     var tabs: [MainSection] {
         switch self {
         case .modes, .languages, .audioDictation: [.modes, .languages, .audioDictation]
+        case .typing, .typingTest: [.typing, .typingTest]
         case .meetings, .notesSettings: [.meetings, .notesSettings]
         case .models, .providers, .benchmark: [.models, .providers, .benchmark]
         default: [self]
@@ -38,6 +41,7 @@ enum MainSection: String, CaseIterable, Hashable {
     var sidebarLabel: String {
         switch self {
         case .modes: String(localized: "Dictation")
+        case .typing: String(localized: "Typing")
         case .meetings: String(localized: "Meetings & notes")
         case .models: String(localized: "Models")
         default: label
@@ -57,6 +61,7 @@ enum MainSection: String, CaseIterable, Hashable {
         case .modes: String(localized: "Modes & shortcuts")
         case .languages: String(localized: "Languages")
         case .vocabulary: String(localized: "Vocabulary & context")
+        case .typing: String(localized: "Layout fixes")
         case .audioDictation: String(localized: "Audio")
         case .models: String(localized: "Local models")
         case .providers: String(localized: "Providers")
@@ -78,6 +83,7 @@ enum MainSection: String, CaseIterable, Hashable {
         case .modes: "slider.horizontal.3"
         case .languages: "globe"
         case .vocabulary: "text.book.closed"
+        case .typing: "keyboard"
         case .audioDictation: "waveform.and.mic"
         case .models: "cpu"
         case .providers: "key.horizontal"

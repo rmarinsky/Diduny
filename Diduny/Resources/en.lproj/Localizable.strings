@@ -2419,3 +2419,25 @@
 "Key lacks permission: user_read" = "Key lacks permission: user_read";
 "Meetings & notes" = "Meetings & notes";
 "Models" = "Models";
+
+/* Settings > Typing (layout fixes) */
+"Typing" = "Typing";
+"Layout fixes" = "Layout fixes";
+"Fixes text typed in the wrong keyboard layout." = "Fixes text typed in the wrong keyboard layout.";
+"Needed to fix what you type. Not allowed yet." = "Needed to fix what you type. Not allowed yet.";
+"Diduny could not start watching the keyboard." = "Diduny could not start watching the keyboard.";
+"Fix wrong-layout text as I type" = "Fix wrong-layout text as I type";
+"How often to fix" = "How often to fix";
+"Careful" = "Careful";
+"Balanced" = "Balanced";
+"More hints" = "More hints";
+"Careful fixes only clear cases. More hints asks before unclear ones." = "Careful fixes only clear cases. More hints asks before unclear ones.";
+"Switch the keyboard layout after a fix" = "Switch the keyboard layout after a fix";
+"Show an undo hint at the cursor" = "Show an undo hint at the cursor";
+"Apps" = "Apps";
+"Apps where fixes are off" = "Apps where fixes are off";
+"Fixes work in every app." = "Fixes work in every app.";
+"Diduny does not change what you type in these apps" = "Diduny does not change what you type in these apps";
+"Fixes are off in" = "Fixes are off in";
+"Other apps" = "Other apps";
+"Used to count the time saved in Overview." = "Used to count the time saved in Overview.";
