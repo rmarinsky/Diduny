@@ -17,7 +17,7 @@ struct ShortcutsSettingsModelTests {
             [.shortcut(.cancelRecording), .keepAudioWhenCancelled, .shortcut(.forceSubmit), .shortcut(.addMeetingChapter)],
             [.shortcut(.translateSelectedText), .shortcut(.inplaceTranslation), .inplacePair],
             [.shortcut(.historyPalette), .openSettings],
-            [.shortcut(.undoLayoutFix)],
+            [.convertLayout, .shortcut(.undoLayoutFix)],
         ])
     }
 
@@ -33,6 +33,18 @@ struct ShortcutsSettingsModelTests {
         #expect(model.displayedPressCount(for: .undoLayoutFix) == 1)
         model.shortcutDidChange(.undoLayoutFix)
         #expect(store.changed == [.undoLayoutFix])
+    }
+
+    @Test("Convert: Option+Shift twice and on by default; the menu and the switch write the store")
+    func convertLayoutRow() {
+        let model = model
+        #expect(model.convertPair == .optionShift)
+        #expect(model.convertEnabled)
+        model.convertPair = .commandShift
+        model.convertEnabled = false
+        #expect(store.convertPair == .commandShift)
+        #expect(store.convertEnabled == false)
+        #expect(TypingConvertPair.allCases.map(\.families.displaySymbols) == ["⌥⇧", "⇧⌘", "⌃⇧"])
     }
 
     @Test("Only the two special rows use the in-repo capture field (D8)")
@@ -178,4 +190,6 @@ final class FakeShortcutsSettingsStore: ShortcutsSettingsStore {
     func takenShortcuts(excluding _: ShortcutRow) -> [KeyboardShortcuts.Name: KeyboardShortcuts.Shortcut] { [:] }
     func selectPair(_ pair: TranslationLanguagePair) { selectedPair = pair }
     var currentPair: TranslationLanguagePair? { selectedPair ?? offeredPairs.first }
+    var convertPair: TypingConvertPair = .optionShift
+    var convertEnabled = true
 }

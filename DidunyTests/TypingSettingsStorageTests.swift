@@ -17,6 +17,8 @@ final class TypingSettingsStorageTests {
         #expect(settings.typingUndoHintEnabled)
         #expect(settings.typingDisabledApps.isEmpty)
         #expect(settings.typingCadenceAverageGap == 0)
+        #expect(settings.typingConvertEnabled)
+        #expect(settings.typingConvertPair == .optionShift)
         #expect(settings.typingSettings == TypingSettings())
     }
 
@@ -33,6 +35,8 @@ final class TypingSettingsStorageTests {
         settings.typingCadenceAverageGap = 0.2
         settings.addTypingNeverFixWord("ghbdsn")
         settings.typingCustomReplaceRules = [CustomAutoReplaceRule(source: "nfrj;", target: "також")]
+        settings.typingConvertEnabled = false
+        settings.typingConvertPair = .commandShift
 
         let written = Set(box.defaults.dictionaryRepresentation().keys).subtracting(before)
         #expect(written == Set(SettingsStorage.TypingKey.allCases.map(\.rawValue)))

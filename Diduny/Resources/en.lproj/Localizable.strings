@@ -1916,6 +1916,9 @@
 "History palette" = "History palette";
 "Undo the last layout fix" = "Undo the last layout fix";
 "Layout fix. No keys by default. Click the field and press the keys you want." = "Layout fix. No keys by default. Click the field and press the keys you want.";
+"Convert the selection to the other layout" = "Convert the selection to the other layout";
+"Layout fix. Two modifier keys pressed together, twice." = "Layout fix. Two modifier keys pressed together, twice.";
+"Keys to convert" = "Keys to convert";
 "Open Settings" = "Open Settings";
 "The standard macOS shortcut. It cannot be changed." = "The standard macOS shortcut. It cannot be changed.";
 

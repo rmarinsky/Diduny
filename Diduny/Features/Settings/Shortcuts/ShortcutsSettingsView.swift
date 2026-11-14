@@ -60,6 +60,34 @@ struct ShortcutsSettingsView: View {
             ) {
                 pairPicker
             } keys: { EmptyView() }
+        case .convertLayout:
+            gridRow(
+                title: "Convert the selection to the other layout",
+                caption: "Layout fix. Two modifier keys pressed together, twice."
+            ) {
+                ShortcutPressCountPicker(selection: .constant(2), isOff: !model.convertEnabled, disabledCounts: [1, 3])
+                    .disabled(!model.convertEnabled)
+                    .accessibilityIdentifier("shortcuts.convertLayout.pressCount")
+                SettingsSwitch(
+                    title: "Convert the selection to the other layout",
+                    isOn: Binding(get: { model.convertEnabled }, set: { model.convertEnabled = $0 })
+                )
+                .accessibilityIdentifier("shortcuts.convertLayout.enabled")
+            } keys: {
+                Picker(
+                    "Keys to convert",
+                    selection: Binding(get: { model.convertPair }, set: { model.convertPair = $0 })
+                ) {
+                    ForEach(TypingConvertPair.allCases) { pair in
+                        Text(verbatim: pair.families.displaySymbols).tag(pair)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
+                .disabled(!model.convertEnabled)
+                .accessibilityIdentifier("shortcuts.convertLayout.keys")
+            }
         case .openSettings:
             EmptyView()
         }
@@ -237,4 +265,6 @@ private final class FakePreviewShortcutsStore: ShortcutsSettingsStore {
     var offeredPairs: [TranslationLanguagePair] { [TranslationLanguagePair(languageA: "en", languageB: "uk")] }
     var currentPair: TranslationLanguagePair? { offeredPairs.first }
     func selectPair(_: TranslationLanguagePair) {}
+    var convertPair: TypingConvertPair = .optionShift
+    var convertEnabled = true
 }

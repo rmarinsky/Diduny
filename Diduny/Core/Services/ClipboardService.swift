@@ -178,6 +178,62 @@ final class ClipboardService {
         throw ClipboardError.captureSelectionFailed
     }
 
+    /// Papuga's `clipboardRestoreDelay`: how long the pasted text stays on the pasteboard before the old one returns.
+    static let replaceSelectionRestoreDelay: Duration = .milliseconds(500)
+
+    /// Copies the selection, pastes what `transform` makes of it, then puts the old pasteboard back.
+    /// Returns nil when nothing was copied or `transform` returned nil; the pasteboard is restored either way.
+    @MainActor
+    func replaceSelection<Result>(
+        _ transform: (String) -> (text: String, result: Result)?
+    ) async throws -> Result? {
+        guard ClipboardService.isAccessibilityGranted() else { throw ClipboardError.accessibilityNotGranted }
+        let saved = Self.snapshot(pasteboard)
+        let initialChangeCount = pasteboard.changeCount
+        try await postCommandShortcut(keyCode: CGKeyCode(8), error: .copyEventFailed)
+
+        var selection: String?
+        for _ in 0 ..< 10 {
+            if pasteboard.changeCount != initialChangeCount {
+                selection = pasteboard.string(forType: .string)
+                break
+            }
+            try await Task.sleep(for: .milliseconds(40))
+        }
+        guard let selection, !selection.isEmpty, let output = transform(selection) else {
+            Self.restore(saved, to: pasteboard)
+            return nil
+        }
+        pasteboard.clearContents()
+        pasteboard.setString(output.text, forType: .string)
+        do {
+            try await paste()
+            try await Task.sleep(for: Self.replaceSelectionRestoreDelay)
+        } catch {
+            Self.restore(saved, to: pasteboard)
+            throw error
+        }
+        Self.restore(saved, to: pasteboard)
+        return output.result
+    }
+
+    /// Every item with every type, as data.
+    static func snapshot(_ pasteboard: NSPasteboard) -> [[NSPasteboard.PasteboardType: Data]] {
+        (pasteboard.pasteboardItems ?? []).map { item in
+            Dictionary(item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }, uniquingKeysWith: { first, _ in first })
+        }
+    }
+
+    static func restore(_ items: [[NSPasteboard.PasteboardType: Data]], to pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+        let restored = items.map { types in
+            let item = NSPasteboardItem()
+            for (type, data) in types { item.setData(data, forType: type) }
+            return item
+        }
+        if !restored.isEmpty { pasteboard.writeObjects(restored) }
+    }
+
     /// Sends the given shortcut to the frontmost app (used by Force submit after a successful paste).
     func sendShortcut(keyCode: CGKeyCode, flags: CGEventFlags) async throws {
         #if TEST_BUILD

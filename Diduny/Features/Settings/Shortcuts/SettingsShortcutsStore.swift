@@ -101,6 +101,16 @@ final class SettingsShortcutsStore: ShortcutsSettingsStore {
         return PushToTalkKey.blocksInplaceTranslation(reserved)
     }
 
+    var convertPair: TypingConvertPair {
+        get { settings.typingConvertPair }
+        set { settings.typingConvertPair = newValue }
+    }
+
+    var convertEnabled: Bool {
+        get { settings.typingConvertEnabled }
+        set { settings.typingConvertEnabled = newValue }
+    }
+
     var offeredPairs: [TranslationLanguagePair] { settings.offeredTranslationPairs }
     var currentPair: TranslationLanguagePair? { settings.translationPair }
     func selectPair(_ pair: TranslationLanguagePair) { settings.selectTranslationPair(pair) }

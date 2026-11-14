@@ -9,6 +9,8 @@ protocol TypingEngineControlling: AnyObject {
     func stop()
     func noteExternalEdit()
     func undoLastFix()
+    func layoutConversion(of text: String) -> TypingLayoutConversion?
+    func finishLayoutConversion(_ conversion: TypingLayoutConversion)
 }
 
 extension TypingEngine: TypingEngineControlling {}
@@ -50,14 +52,25 @@ final class TypingEngineHost {
     /// Built on the first start, so a user who never turns Typing on pays nothing.
     @ObservationIgnored private var engine: TypingEngineControlling?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    @ObservationIgnored private let convertMonitor: TypingConvertMonitor
+    @ObservationIgnored private var clipboard: ClipboardService = .shared
+    @ObservationIgnored private var isConverting = false
+
+    /// The Convert pair while it is listened for. Push-to-talk ignores a press of its key while the other key
+    /// of this pair is down, so the pair pressed twice is never also a dictation tap.
+    var activeConvertPair: TypingConvertPair? {
+        convertMonitor.pair
+    }
 
     init(
         settings: SettingsStorage = .shared,
         isAccessibilityGranted: @escaping () -> Bool = ClipboardService.isAccessibilityGranted,
         isPapugaRunning: @escaping () -> Bool = TypingEngineHost.isStandalonePapugaRunning,
-        makeEngine: (@MainActor () -> TypingEngineControlling)? = nil
+        makeEngine: (@MainActor () -> TypingEngineControlling)? = nil,
+        convertMonitor: TypingConvertMonitor = TypingConvertMonitor()
     ) {
         self.settings = settings
+        self.convertMonitor = convertMonitor
         self.isAccessibilityGranted = isAccessibilityGranted
         self.isPapugaRunning = isPapugaRunning
         self.makeEngine = makeEngine ?? {
@@ -73,11 +86,15 @@ final class TypingEngineHost {
                 onWordRemoved: { settings.removeTypingNeverFixWord($0) }
             )
         }
+        convertMonitor.onTrigger = { [weak self] in
+            MainActor.assumeIsolated { self?.convertSelection() }
+        }
     }
 
     /// Starts following the setting, app activation (a permission may have changed), Papuga launching or
     /// quitting and Diduny's own pastes, then reconciles once.
     func activate(clipboard: ClipboardService) {
+        self.clipboard = clipboard
         clipboard.onShortcutPosted = { [weak self] in self?.noteExternalEdit() }
         guard observers.isEmpty else { return }
         for name in [Notification.Name.typingSettingsChanged, NSApplication.didBecomeActiveNotification] {
@@ -98,6 +115,7 @@ final class TypingEngineHost {
     }
 
     func reconcile() {
+        defer { convertMonitor.listen(for: state == .running && settings.typingConvertEnabled ? settings.typingConvertPair : nil) }
         guard settings.typingEnabled, isAccessibilityGranted() else {
             stop()
             return
@@ -137,6 +155,29 @@ final class TypingEngineHost {
     func noteExternalEdit() {
         guard state == .running else { return }
         engine?.noteExternalEdit()
+    }
+
+    /// The Convert pair was pressed twice: the selection is retyped in the next layout and the layout switches.
+    func convertSelection() {
+        guard state == .running, !isConverting, let engine else { return }
+        isConverting = true
+        Task { @MainActor in
+            defer { isConverting = false }
+            ClipboardHistoryService.shared.suspend()
+            defer { ClipboardHistoryService.shared.resume() }
+            do {
+                let conversion = try await clipboard.replaceSelection { text in
+                    engine.layoutConversion(of: text).map { (text: $0.converted, result: $0) }
+                }
+                if let conversion {
+                    engine.finishLayoutConversion(conversion)
+                } else {
+                    Log.app.info("[Typing] convert: nothing selected or no other layout")
+                }
+            } catch {
+                Log.app.error("[Typing] convert failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// The "Undo the last layout fix" shortcut. Does nothing while the engine is not running.

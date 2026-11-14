@@ -53,6 +53,9 @@ protocol ShortcutsSettingsStore: AnyObject {
     /// "Pair for both directions" (decision 2).
     var currentPair: TranslationLanguagePair? { get }
     func selectPair(_ pair: TranslationLanguagePair)
+    /// "Convert the selection to the other layout": the pair pressed twice, and its switch.
+    var convertPair: TypingConvertPair { get set }
+    var convertEnabled: Bool { get set }
 }
 
 /// Page rules for Settings > Shortcuts, free of AppKit so they are unit-tested.
@@ -66,6 +69,7 @@ final class ShortcutsSettingsModel {
         case keepAudioWhenCancelled
         case inplacePair
         case openSettings
+        case convertLayout
 
         var id: String {
             switch self {
@@ -73,6 +77,7 @@ final class ShortcutsSettingsModel {
             case .keepAudioWhenCancelled: "escapeCancelSaveAudio"
             case .inplacePair: "inplaceTranslationPair"
             case .openSettings: "openSettings"
+            case .convertLayout: "convertLayout"
             }
         }
     }
@@ -89,7 +94,7 @@ final class ShortcutsSettingsModel {
         ]),
         Group(id: .text, items: [.shortcut(.translateSelectedText), .shortcut(.inplaceTranslation), .inplacePair]),
         Group(id: .app, items: [.shortcut(.historyPalette), .openSettings]),
-        Group(id: .typing, items: [.shortcut(.undoLayoutFix)]),
+        Group(id: .typing, items: [.convertLayout, .shortcut(.undoLayoutFix)]),
     ]
 
     static let pressCounts = 1 ... 3
@@ -169,6 +174,16 @@ final class ShortcutsSettingsModel {
     var selectedPairID: String? {
         _ = revision
         return store.currentPair?.id
+    }
+
+    var convertPair: TypingConvertPair {
+        get { _ = revision; return store.convertPair }
+        set { store.convertPair = newValue; revision += 1 }
+    }
+
+    var convertEnabled: Bool {
+        get { _ = revision; return store.convertEnabled }
+        set { store.convertEnabled = newValue; revision += 1 }
     }
 
     func selectPair(id: String) {

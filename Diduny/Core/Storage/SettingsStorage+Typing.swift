@@ -18,6 +18,8 @@ extension SettingsStorage {
         case cadenceAverageGap = "typing.cadenceAverageGap"
         case neverFixWords = "typing.neverFixWords"
         case customReplaceRules = "typing.customReplaceRules"
+        case convertEnabled = "typing.convertEnabled"
+        case convertPair = "typing.convertPair"
     }
 
     /// "Fix as I type". Off until the user turns it on.
@@ -49,6 +51,17 @@ extension SettingsStorage {
     var typingUndoHintEnabled: Bool {
         get { defaults.object(forKey: TypingKey.undoHintEnabled.rawValue) as? Bool ?? true }
         set { setTyping(newValue, .undoHintEnabled) }
+    }
+
+    /// "Convert the selection to the other layout": on until the user turns it off.
+    var typingConvertEnabled: Bool {
+        get { defaults.object(forKey: TypingKey.convertEnabled.rawValue) as? Bool ?? true }
+        set { setTyping(newValue, .convertEnabled) }
+    }
+
+    var typingConvertPair: TypingConvertPair {
+        get { defaults.string(forKey: TypingKey.convertPair.rawValue).flatMap(TypingConvertPair.init(rawValue:)) ?? .optionShift }
+        set { setTyping(newValue.rawValue, .convertPair) }
     }
 
     /// Bundle IDs of the apps where nothing is fixed.

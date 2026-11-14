@@ -49,6 +49,11 @@ extension AppDelegate {
             }
         }
 
+        // Convert (the pair pressed twice) is never also a push-to-talk tap or hold.
+        for service in [pushToTalkService, translationPushToTalkService] {
+            service.convertPair = { [weak self] in MainActor.assumeIsolated { self?.typingEngineHost.activeConvertPair?.families } }
+        }
+
         // Registered only while the typing engine runs (set before the host is activated).
         typingEngineHost.onRunningChanged = { [weak self] isRunning in
             guard let self else { return }

@@ -26,6 +26,8 @@ private final class FakeTypingEngine: TypingEngineControlling {
 
     func noteExternalEdit() { externalEdits += 1 }
     func undoLastFix() { undos += 1 }
+    func layoutConversion(of text: String) -> TypingLayoutConversion? { nil }
+    func finishLayoutConversion(_: TypingLayoutConversion) {}
 }
 
 /// `reconcile()` is the only place that starts or stops the typing engine.
@@ -36,6 +38,7 @@ final class TypingEngineHostTests {
     private var accessibilityGranted = true
     private var papugaRunning = false
     private var enginesBuilt = 0
+    private let convertKeys = FakeKeySource()
     private lazy var sut = TypingEngineHost(
         settings: box.settings,
         isAccessibilityGranted: { [unowned self] in accessibilityGranted },
@@ -43,8 +46,31 @@ final class TypingEngineHostTests {
         makeEngine: { [unowned self] in
             enginesBuilt += 1
             return engine
-        }
+        },
+        convertMonitor: TypingConvertMonitor(source: convertKeys)
     )
+
+    @Test("Convert listens only while the engine runs and its switch is on, for the picked pair")
+    func convertFollowsEngineAndSwitch() {
+        box.settings.typingEnabled = true
+        sut.reconcile()
+        #expect(convertKeys.isActive)
+        #expect(sut.activeConvertPair == .optionShift)
+
+        box.settings.typingConvertPair = .controlShift
+        sut.reconcile()
+        #expect(sut.activeConvertPair == .controlShift)
+
+        box.settings.typingConvertEnabled = false
+        sut.reconcile()
+        #expect(!convertKeys.isActive)
+        #expect(sut.activeConvertPair == nil)
+
+        box.settings.typingConvertEnabled = true
+        box.settings.typingEnabled = false
+        sut.reconcile()
+        #expect(!convertKeys.isActive)
+    }
 
     @Test("runs only with the setting on, Accessibility granted and a tap that starts", arguments: [
         (enabled: false, accessibility: false, startSucceeds: true, expected: TypingEngineHost.State.stopped),

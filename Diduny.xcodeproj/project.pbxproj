@@ -87,6 +87,7 @@
 		2762750D5E54F2C6CFCBE050 /* NoticeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4425D880A401284AAE34412D /* NoticeRow.swift */; };
 		277B309CBA46C7658106C4CA /* TypingHintPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8B46297A085BB811B2A61B /* TypingHintPresenter.swift */; };
 		282F528D9F0D4B11455FFA3A /* AppDelegate+FileTranscription.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D6B26449C9E52BCC8DF79C7 /* AppDelegate+FileTranscription.swift */; };
+		291E1839655512D8090A82FC /* TypingConvertTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 084E38916AA776191A243087 /* TypingConvertTests.swift */; };
 		2941E98F208971F42ACEE3F2 /* FloatingSurfacePanelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1323BF1535174A074A4DF1F3 /* FloatingSurfacePanelTests.swift */; };
 		2B75C64DA51F46DB68543EB1 /* PreConnectAudioBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FBC676468A5F7C9F54507E /* PreConnectAudioBufferTests.swift */; };
 		2C3487ED02EDAD46EB14D8A2 /* BrowserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96604EA9383BC66295320A6 /* BrowserProfile.swift */; };
@@ -326,6 +327,7 @@
 		98F00356C62B376FE8195307 /* ModeEngineRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F40922FD7D77DE206942CE9 /* ModeEngineRules.swift */; };
 		997413CAAA3F1F44E8BE4984 /* TypingSettingsStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0FD00B0346DDD29B100785 /* TypingSettingsStorageTests.swift */; };
 		99B908D1C8FDA6F224AF472C /* AppDelegate+SilenceAutoStop.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81A0D102BDA3562B1225714 /* AppDelegate+SilenceAutoStop.swift */; };
+		9A104FD5FEABBB30D57B8EE3 /* TypingConvertMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4247A4C5ECDE316872ED4ECB /* TypingConvertMonitor.swift */; };
 		9C3AB3F7109D41F8F612797B /* RecordingModelMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44E5C44735AFF2B3983C06A1 /* RecordingModelMigrationTests.swift */; };
 		9D199D5A4B08E96833C4D317 /* ModeSegments.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5183CF2E00CC45EE2C0B930 /* ModeSegments.swift */; };
 		9D29E9860B3B2AB637489395 /* ModesSettingsSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B7C1FA5CEB3714698D11DA5 /* ModesSettingsSource.swift */; };
@@ -632,6 +634,7 @@
 		06FF9AD2A92A54CB48E933D7 /* NotesStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesStoreTests.swift; sourceTree = "<group>"; };
 		07933B2A8DB5CEB1B26A211D /* ComponentRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComponentRenderTests.swift; sourceTree = "<group>"; };
 		08498CFF6A7A5E6FF34B5412 /* ElevenLabsModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsModule.swift; sourceTree = "<group>"; };
+		084E38916AA776191A243087 /* TypingConvertTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingConvertTests.swift; sourceTree = "<group>"; };
 		086BB789A9654657A90B1BAB /* Render.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Render.swift; sourceTree = "<group>"; };
 		090EFBBB70C683F7202D3994 /* MeetingSwitchingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSwitchingTests.swift; sourceTree = "<group>"; };
 		09263D2700ECFEBCE1EAE3AD /* LiveDictationPanelUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDictationPanelUITests.swift; sourceTree = "<group>"; };
@@ -762,6 +765,7 @@
 		3FFDC10EF23A7387DE6194F7 /* ClipboardSyntheticEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardSyntheticEventTests.swift; sourceTree = "<group>"; };
 		40926EA649BA21E7A263919E /* ClipboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardView.swift; sourceTree = "<group>"; };
 		40E7786C88C96F6C70862A1E /* OfflineModelsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineModelsSettingsView.swift; sourceTree = "<group>"; };
+		4247A4C5ECDE316872ED4ECB /* TypingConvertMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingConvertMonitor.swift; sourceTree = "<group>"; };
 		427186C382E3A715A45C4E37 /* TranscribeChoiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscribeChoiceTests.swift; sourceTree = "<group>"; };
 		42801A3099B0B446C15F60E7 /* BrowserCalendarCalendarExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserCalendarCalendarExtractionTests.swift; sourceTree = "<group>"; };
 		4323994D05952C2AB0A25B85 /* KeyboardFocusRing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardFocusRing.swift; sourceTree = "<group>"; };
@@ -1747,6 +1751,7 @@
 		943453BD93EC075C8065488D /* Typing */ = {
 			isa = PBXGroup;
 			children = (
+				4247A4C5ECDE316872ED4ECB /* TypingConvertMonitor.swift */,
 				1BB310F4557C2A5DFE8D55FD /* TypingEngineHost.swift */,
 			);
 			path = Typing;
@@ -2107,6 +2112,7 @@
 				A0608EAB5D80B933C264FF43 /* TranslateMeetingTranscriptTests.swift */,
 				F3740C29CB5080BF536443CD /* TranslationAfterStopTests.swift */,
 				C078BA7D295B4041F5488720 /* TranslationTimestampBackfillTests.swift */,
+				084E38916AA776191A243087 /* TypingConvertTests.swift */,
 				E9503D9DA3FF16B2BC1AA907 /* TypingEngineHostTests.swift */,
 				D72C71E4B9E4718BC95CA389 /* TypingHintPresenterTests.swift */,
 				2248181AEE272A12E609B8E5 /* TypingSettingsModelTests.swift */,
@@ -2789,6 +2795,7 @@
 				5C2CB9682540B1F59DC81F3A /* TranslateMeetingPanelModel.swift in Sources */,
 				D493FEE9E469B5041E3B7007 /* TranslateMeetingTranscript.swift in Sources */,
 				FBFFD88DF4376532FD3365DD /* TranslationTimestampBackfill.swift in Sources */,
+				9A104FD5FEABBB30D57B8EE3 /* TypingConvertMonitor.swift in Sources */,
 				C782A8FD884C9A451B3D822B /* TypingEngineHost.swift in Sources */,
 				6F9309CDE54941B4C4560FCB /* TypingHintPanel.swift in Sources */,
 				277B309CBA46C7658106C4CA /* TypingHintPresenter.swift in Sources */,
@@ -2994,6 +3001,7 @@
 				2F8FFCE56268AC0033EA6773 /* TranslateMeetingTranscriptTests.swift in Sources */,
 				FEC51EBA68CC305774C572D8 /* TranslationAfterStopTests.swift in Sources */,
 				78E5980FBD778FAE4E032ABD /* TranslationTimestampBackfillTests.swift in Sources */,
+				291E1839655512D8090A82FC /* TypingConvertTests.swift in Sources */,
 				8F8C18BAE62849D961C3A005 /* TypingEngineHostTests.swift in Sources */,
 				E7ADC4606B28A1C9E95C85BF /* TypingHintPresenterTests.swift in Sources */,
 				AA4550379F045B438099F290 /* TypingSettingsModelTests.swift in Sources */,

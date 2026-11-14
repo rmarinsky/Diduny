@@ -43,6 +43,12 @@ final class PushToTalkService: PushToTalkServiceProtocol {
     /// Called when recording should toggle (for hands-free mode)
     var onToggle: (() -> Void)?
 
+    /// The Convert pair while Convert listens for it. A press of this key together with the other key of
+    /// the pair is Convert, not a tap and not a hold.
+    var convertPair: () -> ModifierFamilies? = { nil }
+    /// The current press already gave its tap back to Convert.
+    private var pressTakenByConvert = false
+
     init(
         source: KeyEventSource = NSEventKeySource(.flagsChanged),
         scheduler: DelayScheduler = TaskDelayScheduler(),
@@ -114,6 +120,19 @@ final class PushToTalkService: PushToTalkServiceProtocol {
 
         let flags = NSEvent.ModifierFlags(rawValue: flagsRawValue)
 
+        if isPartOfConvertPair(flags: flags) {
+            if isCorrectKeyCode(keyCode) {
+                // Own key goes down while the other key of the pair is already down.
+                if !isKeyPressed, isKeyCurrentlyPressed(keyCode: keyCode, flags: flags) { return }
+            } else if isKeyPressed, !hasStartedAfterHold, !pressTakenByConvert {
+                // The other key joins while own key is down: take back the tap and the hold.
+                pressTakenByConvert = true
+                cancelPendingHoldStart()
+                consecutiveToggleTapCount = max(0, consecutiveToggleTapCount - 1)
+                return
+            }
+        }
+
         guard isCorrectKeyCode(keyCode) else { return }
 
         let isPressed = isKeyCurrentlyPressed(keyCode: keyCode, flags: flags)
@@ -136,6 +155,12 @@ final class PushToTalkService: PushToTalkServiceProtocol {
         processModifierKeyEvent(isPressed: isPressed, eventTime: eventTime)
     }
 
+    /// True when the selected key is in the Convert pair and the pair's other key is down in `flags`.
+    private func isPartOfConvertPair(flags: NSEvent.ModifierFlags) -> Bool {
+        guard let pair = convertPair(), let own = selectedKey.modifierFamily, pair.contains(own) else { return false }
+        return ModifierFamilies(flags: flags).isSuperset(of: pair.subtracting(own))
+    }
+
     private func handleCapsLockEvent(keyCode: UInt16, eventTime: TimeInterval) {
         guard keyCode == 57 else { return }
 
@@ -153,6 +178,7 @@ final class PushToTalkService: PushToTalkServiceProtocol {
             // Key down
             isKeyPressed = true
             hasStartedAfterHold = false
+            pressTakenByConvert = false
 
             let didToggle = toggleModeEnabled
                 ? handleToggleTap(eventTime: eventTime, keyLabel: selectedKey.displayName)

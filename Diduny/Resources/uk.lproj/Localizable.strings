@@ -1916,6 +1916,9 @@
 "History palette" = "Палітра історії";
 "Undo the last layout fix" = "Скасувати останнє виправлення розкладки";
 "Layout fix. No keys by default. Click the field and press the keys you want." = "Виправлення розкладки. Типово без клавіш. Клацніть поле й натисніть потрібні клавіші.";
+"Convert the selection to the other layout" = "Перетворити виділене в іншу розкладку";
+"Layout fix. Two modifier keys pressed together, twice." = "Виправлення розкладки. Дві клавіші-модифікатори разом, двічі.";
+"Keys to convert" = "Клавіші перетворення";
 "Open Settings" = "Відкрити налаштування";
 "The standard macOS shortcut. It cannot be changed." = "Стандартне скорочення macOS. Його не можна змінити.";
 
