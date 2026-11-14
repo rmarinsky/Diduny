@@ -176,11 +176,11 @@ final class ClipboardPageModel {
 
     // MARK: - Settings
 
-    /// A shorter value removes the older entries at once.
+    /// A shorter value removes the older entries at once. "Never" stops the history and removes nothing.
     func setRetention(_ value: ClipboardRetention) {
         settings.clipboardRetention = value
         retention = value
-        service.prune()
+        service.retentionChanged()
     }
 
     func setKeepScreenshots(_ value: Bool) {

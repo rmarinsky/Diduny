@@ -90,6 +90,8 @@ final class ClipboardHistoryService {
     private var suspendCount = 0
     private var lastPrune = Date.distantPast
     private var timer: Timer?
+    /// Set by `start()`; a service built active for a test is ticked by hand.
+    private var usesTimer = false
 
     init(
         store: ClipboardHistoryStore? = nil,
@@ -123,16 +125,30 @@ final class ClipboardHistoryService {
 
     // MARK: - Watching
 
-    /// Prunes, then polls the pasteboard. What is on the pasteboard now is not recorded.
+    /// Prunes, then polls the pasteboard, unless "Keep the clipboard for" is "Never".
     func start() {
-        guard timer == nil else { return }
         isActive = true
+        usesTimer = true
         prune()
+        retentionChanged()
+    }
+
+    /// Follows "Keep the clipboard for": "Never" stops the polling, any other value starts it. What is
+    /// on the pasteboard at the start is not recorded.
+    func retentionChanged() {
+        guard isActive else { return }
+        guard settings.clipboardRetention != .never else {
+            timer?.invalidate()
+            timer = nil
+            return
+        }
+        prune()
+        lastChangeCount = pasteboard.changeCount
+        guard usesTimer, timer == nil else { return }
         #if TEST_BUILD
             // The sample history is fixed: no polling over it.
             if UITestHarness.clipboardFixture != nil { return }
         #endif
-        lastChangeCount = pasteboard.changeCount
         let timer = Timer(timeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
@@ -144,12 +160,17 @@ final class ClipboardHistoryService {
     func stop() {
         timer?.invalidate()
         timer = nil
+        usesTimer = false
         isActive = false
     }
 
     /// One tick: records a new copy unless Diduny is writing the pasteboard itself.
     func poll() {
         let changeCount = pasteboard.changeCount
+        guard settings.clipboardRetention != .never else {
+            lastChangeCount = changeCount
+            return
+        }
         guard changeCount != lastChangeCount else {
             if now().timeIntervalSince(lastPrune) >= Self.pruneInterval { prune() }
             return
@@ -205,7 +226,7 @@ final class ClipboardHistoryService {
     /// One entry for text Diduny delivered ("Dictated into <app>"). `pasted` false: the text was only
     /// copied, so no app is named.
     func recordDelivery(_ text: String, origin: ClipboardEntry.Origin, pasted: Bool) {
-        guard isActive, settings.clipboardKeepDidunyPastes, !text.isEmpty else { return }
+        guard isActive, settings.clipboardRetention != .never, settings.clipboardKeepDidunyPastes, !text.isEmpty else { return }
         store.addDidunyText(text, origin: origin, app: pasted ? frontmostApp() : .unknown, date: now())
         prune()
     }

@@ -137,6 +137,8 @@ final class ClipboardHistoryStore {
     /// Removes entries older than the retention, then the oldest images over the size cap, then the
     /// oldest entries over the entry cap.
     func prune(retention: ClipboardRetention, now: Date) {
+        // "Never" keeps what is there: nothing is deleted silently.
+        guard retention != .never else { return }
         var kept = entries
         var removed: [ClipboardEntry] = []
         if let interval = retention.interval {

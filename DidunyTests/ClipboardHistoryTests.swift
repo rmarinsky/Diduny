@@ -182,8 +182,9 @@ final class ClipboardHistoryTests {
 
         let expectedTexts = ages.filter { age in retention.interval.map { age <= $0 } ?? true }
         #expect(store.entries.filter { $0.kind == .text }.count == expectedTexts.count)
-        #expect(store.entries.contains { $0.kind == .image } == (retention == .forever))
-        #expect(files().isEmpty == (retention != .forever))
+        let keepsAll = retention == .forever || retention == .never
+        #expect(store.entries.contains { $0.kind == .image } == keepsAll)
+        #expect(files().isEmpty == !keepsAll)
         #expect(ClipboardHistoryStore(directory: directory).entries == store.entries)
     }
 
@@ -327,6 +328,34 @@ final class ClipboardHistoryTests {
         idle.poll()
         idle.recordDelivery("dictated", origin: .dictated, pasted: true)
         #expect(store.entries.isEmpty)
+    }
+
+    @Test("with Never nothing new is recorded, what is kept stays, and another value resumes capture")
+    func never() {
+        copyText("kept before")
+        store.addCopiedText("very old", app: frontmost, date: now.addingTimeInterval(-400 * 86400))
+        let page = model()
+
+        page.setRetention(.never)
+        now = now.addingTimeInterval(90 * 86400)
+        copyText("while off")
+        pasteboard.put(image: png(), types: ["public.png"])
+        service.poll()
+        service.withoutCapture { pasteboard.write(text: "dictated while off") }
+        service.recordDelivery("dictated while off", origin: .dictated, pasted: true)
+        service.prune()
+        service.poll()
+        #expect(store.entries.map(\.text) == ["very old", "kept before"])
+        #expect(ClipboardHistoryStore(directory: directory).entries.count == 2)
+
+        // Back on: what is on the pasteboard at that moment is not recorded.
+        pasteboard.put(text: "copied just before", types: ["public.utf8-plain-text"])
+        page.setRetention(.forever)
+        service.poll()
+        #expect(store.entries.count == 2)
+        copyText("after")
+        service.recordDelivery("dictated after", origin: .dictated, pasted: true)
+        #expect(store.entries.map(\.text) == ["dictated after", "after", "very old", "kept before"])
     }
 
     // MARK: - Entries from Diduny
@@ -554,7 +583,7 @@ final class ClipboardHistoryTests {
         #expect(settings.clipboardKeepScreenshots)
         #expect(settings.clipboardKeepDidunyPastes)
         #expect(settings.clipboardSkipPasswordManagers)
-        #expect(ClipboardRetention.allCases.map(\.displayName) == ["1 hour", "1 day", "2 days", "1 week", "1 month", "Forever"])
+        #expect(ClipboardRetention.allCases.map(\.displayName) == ["Never", "1 hour", "1 day", "2 days", "1 week", "1 month", "Forever"])
     }
 
     @Test("every key starts with clipboard. and the page writes nothing else")

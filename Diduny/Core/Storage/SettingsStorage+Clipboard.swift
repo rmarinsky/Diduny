@@ -2,6 +2,8 @@ import Foundation
 
 /// How long the Clipboard page keeps an entry.
 enum ClipboardRetention: String, CaseIterable, Identifiable {
+    /// The history is off: nothing new is kept. What is already kept stays until it is cleared.
+    case never
     case oneHour
     case oneDay
     case twoDays
@@ -14,6 +16,7 @@ enum ClipboardRetention: String, CaseIterable, Identifiable {
     /// nil keeps entries with no time limit.
     var interval: TimeInterval? {
         switch self {
+        case .never: nil
         case .oneHour: 3600
         case .oneDay: 86400
         case .twoDays: 2 * 86400
@@ -25,6 +28,7 @@ enum ClipboardRetention: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
+        case .never: String(localized: "Never")
         case .oneHour: String(localized: "1 hour")
         case .oneDay: String(localized: "1 day")
         case .twoDays: String(localized: "2 days")
