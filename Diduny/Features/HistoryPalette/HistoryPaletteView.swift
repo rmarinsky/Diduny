@@ -104,7 +104,10 @@ struct HistoryPaletteView: View {
 
     private func copyAndClose(_ recording: Recording) {
         guard let text = recording.transcriptionText else { return }
-        ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
+        // A pick is not a new copy for the clipboard history.
+        ClipboardHistoryService.shared.withoutCapture {
+            ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
+        }
         HistoryPaletteWindowController.shared.closeWindow()
     }
 }

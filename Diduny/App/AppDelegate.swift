@@ -460,6 +460,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // DEV build with its real settings, and it must not tap the keyboard.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
             typingEngineHost.activate(clipboard: clipboardService)
+            // The clipboard history; it also must not watch the pasteboard under unit tests.
+            ClipboardHistoryService.shared.start()
         }
 
         // Setup sleep handling for all recording modes (RLR-M2).
@@ -884,6 +886,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         translationPushToTalkService.stop()
         inplaceTranslationMonitor.stop()
         typingEngineHost.stop()
+        ClipboardHistoryService.shared.stop()
         NotificationCenter.default.removeObserver(self)
         // Release all activity tokens on termination to avoid leaking wake locks.
         if let token = recordingActivityToken { ProcessInfo.processInfo.endActivity(token) }

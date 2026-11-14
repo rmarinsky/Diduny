@@ -93,6 +93,10 @@ final class InplaceTranslationService {
         feedback.showBadge(selectionEnd: nil)
         let selectionEnd = await Task.detached { InplaceTranslationAnchor.selectionEndRect() }.value
         feedback.moveBadge(selectionEnd: selectionEnd)
+        // The ⌘C result, the translation and the restored clipboard are not copies made by the user.
+        let history = ClipboardHistoryService.shared
+        history.suspend()
+        defer { history.resume() }
         let snapshot = PasteboardSnapshot.capture()
         let targetPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
 
@@ -128,6 +132,7 @@ final class InplaceTranslationService {
             ClipboardService.shared.copy(text: translated)
             lastFlowChangeCount = NSPasteboard.general.changeCount
             try await ClipboardService.shared.paste(expectedProcessIdentifier: targetPID)
+            history.recordDelivery(translated, origin: .translated, pasted: true)
             // The badge plays on its own; the clipboard restore below must not wait for it.
             Task {
                 await feedback.finishBadge(success: true)

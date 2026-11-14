@@ -8,7 +8,7 @@ import Testing
 @MainActor
 struct MainSectionSidebarTests {
     @Test func mainItemsInOrder() {
-        #expect(MainSection.mainItems == [.overview, .recordings, .notes])
+        #expect(MainSection.mainItems == [.overview, .recordings, .notes, .clipboard])
     }
 
     @Test func settingsItemsInOrder() {
@@ -18,7 +18,7 @@ struct MainSectionSidebarTests {
     @Test func sidebarLabels() {
         let labels = (MainSection.mainItems + MainSection.settingsItems).map(\.sidebarLabel)
         #expect(labels == [
-            "Overview", "Recordings", "Notes",
+            "Overview", "Recordings", "Notes", "Clipboard",
             "General", "Dictation", "Vocabulary & context", "Typing", "Meetings & notes", "Models", "Account", "About",
         ])
     }
@@ -28,7 +28,7 @@ struct MainSectionSidebarTests {
         #expect(MainSection.typing.tabs.map(\.label) == ["Layout fixes", "Typing test"])
         #expect(MainSection.meetings.tabs.map(\.label) == ["Calendar & meetings", "Notes settings"])
         #expect(MainSection.models.tabs.map(\.label) == ["Local models", "Providers", "Benchmark"])
-        let single: [MainSection] = [.overview, .recordings, .notes, .general, .vocabulary, .account, .about]
+        let single: [MainSection] = [.overview, .recordings, .notes, .clipboard, .general, .vocabulary, .account, .about]
         for row in single {
             #expect(row.tabs == [row])
         }
@@ -50,7 +50,7 @@ struct MainSectionSidebarTests {
     /// The sidebar fills the row `tabs.first`; the switch shows `tabs` with the page itself selected.
     @Test func openingAPageSelectsItsRowAndTab() {
         let expected: [MainSection: MainSection] = [
-            .overview: .overview, .recordings: .recordings, .notes: .notes,
+            .overview: .overview, .recordings: .recordings, .notes: .notes, .clipboard: .clipboard,
             .general: .general, .modes: .modes, .languages: .modes, .audioDictation: .modes, .vocabulary: .vocabulary,
             .typing: .typing, .typingTest: .typing,
             .meetings: .meetings, .notesSettings: .meetings,
@@ -82,6 +82,7 @@ struct MainSectionSidebarTests {
         #expect(MainSection.languages.iconName == "globe")
         #expect(MainSection.audioDictation.iconName == "waveform.and.mic")
         #expect(MainSection.typing.iconName == "keyboard")
+        #expect(MainSection.clipboard.iconName == "doc.on.clipboard")
     }
 
     @Test func audioKeepsItsRawValue() {
@@ -92,6 +93,7 @@ struct MainSectionSidebarTests {
     @Test func typingRawValues() {
         #expect(MainSection.typing.rawValue == "typing")
         #expect(MainSection.typingTest.rawValue == "typingTest")
+        #expect(MainSection.clipboard.rawValue == "clipboard")
     }
 
     @Test func footerShortcutDefault() {

@@ -4,6 +4,7 @@ enum MainSection: String, CaseIterable, Hashable {
     case overview
     case recordings
     case notes
+    case clipboard
     case benchmark
     case typingTest
 
@@ -23,7 +24,7 @@ enum MainSection: String, CaseIterable, Hashable {
     case about
 
     /// Sidebar rows. A row is named by its first page; `tabs` lists the pages it holds.
-    static let mainItems: [MainSection] = [.overview, .recordings, .notes]
+    static let mainItems: [MainSection] = [.overview, .recordings, .notes, .clipboard]
     static let settingsItems: [MainSection] = [.general, .modes, .vocabulary, .typing, .meetings, .models, .account, .about]
 
     /// The pages that share this page's sidebar row, in tab order. One page: no switch.
@@ -53,6 +54,7 @@ enum MainSection: String, CaseIterable, Hashable {
         case .overview: String(localized: "Overview")
         case .recordings: String(localized: "Recordings")
         case .notes: String(localized: "Notes")
+        case .clipboard: String(localized: "Clipboard")
         case .benchmark: String(localized: "Benchmark")
         case .typingTest: String(localized: "Typing test")
         case .meetings: String(localized: "Calendar & meetings")
@@ -75,6 +77,7 @@ enum MainSection: String, CaseIterable, Hashable {
         case .overview: "square.grid.2x2"
         case .recordings: "waveform"
         case .notes: "doc.text"
+        case .clipboard: "doc.on.clipboard"
         case .benchmark: "chart.bar.xaxis"
         case .typingTest: "keyboard"
         case .meetings: "calendar"

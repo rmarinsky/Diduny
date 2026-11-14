@@ -55,6 +55,8 @@
             "languages": std("settings.languages"),
             "audio": std("settings.audioDictation", ["--ui-testing-audio-devices=Test Mic A,Test Mic B"]),
             "shortcuts": std("settings.modes"),
+            "clipboard": std("settings.clipboard", ["--ui-testing-clipboard=sample"]),
+            "clipboard-empty": std("settings.clipboard", ["--ui-testing-clipboard=empty"]),
         ]
     }
 

@@ -39,6 +39,7 @@ final class MainWindowUITests: DidunyUITestCase {
             ("Models", "Benchmark", "benchmark", { $0.staticTexts["Benchmark"] }),
             ("Typing", nil, "typing", { $0.staticTexts["Apps where fixes are off"] }),
             ("Typing", "Typing test", "typingTest", { $0.staticTexts["Typing Speed Test"] }),
+            ("Clipboard", nil, "clipboard", { $0.staticTexts["Clear the clipboard history"] }),
             ("Recordings", nil, "recordings", { $0.staticTexts["No Recordings Yet"] }),
             ("Overview", nil, "overview", { $0.staticTexts["Overview"] }),
         ]

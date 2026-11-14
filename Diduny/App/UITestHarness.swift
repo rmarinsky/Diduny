@@ -39,6 +39,9 @@
         static var listensToBridge: Bool { has("--ui-testing-input-bridge") }
         static var quota: String? { value(of: "--ui-testing-quota") }
         static var transcriptEmitCount: Int? { value(of: "--ui-testing-transcript-emit").flatMap(Int.init) }
+        /// `--ui-testing-clipboard=sample` or `=empty`: the Clipboard page shows a fixed history (or none)
+        /// from a temporary folder, and nothing is watched.
+        static var clipboardFixture: String? { value(of: "--ui-testing-clipboard") }
 
         /// `--ui-testing-audio-devices=Test Mic A,Test Mic B`: fake inputs; recording yields silence at level 0.5.
         static var fakeAudioDevices: [String]? {

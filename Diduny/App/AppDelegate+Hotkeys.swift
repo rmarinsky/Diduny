@@ -34,6 +34,10 @@ extension AppDelegate {
         hotkeyService.registerTranslateSelectedTextHotkey {
             FeatureUsageCounter.shared.record(.selectionTranslation, via: .hotkey)
             Task {
+                // The selection lands on the clipboard through Diduny's ⌘C; it is not a copy made by the user.
+                let history = ClipboardHistoryService.shared
+                history.suspend()
+                defer { history.resume() }
                 do {
                     let text = try await ClipboardService.shared.captureSelectedText()
                     await MainActor.run {

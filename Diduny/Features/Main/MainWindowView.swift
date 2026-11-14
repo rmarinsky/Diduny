@@ -109,6 +109,8 @@ struct MainWindowView: View {
                 .environment(audioDeviceManager)
         case .notes:
             NotesView()
+        case .clipboard:
+            ClipboardView()
         case .benchmark:
             BenchmarkView()
         case .typingTest:
