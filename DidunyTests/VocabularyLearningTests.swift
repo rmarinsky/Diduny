@@ -19,7 +19,7 @@ final class VocabularyLearningTests {
             settings: box.settings, directory: directory,
             now: { [unowned self] in clock },
             isKnownWord: { [unowned self] word, _ in known.contains(word.lowercased()) },
-            isSecureInput: { [unowned self] in secure }
+            isPrivateField: { [unowned self] in secure }
         )
     }
 
@@ -65,6 +65,40 @@ final class VocabularyLearningTests {
         box.settings.typingLearnVocabulary = false
         let store = makeStore()
         typed(store, "Supabase", times: 3)
+        #expect(store.extras.pending.isEmpty)
+    }
+
+    @Test("undo and Convert learn nothing while the switch is off or the field is private")
+    func everySignalIsGated() {
+        let store = makeStore()
+        secure = true
+        for _ in 0 ..< 3 {
+            store.observe(.undone(original: "yoyo", replacement: "нщнщ"))
+            store.observeManualSwitch(from: "ыгзф", to: "supa")
+        }
+        secure = false
+        box.settings.typingLearnVocabulary = false
+        for _ in 0 ..< 3 {
+            store.observe(.undone(original: "yoyo", replacement: "нщнщ"))
+            store.observeManualSwitch(from: "ыгзф", to: "supa")
+        }
+        #expect(store.extras.pending.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("vocabulary_evidence.json").path))
+    }
+
+    @Test("turning learning off deletes every counter and the evidence file")
+    func clearDeletesAllCounters() {
+        let store = makeStore()
+        typed(store, "Supabase", times: 2)
+        store.observe(.undone(original: "yoyo", replacement: "нщнщ"))
+        store.observeManualSwitch(from: "ыгзф", to: "supa")
+        let file = directory.appendingPathComponent("vocabulary_evidence.json").path
+        #expect(FileManager.default.fileExists(atPath: file))
+        store.clearTypedEvidence()
+        #expect(!FileManager.default.fileExists(atPath: file))
+        // One more sighting each must start from zero, so nothing reaches 3.
+        typed(store, "Supabase", times: 1)
+        store.observe(.undone(original: "yoyo", replacement: "нщнщ"))
         #expect(store.extras.pending.isEmpty)
     }
 

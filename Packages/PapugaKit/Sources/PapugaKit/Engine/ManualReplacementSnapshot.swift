@@ -21,6 +21,16 @@ struct ManualReplacementSnapshot {
         return Self(element: element, before: before, range: range, original: original)
     }
 
+    /// True when what the user types now must not be learned from: secure input is on, or the focused
+    /// field is a password field, or its text cannot be read.
+    static func focusedFieldIsPrivate() -> Bool {
+        guard !IsSecureEventInputEnabled(), let element = focusedElement(),
+              attribute(kAXSubroleAttribute, of: element) as? String != "AXSecureTextField",
+              attribute(kAXValueAttribute, of: element) is String
+        else { return true }
+        return false
+    }
+
     func confirms(replacement: String) -> Bool {
         guard !IsSecureEventInputEnabled(), let focused = Self.focusedElement(), CFEqual(element, focused),
               let after = Self.attribute(kAXValueAttribute, of: element) as? String,

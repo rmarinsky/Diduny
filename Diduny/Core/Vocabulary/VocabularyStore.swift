@@ -1,5 +1,4 @@
 import AppKit
-import Carbon.HIToolbox
 import Observation
 import PapugaKit
 
@@ -22,19 +21,19 @@ final class VocabularyStore {
     @ObservationIgnored private let evidenceURL: URL
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let isKnownWord: (String, String?) -> Bool
-    @ObservationIgnored private let isSecureInput: () -> Bool
+    @ObservationIgnored private let isPrivateField: () -> Bool
 
     init(
         settings: SettingsStorage = .shared,
         directory: URL = RecordingsLibraryStorage.defaultAppDirectory,
         now: @escaping () -> Date = Date.init,
         isKnownWord: @escaping (String, String?) -> Bool = VocabularyStore.systemSpellerKnows,
-        isSecureInput: @escaping () -> Bool = { IsSecureEventInputEnabled() }
+        isPrivateField: @escaping () -> Bool = { TypingEngine.focusedFieldIsPrivate() }
     ) {
         self.settings = settings
         self.now = now
         self.isKnownWord = isKnownWord
-        self.isSecureInput = isSecureInput
+        self.isPrivateField = isPrivateField
         extrasURL = directory.appendingPathComponent("vocabulary_extras.json")
         evidenceURL = directory.appendingPathComponent("vocabulary_evidence.json")
         if let data = try? Data(contentsOf: extrasURL), let loaded = try? JSONDecoder().decode(VocabularyExtras.self, from: data) {
@@ -61,11 +60,15 @@ final class VocabularyStore {
 
     // MARK: Signals
 
+    /// Nothing is learned while the switch is off or the focused field is private (spec 4.4, 5.5).
+    private var mayLearn: Bool {
+        settings.typingLearnVocabulary && !isPrivateField()
+    }
+
     func observe(_ observation: TypingWordObservation) {
+        guard mayLearn else { return }
         switch observation {
         case let .typed(word, language):
-            // Off means the typed-word counter does not run (spec 4.4).
-            guard settings.typingLearnVocabulary, !isSecureInput() else { return }
             learnWord(word, signal: .typed, language: language)
         case let .undone(original, replacement):
             // Never when the fix produced a real word: the user may simply have changed their mind.
@@ -79,7 +82,7 @@ final class VocabularyStore {
         let from = from.trimmingCharacters(in: .whitespacesAndNewlines)
         let to = to.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !from.isEmpty, !from.contains(where: \.isWhitespace), !to.contains(where: \.isWhitespace),
-              TypingEngine.isVocabularyCandidate(to), !isSecureInput() else { return }
+              TypingEngine.isVocabularyCandidate(to), mayLearn else { return }
         let key = "switch:" + VocabularyRules.ruleKey(from: from, to: to)
         var counter = counters[key] ?? VocabularyCounter(spelling: from, target: to, lastSeen: now())
         VocabularyRules.count(&counter, spelling: from, at: now())
@@ -161,9 +164,9 @@ final class VocabularyStore {
         changed()
     }
 
-    /// "Add words I keep typing to Vocabulary" was turned off: the typed-word counters go.
+    /// "Add words I keep typing to Vocabulary" was turned off: every counter goes, with its file.
     func clearTypedEvidence() {
-        counters = counters.filter { !$0.key.hasPrefix("\(VocabularySignal.typed.rawValue):") }
+        counters = [:]
         saveEvidence()
     }
 

@@ -166,6 +166,12 @@ public final class TypingEngine {
             && !ProtectedLexiconMatcher.isDomainLike(word)
     }
 
+    /// True while nothing typed may be learned from: secure input, a password field, or a field whose text
+    /// cannot be read.
+    public nonisolated static func focusedFieldIsPrivate() -> Bool {
+        ManualReplacementSnapshot.focusedFieldIsPrivate()
+    }
+
     /// Call after `replacementHistoryEnabled` or `replacementHistoryRetention` changed.
     public func applyHistorySettings() {
         let current = settings()
