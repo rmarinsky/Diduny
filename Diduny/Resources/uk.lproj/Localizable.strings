@@ -2534,3 +2534,11 @@
 "1 suggestion waits for your decision" = "1 пропозиція чекає на ваше рішення";
 "%lld suggestions wait for your decision" = "Пропозицій, що чекають на ваше рішення: %lld";
 "Found while you typed and dictated." = "Знайдено, поки ви друкували й диктували.";
+
+/* Typing: import from Papuga */
+"Papuga" = "Papuga";
+"Import from Papuga" = "Імпортувати з Papuga";
+"Import" = "Імпортувати";
+"Never-fix words, replace rules, apps and fix history. Papuga's own files are not changed." = "Слова без виправлень, правила заміни, програми й історія виправлень. Файли Papuga не змінюються.";
+"Nothing new to import." = "Нічого нового для імпорту.";
+"Imported %lld words, %lld rules, %lld apps, %lld fixes." = "Імпортовано: слів %lld, правил %lld, програм %lld, виправлень %lld.";

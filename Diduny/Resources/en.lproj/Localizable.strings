@@ -2534,3 +2534,11 @@
 "1 suggestion waits for your decision" = "1 suggestion waits for your decision";
 "%lld suggestions wait for your decision" = "%lld suggestions wait for your decision";
 "Found while you typed and dictated." = "Found while you typed and dictated.";
+
+/* Typing: import from Papuga */
+"Papuga" = "Papuga";
+"Import from Papuga" = "Import from Papuga";
+"Import" = "Import";
+"Never-fix words, replace rules, apps and fix history. Papuga's own files are not changed." = "Never-fix words, replace rules, apps and fix history. Papuga's own files are not changed.";
+"Nothing new to import." = "Nothing new to import.";
+"Imported %lld words, %lld rules, %lld apps, %lld fixes." = "Imported %lld words, %lld rules, %lld apps, %lld fixes.";

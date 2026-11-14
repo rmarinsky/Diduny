@@ -36,6 +36,7 @@ final class TypingSettingsModel {
     @ObservationIgnored private let isAccessibilityGranted: () -> Bool
     @ObservationIgnored private let runningApps: () -> [App]
     @ObservationIgnored private let installedAppName: (String) -> String?
+    @ObservationIgnored private let papugaImporter: () -> PapugaDataImporter
 
     private(set) var enabled = false
     private(set) var sensitivity: AutoFixSensitivityPreset = .balanced
@@ -48,14 +49,20 @@ final class TypingSettingsModel {
     private(set) var accessibilityGranted = true
     /// The running apps, then the chosen ones that are not running; read by `reload()`.
     private(set) var apps: [App] = []
+    /// True when a standalone Papuga left data that can be imported.
+    private(set) var papugaDataFound = false
+    /// What the last import added, shown under the import row.
+    private(set) var papugaImportResult: PapugaDataImporter.Result?
 
     init(
         store: SettingsStorage = .shared,
         host: TypingEngineHost = .shared,
         isAccessibilityGranted: @escaping () -> Bool = ClipboardService.isAccessibilityGranted,
         runningApps: @escaping () -> [App] = TypingSettingsModel.regularRunningApps,
-        installedAppName: @escaping (String) -> String? = TypingSettingsModel.installedAppName
+        installedAppName: @escaping (String) -> String? = TypingSettingsModel.installedAppName,
+        papugaImporter: @escaping () -> PapugaDataImporter = PapugaDataImporter.live
     ) {
+        self.papugaImporter = papugaImporter
         self.store = store
         self.host = host
         self.isAccessibilityGranted = isAccessibilityGranted
@@ -73,7 +80,20 @@ final class TypingSettingsModel {
         disabledApps = store.typingDisabledApps
         typingSpeedWordsPerMinute = store.typingSpeedWordsPerMinute
         accessibilityGranted = isAccessibilityGranted()
+        papugaDataFound = papugaImporter().hasData
         reloadApps()
+    }
+
+    /// Reads Papuga's data and adds what Diduny does not have yet. Papuga's files are not changed.
+    func importFromPapuga() {
+        papugaImportResult = papugaImporter().run(into: store)
+        reload()
+    }
+
+    static func importCaption(_ result: PapugaDataImporter.Result?) -> LocalizedStringKey {
+        guard let result else { return "Never-fix words, replace rules, apps and fix history. Papuga's own files are not changed." }
+        if result.isEmpty { return "Nothing new to import." }
+        return "Imported \(result.words) words, \(result.rules) rules, \(result.apps) apps, \(result.fixes) fixes."
     }
 
     // MARK: - Status
