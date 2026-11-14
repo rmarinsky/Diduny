@@ -45,6 +45,16 @@ extension AppDelegate {
             }
         }
 
+        // Registered only while the typing engine runs (set before the host is activated).
+        typingEngineHost.onRunningChanged = { [weak self] isRunning in
+            guard let self else { return }
+            if isRunning {
+                hotkeyService.registerUndoLayoutFixHotkey { [weak self] in self?.typingEngineHost.undoLastFix() }
+            } else {
+                hotkeyService.unregisterUndoLayoutFixHotkey()
+            }
+        }
+
         // A Shortcuts row switch: off keeps the keys and disables the name; on enables it again.
         NotificationCenter.default.addObserver(forName: .shortcutSwitchesChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.hotkeyService.refreshSwitches() }

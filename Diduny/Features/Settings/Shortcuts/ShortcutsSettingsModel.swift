@@ -59,7 +59,7 @@ protocol ShortcutsSettingsStore: AnyObject {
 @MainActor
 @Observable
 final class ShortcutsSettingsModel {
-    enum GroupID: String { case whileRecording, text, app }
+    enum GroupID: String { case whileRecording, text, app, typing }
 
     enum Item: Equatable, Identifiable {
         case shortcut(ShortcutRow)
@@ -89,6 +89,7 @@ final class ShortcutsSettingsModel {
         ]),
         Group(id: .text, items: [.shortcut(.translateSelectedText), .shortcut(.inplaceTranslation), .inplacePair]),
         Group(id: .app, items: [.shortcut(.historyPalette), .openSettings]),
+        Group(id: .typing, items: [.shortcut(.undoLayoutFix)]),
     ]
 
     static let pressCounts = 1 ... 3

@@ -9,6 +9,7 @@ private final class StubTypingEngine: TypingEngineControlling {
     func start() -> Bool { starts }
     func stop() {}
     func noteExternalEdit() {}
+    func undoLastFix() {}
 }
 
 /// Settings > Typing > Layout fixes: the status row, the disabled rows and the apps list.

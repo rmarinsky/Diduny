@@ -20,6 +20,8 @@ public final class TypingEngine {
     ///   - settings: read on the main actor every time the engine needs a setting, so keep it cheap.
     ///   - logSubsystem: the OSLog subsystem of the host.
     ///   - hintPresenter: shows the undo hint, the proposal, the recovery hint and the deferred chip.
+    ///   - undoShortcut: the keys of the host's hotkey that calls `undoLastFix()`, read on every key
+    ///     down. The key tap sees those keys before the hotkey fires and must not drop the pending fix.
     ///   - onCadenceGapWritten: the typing rhythm to keep for the next launch, written in `stop()`.
     ///     The next `settings()` should return it as `typingCadenceAverageGap`.
     ///   - onRulesWritten: the complete new rule list. The next `settings()` must return it as
@@ -31,6 +33,7 @@ public final class TypingEngine {
         settings: @escaping @MainActor () -> TypingSettings,
         logSubsystem: String,
         hintPresenter: TypingHintPresenting? = nil,
+        undoShortcut: @escaping @MainActor () -> AutoFixUndoShortcut? = { nil },
         onReplacementRecorded: ((String) -> Void)? = nil,
         onReplacementReversed: ((String) -> Void)? = nil,
         onCadenceGapWritten: ((Double) -> Void)? = nil,
@@ -71,6 +74,7 @@ public final class TypingEngine {
             presenter: hintPresenter.map(TypingHintPresenterAdapter.init(host:)) ?? NoOpAutoFixPresenter(),
             stats: hostCalls,
             wordList: hostCalls,
+            undoShortcut: undoShortcut,
             logSubsystem: logSubsystem,
             tapThreadName: "\(logSubsystem).typing-tap"
         )

@@ -8,6 +8,7 @@ protocol TypingEngineControlling: AnyObject {
     func start() -> Bool
     func stop()
     func noteExternalEdit()
+    func undoLastFix()
 }
 
 extension TypingEngine: TypingEngineControlling {}
@@ -33,7 +34,14 @@ final class TypingEngineHost {
 
     nonisolated static let papugaBundleIDs = ["ua.com.rmarinsky.papuga", "ua.com.rmarinsky.papuga.dev"]
 
-    private(set) var state: State = .stopped
+    private(set) var state: State = .stopped {
+        didSet {
+            if (oldValue == .running) != (state == .running) { onRunningChanged?(state == .running) }
+        }
+    }
+
+    /// Called when the engine starts or stops running; the app registers the Undo hotkey only while it runs.
+    @ObservationIgnored var onRunningChanged: ((Bool) -> Void)?
 
     @ObservationIgnored private let settings: SettingsStorage
     @ObservationIgnored private let isAccessibilityGranted: () -> Bool
@@ -58,6 +66,7 @@ final class TypingEngineHost {
                 settings: { settings.typingSettings },
                 logSubsystem: Log.subsystem,
                 hintPresenter: TypingHintPresenter(settings: settings),
+                undoShortcut: { settings.typingUndoShortcut },
                 onCadenceGapWritten: { settings.typingCadenceAverageGap = $0 },
                 onRulesWritten: { settings.typingCustomReplaceRules = $0 },
                 onWordAdded: { settings.addTypingNeverFixWord($0) },
@@ -128,5 +137,11 @@ final class TypingEngineHost {
     func noteExternalEdit() {
         guard state == .running else { return }
         engine?.noteExternalEdit()
+    }
+
+    /// The "Undo the last layout fix" shortcut. Does nothing while the engine is not running.
+    func undoLastFix() {
+        guard state == .running else { return }
+        engine?.undoLastFix()
     }
 }

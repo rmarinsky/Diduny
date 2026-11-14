@@ -15,6 +15,8 @@ extension SettingsStorage {
         case addMeetingChapterHotkeyEnabled
         case translateSelectedTextHotkeyEnabled
         case historyPaletteHotkeyEnabled
+        case undoLayoutFixPressCount
+        case undoLayoutFixHotkeyEnabled
     }
 
     // MARK: - Translate in place
@@ -82,6 +84,11 @@ extension SettingsStorage {
         set { setPressCount(newValue, ShortcutsKey.historyPalettePressCount) }
     }
 
+    var undoLayoutFixPressCount: Int {
+        get { Self.storedPressCount(defaults, ShortcutsKey.undoLayoutFixPressCount, fallback: 1) }
+        set { setPressCount(newValue, ShortcutsKey.undoLayoutFixPressCount) }
+    }
+
     // MARK: - Switches (unset on)
 
     var addMeetingChapterHotkeyEnabled: Bool {
@@ -97,6 +104,11 @@ extension SettingsStorage {
     var historyPaletteHotkeyEnabled: Bool {
         get { switchValue(ShortcutsKey.historyPaletteHotkeyEnabled) }
         set { setSwitch(newValue, ShortcutsKey.historyPaletteHotkeyEnabled) }
+    }
+
+    var undoLayoutFixHotkeyEnabled: Bool {
+        get { switchValue(ShortcutsKey.undoLayoutFixHotkeyEnabled) }
+        set { setSwitch(newValue, ShortcutsKey.undoLayoutFixHotkeyEnabled) }
     }
 
     // MARK: - Rows
@@ -131,6 +143,12 @@ extension SettingsStorage {
                 pressCount: historyPalettePressCount,
                 enabled: historyPaletteHotkeyEnabled
             )
+        case .undoLayoutFix:
+            ShortcutSetting(
+                keys: .chord(.undoLayoutFix),
+                pressCount: undoLayoutFixPressCount,
+                enabled: undoLayoutFixHotkeyEnabled
+            )
         }
     }
 
@@ -142,6 +160,7 @@ extension SettingsStorage {
         case .translateSelectedText: translateSelectedTextHotkeyPressCount = count
         case .inplaceTranslation: inplaceTranslationPressCount = count
         case .historyPalette: historyPalettePressCount = count
+        case .undoLayoutFix: undoLayoutFixPressCount = count
         }
     }
 
@@ -154,6 +173,7 @@ extension SettingsStorage {
         case .translateSelectedText: translateSelectedTextHotkeyEnabled = enabled
         case .inplaceTranslation: inplaceTranslationEnabled = enabled
         case .historyPalette: historyPaletteHotkeyEnabled = enabled
+        case .undoLayoutFix: undoLayoutFixHotkeyEnabled = enabled
         }
     }
 

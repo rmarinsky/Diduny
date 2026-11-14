@@ -73,6 +73,7 @@ final class SettingsShortcutsStore: ShortcutsSettingsStore {
         let names: [KeyboardShortcuts.Name] = [
             .toggleRecording, .toggleMeetingRecording, .toggleMeetingTranslation, .toggleTranslation,
             .addMeetingChapter, .toggleHistoryPalette, .forceSubmit, .translateSelectedText, .inplaceTranslation,
+            .undoLayoutFix,
         ]
         for name in names where name != row.hotkeyName {
             if let shortcut = KeyboardShortcuts.getShortcut(for: name) { taken[name] = shortcut }

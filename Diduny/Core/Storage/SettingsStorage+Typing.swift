@@ -1,4 +1,5 @@
 import Foundation
+import KeyboardShortcuts
 import PapugaKit
 
 /// Holds the last `TypingSettings` built from storage; the engine reads it on every key.
@@ -23,6 +24,12 @@ extension SettingsStorage {
     var typingEnabled: Bool {
         get { defaults.bool(forKey: TypingKey.enabled.rawValue) }
         set { setTyping(newValue, .enabled) }
+    }
+
+    /// The keys of "Undo the last layout fix" for the engine's key tap; nil while the row is off or has no keys.
+    var typingUndoShortcut: AutoFixUndoShortcut? {
+        guard undoLayoutFixHotkeyEnabled, let shortcut = KeyboardShortcuts.getShortcut(for: .undoLayoutFix) else { return nil }
+        return AutoFixUndoShortcut(carbonKeyCode: shortcut.carbonKeyCode, modifiers: shortcut.modifiers)
     }
 
     var typingSensitivity: AutoFixSensitivityPreset {

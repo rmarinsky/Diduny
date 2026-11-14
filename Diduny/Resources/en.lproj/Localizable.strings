@@ -1914,6 +1914,8 @@
 "Works in both directions: the direction follows the language of the selected text." = "Works in both directions: the direction follows the language of the selected text.";
 "App" = "App";
 "History palette" = "History palette";
+"Undo the last layout fix" = "Undo the last layout fix";
+"Layout fix. No keys by default. Click the field and press the keys you want." = "Layout fix. No keys by default. Click the field and press the keys you want.";
 "Open Settings" = "Open Settings";
 "The standard macOS shortcut. It cannot be changed." = "The standard macOS shortcut. It cannot be changed.";
 

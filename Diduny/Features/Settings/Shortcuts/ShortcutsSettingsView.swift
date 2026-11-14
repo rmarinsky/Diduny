@@ -192,6 +192,7 @@ struct ShortcutsSettingsView: View {
         case .translateSelectedText: "Translate selected text"
         case .inplaceTranslation: "Translate the selection in place"
         case .historyPalette: "History palette"
+        case .undoLayoutFix: "Undo the last layout fix"
         }
     }
 
@@ -204,6 +205,7 @@ struct ShortcutsSettingsView: View {
         case .forceSubmit: "Stops, pastes, then presses ⌘↩."
         case .translateSelectedText: "Opens the translation window with the selection."
         case .inplaceTranslation: "Replaces the selected text with its translation."
+        case .undoLayoutFix: "Layout fix. No keys by default. Click the field and press the keys you want."
         case .cancelRecording, .addMeetingChapter, .historyPalette: nil
         }
     }

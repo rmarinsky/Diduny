@@ -47,9 +47,14 @@ protocol TypingStatsRecording: AnyObject {
 
 /// The host's "undo the last fix" shortcut in Carbon terms, or nil from the provider when no
 /// shortcut is set.
-struct AutoFixUndoShortcut: Equatable {
-    var carbonKeyCode: Int
-    var modifiers: NSEvent.ModifierFlags
+public struct AutoFixUndoShortcut: Equatable {
+    public var carbonKeyCode: Int
+    public var modifiers: NSEvent.ModifierFlags
+
+    public init(carbonKeyCode: Int, modifiers: NSEvent.ModifierFlags) {
+        self.carbonKeyCode = carbonKeyCode
+        self.modifiers = modifiers
+    }
 }
 
 // MARK: - Cursor UI

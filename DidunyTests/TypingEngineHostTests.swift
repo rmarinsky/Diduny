@@ -1,5 +1,7 @@
 @testable import Diduny
 import Foundation
+import KeyboardShortcuts
+import PapugaKit
 import Testing
 
 @MainActor
@@ -9,6 +11,7 @@ private final class FakeTypingEngine: TypingEngineControlling {
     var starts = 0
     var stops = 0
     var externalEdits = 0
+    var undos = 0
 
     func start() -> Bool {
         starts += 1
@@ -22,6 +25,7 @@ private final class FakeTypingEngine: TypingEngineControlling {
     }
 
     func noteExternalEdit() { externalEdits += 1 }
+    func undoLastFix() { undos += 1 }
 }
 
 /// `reconcile()` is the only place that starts or stops the typing engine.
@@ -215,5 +219,53 @@ final class TypingEngineHostTests {
 
         #expect(engine.externalEdits == 0)
         #expect(enginesBuilt == 0)
+    }
+
+    @Test("the Undo shortcut reaches the engine only while it runs")
+    func undoOnlyWhileRunning() {
+        sut.undoLastFix()
+        #expect(engine.undos == 0)
+        #expect(enginesBuilt == 0)
+
+        box.settings.typingEnabled = true
+        sut.reconcile()
+        sut.undoLastFix()
+        #expect(engine.undos == 1)
+
+        papugaRunning = true
+        sut.reconcile()
+        sut.undoLastFix()
+        #expect(engine.undos == 1)
+    }
+
+    @Test("running changes are reported once each, so the Undo hotkey is registered only while the engine runs")
+    func runningChangesAreReported() {
+        var changes: [Bool] = []
+        sut.onRunningChanged = { changes.append($0) }
+
+        sut.reconcile()
+        #expect(changes.isEmpty)
+
+        box.settings.typingEnabled = true
+        sut.reconcile()
+        sut.reconcile()
+        #expect(changes == [true])
+
+        box.settings.typingEnabled = false
+        sut.reconcile()
+        sut.reconcile()
+        #expect(changes == [true, false])
+    }
+
+    @Test("the engine's undo keys follow the Undo row: nil without keys or with the switch off")
+    func undoShortcutFollowsTheRow() {
+        #expect(box.settings.typingUndoShortcut == nil)
+
+        KeyboardShortcuts.setShortcut(.init(.f19, modifiers: [.control, .option]), for: .undoLayoutFix)
+        defer { KeyboardShortcuts.setShortcut(nil, for: .undoLayoutFix) }
+        #expect(box.settings.typingUndoShortcut == AutoFixUndoShortcut(carbonKeyCode: 80, modifiers: [.control, .option]))
+
+        box.settings.undoLayoutFixHotkeyEnabled = false
+        #expect(box.settings.typingUndoShortcut == nil)
     }
 }

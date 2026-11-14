@@ -107,6 +107,7 @@ enum ShortcutRow: String, CaseIterable {
     case translateSelectedText
     case inplaceTranslation
     case historyPalette
+    case undoLayoutFix
 
     /// The package name behind the row's keys; nil for the cancel key, which is stored by Diduny.
     var hotkeyName: KeyboardShortcuts.Name? {
@@ -117,6 +118,7 @@ enum ShortcutRow: String, CaseIterable {
         case .translateSelectedText: .translateSelectedText
         case .inplaceTranslation: .inplaceTranslation
         case .historyPalette: .toggleHistoryPalette
+        case .undoLayoutFix: .undoLayoutFix
         }
     }
 }

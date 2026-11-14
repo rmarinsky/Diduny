@@ -154,7 +154,8 @@ final class ShortcutCaptureSession {
     /// Every `KeyboardShortcuts.Name` Diduny registers.
     static let managedNames: [KeyboardShortcuts.Name] = [
         .toggleRecording, .toggleTranslation, .toggleMeetingRecording, .toggleMeetingTranslation,
-        .addMeetingChapter, .toggleHistoryPalette, .forceSubmit, .translateSelectedText, .inplaceTranslation
+        .addMeetingChapter, .toggleHistoryPalette, .forceSubmit, .translateSelectedText, .inplaceTranslation,
+        .undoLayoutFix
     ]
 
     private let registrar: HotkeyRegistrar

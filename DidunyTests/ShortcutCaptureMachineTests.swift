@@ -170,7 +170,7 @@ struct ShortcutCaptureSessionTests {
     @Test("The in-place key chord is part of the managed names")
     func managedNamesIncludeInplace() {
         #expect(ShortcutCaptureSession.managedNames.contains(.inplaceTranslation))
-        #expect(ShortcutCaptureSession.managedNames.count == 9)
+        #expect(ShortcutCaptureSession.managedNames.count == 10)
     }
 
     @Test("End posts once per capture; end without begin and a second begin change nothing")

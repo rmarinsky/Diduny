@@ -1914,6 +1914,8 @@
 "Works in both directions: the direction follows the language of the selected text." = "Працює в обидва боки: напрям залежить від мови виділеного тексту.";
 "App" = "Застосунок";
 "History palette" = "Палітра історії";
+"Undo the last layout fix" = "Скасувати останнє виправлення розкладки";
+"Layout fix. No keys by default. Click the field and press the keys you want." = "Виправлення розкладки. Типово без клавіш. Клацніть поле й натисніть потрібні клавіші.";
 "Open Settings" = "Відкрити налаштування";
 "The standard macOS shortcut. It cannot be changed." = "Стандартне скорочення macOS. Його не можна змінити.";
 
