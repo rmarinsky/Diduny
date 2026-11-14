@@ -3,7 +3,7 @@
   "en": {
     "headline": "Papuga is now part of Diduny: layout fixes, Vocabulary from typing and clipboard history",
     "highlights": [
-      "Settings → Typing fixes text typed in the wrong keyboard layout as you type, with an undo hint at the cursor. Select text and press Option+Shift twice to turn it into the other layout. Papuga's words, rules and history come over with Import from Papuga.",
+      "Settings → Typing fixes text typed in the wrong keyboard layout as you type, with an undo hint at the cursor. Select text and press Option+Shift twice to turn it into the other layout.",
       "Words you keep typing are added to Vocabulary & context by themselves, and you can remove them. Replacements and less certain words wait in \"Waiting for you\" for your click. Nothing from password fields is counted.",
       "New Clipboard page keeps what you copied, screenshots and what Diduny pasted. Overview counts layout fixes, shows when an update is ready, and the sidebar groups Dictation, Meetings & notes and Models."
     ]
@@ -11,7 +11,7 @@
   "uk": {
     "headline": "Papuga тепер у Diduny: виправлення розкладки, словник із набору й історія буфера",
     "highlights": [
-      "Налаштування → Набір тексту виправляє текст, набраний не в тій розкладці, просто під час набору, з підказкою для скасування біля курсора. Виділіть текст і двічі натисніть Option+Shift, щоб перевести його в іншу розкладку. Слова, правила й історію Papuga переносить кнопка «Імпортувати з Papuga».",
+      "Налаштування → Набір тексту виправляє текст, набраний не в тій розкладці, просто під час набору, з підказкою для скасування біля курсора. Виділіть текст і двічі натисніть Option+Shift, щоб перевести його в іншу розкладку.",
       "Слова, які ви часто набираєте, самі додаються у «Словник і контекст», і їх можна прибрати. Заміни та менш певні слова чекають на ваш клік у блоці «Чекає на вас». З полів пароля нічого не рахується.",
       "Нова сторінка «Буфер обміну» зберігає скопійоване, скриншоти і те, що вставив Diduny. Огляд рахує виправлення розкладки й показує, коли оновлення готове, а бічна панель групує Диктування, Зустрічі й нотатки та Моделі."
     ]

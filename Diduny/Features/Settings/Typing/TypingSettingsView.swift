@@ -50,18 +50,6 @@ struct TypingSettingsView: View {
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("typing.openVocabulary")
                 }
-                if model.papugaDataFound || model.papugaImportResult != nil {
-                    group("Papuga")
-                    SettingsLineRow(
-                        title: "Import from Papuga",
-                        caption: TypingSettingsModel.importCaption(model.papugaImportResult),
-                        kind: .button
-                    ) {
-                        Button("Import") { model.importFromPapuga() }
-                            .buttonStyle(.bordered)
-                            .accessibilityIdentifier("typing.importPapuga")
-                    }
-                }
                 group("Typing speed")
                 SettingsLineRow(
                     title: "Typing speed",

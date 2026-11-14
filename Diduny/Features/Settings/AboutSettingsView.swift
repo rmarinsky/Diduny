@@ -31,6 +31,10 @@ struct AboutSettingsView: View {
                     .font(DS.Font.callout)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, DS.Space.xs)
+                Text("Word frequency lists: [FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)")
+                    .font(DS.Font.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, DS.Space.xs)
             }
         }
         .task { await loadLatestVersion() }

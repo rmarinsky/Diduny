@@ -148,7 +148,6 @@
 		4398CE8CBF93A37608E8D509 /* UITestFakeParakeetDownload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F517E809D6F92F01144A329 /* UITestFakeParakeetDownload.swift */; };
 		43B8B84A25B31C52E9CDD478 /* parakeet-meeting.plist in Resources */ = {isa = PBXBuildFile; fileRef = 74A2FD1BFD19A209E172F4CE /* parakeet-meeting.plist */; };
 		43E33ECE3C848C8CD0A3AC2D /* pairs-en-uk-de-en.plist in Resources */ = {isa = PBXBuildFile; fileRef = E8267886BBF624F22F0C59EC /* pairs-en-uk-de-en.plist */; };
-		44CA5D4F31551DB180DD11E8 /* PapugaDataImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56483086B81E5F5352395CB4 /* PapugaDataImporterTests.swift */; };
 		45B0FAAB3BF7CD6ACFB73C3E /* PowerSourceMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CBAC9C8B4327D65DB53A044 /* PowerSourceMonitorTests.swift */; };
 		45F7A5C71CE4990E10BCFCA0 /* InProgressRecordingStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22ECCCBC345EE579CFE2AD5F /* InProgressRecordingStoreTests.swift */; };
 		46C13D134A69C702F5FEB204 /* local-whisper-preview-off.plist in Resources */ = {isa = PBXBuildFile; fileRef = E1A0CEE8AE817C58D2523A6F /* local-whisper-preview-off.plist */; };
@@ -421,7 +420,6 @@
 		C2166F8180638E5ADD7039F3 /* PanelHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24B67F7FAF3CCF662E65869E /* PanelHeader.swift */; };
 		C23F6830155468C581178868 /* SavedConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D73646890B3E7956455A0BA /* SavedConnection.swift */; };
 		C24B6F611448AF8CAD8E3DB9 /* MeetingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA64DC6EAB5D1FB38CF7F517 /* MeetingSettingsView.swift */; };
-		C28E86F58799444E134E931A /* PapugaDataImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1762A00A92BA8C9978879BC4 /* PapugaDataImporter.swift */; };
 		C3609D4F60C357BFE05CA61A /* PressCounterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F45A4CD65D51D1CDA652CE20 /* PressCounterTests.swift */; };
 		C43534C0B528F618061169B2 /* LivePanelStateMeetingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3992FDB263BF2CDF36C29B70 /* LivePanelStateMeetingTests.swift */; };
 		C451E8FBB81B9954817ACE61 /* NotesStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06FF9AD2A92A54CB48E933D7 /* NotesStoreTests.swift */; };
@@ -686,7 +684,6 @@
 		15E5289B27697670E50F8E3D /* NotesQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesQueueTests.swift; sourceTree = "<group>"; };
 		1695A067CB9B3F989FD8CA18 /* ProviderDefaultsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDefaultsTests.swift; sourceTree = "<group>"; };
 		16BFE0903EF698F090808CEE /* LanguagesSettingsModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguagesSettingsModelTests.swift; sourceTree = "<group>"; };
-		1762A00A92BA8C9978879BC4 /* PapugaDataImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PapugaDataImporter.swift; sourceTree = "<group>"; };
 		17D695564E55A2864828FFF0 /* BrowserCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserCatalog.swift; sourceTree = "<group>"; };
 		17DDE5421515DDFE13E751C6 /* TranscriptionBatchStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionBatchStorageTests.swift; sourceTree = "<group>"; };
 		18174CC5740A330799589646 /* AppDelegate+MeetingRecording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+MeetingRecording.swift"; sourceTree = "<group>"; };
@@ -817,7 +814,6 @@
 		52C8A25D3FCD6DE742A1274E /* PermissionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsSettingsView.swift; sourceTree = "<group>"; };
 		531C53F23BB5808801803CD5 /* DictationSwitchPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationSwitchPlan.swift; sourceTree = "<group>"; };
 		53DBF08EF8AA75C055A631A2 /* EdgeCommandPanelModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeCommandPanelModelTests.swift; sourceTree = "<group>"; };
-		56483086B81E5F5352395CB4 /* PapugaDataImporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PapugaDataImporterTests.swift; sourceTree = "<group>"; };
 		566C01EA8CBE6F4189D6FDBD /* SpeechLanguageHintsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechLanguageHintsTests.swift; sourceTree = "<group>"; };
 		5760997DDCC08AA31E95ABD0 /* OnDeviceLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceLanguageTests.swift; sourceTree = "<group>"; };
 		583D24D80FE19BB49505E371 /* TextTranslationWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextTranslationWindowController.swift; sourceTree = "<group>"; };
@@ -1780,7 +1776,6 @@
 		943453BD93EC075C8065488D /* Typing */ = {
 			isa = PBXGroup;
 			children = (
-				1762A00A92BA8C9978879BC4 /* PapugaDataImporter.swift */,
 				4247A4C5ECDE316872ED4ECB /* TypingConvertMonitor.swift */,
 				A089F4CEBAF220F3F335279C /* TypingDailyStats.swift */,
 				1BB310F4557C2A5DFE8D55FD /* TypingEngineHost.swift */,
@@ -2092,7 +2087,6 @@
 				9875E56EAF311E72020C75F2 /* OtherBuildLibraryTests.swift */,
 				C6693C0EB41B2F434398AE59 /* OutcomeStateTests.swift */,
 				288F8771F07733A21757F037 /* OverviewTypingAndUpdateTests.swift */,
-				56483086B81E5F5352395CB4 /* PapugaDataImporterTests.swift */,
 				FFCE4E033167376CFE6779D0 /* ParakeetModelStoreTests.swift */,
 				0C45BBD5F8C3D95F315761C6 /* ParakeetOfferPhaseTests.swift */,
 				099BA4D66F464D42D909B896 /* PasteMarkTests.swift */,
@@ -2721,7 +2715,6 @@
 				98220A462B8E3D7930AE7A3D /* PanelBoxes.swift in Sources */,
 				76577D803C41F1F75371C47B /* PanelButtons.swift in Sources */,
 				C2166F8180638E5ADD7039F3 /* PanelHeader.swift in Sources */,
-				C28E86F58799444E134E931A /* PapugaDataImporter.swift in Sources */,
 				B43DF5E9A6808BB10B28A69B /* ParakeetModelController.swift in Sources */,
 				508CBE565638EE0EC4A86F21 /* ParakeetProvider.swift in Sources */,
 				38C1BEDA7D493CF814DC9B2E /* PasteMarkController.swift in Sources */,
@@ -2987,7 +2980,6 @@
 				D3B17F5E0BF8C90E0A89BF0E /* OtherBuildLibraryTests.swift in Sources */,
 				A0C4EF24218B810E11151C63 /* OutcomeStateTests.swift in Sources */,
 				148FC6BE20E487F9C1BF963E /* OverviewTypingAndUpdateTests.swift in Sources */,
-				44CA5D4F31551DB180DD11E8 /* PapugaDataImporterTests.swift in Sources */,
 				38E9BF6163BBA5F207D7C2C5 /* ParakeetModelStoreTests.swift in Sources */,
 				F4E887FAA90C3C2ED92BFBF7 /* ParakeetOfferPhaseTests.swift in Sources */,
 				03EA30C8FBE03F55620200D4 /* PasteMarkTests.swift in Sources */,

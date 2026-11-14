@@ -73,6 +73,23 @@ final class TypingEngineTests: XCTestCase {
         XCTAssertFalse(engine.isRunning)
     }
 
+    /// Overview's "Layout fixes" card counts manual conversions (Convert) as well as automatic fixes.
+    func test_convertIsRecordedAsAFix() {
+        var recorded: [String] = []
+        let engine = TypingEngine(
+            storageDirectory: directory,
+            settings: { TypingSettings() },
+            logSubsystem: "papugakit.tests",
+            onReplacementRecorded: { recorded.append($0) }
+        )
+
+        engine.finishLayoutConversion(TypingLayoutConversion(
+            original: "ghbdsn", converted: "привіт", sourceLayoutID: "test.none", targetLayoutID: "test.none"
+        ))
+
+        XCTAssertEqual(recorded, ["ghbdsn"])
+    }
+
     func test_stopWritesTheCadenceOnlyAfterAStart() {
         var gaps: [Double] = []
         let engine = TypingEngine(
