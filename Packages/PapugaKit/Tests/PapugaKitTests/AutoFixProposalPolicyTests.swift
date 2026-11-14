@@ -2,6 +2,32 @@ import XCTest
 @testable import PapugaKit
 
 final class AutoFixProposalPolicyTests: XCTestCase {
+    @MainActor
+    func test_controllerPersistsThePresentedCandidateAndItsIdentity() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("decisions.jsonl")
+        let store = AutoFixDecisionHistoryStore(testFileURL: file)
+        // Was `Defaults[.replacementHistoryEnabled] = true`; the store now holds that value itself.
+        store.isEnabled = true
+        let controller = AutoFixControllerHarness(directory: directory, decisionHistory: store).controller
+        let proposal = makeProposal(kind: .compound, original: "ghbds", candidate: "привіт", scoreOriginal: 0.12, threshold: 0.5)
+        controller.recordProposalPresentation(proposal)
+        store.waitForPendingWritesForTesting()
+        let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+        XCTAssertEqual(lines.count, 1)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let observation = try decoder.decode(AutoFixDecisionObservation.self, from: Data(lines[0].utf8))
+        XCTAssertEqual(observation.id, proposal.id)
+        XCTAssertEqual(observation.selectedCandidate, "привіт")
+        XCTAssertEqual(observation.proposalContext?.kind, "compound")
+        XCTAssertEqual(observation.originalScore, 0.12)
+        XCTAssertEqual(observation.threshold, 0.5)
+        XCTAssertNil(observation.effectiveCandidateScore)
+    }
+
     func test_presentedProposalRoundTripsTheActualCandidateAndSharedID() throws {
         for kind: AutoFixProposal.Kind in [.detected, .compound, .spelling, .customRule] {
             let proposal = makeProposal(kind: kind, original: "(ghbds!)", candidate: "(привіт!)")

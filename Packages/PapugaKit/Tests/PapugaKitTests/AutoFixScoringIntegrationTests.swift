@@ -266,6 +266,28 @@ final class AutoFixScoringIntegrationTests: XCTestCase {
         )
     }
 
+    func test_controlCharacterPrefixedPhysicalInputStillMapsToZaraz() throws {
+        let fromID = "com.apple.keylayout.US"
+        let toID = "com.apple.keylayout.Ukrainian-PC"
+        let fromSource = try source(forID: fromID)
+        let toSource = try source(forID: toID)
+        mapper.buildMap(for: fromSource, sourceID: fromID)
+        mapper.buildMap(for: toSource, sourceID: toID)
+
+        let source = AutoFixKeyEventText.sanitized("\u{10}pfhfp")
+        let candidate = mapper.convert(text: source, fromSourceID: fromID, toSourceID: toID)
+
+        XCTAssertEqual(source, "pfhfp")
+        XCTAssertEqual(candidate, "зараз")
+        XCTAssertTrue(
+            AutoFixDecision.shouldReplace(
+                scoreOriginal: AppleNLScorer().score(source, expecting: "en"),
+                scoreCandidate: AppleNLScorer().score(candidate, expecting: "uk"),
+                threshold: 0.35
+            )
+        )
+    }
+
     /// Documents a known limitation of the AppleNL backend: short single English words like
     /// 'world' get remapped to 'цщкдв' which AppleNL classifies as Ukrainian with very high
     /// confidence. Without a dictionary check the auto-fix WILL trigger here. This test
