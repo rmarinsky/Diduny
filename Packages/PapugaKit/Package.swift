@@ -5,18 +5,19 @@ let package = Package(
     name: "PapugaKit",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "PapugaCore", targets: ["PapugaCore"]),
+        .library(name: "PapugaKit", targets: ["PapugaKit"]),
     ],
     targets: [
         .target(
-            name: "PapugaCore",
-            path: "Sources/PapugaCore",
+            name: "PapugaKit",
+            path: "Sources/PapugaKit",
             resources: [.process("Resources")]
         ),
         .testTarget(
-            name: "PapugaCoreTests",
-            dependencies: ["PapugaCore"],
-            path: "Tests/PapugaCoreTests"
+            name: "PapugaKitTests",
+            dependencies: ["PapugaKit"],
+            path: "Tests/PapugaKitTests",
+            resources: [.copy("Fixtures")]
         ),
     ]
 )
