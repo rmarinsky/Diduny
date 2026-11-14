@@ -27,6 +27,8 @@ struct EdgeCommandExpandedView: View {
     /// The outcome after Stop (WP-42); shown in place of the live view until it auto-hides, ×,
     /// New recording or the next recording.
     var outcomeStore: EdgeCommandOutcomeStore = DictationOverlayController.shared.outcomeStore
+    /// The silent update; a row on command home while one downloads or waits.
+    var updateStatus: UpdateStatus = .shared
     var onCloseOutcome: () -> Void = {}
     var onNewRecording: () -> Void = {}
     var onOpenRecording: (UUID) -> Void = { _ in }
@@ -154,6 +156,22 @@ struct EdgeCommandExpandedView: View {
             HeaderLink(title: "Batch files & URLs") { onAction(.batch) }
                 .accessibilityIdentifier("commandPanel.batch")
                 .frame(maxWidth: .infinity)
+
+            if let text = updateStatus.panelText {
+                VStack(spacing: DS.Panel.blockGap) {
+                    Text(text)
+                        .font(DS.Font.meta)
+                        .foregroundStyle(DS.Palette.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if updateStatus.showsRestartButton {
+                        PanelButton(title: "Restart to update", role: .primary) { updateStatus.restart() }
+                            .disabled(!updateStatus.canRestart)
+                            .accessibilityIdentifier("commandPanel.update.restart")
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("commandPanel.update")
+            }
         }
         .padding(DS.Panel.padding)
         .background(DS.Palette.panel, in: panelShape)

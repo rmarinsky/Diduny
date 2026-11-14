@@ -69,6 +69,7 @@
             if UITestHarness.listensToBridge { UITestBridge.shared.start() }
             if UITestHarness.showsProbe { UITestProbe.shared.show(appState: appDelegate.appState) }
             TypingHintsUITestPreview.showIfRequested()
+            UpdateStatus.shared.applyUITestingArgument()
             guard let target = UITestHarness.openTarget else { return }
             open(target, appDelegate: appDelegate)
         }

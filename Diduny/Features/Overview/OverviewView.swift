@@ -10,6 +10,9 @@ struct OverviewView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedRecording: Recording? = nil
     @State private var typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
+    @State private var typingStats = TypingDailyStatsStore.shared
+    @State private var vocabulary = VocabularyStore.shared
+    @State private var updateStatus = UpdateStatus.shared
 
     enum TimePeriod: String, CaseIterable {
         case week = "Week"
@@ -55,6 +58,8 @@ struct OverviewView: View {
     struct Snapshot {
         var period = RecordingStatistics(recordings: [])
         var previousTimeSavedSeconds: Double = 0
+        var layoutFixSeconds: Double = 0
+        var layoutFixCount = 0
         var series: [DayStat] = []
         var avgMinutes: Double = 0
         var maxMinutes: Double = 1
@@ -64,10 +69,14 @@ struct OverviewView: View {
     private func rebuildSnapshot() {
         let series = computeChartSeries()
         let nonEmpty = series.filter { !$0.isFuture && $0.minutes > 0 }
+        let fixRows = typingStats.rows(from: periodStart)
         snapshot = Snapshot(
             period: RecordingStatistics(rows: periodRecordings),
             previousTimeSavedSeconds: RecordingStatistics(rows: previousPeriodRecordings)
-                .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute),
+                .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute)
+                + layoutFixSeconds(typingStats.rows(from: previousPeriodStart, to: periodStart)),
+            layoutFixSeconds: layoutFixSeconds(fixRows),
+            layoutFixCount: fixRows.reduce(0) { $0 + $1.fixCount },
             series: series,
             avgMinutes: nonEmpty.isEmpty ? 0 : nonEmpty.reduce(0) { $0 + $1.minutes } / Double(nonEmpty.count),
             maxMinutes: series.map(\.minutes).max() ?? 1,
@@ -86,7 +95,11 @@ struct OverviewView: View {
     }
 
     private var totalTimeSavedSeconds: Double {
-        periodStatistics.totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute)
+        periodStatistics.totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute) + snapshot.layoutFixSeconds
+    }
+
+    private func layoutFixSeconds(_ rows: [TypingDayStat]) -> Double {
+        TypingDayStat.secondsSaved(rows, wordsPerMinute: typingSpeedWordsPerMinute)
     }
 
     private var totalHours: Double {
@@ -190,13 +203,17 @@ struct OverviewView: View {
             let byMonth = Dictionary(grouping: periodRecordings) {
                 cal.date(from: cal.dateComponents([.year, .month], from: $0.createdAt))!
             }
+            let fixesByMonth = Dictionary(grouping: typingStats.rows(from: periodStart)) { row in
+                row.date().flatMap { cal.date(from: cal.dateComponents([.year, .month], from: $0)) }
+            }
             let formatter = DateFormatter()
             formatter.dateFormat = "MMM"
             return months.map { month in
                 DayStat(
                     id: month,
-                    minutes: RecordingStatistics(rows: byMonth[month] ?? [])
-                        .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute) / 60,
+                    minutes: (RecordingStatistics(rows: byMonth[month] ?? [])
+                        .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute)
+                        + layoutFixSeconds(fixesByMonth[month] ?? [])) / 60,
                     isToday: month == currentMonth,
                     isFuture: false,
                     label: formatter.string(from: month)
@@ -215,11 +232,13 @@ struct OverviewView: View {
             }
         }
         let byDay = Dictionary(grouping: periodRecordings) { cal.startOfDay(for: $0.createdAt) }
+        let fixesByDay = Dictionary(grouping: typingStats.rows) { $0.day }
         let formatter = DateFormatter()
         formatter.dateFormat = timePeriod == .month ? "d" : "EEE"
         return days.map { day in
-            let mins = RecordingStatistics(rows: byDay[day] ?? [])
-                .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute) / 60
+            let mins = (RecordingStatistics(rows: byDay[day] ?? [])
+                .totalTimeSavedSeconds(wordsPerMinute: typingSpeedWordsPerMinute)
+                + layoutFixSeconds(fixesByDay[TypingDayStat.dayKey(day)] ?? [])) / 60
             return DayStat(
                 id: day,
                 minutes: mins,
@@ -240,6 +259,12 @@ struct OverviewView: View {
         guard totalTimeSavedSeconds > 0 else {
             return String(localized: "Based on \(formatWordsPerMinute(typingSpeedWordsPerMinute)) WPM typing baseline")
         }
+        if snapshot.layoutFixSeconds > 0 {
+            let fixes = formatDurationCompact(snapshot.layoutFixSeconds).replacingOccurrences(of: "≈ ", with: "")
+            return String(
+                localized: "Dictation and \(fixes) of layout fixes. Based on \(formatWordsPerMinute(typingSpeedWordsPerMinute)) WPM typing baseline"
+            )
+        }
 
         return String(
             localized: "\(formatDurationCompact(typingTimeSavedSeconds)) typing · \(formatDurationCompact(mediaTimeSavedSeconds)) media"
@@ -257,10 +282,12 @@ struct OverviewView: View {
             .frame(width: 220)
         } content: {
             VStack(spacing: DS.Space.md) {
+                updateCard
                 OverviewLaunchCard()
                 heroCard
                 metricGrid
                 chartCard
+                pendingCard
                 recentCard
             }
         }
@@ -283,6 +310,7 @@ struct OverviewView: View {
         .onChange(of: timePeriod) { rebuildSnapshot(); revealBars() }
         .onChange(of: storage.recordings) { rebuildSnapshot(); syncBars() }
         .onChange(of: typingSpeedWordsPerMinute) { rebuildSnapshot(); syncBars() }
+        .onChange(of: typingStats.rows) { rebuildSnapshot(); syncBars() }
     }
 
     // MARK: - Hero Card
@@ -365,6 +393,13 @@ struct OverviewView: View {
                         ? String(format: "%.1fk", Double(totalWords) / 1000)
                         : "\(totalWords)",
                     label: String(localized: "Words transcribed")
+                )
+                MetricCard(
+                    icon: "keyboard",
+                    value: snapshot.layoutFixCount >= 1000
+                        ? String(format: "%.1fk", Double(snapshot.layoutFixCount) / 1000)
+                        : "\(snapshot.layoutFixCount)",
+                    label: String(localized: "Layout fixes")
                 )
                 MetricCard(
                     icon: "dial.medium",
@@ -459,6 +494,66 @@ struct OverviewView: View {
         )
     }
 
+    // MARK: - Update and suggestions cards
+
+    @ViewBuilder
+    private var updateCard: some View {
+        if let title = updateStatus.cardTitle {
+            HStack(spacing: DS.Space.lg) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(DS.Font.headline)
+                    if let detail = updateStatus.cardDetail {
+                        Text(detail).font(DS.Font.callout).foregroundColor(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if updateStatus.showsRestartButton {
+                    Button("Restart to update") { updateStatus.restart() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color("BrandAccentDeep"))
+                        .controlSize(.small)
+                        .disabled(!updateStatus.canRestart)
+                        .accessibilityIdentifier("overview.update.restart")
+                }
+            }
+            .padding(DS.Space.lg)
+            .background(Color("BrandTintSoft"), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color("BrandTintBorder"), lineWidth: 1)
+            )
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("overview.update")
+        }
+    }
+
+    @ViewBuilder
+    private var pendingCard: some View {
+        let count = vocabulary.pendingCount
+        if count > 0 {
+            Card {
+                HStack(spacing: DS.Space.lg) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(count == 1
+                            ? String(localized: "1 suggestion waits for your decision")
+                            : String(localized: "\(count) suggestions wait for your decision"))
+                            .font(DS.Font.headline)
+                        Text("Found while you typed and dictated.")
+                            .font(DS.Font.callout)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("Open Vocabulary") {
+                        MainWindowController.shared.showWindow(section: .vocabulary)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+            .accessibilityIdentifier("overview.pendingSuggestions")
+        }
+    }
+
     // MARK: - Recent Card
 
     private var recentCard: some View {
@@ -547,12 +642,14 @@ private struct MetricCard: View {
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.82)
+                // Five cards share the row at the 1000 pt minimum window ("Layout fixes" is the fifth).
+                .minimumScaleFactor(0.6)
 
             Text(LocalizedStringKey(label))
                 .font(DS.Font.caption)
                 .foregroundColor(.secondary)
-                .lineLimit(1)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)

@@ -80,6 +80,8 @@ final class TypingEngineHost {
                 logSubsystem: Log.subsystem,
                 hintPresenter: TypingHintPresenter(settings: settings),
                 undoShortcut: { settings.typingUndoShortcut },
+                onReplacementRecorded: { text in MainActor.assumeIsolated { TypingDailyStatsStore.shared.recordFix(text: text) } },
+                onReplacementReversed: { text in MainActor.assumeIsolated { TypingDailyStatsStore.shared.reverseFix(text: text) } },
                 onCadenceGapWritten: { settings.typingCadenceAverageGap = $0 },
                 onRulesWritten: { settings.typingCustomReplaceRules = $0 },
                 onWordAdded: { settings.addTypingNeverFixWord($0) },

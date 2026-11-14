@@ -2515,3 +2515,22 @@
 "%lld of 300" = "%lld з 300";
 "%lld of 300, %lld waiting for you" = "%lld з 300, %lld чекає на вас";
 "Open Vocabulary" = "Відкрити словник";
+
+/* Overview: layout fixes and the update state */
+"Downloading Diduny %@" = "Завантажуємо Diduny %@";
+"Diduny %@ is ready" = "Diduny %@ готовий";
+"Restarting Diduny..." = "Diduny перезапускається...";
+"In the background. You can keep working." = "У фоні. Можна працювати далі.";
+"Finish the recording first." = "Спершу завершіть запис.";
+"Downloaded in the background. Restarting takes a few seconds." = "Завантажено у фоні. Перезапуск триває кілька секунд.";
+"Downloading Diduny %@ in the background." = "Diduny %@ завантажується у фоні.";
+"Diduny %@ is downloaded." = "Diduny %@ завантажено.";
+"Downloading the update" = "Завантажуємо оновлення";
+"Update downloaded" = "Оновлення завантажено";
+"Downloading..." = "Завантаження...";
+"Restart to update" = "Перезапустити й оновити";
+"Restarting..." = "Перезапуск...";
+"Dictation and %@ of layout fixes. Based on %@ WPM typing baseline" = "Диктовка і %@ виправлень розкладки. Розраховано для швидкості друку %@ слів/хв";
+"1 suggestion waits for your decision" = "1 пропозиція чекає на ваше рішення";
+"%lld suggestions wait for your decision" = "Пропозицій, що чекають на ваше рішення: %lld";
+"Found while you typed and dictated." = "Знайдено, поки ви друкували й диктували.";

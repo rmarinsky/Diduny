@@ -11,6 +11,7 @@ struct AboutSettingsView: View {
     }
 
     @State private var latestVersion: String?
+    @State private var updateStatus = UpdateStatus.shared
     @State private var updateState: UpdateState = .checking
     @State private var checkedToday = false
 
@@ -97,7 +98,9 @@ struct AboutSettingsView: View {
 
     private var updateCard: some View {
         VStack(alignment: .leading, spacing: DS.Space.sm) {
-            Text(updateHeadline)
+            Group {
+                if let headline = updateStatus.aboutHeadline { Text(headline) } else { Text(updateHeadline) }
+            }
                 .font(DS.Font.headline)
                 .foregroundStyle(currentProduct.accentDeep)
                 .fixedSize(horizontal: false, vertical: true)
@@ -108,19 +111,33 @@ struct AboutSettingsView: View {
                 versionLine("Checked", value: checkedToday ? String(localized: "today") : "—")
             }
 
-            Button {
-                MainWindowController.shared.checkForUpdates()
-            } label: {
-                Label(
-                    updateState == .available ? "Update now" : "Check for updates",
-                    systemImage: "arrow.triangle.2.circlepath"
-                )
-                .labelStyle(.titleAndIcon)
+            if let title = updateStatus.aboutButtonTitle {
+                Button {
+                    updateStatus.restart()
+                } label: {
+                    Label(title, systemImage: "arrow.triangle.2.circlepath")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(currentProduct.accentDeep)
+                .controlSize(.small)
+                .disabled(!updateStatus.canRestart)
+                .accessibilityIdentifier("about.update.restart")
+            } else {
+                Button {
+                    MainWindowController.shared.checkForUpdates()
+                } label: {
+                    Label(
+                        updateState == .available ? "Update now" : "Check for updates",
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
+                    .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(currentProduct.accentDeep)
+                .controlSize(.small)
+                .disabled(!MainWindowController.shared.canCheckForUpdates)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(currentProduct.accentDeep)
-            .controlSize(.small)
-            .disabled(!MainWindowController.shared.canCheckForUpdates)
         }
         .padding(DS.Space.md)
         .background(

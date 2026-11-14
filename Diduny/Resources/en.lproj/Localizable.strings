@@ -2515,3 +2515,22 @@
 "%lld of 300" = "%lld of 300";
 "%lld of 300, %lld waiting for you" = "%lld of 300, %lld waiting for you";
 "Open Vocabulary" = "Open Vocabulary";
+
+/* Overview: layout fixes and the update state */
+"Downloading Diduny %@" = "Downloading Diduny %@";
+"Diduny %@ is ready" = "Diduny %@ is ready";
+"Restarting Diduny..." = "Restarting Diduny...";
+"In the background. You can keep working." = "In the background. You can keep working.";
+"Finish the recording first." = "Finish the recording first.";
+"Downloaded in the background. Restarting takes a few seconds." = "Downloaded in the background. Restarting takes a few seconds.";
+"Downloading Diduny %@ in the background." = "Downloading Diduny %@ in the background.";
+"Diduny %@ is downloaded." = "Diduny %@ is downloaded.";
+"Downloading the update" = "Downloading the update";
+"Update downloaded" = "Update downloaded";
+"Downloading..." = "Downloading...";
+"Restart to update" = "Restart to update";
+"Restarting..." = "Restarting...";
+"Dictation and %@ of layout fixes. Based on %@ WPM typing baseline" = "Dictation and %@ of layout fixes. Based on %@ WPM typing baseline";
+"1 suggestion waits for your decision" = "1 suggestion waits for your decision";
+"%lld suggestions wait for your decision" = "%lld suggestions wait for your decision";
+"Found while you typed and dictated." = "Found while you typed and dictated.";
