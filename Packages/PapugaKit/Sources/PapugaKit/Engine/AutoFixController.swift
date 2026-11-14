@@ -2338,7 +2338,7 @@ final class AutoFixController {
         pendingProposalRecovery = pending
         pendingReapply = nil
         presenter.showRecovery(
-            title: "Повернути підказку",
+            title: AutoFixRecoveryTitle.bringBackProposal,
             near: NSEvent.mouseLocation
         ) { [weak self] in
             self?.reopenProposalRecovery()
@@ -2362,7 +2362,7 @@ final class AutoFixController {
         pendingReapply = pending
         pendingProposalRecovery = nil
         presenter.showRecovery(
-            title: "Застосувати знову",
+            title: AutoFixRecoveryTitle.applyAgain,
             near: NSEvent.mouseLocation
         ) { [weak self] in
             self?.reapplyPendingFix()

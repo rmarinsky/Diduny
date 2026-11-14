@@ -2441,3 +2441,20 @@
 "Fixes are off in" = "Fixes are off in";
 "Other apps" = "Other apps";
 "Used to count the time saved in Overview." = "Used to count the time saved in Overview.";
+
+/* Typing hints at the cursor (undo, proposal, recovery, deferred fix) */
+"Fixed" = "Fixed";
+"Undo fix" = "Undo fix";
+"Bring back the hint" = "Bring back the hint";
+"Apply again" = "Apply again";
+"Apply the deferred fix" = "Apply the deferred fix";
+"Close the hint" = "Close the hint";
+"Possible replacement" = "Possible replacement";
+"Possible fix" = "Possible fix";
+"Never replace “%@”" = "Never replace “%@”";
+"Never fix “%@”" = "Never fix “%@”";
+"Replace and create a rule. Enter" = "Replace and create a rule. Enter";
+"Fix this case. Enter" = "Fix this case. Enter";
+"Close the hint. You can bring it back within 10 seconds. Esc" = "Close the hint. You can bring it back within 10 seconds. Esc";
+"Never suggest this replacement again" = "Never suggest this replacement again";
+"Possible replacement of %1$@ with %2$@" = "Possible replacement of %1$@ with %2$@";

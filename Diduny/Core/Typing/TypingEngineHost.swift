@@ -49,6 +49,7 @@ final class TypingEngineHost {
                 storageDirectory: RecordingsLibraryStorage.defaultAppDirectory.appendingPathComponent("Typing"),
                 settings: { settings.typingSettings },
                 logSubsystem: Log.subsystem,
+                hintPresenter: TypingHintPresenter(settings: settings),
                 onCadenceGapWritten: { settings.typingCadenceAverageGap = $0 }
             )
         }

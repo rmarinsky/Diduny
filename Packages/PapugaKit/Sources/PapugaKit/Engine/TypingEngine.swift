@@ -1,8 +1,8 @@
 import Foundation
 
 /// The one type a host app uses. It builds the stores, the layout manager, the spell checker and
-/// the controller in Papuga's start order, and shows nothing on screen: the controller gets
-/// `NoOpAutoFixPresenter`, so no proposal appears and the tap never swallows a key.
+/// the controller in Papuga's start order. It draws nothing itself: the host's `hintPresenter`
+/// shows the hints. Without one no proposal appears and the tap never swallows a key.
 @MainActor
 public final class TypingEngine {
     private let settings: @MainActor () -> TypingSettings
@@ -19,6 +19,7 @@ public final class TypingEngine {
     ///   - storageDirectory: where the history and event files live. Created when missing.
     ///   - settings: read on the main actor every time the engine needs a setting, so keep it cheap.
     ///   - logSubsystem: the OSLog subsystem of the host.
+    ///   - hintPresenter: shows the undo hint, the proposal, the recovery hint and the deferred chip.
     ///   - onCadenceGapWritten: the typing rhythm to keep for the next launch, written in `stop()`.
     ///     The next `settings()` should return it as `typingCadenceAverageGap`.
     ///   - onRulesWritten: the complete new rule list. The next `settings()` must return it as
@@ -29,6 +30,7 @@ public final class TypingEngine {
         storageDirectory: URL,
         settings: @escaping @MainActor () -> TypingSettings,
         logSubsystem: String,
+        hintPresenter: TypingHintPresenting? = nil,
         onReplacementRecorded: ((String) -> Void)? = nil,
         onReplacementReversed: ((String) -> Void)? = nil,
         onCadenceGapWritten: ((Double) -> Void)? = nil,
@@ -66,7 +68,7 @@ public final class TypingEngine {
             eventLog: eventLog,
             settings: settings,
             settingsWriter: hostCalls,
-            presenter: NoOpAutoFixPresenter(),
+            presenter: hintPresenter.map(TypingHintPresenterAdapter.init(host:)) ?? NoOpAutoFixPresenter(),
             stats: hostCalls,
             wordList: hostCalls,
             logSubsystem: logSubsystem,

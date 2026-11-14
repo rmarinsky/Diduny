@@ -76,6 +76,12 @@ final class AutoFixProposalShortcutGate: @unchecked Sendable {
     func disarm() { armed.withLock { $0 = false } }
 }
 
+/// The two recovery toasts the controller shows, by their Papuga titles.
+enum AutoFixRecoveryTitle {
+    static let bringBackProposal = "Повернути підказку"
+    static let applyAgain = "Застосувати знову"
+}
+
 /// Everything the controller shows near the cursor. The methods mirror, one for one, the calls
 /// the controller made on Papuga's toast coordinator and proposal coordinator.
 @MainActor

@@ -2441,3 +2441,20 @@
 "Fixes are off in" = "Виправлення вимкнено в";
 "Other apps" = "Інші програми";
 "Used to count the time saved in Overview." = "За нею рахується заощаджений час в Огляді.";
+
+/* Typing hints at the cursor (undo, proposal, recovery, deferred fix) */
+"Fixed" = "Виправлено";
+"Undo fix" = "Скасувати заміну";
+"Bring back the hint" = "Повернути підказку";
+"Apply again" = "Застосувати знову";
+"Apply the deferred fix" = "Застосувати відкладену підказку";
+"Close the hint" = "Закрити підказку";
+"Possible replacement" = "Можлива заміна";
+"Possible fix" = "Можливе виправлення";
+"Never replace “%@”" = "Ніколи не замінювати “%@”";
+"Never fix “%@”" = "Ніколи не виправляти “%@”";
+"Replace and create a rule. Enter" = "Замінити й створити правило. Enter";
+"Fix this case. Enter" = "Виправити поточний випадок. Enter";
+"Close the hint. You can bring it back within 10 seconds. Esc" = "Закрити підказку. Її можна повернути протягом 10 секунд. Esc";
+"Never suggest this replacement again" = "Більше не пропонувати цю заміну";
+"Possible replacement of %1$@ with %2$@" = "Можлива заміна %1$@ на %2$@";
