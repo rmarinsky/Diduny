@@ -24,11 +24,19 @@ struct ManualReplacementSnapshot {
     /// True when what the user types now must not be learned from: secure input is on, or the focused
     /// field is a password field, or its text cannot be read.
     static func focusedFieldIsPrivate() -> Bool {
-        guard !IsSecureEventInputEnabled(), let element = focusedElement(),
-              attribute(kAXSubroleAttribute, of: element) as? String != "AXSecureTextField",
+        guard !focusedFieldIsSecure(), let element = focusedElement(),
               attribute(kAXValueAttribute, of: element) is String
         else { return true }
         return false
+    }
+
+    /// True when secure input is on or the focused field is a password field. Typing there is never
+    /// buffered, judged, fixed or written to history.
+    static func focusedFieldIsSecure() -> Bool {
+        if IsSecureEventInputEnabled() { return true }
+        guard let element = focusedElement() else { return false }
+        return attribute(kAXSubroleAttribute, of: element) as? String == "AXSecureTextField"
+            || attribute(kAXRoleAttribute, of: element) as? String == "AXSecureTextField"
     }
 
     func confirms(replacement: String) -> Bool {

@@ -68,6 +68,8 @@ final class AutoFixController {
     private let stats: TypingStatsRecording
     private let wordList: WordListEditing
     private let undoShortcut: @MainActor () -> AutoFixUndoShortcut?
+    /// True while the focused field is a password field or secure input is on.
+    private let isSecureField: @MainActor () -> Bool
     private let replacementNotificationName: Notification.Name
     /// Set by `setPaused(_:)`. While true the event tap is disabled, so no key reaches the controller.
     private(set) var isPaused = false
@@ -85,6 +87,7 @@ final class AutoFixController {
         stats: TypingStatsRecording,
         wordList: WordListEditing,
         undoShortcut: @escaping @MainActor () -> AutoFixUndoShortcut? = { nil },
+        isSecureField: @escaping @MainActor () -> Bool = { ManualReplacementSnapshot.focusedFieldIsSecure() },
         logSubsystem: String = Constants.bundleIdentifier,
         tapThreadName: String = AutoFixEventTap.defaultThreadName,
         replacementNotificationName: Notification.Name = .textReplacementDidComplete
@@ -101,6 +104,7 @@ final class AutoFixController {
         self.stats = stats
         self.wordList = wordList
         self.undoShortcut = undoShortcut
+        self.isSecureField = isSecureField
         self.replacementNotificationName = replacementNotificationName
         self.logger = Logger(subsystem: logSubsystem, category: "AutoFix")
         self.eventTapRunner = AutoFixEventTap(mask: AutoFixController.eventMask, threadName: tapThreadName)
@@ -380,6 +384,10 @@ final class AutoFixController {
 
         if !typedString.isEmpty {
             implicitUndoWatch = nil
+            if buffer.text.isEmpty, isSecureField() {
+                resetTypingState(clearLastFix: false)
+                return
+            }
             if buffer.text.isEmpty {
                 targetValidator.startSession(targetPID: targetPID, keyCode: keyCode, typedString: typedString)
             } else {
@@ -510,6 +518,10 @@ final class AutoFixController {
         let word = buffer.text
         guard !word.isEmpty else {
             // Boundary fired with nothing typed: the latch is cleared by noteBoundary in the caller.
+            return
+        }
+        guard !isSecureField() else {
+            buffer.reset()
             return
         }
 

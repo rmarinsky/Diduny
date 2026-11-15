@@ -43,6 +43,37 @@ final class AutoFixControllerSeamTests: XCTestCase {
         XCTAssertEqual(observations[1].minimumWordLength, 5)
     }
 
+    func test_secureFieldIsNeverBufferedFixedOrRecorded() {
+        let harness = AutoFixControllerHarness(directory: directory)
+        harness.isSecureField = true
+        let controller = harness.controller
+        // "ghbdsn" is "привіт" typed in the wrong layout: a fix candidate in a normal field.
+        for (code, char) in [(kVK_ANSI_G, "g"), (kVK_ANSI_H, "h"), (kVK_ANSI_B, "b"),
+                             (kVK_ANSI_D, "d"), (kVK_ANSI_S, "s"), (kVK_ANSI_N, "n")] {
+            controller.processKeyDownForTesting(keyCode: UInt16(code), typedString: char)
+        }
+        XCTAssertEqual(controller.typingBufferForTesting, "")
+        controller.processKeyDownForTesting(keyCode: UInt16(kVK_Space), typedString: " ")
+
+        XCTAssertFalse(controller.hasPendingUndoForTesting)
+        XCTAssertTrue(harness.stats.recorded.isEmpty)
+        XCTAssertTrue(ReplacementHistoryStore(directory: directory).loadEntriesSync().isEmpty)
+    }
+
+    func test_secureFocusAtTheBoundaryDropsTheBufferedWord() {
+        let harness = AutoFixControllerHarness(directory: directory)
+        let controller = harness.controller
+        controller.processKeyDownForTesting(keyCode: UInt16(kVK_ANSI_G), typedString: "g")
+        controller.processKeyDownForTesting(keyCode: UInt16(kVK_ANSI_H), typedString: "h")
+        harness.isSecureField = true
+        controller.processKeyDownForTesting(keyCode: UInt16(kVK_Space), typedString: " ")
+
+        XCTAssertEqual(controller.typingBufferForTesting, "")
+        XCTAssertFalse(controller.hasPendingUndoForTesting)
+        XCTAssertTrue(harness.stats.recorded.isEmpty)
+        XCTAssertTrue(ReplacementHistoryStore(directory: directory).loadEntriesSync().isEmpty)
+    }
+
     func test_noteExternalEditClearsTheTypingBuffer() {
         let harness = AutoFixControllerHarness(directory: directory)
         let controller = harness.controller

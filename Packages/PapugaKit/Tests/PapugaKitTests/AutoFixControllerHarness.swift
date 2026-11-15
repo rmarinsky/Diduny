@@ -50,6 +50,7 @@ final class AutoFixControllerHarness {
     final class Box {
         var settings: TypingSettings
         var undoShortcut: AutoFixUndoShortcut?
+        var isSecureField = false
         init(settings: TypingSettings) { self.settings = settings }
     }
 
@@ -61,6 +62,10 @@ final class AutoFixControllerHarness {
     var undoShortcut: AutoFixUndoShortcut? {
         get { box.undoShortcut }
         set { box.undoShortcut = newValue }
+    }
+    var isSecureField: Bool {
+        get { box.isSecureField }
+        set { box.isSecureField = newValue }
     }
     let writer = Writer()
     let stats = Stats()
@@ -83,7 +88,8 @@ final class AutoFixControllerHarness {
             presenter: presenter,
             stats: stats,
             wordList: wordList,
-            undoShortcut: { box.undoShortcut }
+            undoShortcut: { box.undoShortcut },
+            isSecureField: { box.isSecureField }
         )
     }
 }
