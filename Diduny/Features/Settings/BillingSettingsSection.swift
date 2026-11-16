@@ -401,10 +401,11 @@ struct BillingOfferView: View {
         VStack(alignment: .leading, spacing: 16) {
             if let contrast = priceContrast {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(contrast.title).font(.headline)
-                    Text(contrast.detail).font(.caption).foregroundStyle(.secondary)
+                    Text(contrast.title).font(.headline).foregroundStyle(DS.Palette.text)
+                    Text(contrast.detail).font(.caption).foregroundStyle(DS.Palette.secondary)
                 }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    .background(DS.Palette.tintSoft, in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous).strokeBorder(DS.Palette.tintBorder))
             }
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 12) {
@@ -466,16 +467,16 @@ struct BillingOfferView: View {
         let unavailable = chosen == .support ? state.supportPlan == nil : chosen == .cloud ? state.cloudPlan == nil : false
         let activeBlocked = state.plan == "pro" || state.plan == chosen?.rawValue || (state.plan == "cloud" && chosen == .support)
         return VStack(alignment: .leading, spacing: 14) {
-            Text(highlighted ? "No hourly limit" : " ").font(.caption).foregroundStyle(.secondary).frame(height: 16)
-            Text(title).font(.headline).frame(height: 38, alignment: .topLeading)
-            Text(price).font(.title2.weight(.semibold))
-            Text(chosen == nil ? " " : "per month").font(.caption).foregroundStyle(.secondary)
-            Text(bill).font(.caption).foregroundStyle(.secondary).frame(height: 48, alignment: .topLeading)
-            Text(detail).font(.callout).foregroundStyle(.secondary).frame(height: 62, alignment: .topLeading)
-            Text(quota).font(.callout.weight(.semibold)).frame(height: 50, alignment: .topLeading)
+            Text(highlighted ? "No hourly limit" : " ").font(.caption).foregroundStyle(DS.Palette.accentText).frame(height: 16)
+            Text(title).font(.headline).foregroundStyle(DS.Palette.text).frame(height: 38, alignment: .topLeading)
+            Text(price).font(.title2.weight(.semibold)).foregroundStyle(DS.Palette.text)
+            Text(chosen == nil ? " " : "per month").font(.caption).foregroundStyle(DS.Palette.secondary)
+            Text(bill).font(.caption).foregroundStyle(DS.Palette.secondary).frame(height: 48, alignment: .topLeading)
+            Text(detail).font(.callout).foregroundStyle(DS.Palette.secondary).frame(height: 62, alignment: .topLeading)
+            Text(quota).font(.callout.weight(.semibold)).foregroundStyle(DS.Palette.text).frame(height: 50, alignment: .topLeading)
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    Text(item).font(.caption).fixedSize(horizontal: false, vertical: true)
+                    Text(item).font(.caption).foregroundStyle(DS.Palette.text).fixedSize(horizontal: false, vertical: true)
                 }
             }.frame(height: 155, alignment: .topLeading)
             if highlighted {
@@ -489,8 +490,10 @@ struct BillingOfferView: View {
                 }.buttonStyle(.bordered).disabled(chosen != nil && (isLoading || pending || activeBlocked || unavailable))
             }
         }.padding(14).frame(width: 160, alignment: .leading)
-            .background(highlighted ? Color.blue.opacity(0.22) : Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(highlighted ? Color.blue.opacity(0.65) : Color.secondary.opacity(0.18)))
+            .background(highlighted ? DS.Palette.tintSoft : DS.Palette.card,
+                        in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(highlighted ? DS.Palette.accent : DS.Palette.line, lineWidth: highlighted ? 1.5 : 1))
     }
 
     private var comparison: some View {
