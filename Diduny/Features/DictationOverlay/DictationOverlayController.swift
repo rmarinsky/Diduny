@@ -62,7 +62,7 @@ final class DictationOverlayController {
         }
     }
 
-    func startRecording(mode: RecordingMode) {
+    func startRecording(mode: RecordingMode, micNotice: String? = nil) {
         PasteMarkController.shared.clear()
         autoHideTask?.cancel()
         beginSurfaceSession()
@@ -70,9 +70,16 @@ final class DictationOverlayController {
             store.reset(mode: mode)
             configureSession(mode: mode)
         }
+        // This is called again after each info message; announce a notice only the first time.
+        let isNewNotice = micNotice != nil && micNotice != store.micNotice
+        store.micNotice = micNotice
         store.phase = .recording
         if usesNotch {
             NotchManager.shared.startRecording(mode: mode)
+            // The notch has no room for a lasting line, so it shows the notice once.
+            if isNewNotice, let micNotice {
+                NotchManager.shared.showInfoDuringRecording(message: micNotice, mode: mode, duration: 4)
+            }
         } else {
             showPanel()
         }

@@ -32,6 +32,8 @@ final class LiveDictationOverlayStore {
     var endedAt: Date?
     /// Box text while the "Transcribing in background" hand-off is shown; nil otherwise.
     var backgroundHandoffDetail: String?
+    /// Shown under the content while recording when the chosen mic failed and another one records.
+    var micNotice: String?
     /// After a meeting's Stop on the floating panel: the header-only logo view; nil otherwise.
     var headerLanding: PasteMarkPlan.HeaderLanding?
     var finalText = ""
@@ -224,6 +226,7 @@ final class LiveDictationOverlayStore {
         startedAt = Date()
         endedAt = nil
         backgroundHandoffDetail = nil
+        micNotice = nil
         headerLanding = nil
         finalText = ""
         provisionalText = ""

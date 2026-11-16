@@ -12,8 +12,7 @@ cd "$PROJECT_DIR"
 PROJECT_NAME="Diduny"
 SCHEME="Diduny DEV"
 CONFIG="Debug"
-# Override both to install a second DEV app, for example:
-#   DEV_APP_NAME="Diduny Papuga" DEV_BUNDLE_ID=ua.com.rmarinsky.diduny.papuga ./scripts/dev_install.sh
+# Set DEV_APP_NAME and DEV_BUNDLE_ID together to install a second DEV app.
 APP_NAME="${DEV_APP_NAME:-Diduny DEV}"
 BUNDLE_ID="${DEV_BUNDLE_ID:-ua.com.rmarinsky.diduny.dev}"
 BUILD_DIR="$PROJECT_DIR/build/dev-install"

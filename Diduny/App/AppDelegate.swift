@@ -451,11 +451,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // AuthService remains lazy until first cloud use; getAccessToken()
         // refreshes an expiring session on demand.
 
-        // Setup hotkeys and push-to-talk
-        setupHotkeys()
-        setupPushToTalk()
-        setupTranslationPushToTalk()
-        setupInplaceTranslation()
+        // Setup hotkeys and push-to-talk. Not under unit tests: the test host would answer the
+        // user's shortcuts and record, then ask for Accessibility it does not have.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            setupHotkeys()
+            setupPushToTalk()
+            setupTranslationPushToTalk()
+            setupInplaceTranslation()
+        }
         // Fixes while typing; off unless `typing.enabled`. Not under unit tests: the test host is the
         // DEV build with its real settings, and it must not tap the keyboard.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
@@ -1167,7 +1170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showFeedbackRecording(mode: RecordingMode) {
-        DictationOverlayController.shared.startRecording(mode: mode)
+        DictationOverlayController.shared.startRecording(mode: mode, micNotice: appState.deviceFallbackWarning)
     }
 
     private func showFeedbackProcessing(mode: RecordingMode) {
@@ -1250,8 +1253,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 do {
                     try await audioRecorder.startRecording(device: fallbackDevice)
                     let warningMessage = initialDevice.isDefault
-                        ? "System Default microphone failed to start. Using \(fallbackDevice.name)."
-                        : "\(initialDevice.name) failed to start. Using \(fallbackDevice.name)."
+                        ? String(localized: "System Default microphone did not start. Recording from \(fallbackDevice.name).")
+                        : String(localized: "\(initialDevice.name) did not start. Recording from \(fallbackDevice.name).")
                     appState.deviceFallbackWarning = warningMessage
                     Log.app.warning("\(logPrefix): recovered by switching microphone route")
                     return fallbackDevice

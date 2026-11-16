@@ -31,6 +31,8 @@ final class AudioRecorderService: ObservableObject {
     private nonisolated let _audioLevelBox = OSAllocatedUnfairLock<Float>(initialState: 0)
     private var audioLevelTimer: DispatchSourceTimer?
     private(set) var currentRecordingDeviceInfo: RecordingDeviceInfo?
+    /// While a start awaits the engine queue, only the start path may touch the engine.
+    private var isStartingEngine = false
 
     /// Timeout for audio hardware operations (in seconds)
     /// Increased to 5s to support older Intel Macs which can be slower
@@ -89,32 +91,40 @@ final class AudioRecorderService: ObservableObject {
         // Create and configure audio engine
         let engine = AVAudioEngine()
         audioEngine = engine
+        isStartingEngine = true
+        defer { isStartingEngine = false }
 
         // Set up input device on the engine
         // IMPORTANT: Accessing engine.inputNode can hang indefinitely if CoreAudio/coreaudiod is unresponsive
         // We wrap this in a timeout to prevent the app from freezing
         let shouldBindExplicitDevice = shouldBindExplicitDevice(device)
-        let deviceID = shouldBindExplicitDevice ? device?.id : nil
+        // The cached device ID goes stale when a device reconnects, so look it up again by UID.
+        let deviceUID = shouldBindExplicitDevice ? device?.uid : nil
         let hardwareInputFormat: AVAudioFormat
         let tapFormat: AVAudioFormat
         let inputNode: AVAudioInputNode
         let audioOperationTimeout = audioOperationTimeout
+        // One queue per engine: a call that hangs blocks only this engine, not the fallback's.
+        let engineQueue = DispatchQueue(label: "ua.com.rmarinsky.diduny.audio-engine", qos: .userInitiated)
 
         do {
             Log.audio.info("startRecording: Initializing audio engine with \(audioOperationTimeout)s timeout")
 
             // Run audio hardware initialization with timeout to prevent hanging
-            let result = try await withAudioTimeout(
+            let result = try await Self.runWithTimeout(
+                on: engineQueue,
                 operation: "audio engine initialization",
                 timeout: audioOperationTimeout
-            ) { [engine] () async throws -> (AVAudioInputNode, AVAudioFormat, AVAudioFormat) in
-                // This runs in a detached context to avoid blocking MainActor
+            ) { [engine] () throws -> (AVAudioInputNode, AVAudioFormat, AVAudioFormat) in
                 // Set device on the audio unit if specified
-                if let deviceID {
+                if let deviceUID {
+                    guard let deviceID = Self.currentDeviceID(forUID: deviceUID) else {
+                        throw AudioError.recordingFailed("Microphone \(deviceUID) is no longer connected")
+                    }
                     let node = engine.inputNode
                     if let audioUnit = node.audioUnit {
                         var mutableDeviceID = deviceID
-                        AudioUnitSetProperty(
+                        let status = AudioUnitSetProperty(
                             audioUnit,
                             kAudioOutputUnitProperty_CurrentDevice,
                             kAudioUnitScope_Global,
@@ -122,6 +132,9 @@ final class AudioRecorderService: ObservableObject {
                             &mutableDeviceID,
                             UInt32(MemoryLayout<AudioDeviceID>.size)
                         )
+                        guard status == noErr else {
+                            throw AudioError.recordingFailed("Could not select microphone (OSStatus \(status))")
+                        }
                     }
                 }
 
@@ -138,8 +151,14 @@ final class AudioRecorderService: ObservableObject {
             Log.audio.info("startRecording: Audio engine initialized successfully")
         } catch let error as AudioTimeoutError {
             Log.audio.error("startRecording: \(error.localizedDescription)")
-            audioEngine = nil
+            if audioEngine === engine { audioEngine = nil }
+            // The hung call still owns the engine; tear it down after it returns.
+            engineQueue.async { engine.stop(); engine.reset() }
             throw AudioError.recordingFailed(error.localizedDescription)
+        } catch {
+            Log.audio.error("startRecording: engine initialization failed: \(error.localizedDescription)")
+            if audioEngine === engine { audioEngine = nil }
+            throw error
         }
 
         // cancelRecording() (or a newer start) may have run during the await above.
@@ -263,21 +282,43 @@ final class AudioRecorderService: ObservableObject {
             }
         }
 
-        // Start the engine
-        // NOTE: Do NOT wrap in withAudioTimeout - it causes threading issues/deadlocks on Intel Macs
-        // because TaskGroup runs on background threads while AVAudioEngine needs main thread
+        // Start the engine on its own queue with a timeout: a mic that does not answer
+        // must not freeze the main thread, and the caller falls back to the next mic.
         do {
             Log.audio.info("startRecording: Starting audio engine...")
-            try engine.start()
+            let isRunning = try await Self.runWithTimeout(
+                on: engineQueue,
+                operation: "audio engine start",
+                timeout: audioOperationTimeout
+            ) { [engine] () throws -> Bool in
+                try engine.start()
+                return engine.isRunning
+            }
             Log.audio.info("startRecording: Audio engine started")
 
+            guard audioEngine === engine else {
+                Log.audio.warning("startRecording: canceled during engine start")
+                engineQueue.async { inputNode.removeTap(onBus: 0); engine.stop(); engine.reset() }
+                cleanupAfterFailedStart(removeTap: false, removeFile: true)
+                throw CancellationError()
+            }
+
             // Verify engine is actually running
-            guard engine.isRunning else {
+            guard isRunning else {
                 Log.audio.error("startRecording: Engine started but isRunning=false")
                 inputNode.removeTap(onBus: 0)
                 throw AudioError.recordingFailed("Audio engine failed to start. Please try a different microphone.")
             }
             Log.audio.info("startRecording: Engine verified running")
+        } catch let error as CancellationError {
+            throw error
+        } catch let error as AudioTimeoutError {
+            Log.audio.error("startRecording: \(error.localizedDescription)")
+            // engine.start() is still blocked on engineQueue: do not touch the engine from here.
+            if audioEngine === engine { audioEngine = nil }
+            engineQueue.async { inputNode.removeTap(onBus: 0); engine.stop(); engine.reset() }
+            cleanupAfterFailedStart(removeTap: false, removeFile: true)
+            throw AudioError.recordingFailed(error.localizedDescription)
         } catch {
             Log.audio.error("startRecording: Failed to start engine: \(error.localizedDescription)")
             cleanupAfterFailedStart(removeTap: true, removeFile: true)
@@ -361,6 +402,11 @@ final class AudioRecorderService: ObservableObject {
             }
         #endif
         guard let engine = audioEngine else { return }
+        if isStartingEngine {
+            // startRecording sees the nil engine after its await and cleans up on the engine queue.
+            audioEngine = nil
+            return
+        }
 
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
@@ -509,34 +555,52 @@ final class AudioRecorderService: ObservableObject {
 
     // MARK: - Timeout Helper
 
-    /// Executes an operation with a timeout. Throws AudioTimeoutError if the operation exceeds the time limit.
-    /// Note: This uses a detached task to avoid MainActor blocking during audio hardware operations.
-    private func withAudioTimeout<T: Sendable>(
+    /// Runs blocking audio work on `queue` and returns after `timeout` even if the work is still
+    /// blocked. A task group cannot do this: it waits for every child, including a hung one.
+    nonisolated static func runWithTimeout<T>(
+        on queue: DispatchQueue,
         operation: String,
         timeout: TimeInterval,
-        work: @escaping @Sendable () async throws -> T
+        work: @escaping () throws -> T
     ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            // Add the actual work task
-            group.addTask {
-                try await work()
+        let finished = OSAllocatedUnfairLock(initialState: false)
+        return try await withCheckedThrowingContinuation { continuation in
+            let finish: (Result<T, Error>) -> Void = { result in
+                let isFirst = finished.withLock { done in
+                    defer { done = true }
+                    return !done
+                }
+                if isFirst { continuation.resume(with: result) }
             }
-
-            // Add the timeout task
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                throw AudioTimeoutError(operation: operation, timeout: timeout)
+            queue.async { finish(Result { try work() }) }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                finish(.failure(AudioTimeoutError(operation: operation, timeout: timeout)))
             }
-
-            // Return the first result (either success or timeout)
-            guard let result = try await group.next() else {
-                throw AudioTimeoutError(operation: operation, timeout: timeout)
-            }
-
-            // Cancel the remaining task (either the work or the timeout)
-            group.cancelAll()
-            return result
         }
+    }
+
+    /// Looks the device up again by UID: a device that reconnects (iPhone, AirPods) gets a new ID.
+    private nonisolated static func currentDeviceID(forUID uid: String) -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var cfUID = uid as CFString
+        var deviceID = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = withUnsafeMutablePointer(to: &cfUID) { uidPointer in
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                UInt32(MemoryLayout<CFString>.size),
+                uidPointer,
+                &size,
+                &deviceID
+            )
+        }
+        guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
+        return deviceID
     }
 
     private func makeRealtimeAudioStreamerIfNeeded(inputFormat: AVAudioFormat) -> RealtimeAudioStreamer? {

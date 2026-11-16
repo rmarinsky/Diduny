@@ -62,6 +62,13 @@ struct LivePanelView: View {
                     .reveal(store.contentRevealed, step: 0, reduceMotion: reduceMotion)
                 content
                     .reveal(store.contentRevealed, step: 1, reduceMotion: reduceMotion)
+                if store.phase == .recording, let notice = store.micNotice {
+                    Text(notice)
+                        .font(DS.Font.meta)
+                        .foregroundStyle(DS.Palette.warn)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("livePanel.micNotice")
+                }
                 if store.phase == .pasted {
                     Toggle("Paste and close automatically", isOn: $autoPaste)
                         .toggleStyle(.checkbox)

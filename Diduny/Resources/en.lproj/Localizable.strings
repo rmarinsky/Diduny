@@ -2537,3 +2537,11 @@
 
 /* About: attribution for the word frequency lists used by layout fixes */
 "Word frequency lists: [FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)" = "Word frequency lists: [FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)";
+"Dictation, meetings" = "Dictation, meetings";
+"Auto-paste, layout fixes, Convert" = "Auto-paste, layout fixes, Convert";
+"Auto-paste, layout fixes, Convert. If the switch in System Settings is already on, turn it off and on again." = "Auto-paste, layout fixes, Convert. If the switch in System Settings is already on, turn it off and on again.";
+"Input Monitoring" = "Input Monitoring";
+"Convert (⇧⌥ twice), shortcuts" = "Convert (⇧⌥ twice), shortcuts";
+"Meeting audio" = "Meeting audio";
+"System Default microphone did not start. Recording from %@." = "System Default microphone did not start. Recording from %@.";
+"%@ did not start. Recording from %@." = "%1$@ did not start. Recording from %2$@.";

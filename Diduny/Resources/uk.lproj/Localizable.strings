@@ -2537,3 +2537,11 @@
 
 /* About: attribution for the word frequency lists used by layout fixes */
 "Word frequency lists: [FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)" = "Частотні списки слів: [FrequencyWords](https://github.com/hermitdave/FrequencyWords), автор Hermit Dave, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)";
+"Dictation, meetings" = "Диктування, зустрічі";
+"Auto-paste, layout fixes, Convert" = "Автовставка, виправлення розкладки, Convert";
+"Auto-paste, layout fixes, Convert. If the switch in System Settings is already on, turn it off and on again." = "Автовставка, виправлення розкладки, Convert. Якщо перемикач у System Settings уже ввімкнено, вимкніть і ввімкніть його знову.";
+"Input Monitoring" = "Моніторинг вводу";
+"Convert (⇧⌥ twice), shortcuts" = "Convert (⇧⌥ двічі), скорочення";
+"Meeting audio" = "Звук зустрічей";
+"System Default microphone did not start. Recording from %@." = "Системний мікрофон не запустився. Запис іде з %@.";
+"%@ did not start. Recording from %@." = "%1$@ не запустився. Запис іде з %2$@.";
