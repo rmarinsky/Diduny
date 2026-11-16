@@ -27,7 +27,7 @@ struct ProviderTableModelTests {
         .dictAfterStop: ["Y", "Y", "Y", "Y", "Y"],
         .dictTranslation: ["Y|Live, any of 60 languages", "D", "N|Itself: only into English+D|Into any language", "D", "D"],
         .meetLive: ["Y", "Y", "Y|Preview", "N|After Stop only", "Y"],
-        .meetLabels: ["Y|Live", "Y|After Stop, up to 32", "N", "N", "N"],
+        .meetLabels: ["Y|Live", "Y|After Stop, up to 32", "Y|After Stop", "N", "N"],
         .meetTranslation: ["Y|Live", "D|After Stop", "D|After Stop", "D|After Stop", "D|After Stop"],
         .translateSelected: ["Y", "D", "D", "D", "D"],
         .files: ["N|Files run on this Mac", "N|Files run on this Mac", "Y", "Y", "Y"]

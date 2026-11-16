@@ -27,6 +27,8 @@ struct TypingSettingsView: View {
                     TypingAppsButton(model: model, presenter: presenter)
                 }
                 .accessibilityIdentifier("typing.apps")
+                group("Shortcuts")
+                TypingShortcutRows()
                 group("Vocabulary")
                 SettingsLineRow(
                     title: "Add words I keep typing to Vocabulary",

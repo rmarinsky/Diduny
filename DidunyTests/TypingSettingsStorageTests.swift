@@ -19,8 +19,20 @@ final class TypingSettingsStorageTests {
         #expect(settings.typingCadenceAverageGap == 0)
         #expect(settings.typingConvertEnabled)
         #expect(settings.typingConvertPair == .optionShift)
+        #expect(settings.typingConvertPressCount == 2)
         #expect(settings.typingLearnVocabulary)
         #expect(settings.typingSettings == TypingSettings())
+    }
+
+    @Test("Convert press count: 2 or 3, a stored 1 reads as 2")
+    func convertPressCount() {
+        let settings = box.settings
+        settings.typingConvertPressCount = 3
+        #expect(settings.typingConvertPressCount == 3)
+        settings.typingConvertPressCount = 1
+        #expect(settings.typingConvertPressCount == 2)
+        box.defaults.set(9, forKey: SettingsStorage.TypingKey.convertPressCount.rawValue)
+        #expect(settings.typingConvertPressCount == 2)
     }
 
     @Test("every key starts with typing. and nothing else is written")
@@ -38,6 +50,7 @@ final class TypingSettingsStorageTests {
         settings.typingCustomReplaceRules = [CustomAutoReplaceRule(source: "nfrj;", target: "також")]
         settings.typingConvertEnabled = false
         settings.typingConvertPair = .commandShift
+        settings.typingConvertPressCount = 3
         settings.typingLearnVocabulary = false
 
         let written = Set(box.defaults.dictionaryRepresentation().keys).subtracting(before)

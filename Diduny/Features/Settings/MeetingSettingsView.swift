@@ -1,48 +1,60 @@
 import SwiftUI
 
+/// One page in the order a meeting happens: before (calendar, browser, reminders), during (engine,
+/// sound, speaker labels), after (notes). Composes the existing sections; nothing is collapsed.
 struct MeetingSettingsView: View {
-    var body: some View {
-        PageScaffold(title: "Calendar & meetings", scrolls: false) { formContent }
-    }
-
-    private var formContent: some View {
-        Form {
-            CalendarSettingsSection()
-            Section {
-                Button("Meeting audio and transcription…") {
-                    // Decision 12: meeting settings live in Modes > Meeting.
-                    MainWindowController.shared.requestedModesExpander = .meeting
-                    MainWindowController.shared.showWindow(section: .modes)
-                }
-            } footer: {
-                Text("Choose the engine, audio sources and recording levels in Modes.")
-            }
-            MeetingNotesSection()
-        }.formStyle(.grouped)
-    }
-}
-
-/// Notes after a meeting: the same stored values as on the Notes settings page.
-private struct MeetingNotesSection: View {
-    @State private var timing = NotesSettings.meetingTiming
-    @State private var useCalendarNames = NotesSettings.useCalendarNames
+    @AppStorage(ModeDefaults.meetingTranscriptModeKey) private var startsInRaw = ModeDefaults.newInstallStartsIn.rawValue
 
     var body: some View {
-        Section {
-            Picker("Write notes", selection: $timing) {
-                ForEach(NotesMeetingTiming.allCases) { Text($0.label).tag($0) }
+        PageScaffold(title: "Meetings", subtitle: "Before, during and after a meeting, in the order it happens.") {
+            VStack(alignment: .leading, spacing: 0) {
+                phase("Before", "Calendar, browser and reminders", first: true)
+                CalendarSettingsSection()
+
+                phase("During", "Engine and sound")
+                AudioSettingsGroup(title: "Engine") { engineRow }
+                AudioSettingsView(embedded: true)
+                SpeakerLabelsGroup()
+
+                phase("After", "Notes")
+                NotesSettingsView(embedded: true)
             }
-            Toggle("Names from the calendar event", isOn: $useCalendarNames)
-            Button("Open Notes settings") { MainWindowController.shared.showWindow(section: .notesSettings) }
-        } header: {
-            Text("Notes after a meeting")
-        } footer: {
-            Text(NotesSettings.writer == .off
-                ? "Nobody writes notes yet. Choose a model or a subscription tool in Notes settings."
-                : "Notes are written by \(NotesSettings.writer.label).")
         }
-        .onChange(of: timing) { _, value in NotesSettings.meetingTiming = value }
-        .onChange(of: useCalendarNames) { _, value in NotesSettings.useCalendarNames = value }
+    }
+
+    private func phase(_ title: LocalizedStringKey, _ detail: LocalizedStringKey, first: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.sm) {
+            Text(title).font(DS.Font.settingsTitle)
+            Text(detail).font(DS.Font.body).foregroundStyle(DS.Palette.secondary)
+        }
+        .padding(.top, first ? 0 : 36)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    /// Decision 12: the meeting engine lives in Modes > Meeting; this row shows it and opens it.
+    private var engineRow: some View {
+        SettingsLineRow(
+            title: "Meeting engine",
+            caption: "Choose the engine and its details in Modes.",
+            kind: .button,
+            showsHairline: false
+        ) {
+            Text(verbatim: startsInTitle).foregroundStyle(DS.Palette.secondary)
+            Button("Open Modes") {
+                MainWindowController.shared.requestedModesExpander = .meeting
+                MainWindowController.shared.showWindow(section: .modes)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    private var startsInTitle: String {
+        switch MeetingSegment(rawValue: startsInRaw) ?? ModeDefaults.newInstallStartsIn {
+        case .thisMac: String(localized: "Local")
+        case .cloud: String(localized: "Cloud")
+        case .recordOnly: String(localized: "Record only")
+        }
     }
 }
 

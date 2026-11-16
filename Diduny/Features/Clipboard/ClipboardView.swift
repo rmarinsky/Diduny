@@ -4,7 +4,6 @@ import SwiftUI
 /// The Clipboard page: what was copied and what Diduny pasted, by day, with its settings below.
 struct ClipboardView: View {
     @State private var model: ClipboardPageModel
-    @FocusState private var keepIsFocused: Bool
 
     init(model: ClipboardPageModel? = nil) {
         _model = State(initialValue: model ?? ClipboardPageModel())
@@ -13,7 +12,8 @@ struct ClipboardView: View {
     var body: some View {
         PageScaffold(
             title: "Clipboard",
-            subtitle: "Everything you copied and everything Diduny pasted, so you can bring an earlier one back."
+            subtitle: "Everything you copied and everything Diduny pasted, so you can bring an earlier one back.",
+            trailing: { SettingsPageButton(target: .general) }
         ) {
             let days = model.days
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -32,11 +32,8 @@ struct ClipboardView: View {
                         )
                     }
                 }
-                group(Text("Settings"))
-                settingsRows
             }
         }
-        .onDisappear { model.isAskingToClear = false }
     }
 
     // MARK: - Search and filter
@@ -91,65 +88,6 @@ struct ClipboardView: View {
             .padding(.top, 18)
             .padding(.bottom, 2)
             .accessibilityAddTraits(.isHeader)
-    }
-
-    // MARK: - Settings
-
-    @ViewBuilder private var settingsRows: some View {
-        SettingsLineRow(title: "Keep the clipboard for", kind: .popUp) {
-            Picker("Keep the clipboard for", selection: Binding(
-                get: { model.retention }, set: { model.setRetention($0) }
-            )) {
-                ForEach(ClipboardRetention.allCases) { Text(verbatim: $0.displayName).tag($0) }
-            }
-            .pickerStyle(.menu).labelsHidden().fixedSize()
-            .accessibilityIdentifier("clipboard.retention")
-        }
-        SettingsLineRow(title: "Keep screenshots", caption: "Screenshots take more space than text.", kind: .toggle) {
-            SettingsSwitch(title: "Keep screenshots", isOn: Binding(
-                get: { model.keepScreenshots }, set: { model.setKeepScreenshots($0) }
-            ))
-            .accessibilityIdentifier("clipboard.keepScreenshots")
-        }
-        SettingsLineRow(title: "Keep what Diduny pastes", caption: "Dictated and translated text.", kind: .toggle) {
-            SettingsSwitch(title: "Keep what Diduny pastes", isOn: Binding(
-                get: { model.keepDidunyPastes }, set: { model.setKeepDidunyPastes($0) }
-            ))
-            .accessibilityIdentifier("clipboard.keepDidunyPastes")
-        }
-        SettingsLineRow(
-            title: "Skip password managers",
-            caption: "Nothing copied in 1Password, Keychain and similar apps is kept.",
-            kind: .toggle
-        ) {
-            SettingsSwitch(title: "Skip password managers", isOn: Binding(
-                get: { model.skipPasswordManagers }, set: { model.setSkipPasswordManagers($0) }
-            ))
-            .accessibilityIdentifier("clipboard.skipPasswordManagers")
-        }
-        // The question is in the row itself: "Clear" becomes "Clear everything" and "Keep".
-        SettingsLineRow(title: "Clear the clipboard history", kind: .button, showsHairline: false) {
-            if model.isAskingToClear {
-                Button(role: .destructive) { model.clearEverything() } label: {
-                    Text("Clear everything").foregroundStyle(DS.Palette.no)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("clipboard.clear.confirm")
-                Button("Keep") { model.isAskingToClear = false }
-                    .buttonStyle(.bordered)
-                    .focused($keepIsFocused)
-                    .accessibilityIdentifier("clipboard.clear.keep")
-            } else {
-                Button(role: .destructive) {
-                    model.isAskingToClear = true
-                    keepIsFocused = true
-                } label: {
-                    Text("Clear").foregroundStyle(DS.Palette.no)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("clipboard.clear")
-            }
-        }
     }
 }
 

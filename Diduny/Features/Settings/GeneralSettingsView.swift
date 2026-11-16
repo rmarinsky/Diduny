@@ -11,7 +11,8 @@ struct GeneralSettingsView: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
     @State private var showLiveTranscriptModal = SettingsStorage.shared.showLiveTranscriptModal
-    @State private var typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
+    @State private var clipboard = ClipboardPageModel()
+    @FocusState private var keepIsFocused: Bool
     @State private var dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
     @State private var meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
 
@@ -19,10 +20,12 @@ struct GeneralSettingsView: View {
         PageScaffold(title: "General", subtitle: "How the app behaves, whatever the mode.") {
             VStack(alignment: .leading, spacing: 0) {
                 topGroup
+                GeneralMicrophoneGroup()
                 afterRecordingGroup
                 whileRecordingGroup
+                permissionsGroup
                 historyGroup
-                AgentsGroup()
+                clipboardGroup
                 helpGroup
             }
         }
@@ -30,7 +33,6 @@ struct GeneralSettingsView: View {
             launchAtLogin = LaunchAtLogin.isEnabled
             recordingFeedbackSurface = SettingsStorage.shared.recordingFeedbackSurface
             showLiveTranscriptModal = SettingsStorage.shared.showLiveTranscriptModal
-            typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
             dictationRetention = SettingsStorage.shared.dictationTranslationHistoryRetentionPolicy
             meetingRetention = SettingsStorage.shared.meetingHistoryRetentionPolicy
         }
@@ -40,9 +42,7 @@ struct GeneralSettingsView: View {
             if messageFormattingMode != storage.messageFormattingMode { messageFormattingMode = storage.messageFormattingMode }
             if playSound != storage.playSoundOnCompletion { playSound = storage.playSoundOnCompletion }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .typingSpeedSettingsChanged)) { _ in
-            typingSpeedWordsPerMinute = SettingsStorage.shared.typingSpeedWordsPerMinute
-        }
+        .onDisappear { clipboard.isAskingToClear = false }
     }
 
     // MARK: - Groups
@@ -142,20 +142,13 @@ struct GeneralSettingsView: View {
         }
     }
 
-    private var helpGroup: some View {
-        GeneralGroup(heading: "Help") {
-            SettingsLineRow(title: "Setup guide", kind: .button) {
-                Button("Open") {
-                    OnboardingManager.shared.showFromSettings()
-                    OnboardingWindowController.shared.showOnboarding()
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("general.setupGuide")
-            }
+    private var permissionsGroup: some View {
+        GeneralGroup(heading: "Permissions") {
             SettingsLineRow(
                 title: "Permission to record system audio",
                 caption: "You said no to Screen Recording earlier. Meetings need it to record the other side.",
-                kind: .button
+                kind: .button,
+                showsHairline: false
             ) {
                 Button("Ask again") {
                     Task {
@@ -167,15 +160,78 @@ struct GeneralSettingsView: View {
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("general.screenRecording.askAgain")
             }
-            SettingsLineRow(title: "Typing speed", kind: .button, showsHairline: false) {
-                Text("\(String(format: "%.0f", typingSpeedWordsPerMinute)) WPM")
-                    .font(DS.Font.meta)
-                    .foregroundStyle(DS.Palette.secondary)
-                    .monospacedDigit()
-                    .accessibilityIdentifier("general.typingSpeed")
-                Button("Typing test") { MainWindowController.shared.showWindow(section: .typingTest) }
+        }
+    }
+
+    /// Moved here from the Clipboard page, which opens this group with its Settings button.
+    private var clipboardGroup: some View {
+        GeneralGroup(heading: "Clipboard") {
+            SettingsLineRow(title: "Keep the clipboard for", kind: .popUp) {
+                Picker("Keep the clipboard for", selection: Binding(
+                    get: { clipboard.retention }, set: { clipboard.setRetention($0) }
+                )) {
+                    ForEach(ClipboardRetention.allCases) { Text(verbatim: $0.displayName).tag($0) }
+                }
+                .pickerStyle(.menu).labelsHidden().fixedSize()
+                .accessibilityIdentifier("clipboard.retention")
+            }
+            SettingsLineRow(title: "Keep screenshots", caption: "Screenshots take more space than text.", kind: .toggle) {
+                SettingsSwitch(title: "Keep screenshots", isOn: Binding(
+                    get: { clipboard.keepScreenshots }, set: { clipboard.setKeepScreenshots($0) }
+                ))
+                .accessibilityIdentifier("clipboard.keepScreenshots")
+            }
+            SettingsLineRow(title: "Keep what Diduny pastes", caption: "Dictated and translated text.", kind: .toggle) {
+                SettingsSwitch(title: "Keep what Diduny pastes", isOn: Binding(
+                    get: { clipboard.keepDidunyPastes }, set: { clipboard.setKeepDidunyPastes($0) }
+                ))
+                .accessibilityIdentifier("clipboard.keepDidunyPastes")
+            }
+            SettingsLineRow(
+                title: "Skip password managers",
+                caption: "Nothing copied in 1Password, Keychain and similar apps is kept.",
+                kind: .toggle
+            ) {
+                SettingsSwitch(title: "Skip password managers", isOn: Binding(
+                    get: { clipboard.skipPasswordManagers }, set: { clipboard.setSkipPasswordManagers($0) }
+                ))
+                .accessibilityIdentifier("clipboard.skipPasswordManagers")
+            }
+            // The question is in the row itself: "Clear" becomes "Clear everything" and "Keep".
+            SettingsLineRow(title: "Clear the clipboard history", kind: .button) {
+                if clipboard.isAskingToClear {
+                    Button(role: .destructive) { clipboard.clearEverything() } label: {
+                        Text("Clear everything").foregroundStyle(DS.Palette.no)
+                    }
                     .buttonStyle(.bordered)
-                    .accessibilityIdentifier("general.typingTest")
+                    .accessibilityIdentifier("clipboard.clear.confirm")
+                    Button("Keep") { clipboard.isAskingToClear = false }
+                        .buttonStyle(.bordered)
+                        .focused($keepIsFocused)
+                        .accessibilityIdentifier("clipboard.clear.keep")
+                } else {
+                    Button(role: .destructive) {
+                        clipboard.isAskingToClear = true
+                        keepIsFocused = true
+                    } label: {
+                        Text("Clear").foregroundStyle(DS.Palette.no)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("clipboard.clear")
+                }
+            }
+        }
+    }
+
+    private var helpGroup: some View {
+        GeneralGroup(heading: "Help") {
+            SettingsLineRow(title: "Setup guide", kind: .button, showsHairline: false) {
+                Button("Open") {
+                    OnboardingManager.shared.showFromSettings()
+                    OnboardingWindowController.shared.showOnboarding()
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("general.setupGuide")
             }
         }
     }
@@ -199,81 +255,99 @@ struct GeneralSettingsView: View {
     }
 }
 
-/// Agents: the `diduny` command, the skill for Claude Code and Codex, and the settings file.
-private struct AgentsGroup: View {
-    @State private var installed = AgentCommandLineTool.isInstalled
-    @State private var installSkill = AgentSkillInstaller.isEnabled
-    @State private var installError: String?
+/// Microphone: the input choice and a short test (record a few seconds, then play them back).
+/// Uses the same recorder and playback as Settings > Audio.
+private struct GeneralMicrophoneGroup: View {
+    @Environment(AppState.self) private var appState
+    @Environment(AudioDeviceManager.self) private var deviceManager
 
-    private var agentNames: String {
-        let names = AgentSkillInstaller.targets.map(\.agent)
-        return names.isEmpty ? String(localized: "none found on this Mac") : names.joined(separator: ", ")
-    }
+    @StateObject private var recorder = AudioRecorderService()
+    @State private var playback = AudioTestPlayback()
+    @State private var clipURL: URL?
+    @State private var status = ""
+    @State private var testTask: Task<Void, Never>?
+
+    private static let testSeconds = 4
+
+    private var isTesting: Bool { testTask != nil }
 
     var body: some View {
-        GeneralGroup(heading: "Agents") {
+        GeneralGroup(heading: "Microphone") {
             SettingsLineRow(
-                title: "Command line tool",
-                caption: installed
-                    ? "Installed as \(AgentCommandLineTool.commandName) in ~/.local/bin. Agents such as Claude Code and Codex use it to read your meetings and, when you ask them, to add to notes or tag recordings."
-                    : "Lets Claude Code, Codex and other agents on this Mac read your meetings. When you ask, they can add to notes, tag recordings and transcribe again; they never delete anything.",
-                kind: .button
-            ) {
-                if installed {
-                    Button("Remove") {
-                        AgentCommandLineTool.uninstall()
-                        installed = AgentCommandLineTool.isInstalled
-                        AgentSkillInstaller.sync()
-                    }
-                    .buttonStyle(.bordered)
-                } else {
-                    Button("Install command line tool") {
-                        do {
-                            try AgentCommandLineTool.install()
-                            installError = nil
-                        } catch {
-                            installError = String(localized: "Could not install: \(AgentCommandLineTool.linkURL.path) already exists and is not Diduny's.")
-                        }
-                        installed = AgentCommandLineTool.isInstalled
-                        AgentSkillInstaller.sync()
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("general.agents.installCLI")
-                }
-            }
-            if let installError {
-                Text(installError).font(DS.Font.meta).foregroundStyle(.red)
-            }
-            SettingsLineRow(
-                title: "Teach agents about Diduny",
-                caption: "Adds a short Diduny skill to Claude Code and Codex, so they know how to find and read your meetings. Agents here: \(agentNames).",
-                kind: .toggle
-            ) {
-                SettingsSwitch(title: "Teach agents about Diduny", isOn: $installSkill)
-                    .accessibilityIdentifier("general.agents.skill")
-                    .onChange(of: installSkill) { _, value in
-                        AgentSkillInstaller.isEnabled = value
-                        AgentSkillInstaller.sync()
-                    }
-            }
-            SettingsLineRow(
-                title: "Settings agents can change",
-                caption: "Transcription words, languages, filler words, silence stop and sounds. Addresses, hotkeys, devices and history stay here.",
-                kind: .button,
+                title: "Input",
+                caption: status.isEmpty ? "The menu bar shows the same choice" : "\(status)",
+                kind: .popUp,
                 showsHairline: false
             ) {
-                Button("Show the file") {
-                    NSWorkspace.shared.activateFileViewerSelecting([AgentSettingsSync.shared.fileURL])
+                AudioLevelBar(level: recorder.isRecording ? recorder.audioLevel : 0)
+                Picker("Input", selection: inputSelection) {
+                    Text("System Default").tag(String?.none)
+                    ForEach(deviceManager.availableDevices) { device in
+                        Text(verbatim: device.name).tag(String?.some(device.uid))
+                    }
                 }
-                .buttonStyle(.bordered)
+                .pickerStyle(.menu).labelsHidden().fixedSize()
+                .accessibilityIdentifier("general.input")
+                Button(isTesting ? "Stop" : "Test") { isTesting ? cancelTest() : startTest() }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("general.mic.test")
             }
         }
-        .onAppear { installed = AgentCommandLineTool.isInstalled }
+        .onAppear { playback.onFinish = { status = String(localized: "Playback finished") } }
+        .onDisappear { cleanUp() }
+    }
+
+    /// A stale preferred device (unplugged) reads as System Default.
+    private var inputSelection: Binding<String?> {
+        Binding(
+            get: { deviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID) },
+            set: { appState.preferredDeviceUID = $0 }
+        )
+    }
+
+    private func startTest() {
+        let (device, _) = deviceManager.resolveDevice(preferredUID: appState.preferredDeviceUID)
+        status = String(localized: "Recording... speak into your microphone")
+        testTask = Task { @MainActor in
+            defer { testTask = nil }
+            do {
+                try await recorder.startRecording(device: device)
+                try await Task.sleep(for: .seconds(Self.testSeconds))
+                let data = try await recorder.stopRecording()
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("test_recording_\(UUID().uuidString).wav")
+                try data.write(to: url, options: .atomic)
+                if let clipURL { try? FileManager.default.removeItem(at: clipURL) }
+                clipURL = url
+                try playback.play(url)
+                status = String(localized: "Playing recording...")
+            } catch is CancellationError {
+                recorder.cancelRecording()
+                status = ""
+            } catch {
+                recorder.cancelRecording()
+                status = String(localized: "Error: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func cancelTest() {
+        testTask?.cancel()
+        playback.stop()
+        status = ""
+    }
+
+    private func cleanUp() {
+        testTask?.cancel()
+        recorder.cancelRecording()
+        playback.stop()
+        if let clipURL { try? FileManager.default.removeItem(at: clipURL) }
+        clipURL = nil
     }
 }
 
 /// Group on a Settings page (spec 4.10): 18 above, heading 15 semibold, 2 below it, then rows.
-private struct GeneralGroup<Rows: View>: View {
+struct GeneralGroup<Rows: View>: View {
     let heading: LocalizedStringKey?
     @ViewBuilder var rows: () -> Rows
 
@@ -312,5 +386,7 @@ enum GeneralSettingsActions {
 
 #Preview {
     GeneralSettingsView()
+        .environment(AppState())
+        .environment(AudioDeviceManager())
         .frame(width: 757, height: 900)
 }

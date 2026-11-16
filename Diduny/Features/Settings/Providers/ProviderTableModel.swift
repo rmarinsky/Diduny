@@ -133,6 +133,10 @@ struct ProviderTableModel: Equatable, Sendable {
                 [.init(kind: .yes, subline: String(localized: "Live"))]
             } else if let afterStop = EngineCaptions.afterStopSpeakerLabels(caps) {
                 [.init(kind: .yes, subline: afterStop)]
+            } else if caps.id == .whisper {
+                // Whisper's module declares no diarization, but LocalSpeakerLabelService labels
+                // its segments on this Mac after Stop. Parakeet and Apple Speech return no segments.
+                [.init(kind: .yes, subline: String(localized: "After Stop"))]
             } else {
                 [.init(kind: .no)]
             }

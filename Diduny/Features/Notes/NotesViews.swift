@@ -269,7 +269,7 @@ struct NotesView: View {
     }
 
     var body: some View {
-        PageScaffold(title: "Notes", scrolls: false) {
+        PageScaffold(title: "Notes", scrolls: false, trailing: { SettingsPageButton(target: .meetings) }) {
             VStack(alignment: .leading, spacing: DS.Space.md) {
                 NotesWorkStrip()
                 if store.notes.isEmpty {

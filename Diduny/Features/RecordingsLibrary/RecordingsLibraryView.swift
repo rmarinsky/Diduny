@@ -338,6 +338,7 @@ struct RecordingsLibraryView: View {
 
     private func headerActions(compact: Bool) -> some View {
         HStack(spacing: DS.Space.sm) {
+            SettingsPageButton(target: .general)
             if listFilter?.showsBatches != true {
                 Button {
                     toggleSelectionMode()

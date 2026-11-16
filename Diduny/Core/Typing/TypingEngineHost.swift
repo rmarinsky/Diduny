@@ -118,7 +118,12 @@ final class TypingEngineHost {
     }
 
     func reconcile() {
-        defer { convertMonitor.listen(for: state == .running && settings.typingConvertEnabled ? settings.typingConvertPair : nil) }
+        defer {
+            convertMonitor.listen(
+                for: state == .running && settings.typingConvertEnabled ? settings.typingConvertPair : nil,
+                pressCount: settings.typingConvertPressCount
+            )
+        }
         guard settings.typingEnabled, isAccessibilityGranted() else {
             stop()
             return

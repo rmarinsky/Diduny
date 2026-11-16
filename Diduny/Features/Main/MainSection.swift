@@ -24,15 +24,14 @@ enum MainSection: String, CaseIterable, Hashable {
     case about
 
     /// Sidebar rows. A row is named by its first page; `tabs` lists the pages it holds.
-    static let mainItems: [MainSection] = [.overview, .recordings, .notes, .clipboard]
-    static let settingsItems: [MainSection] = [.general, .modes, .vocabulary, .typing, .meetings, .models, .account, .about]
+    static let mainItems: [MainSection] = [.overview, .recordings, .notes, .clipboard, .vocabulary]
+    static let settingsItems: [MainSection] = [.general, .modes, .languages, .typing, .meetings, .models, .account, .about]
 
     /// The pages that share this page's sidebar row, in tab order. One page: no switch.
     var tabs: [MainSection] {
         switch self {
-        case .modes, .languages, .audioDictation: [.modes, .languages, .audioDictation]
         case .typing, .typingTest: [.typing, .typingTest]
-        case .meetings, .notesSettings: [.meetings, .notesSettings]
+        case .meetings, .notesSettings, .audioDictation: [.meetings, .notesSettings, .audioDictation]
         case .models, .providers, .benchmark: [.models, .providers, .benchmark]
         default: [self]
         }
@@ -41,10 +40,10 @@ enum MainSection: String, CaseIterable, Hashable {
     /// The sidebar row's label; `label` stays the page and tab label.
     var sidebarLabel: String {
         switch self {
-        case .modes: String(localized: "Dictation")
+        case .modes: String(localized: "Modes")
         case .typing: String(localized: "Typing")
-        case .meetings: String(localized: "Meetings & notes")
-        case .models: String(localized: "Models")
+        case .meetings: String(localized: "Meetings")
+        case .models: String(localized: "Engines")
         default: label
         }
     }
@@ -62,7 +61,7 @@ enum MainSection: String, CaseIterable, Hashable {
         case .general: String(localized: "General")
         case .modes: String(localized: "Modes & shortcuts")
         case .languages: String(localized: "Languages")
-        case .vocabulary: String(localized: "Vocabulary & context")
+        case .vocabulary: String(localized: "Vocabulary")
         case .typing: String(localized: "Layout fixes")
         case .audioDictation: String(localized: "Audio")
         case .models: String(localized: "Local models")
@@ -93,5 +92,16 @@ enum MainSection: String, CaseIterable, Hashable {
         case .account: "person.crop.circle"
         case .about: "info.circle"
         }
+    }
+}
+
+/// The "Settings" button in a data page's header: opens the settings page that holds that page's options.
+struct SettingsPageButton: View {
+    let target: MainSection
+
+    var body: some View {
+        Button("Settings") { MainWindowController.shared.showWindow(section: target) }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("page.settings.\(target.rawValue)")
     }
 }

@@ -192,4 +192,5 @@ final class FakeShortcutsSettingsStore: ShortcutsSettingsStore {
     var currentPair: TranslationLanguagePair? { selectedPair ?? offeredPairs.first }
     var convertPair: TypingConvertPair = .optionShift
     var convertEnabled = true
+    var convertPressCount = 2
 }

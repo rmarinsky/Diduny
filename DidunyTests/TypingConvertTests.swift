@@ -38,6 +38,35 @@ struct TypingConvertTests {
         #expect(fired() == 1)
     }
 
+    @Test("3x: two presses fire nothing, the third inside 0.4 s of the second fires once; 1x counts as 2x")
+    func pairThreeTimes() {
+        let monitor = TypingConvertMonitor(source: source, captureSession: session)
+        var fired = 0
+        monitor.onTrigger = { fired += 1 }
+        monitor.listen(for: .optionShift, pressCount: 3)
+        defer { withExtendedLifetime(monitor) {} }
+        pairPress(source.send, at: 1.0)
+        pairPress(source.send, at: 1.2)
+        #expect(fired == 0)
+        pairPress(source.send, at: 1.4)
+        #expect(fired == 1)
+        // A third press too late starts over.
+        pairPress(source.send, at: 3.0)
+        pairPress(source.send, at: 3.2)
+        pairPress(source.send, at: 3.7)
+        #expect(fired == 1)
+    }
+
+    @Test("Changing the press count re-arms the listener")
+    func pressCountChangeRearms() {
+        let (monitor, fired) = makeMonitor()
+        defer { withExtendedLifetime(monitor) {} }
+        monitor.listen(for: .optionShift, pressCount: 3)
+        pairPress(source.send, at: 1.0)
+        pairPress(source.send, at: 1.2)
+        #expect(fired() == 0)
+    }
+
     @Test("Once, or twice too slowly, fires nothing")
     func onceOrSlowFiresNothing() {
         let (monitor, fired) = makeMonitor()

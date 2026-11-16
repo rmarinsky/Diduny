@@ -21,8 +21,20 @@ struct NotesSettingsView: View {
     @State private var noOwner = NotesSettings.noOwner
     @State private var markNames = NotesSettings.markUnknownNames
 
+    /// True on the Meetings page, which shows these settings under "After" without page chrome.
+    var embedded = false
+
     var body: some View {
-        PageScaffold(title: "Notes settings", subtitle: "Diduny turns a transcript into a summary, decisions and action items") {
+        if embedded {
+            content
+        } else {
+            PageScaffold(title: "Notes settings", subtitle: "Diduny turns a transcript into a summary, decisions and action items") {
+                content
+            }
+        }
+    }
+
+    private var content: some View {
             VStack(alignment: .leading, spacing: DS.Space.xl) {
                 whoSection
                 switch group {
@@ -42,7 +54,6 @@ struct NotesSettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        }
     }
 
     // MARK: - Who writes the notes

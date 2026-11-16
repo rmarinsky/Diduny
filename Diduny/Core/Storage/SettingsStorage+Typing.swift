@@ -20,6 +20,7 @@ extension SettingsStorage {
         case customReplaceRules = "typing.customReplaceRules"
         case convertEnabled = "typing.convertEnabled"
         case convertPair = "typing.convertPair"
+        case convertPressCount = "typing.convertPressCount"
         case learnVocabulary = "typing.learnVocabulary"
     }
 
@@ -69,6 +70,13 @@ extension SettingsStorage {
     var typingConvertPair: TypingConvertPair {
         get { defaults.string(forKey: TypingKey.convertPair.rawValue).flatMap(TypingConvertPair.init(rawValue:)) ?? .optionShift }
         set { setTyping(newValue.rawValue, .convertPair) }
+    }
+
+    /// How many times the Convert pair is pressed together: 2 or 3 (a modifier chord pressed once would fire on
+    /// every lone press, so 1 reads as 2). Unset reads 2.
+    var typingConvertPressCount: Int {
+        get { max(Self.validPressCount(defaults.object(forKey: TypingKey.convertPressCount.rawValue) as? Int, fallback: 2), 2) }
+        set { setTyping(min(max(newValue, 1), 3), .convertPressCount) }
     }
 
     /// Bundle IDs of the apps where nothing is fixed.

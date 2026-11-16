@@ -15,8 +15,10 @@ struct ShortcutsSettingsView: View {
         self.widths = widths
     }
 
-    /// Every item but "Open Settings", which cannot be changed.
-    private static let items = ShortcutsSettingsModel.groups.flatMap(\.items).filter { $0 != .openSettings }
+    /// Every item but "Open Settings" (the stored value stays) and the layout shortcuts, which live on Typing.
+    private static let items = ShortcutsSettingsModel.groups.flatMap(\.items).filter {
+        $0 != .openSettings && $0 != .convertLayout && $0 != .shortcut(.undoLayoutFix)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -55,40 +57,12 @@ struct ShortcutsSettingsView: View {
             } keys: { EmptyView() }
         case .inplacePair:
             gridRow(
-                title: "Translate in place between",
-                caption: "Works in both directions: the direction follows the language of the selected text."
+                title: "Replace between",
+                caption: "Works both ways: the direction follows the language of the selected text."
             ) {
                 pairPicker
             } keys: { EmptyView() }
-        case .convertLayout:
-            gridRow(
-                title: "Convert the selection to the other layout",
-                caption: "Layout fix. Two modifier keys pressed together, twice."
-            ) {
-                ShortcutPressCountPicker(selection: .constant(2), isOff: !model.convertEnabled, disabledCounts: [1, 3])
-                    .disabled(!model.convertEnabled)
-                    .accessibilityIdentifier("shortcuts.convertLayout.pressCount")
-                SettingsSwitch(
-                    title: "Convert the selection to the other layout",
-                    isOn: Binding(get: { model.convertEnabled }, set: { model.convertEnabled = $0 })
-                )
-                .accessibilityIdentifier("shortcuts.convertLayout.enabled")
-            } keys: {
-                Picker(
-                    "Keys to convert",
-                    selection: Binding(get: { model.convertPair }, set: { model.convertPair = $0 })
-                ) {
-                    ForEach(TypingConvertPair.allCases) { pair in
-                        Text(verbatim: pair.families.displaySymbols).tag(pair)
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .fixedSize()
-                .disabled(!model.convertEnabled)
-                .accessibilityIdentifier("shortcuts.convertLayout.keys")
-            }
-        case .openSettings:
+        case .openSettings, .convertLayout:
             EmptyView()
         }
     }
@@ -193,7 +167,7 @@ struct ShortcutsSettingsView: View {
 
     private var pairPicker: some View {
         Picker(
-            "Translate in place between",
+            "Replace between",
             selection: Binding(
                 get: { model.selectedPairID ?? "" },
                 set: { model.selectPair(id: $0) }
@@ -218,7 +192,7 @@ struct ShortcutsSettingsView: View {
         case .forceSubmit: "Stop, paste and send"
         case .addMeetingChapter: "Add a meeting chapter"
         case .translateSelectedText: "Translate selected text"
-        case .inplaceTranslation: "Translate the selection in place"
+        case .inplaceTranslation: "Replace with translation"
         case .historyPalette: "History palette"
         case .undoLayoutFix: "Undo the last layout fix"
         }
@@ -232,7 +206,7 @@ struct ShortcutsSettingsView: View {
         switch row {
         case .forceSubmit: "Stops, pastes, then presses ⌘↩."
         case .translateSelectedText: "Opens the translation window with the selection."
-        case .inplaceTranslation: "Replaces the selected text with its translation."
+        case .inplaceTranslation: "Replaces the selected text with its translation. 1× is off for keys pressed together."
         case .undoLayoutFix: "Layout fix. No keys by default. Click the field and press the keys you want."
         case .cancelRecording, .addMeetingChapter, .historyPalette: nil
         }
@@ -267,4 +241,5 @@ private final class FakePreviewShortcutsStore: ShortcutsSettingsStore {
     func selectPair(_: TranslationLanguagePair) {}
     var convertPair: TypingConvertPair = .optionShift
     var convertEnabled = true
+    var convertPressCount = 2
 }

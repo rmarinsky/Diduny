@@ -235,6 +235,7 @@
 		6E398C8A5153D76198B44FFE /* LanguagesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 968E497FE52FE30B3374C26A /* LanguagesUITests.swift */; };
 		6E95C33622E89CBD05C763D5 /* EscapeCancelService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2A0045FAC17572590BE16F /* EscapeCancelService.swift */; };
 		6E9635DAF39B578276184622 /* NotesSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 229AA83DC1DF3A020DD7A371 /* NotesSettings.swift */; };
+		6EACB917BBD7A87F1A10285C /* TypingShortcutRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7603C58D9BB6B5A44FBAD5C /* TypingShortcutRows.swift */; };
 		6F9309CDE54941B4C4560FCB /* TypingHintPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37DCBEBF2DE074CDB57E838A /* TypingHintPanel.swift */; };
 		705167FDB860B0AC9BA65DC6 /* VocabularySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6A414C31E4B1FD3EBA64C95 /* VocabularySettingsView.swift */; };
 		711E62BC495FFA03AFB4A8C6 /* FloatingSurfacePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB65D5F96E9C329F3E47718C /* FloatingSurfacePanel.swift */; };
@@ -993,6 +994,7 @@
 		A6D6EBF17BC6CAF61401BF66 /* SettingsPageWidthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPageWidthTests.swift; sourceTree = "<group>"; };
 		A6D8F4C5FC5CDB3A9842F4F3 /* SettingsMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsMigration.swift; sourceTree = "<group>"; };
 		A71FCAF64D600F8EFA8B20A2 /* WhisperModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModelManager.swift; sourceTree = "<group>"; };
+		A7603C58D9BB6B5A44FBAD5C /* TypingShortcutRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingShortcutRows.swift; sourceTree = "<group>"; };
 		A90DC34399C728FB2BD9C292 /* AuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthServiceTests.swift; sourceTree = "<group>"; };
 		A93C5FD49F98345A448E9EA7 /* FileTranscriptionBatchServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTranscriptionBatchServiceTests.swift; sourceTree = "<group>"; };
 		A99018E8DFBEBE3CA9BE2C26 /* MeetingSwitchMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSwitchMachine.swift; sourceTree = "<group>"; };
@@ -1802,6 +1804,7 @@
 			children = (
 				87358719971C6D63513E2E46 /* TypingSettingsModel.swift */,
 				A579615E56F066D88FD29AD0 /* TypingSettingsView.swift */,
+				A7603C58D9BB6B5A44FBAD5C /* TypingShortcutRows.swift */,
 			);
 			path = Typing;
 			sourceTree = "<group>";
@@ -2836,6 +2839,7 @@
 				A28B6313423969F0E1F9607C /* TypingHintsUITestPreview.swift in Sources */,
 				4378EAADA6ACC19FF135352A /* TypingSettingsModel.swift in Sources */,
 				84CBF04E3234BB12EC003588 /* TypingSettingsView.swift in Sources */,
+				6EACB917BBD7A87F1A10285C /* TypingShortcutRows.swift in Sources */,
 				4D10D5466C7B83FF47A47945 /* TypingSpeedMeasurement.swift in Sources */,
 				D0BDBD33AD9969711AEF33E1 /* TypingTestView.swift in Sources */,
 				EB4E1AD51157D22997EF8463 /* UITestBridge.swift in Sources */,

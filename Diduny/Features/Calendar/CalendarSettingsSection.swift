@@ -7,7 +7,6 @@ struct CalendarSettingsSection: View {
     /// Re-renders the "Starts in" line when it changes anywhere.
     @AppStorage(ModeDefaults.meetingTranscriptModeKey) private var startsInRaw = ModeDefaults.newInstallStartsIn.rawValue
     @State private var approved = false
-    @State private var showBrowser = false
     @State private var showCalendars = false
     @State private var browsers = InstalledBrowser.discover()
 
@@ -16,62 +15,15 @@ struct CalendarSettingsSection: View {
     }
 
     var body: some View {
-        Section {
+        VStack(alignment: .leading, spacing: 0) {
+            AudioSettingsGroup(title: "Calendars") { calendarRows }
+            AudioSettingsGroup(title: "Browser") { BrowserCalendarSettingsView() }
             if connection.configuration.connected {
-                HStack(spacing: 12) {
-                    Image(systemName: "calendar.badge.checkmark")
-                        .font(.title2).foregroundStyle(.tint).accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("macOS Calendars").font(.headline)
-                        Text("\(connection.calendars.filter { connection.configuration.selected.contains($0.id) }.count) selected")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Manage calendars…") { showCalendars = true }
-                }.padding(.vertical, 6)
-                HStack {
-                    if connection.busy {
-                        ProgressView().controlSize(.small)
-                        Text("Refreshing calendars…").font(.caption).foregroundStyle(.secondary)
-                    } else if let date = connection.fetchedAt {
-                        Text("Last read: \(date.formatted(date: .omitted, time: .standard))")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Refresh") { Task { await connection.refresh() } }.disabled(connection.busy)
-                }
-                if connection.calendars.isEmpty && !connection.busy {
-                    EmptyState(
-                        icon: "calendar.badge.exclamationmark",
-                        title: "No calendars",
-                        message: "No calendars are available. Add an account in System Settings → Internet Accounts, then refresh.",
-                        compact: true
-                    )
-                }
-            } else {
-                EmptyState(
-                    icon: "calendar.badge.plus",
-                    title: "Connect your calendars",
-                    message: "Use calendars already connected to this Mac. Choose which ones appear in Diduny.",
-                    compact: true
-                ) {
-                    Button("Connect macOS calendars…") { approved = false; showConsent = true }
-                        .buttonStyle(.borderedProminent)
-                        .tint(DS.Palette.accent)
-                }
+                AudioSettingsGroup(title: "Reminders") { reminderRows }
+                AudioSettingsGroup(title: "Joining") { joiningRows }
+                AudioSettingsGroup(title: "Menu bar") { menuBarRows }
             }
-            if let error = connection.error {
-                Banner(message: Text(verbatim: error)) {
-                    Button("Open Calendar Permissions") {
-                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-            DisclosureGroup("Read a calendar from a browser", isExpanded: $showBrowser) {
-                BrowserCalendarSettingsView()
-            }
-        } header: { Text("Calendars") }
+        }
         .sheet(isPresented: $showCalendars) { calendarManagement }
         .sheet(isPresented: $showConsent) {
             VStack(alignment: .leading, spacing: 18) {
@@ -88,67 +40,148 @@ struct CalendarSettingsSection: View {
                 }
             }.padding(28).frame(width: 540)
         }
+    }
+
+    @ViewBuilder private var calendarRows: some View {
         if connection.configuration.connected {
-            Section {
-                Toggle("Show agendas and people", isOn: Binding(
+            let selected = connection.calendars.filter { connection.configuration.selected.contains($0.id) }.count
+            SettingsLineRow(title: "macOS Calendars", caption: "\(selected) selected", kind: .button) {
+                Button("Manage calendars…") { showCalendars = true }
+                    .buttonStyle(.bordered)
+            }
+            SettingsLineRow(title: "Refresh", caption: refreshCaption, kind: .button) {
+                if connection.busy { ProgressView().controlSize(.small) }
+                Button("Refresh") { Task { await connection.refresh() } }
+                    .buttonStyle(.bordered)
+                    .disabled(connection.busy)
+            }
+            if connection.calendars.isEmpty && !connection.busy {
+                EmptyState(
+                    icon: "calendar.badge.exclamationmark",
+                    title: "No calendars",
+                    message: "No calendars are available. Add an account in System Settings → Internet Accounts, then refresh.",
+                    compact: true
+                )
+            }
+            SettingsLineRow(
+                title: "Show agendas and people",
+                caption: "Reads each meeting's description, place and attendees for reminders and the menu, keeps them (names and emails) with linked recordings on this Mac, and links earlier meeting recordings to their events. Only a meeting's title and attendee names go to Diduny Cloud with its recording, and you can turn that off in Vocabulary & context.",
+                kind: .toggle
+            ) {
+                SettingsSwitch(title: "Show agendas and people", isOn: Binding(
                     get: { connection.configuration.eventDetails },
                     set: { enabled in Task { await connection.setEventDetails(enabled) } }))
-                Text("Reads each meeting's description, place and attendees for reminders and the menu, keeps them (names and emails) with linked recordings on this Mac, and links earlier meeting recordings to their events. Only a meeting's title and attendee names go to Diduny Cloud with its recording, and you can turn that off in Vocabulary & context.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Meeting reminders") {
-                Picker("Before a meeting", selection: preference(\.reminderMinutes)) {
-                    Text("Off").tag(0)
-                    Text("1 minute before").tag(1)
-                    Text("5 minutes before").tag(5)
-                    Text("15 minutes before").tag(15)
-                    Text("1 hour before").tag(60)
-                }
-                Text("A small window in the middle of the screen with the meeting's details.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Picker("When a meeting starts", selection: preference(\.reminderStyle)) {
-                    Text("Full screen").tag(CalendarConfiguration.ReminderStyle.fullScreen)
-                    Text("Small window").tag(CalendarConfiguration.ReminderStyle.window)
-                    Text("Off").tag(CalendarConfiguration.ReminderStyle.off)
-                }
-                Toggle("Show again while the meeting is running", isOn: preference(\.repeatDuringMeeting))
-                    .disabled(connection.configuration.reminderStyle == .off)
-                Text("Until you join or dismiss it, including after the Mac wakes or is unlocked. Full-screen reminders can always be dismissed with Escape.")
-                    .font(.caption).foregroundStyle(.secondary)
+        } else {
+            EmptyState(
+                icon: "calendar.badge.plus",
+                title: "Connect your calendars",
+                message: "Use calendars already connected to this Mac. Choose which ones appear in Diduny.",
+                compact: true
+            ) {
+                Button("Connect macOS calendars…") { approved = false; showConsent = true }
+                    .buttonStyle(.borderedProminent)
+                    .tint(DS.Palette.accent)
             }
-            Section("Joining") {
-                Picker("Open meeting links in", selection: preference(\.browserBundleID)) {
-                    Text("Default browser").tag(String?.none)
-                    ForEach(browsers) { browser in
-                        Text(verbatim: browser.name).tag(String?.some(browser.id))
-                    }
+        }
+        if let error = connection.error {
+            Banner(message: Text(verbatim: error)) {
+                Button("Open Calendar Permissions") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
                 }
-                Toggle("Open Zoom and Teams in their apps", isOn: preference(\.openInApps))
-                Toggle("Record when I choose Join", isOn: preference(\.recordOnJoin))
-                // 8A: calendar meetings follow Settings › Modes › Meeting "Starts in"; shown, not edited, here.
-                LabeledContent("Transcribe calendar recordings") {
-                    HStack {
-                        Text(startsInTitle)
-                        Button("Open Modes") { AppDelegate.current?.openMainWindow(section: .modes) }
-                            .buttonStyle(.link)
-                            .accessibilityIdentifier("calendar.startsIn.openModes")
-                    }
-                }
-                Text("Calendar meetings follow Settings › Modes › Meeting.")
-                    .font(.caption).foregroundStyle(.secondary)
+                .buttonStyle(.bordered)
             }
-            Section("Menu bar") {
-                Picker("Show next meeting in menu bar", selection: preference(\.displayMinutes)) {
-                    Text("15 minutes before").tag(15)
-                    Text("1 hour before").tag(60)
-                    Text("All day").tag(1440)
+        }
+    }
+
+    private var refreshCaption: LocalizedStringKey? {
+        if connection.busy { return "Refreshing calendars…" }
+        guard let date = connection.fetchedAt else { return nil }
+        return "Last read: \(date.formatted(date: .omitted, time: .standard))"
+    }
+
+    @ViewBuilder private var reminderRows: some View {
+        SettingsLineRow(
+            title: "Before a meeting",
+            caption: "A small window in the middle of the screen with the meeting's details.",
+            kind: .popUp
+        ) {
+            Picker("Before a meeting", selection: preference(\.reminderMinutes)) {
+                Text("Off").tag(0)
+                Text("1 minute before").tag(1)
+                Text("5 minutes before").tag(5)
+                Text("15 minutes before").tag(15)
+                Text("1 hour before").tag(60)
+            }.labelsHidden().fixedSize()
+        }
+        SettingsLineRow(title: "When a meeting starts", kind: .popUp) {
+            Picker("When a meeting starts", selection: preference(\.reminderStyle)) {
+                Text("Full screen").tag(CalendarConfiguration.ReminderStyle.fullScreen)
+                Text("Small window").tag(CalendarConfiguration.ReminderStyle.window)
+                Text("Off").tag(CalendarConfiguration.ReminderStyle.off)
+            }.labelsHidden().fixedSize()
+        }
+        SettingsLineRow(
+            title: "Show again while the meeting is running",
+            caption: "Until you join or dismiss it, including after the Mac wakes or is unlocked. Full-screen reminders can always be dismissed with Escape.",
+            kind: .toggle,
+            showsHairline: false
+        ) {
+            SettingsSwitch(title: "Show again while the meeting is running", isOn: preference(\.repeatDuringMeeting))
+        }
+        .disabled(connection.configuration.reminderStyle == .off)
+    }
+
+    @ViewBuilder private var joiningRows: some View {
+        SettingsLineRow(title: "Open meeting links in", kind: .popUp) {
+            Picker("Open meeting links in", selection: preference(\.browserBundleID)) {
+                Text("Default browser").tag(String?.none)
+                ForEach(browsers) { browser in
+                    Text(verbatim: browser.name).tag(String?.some(browser.id))
                 }
-                Toggle("Show tomorrow's meetings", isOn: preference(\.showTomorrow))
-                Toggle("Show meetings without a link", isOn: preference(\.showWithoutLink))
-                Toggle("Hide meeting names", isOn: preference(\.hideNames))
-                Text("Hides titles, people and agendas in the menu bar and reminders, for example while sharing your screen.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            }.labelsHidden().fixedSize()
+        }
+        SettingsLineRow(title: "Open Zoom and Teams in their apps", kind: .toggle) {
+            SettingsSwitch(title: "Open Zoom and Teams in their apps", isOn: preference(\.openInApps))
+        }
+        SettingsLineRow(title: "Record when I choose Join", kind: .toggle) {
+            SettingsSwitch(title: "Record when I choose Join", isOn: preference(\.recordOnJoin))
+        }
+        // 8A: calendar meetings follow Settings › Modes › Meeting "Starts in"; shown, not edited, here.
+        SettingsLineRow(
+            title: "Transcribe calendar recordings",
+            caption: "Calendar meetings follow Settings › Modes › Meeting.",
+            kind: .button,
+            showsHairline: false
+        ) {
+            Text(verbatim: startsInTitle).foregroundStyle(DS.Palette.secondary)
+            Button("Open Modes") { AppDelegate.current?.openMainWindow(section: .modes) }
+                .buttonStyle(.link)
+                .accessibilityIdentifier("calendar.startsIn.openModes")
+        }
+    }
+
+    @ViewBuilder private var menuBarRows: some View {
+        SettingsLineRow(title: "Show next meeting in menu bar", kind: .popUp) {
+            Picker("Show next meeting in menu bar", selection: preference(\.displayMinutes)) {
+                Text("15 minutes before").tag(15)
+                Text("1 hour before").tag(60)
+                Text("All day").tag(1440)
+            }.labelsHidden().fixedSize()
+        }
+        SettingsLineRow(title: "Show tomorrow's meetings", kind: .toggle) {
+            SettingsSwitch(title: "Show tomorrow's meetings", isOn: preference(\.showTomorrow))
+        }
+        SettingsLineRow(title: "Show meetings without a link", kind: .toggle) {
+            SettingsSwitch(title: "Show meetings without a link", isOn: preference(\.showWithoutLink))
+        }
+        SettingsLineRow(
+            title: "Hide meeting names",
+            caption: "Hides titles, people and agendas in the menu bar and reminders, for example while sharing your screen.",
+            kind: .toggle,
+            showsHairline: false
+        ) {
+            SettingsSwitch(title: "Hide meeting names", isOn: preference(\.hideNames))
         }
     }
 

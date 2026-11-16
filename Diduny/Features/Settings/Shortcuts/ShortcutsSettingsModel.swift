@@ -53,9 +53,11 @@ protocol ShortcutsSettingsStore: AnyObject {
     /// "Pair for both directions" (decision 2).
     var currentPair: TranslationLanguagePair? { get }
     func selectPair(_ pair: TranslationLanguagePair)
-    /// "Convert the selection to the other layout": the pair pressed twice, and its switch.
+    /// "Switch layout of selected text": the pair, how often it is pressed, and its switch.
     var convertPair: TypingConvertPair { get set }
     var convertEnabled: Bool { get set }
+    /// 2 or 3: the pair pressed together that many times.
+    var convertPressCount: Int { get set }
 }
 
 /// Page rules for Settings > Shortcuts, free of AppKit so they are unit-tested.
@@ -184,6 +186,11 @@ final class ShortcutsSettingsModel {
     var convertEnabled: Bool {
         get { _ = revision; return store.convertEnabled }
         set { store.convertEnabled = newValue; revision += 1 }
+    }
+
+    var convertPressCount: Int {
+        get { _ = revision; return store.convertPressCount }
+        set { store.convertPressCount = newValue; revision += 1 }
     }
 
     func selectPair(id: String) {

@@ -1,7 +1,7 @@
 import PapugaKit
 import SwiftUI
 
-/// Settings > Vocabulary & context: what Diduny Cloud receives as `user_context` (see `SpeechUserContext`).
+/// Vocabulary: what Diduny Cloud receives as `user_context` (see `SpeechUserContext`).
 struct VocabularySettingsView: View {
     var settings: SettingsStorage = .shared
     var store: VocabularyStore = .shared
@@ -17,8 +17,13 @@ struct VocabularySettingsView: View {
 
     var body: some View {
         PageScaffold(
-            title: "Vocabulary & context",
-            subtitle: "Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud. Layout fixes never change these words."
+            title: "Vocabulary",
+            subtitle: "Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud. Layout fixes never change these words.",
+            trailing: {
+                Button("Typing settings") { MainWindowController.shared.showWindow(section: .typing) }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("vocabulary.typingSettings")
+            }
         ) {
             VStack(alignment: .leading, spacing: 0) {
                 if !store.extras.pending.isEmpty {

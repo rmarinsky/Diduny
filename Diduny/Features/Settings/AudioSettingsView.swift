@@ -16,7 +16,26 @@ struct AudioSettingsView: View {
     @State private var micGain = SettingsStorage.shared.meetingMicGain
     @State private var systemGain = SettingsStorage.shared.meetingSystemGain
 
+    /// True on the Meetings page: only the meeting sound rows, with the level tests, and no page chrome.
+    var embedded = false
+
     var body: some View {
+        Group {
+            if embedded { meetingSound } else { page }
+        }
+        .onAppear {
+            audioSource = SettingsStorage.shared.meetingAudioSource
+            micGain = SettingsStorage.shared.meetingMicGain
+            systemGain = SettingsStorage.shared.meetingSystemGain
+            micPlayback.onFinish = { micStatus = String(localized: "Playback finished") }
+        }
+        .onDisappear {
+            cleanUpMicTest()
+            systemTester.cleanUp()
+        }
+    }
+
+    private var page: some View {
         PageScaffold(title: "Audio", subtitle: "Devices and levels.") {
             EmptyView()
         } content: {
@@ -40,15 +59,54 @@ struct AudioSettingsView: View {
                 SpeakerLabelsGroup()
             }
         }
-        .onAppear {
-            audioSource = SettingsStorage.shared.meetingAudioSource
-            micGain = SettingsStorage.shared.meetingMicGain
-            systemGain = SettingsStorage.shared.meetingSystemGain
-            micPlayback.onFinish = { micStatus = String(localized: "Playback finished") }
-        }
-        .onDisappear {
-            cleanUpMicTest()
-            systemTester.cleanUp()
+    }
+
+    // MARK: - Meetings page
+
+    private var meetingSound: some View {
+        AudioSettingsGroup(title: "Sound") {
+            sourceRow
+            if AudioSettingsText.showsMicrophoneLevel(audioSource) {
+                gainRow(
+                    "Microphone level", value: $micGain, identifier: "audio.meeting.micLevel",
+                    caption: statusCaption(micStatus),
+                    save: { SettingsStorage.shared.meetingMicGain = $0 }
+                ) {
+                    AudioLevelBar(level: micRecorder.isRecording ? micRecorder.audioLevel : 0)
+                } trailing: {
+                    Button(micRecorder.isRecording ? "Stop" : "Test") {
+                        if micRecorder.isRecording { stopMicTest() } else { startMicTest() }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(micPlayback.isPlaying)
+                    .accessibilityIdentifier("audio.mic.record")
+                    if micClipURL != nil, !micRecorder.isRecording {
+                        Button(micPlayback.isPlaying ? "Stop" : "Play") { toggleMicPlayback() }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("audio.mic.play")
+                    }
+                }
+            }
+            gainRow(
+                "System audio level", value: $systemGain, identifier: "audio.meeting.systemLevel",
+                caption: statusCaption(systemTester.status),
+                save: { SettingsStorage.shared.meetingSystemGain = $0 }
+            ) {
+                // No live system level exists in SystemAudioCaptureService, so no meter here.
+                EmptyView()
+            } trailing: {
+                Button(systemTester.isCapturing ? "Stop" : "Test") {
+                    Task { await systemTester.toggleCapture() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(systemTester.playback.isPlaying)
+                .accessibilityIdentifier("audio.meeting.capture")
+                if systemTester.clipURL != nil, !systemTester.isCapturing {
+                    Button(systemTester.playback.isPlaying ? "Stop" : "Play") { systemTester.togglePlayback() }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("audio.meeting.play")
+                }
+            }
         }
     }
 
@@ -114,7 +172,26 @@ struct AudioSettingsView: View {
         identifier: String,
         save: @escaping (Float) -> Void
     ) -> some View {
-        SettingsLineRow(title: title) {
+        gainRow(title, value: value, identifier: identifier, caption: nil, save: save) {
+            EmptyView()
+        } trailing: {
+            EmptyView()
+        }
+    }
+
+    /// `meter` sits before the slider and `trailing` (test buttons) after the percentage.
+    private func gainRow(
+        _ title: LocalizedStringKey,
+        value: Binding<Float>,
+        identifier: String,
+        caption: LocalizedStringKey?,
+        save: @escaping (Float) -> Void,
+        @ViewBuilder meter: () -> some View,
+        @ViewBuilder trailing: () -> some View
+    ) -> some View {
+        let meter = meter(), trailing = trailing()
+        return SettingsLineRow(title: title, caption: caption) {
+            meter
             GapSlider(value: value, in: 0 ... 2, step: 0.05) { editing in
                 if !editing { save(value.wrappedValue) }
             }
@@ -127,6 +204,7 @@ struct AudioSettingsView: View {
                 .monospacedDigit()
                 .frame(minWidth: 36, alignment: .trailing)
                 .accessibilityIdentifier("\(identifier).value")
+            trailing
         }
     }
 

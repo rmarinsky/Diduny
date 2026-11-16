@@ -111,6 +111,11 @@ final class SettingsShortcutsStore: ShortcutsSettingsStore {
         set { settings.typingConvertEnabled = newValue }
     }
 
+    var convertPressCount: Int {
+        get { settings.typingConvertPressCount }
+        set { settings.typingConvertPressCount = newValue }
+    }
+
     var offeredPairs: [TranslationLanguagePair] { settings.offeredTranslationPairs }
     var currentPair: TranslationLanguagePair? { settings.translationPair }
     func selectPair(_ pair: TranslationLanguagePair) { settings.selectTranslationPair(pair) }

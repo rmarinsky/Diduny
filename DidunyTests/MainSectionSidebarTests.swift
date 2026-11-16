@@ -8,27 +8,26 @@ import Testing
 @MainActor
 struct MainSectionSidebarTests {
     @Test func mainItemsInOrder() {
-        #expect(MainSection.mainItems == [.overview, .recordings, .notes, .clipboard])
+        #expect(MainSection.mainItems == [.overview, .recordings, .notes, .clipboard, .vocabulary])
     }
 
     @Test func settingsItemsInOrder() {
-        #expect(MainSection.settingsItems == [.general, .modes, .vocabulary, .typing, .meetings, .models, .account, .about])
+        #expect(MainSection.settingsItems == [.general, .modes, .languages, .typing, .meetings, .models, .account, .about])
     }
 
     @Test func sidebarLabels() {
         let labels = (MainSection.mainItems + MainSection.settingsItems).map(\.sidebarLabel)
         #expect(labels == [
-            "Overview", "Recordings", "Notes", "Clipboard",
-            "General", "Dictation", "Vocabulary & context", "Typing", "Meetings & notes", "Models", "Account", "About",
+            "Overview", "Recordings", "Notes", "Clipboard", "Vocabulary",
+            "General", "Modes", "Languages", "Typing", "Meetings", "Engines", "Account", "About",
         ])
     }
 
     @Test func tabsOfEachRowInOrder() {
-        #expect(MainSection.modes.tabs.map(\.label) == ["Modes & shortcuts", "Languages", "Audio"])
         #expect(MainSection.typing.tabs.map(\.label) == ["Layout fixes", "Typing test"])
-        #expect(MainSection.meetings.tabs.map(\.label) == ["Calendar & meetings", "Notes settings"])
+        #expect(MainSection.meetings.tabs.map(\.label) == ["Calendar & meetings", "Notes settings", "Audio"])
         #expect(MainSection.models.tabs.map(\.label) == ["Local models", "Providers", "Benchmark"])
-        let single: [MainSection] = [.overview, .recordings, .notes, .clipboard, .general, .vocabulary, .account, .about]
+        let single: [MainSection] = [.overview, .recordings, .notes, .clipboard, .general, .modes, .languages, .vocabulary, .account, .about]
         for row in single {
             #expect(row.tabs == [row])
         }
@@ -51,9 +50,9 @@ struct MainSectionSidebarTests {
     @Test func openingAPageSelectsItsRowAndTab() {
         let expected: [MainSection: MainSection] = [
             .overview: .overview, .recordings: .recordings, .notes: .notes, .clipboard: .clipboard,
-            .general: .general, .modes: .modes, .languages: .modes, .audioDictation: .modes, .vocabulary: .vocabulary,
+            .general: .general, .modes: .modes, .languages: .languages, .vocabulary: .vocabulary,
             .typing: .typing, .typingTest: .typing,
-            .meetings: .meetings, .notesSettings: .meetings,
+            .meetings: .meetings, .notesSettings: .meetings, .audioDictation: .meetings,
             .models: .models, .providers: .models, .benchmark: .models,
             .account: .account, .about: .about,
         ]

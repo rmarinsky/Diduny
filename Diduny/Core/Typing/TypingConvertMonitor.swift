@@ -1,6 +1,6 @@
 import AppKit
 
-/// The modifier pair of "Convert the selection to the other layout", pressed together twice.
+/// The modifier pair of "Switch layout of selected text", pressed together 2 or 3 times.
 /// Raw values are Papuga's `doublePressShortcut` values.
 enum TypingConvertPair: String, CaseIterable, Identifiable {
     case optionShift, commandShift, controlShift
@@ -16,7 +16,7 @@ enum TypingConvertPair: String, CaseIterable, Identifiable {
     }
 }
 
-/// Listens for the Convert pair pressed twice (Papuga's `HotkeyListener`), on Diduny's own key monitors.
+/// Listens for the Convert pair pressed 2 or 3 times (Papuga's `HotkeyListener`), on Diduny's own key monitors.
 /// Left and right keys both count. Any other key or modifier in between starts over.
 final class TypingConvertMonitor {
     /// Papuga's `doublePressInterval`.
@@ -26,6 +26,7 @@ final class TypingConvertMonitor {
     private let captureSession: ShortcutCaptureSession
     private var gesture = InplaceTranslationGesture()
     private(set) var pair: TypingConvertPair?
+    private var pressCount = 2
 
     var onTrigger: (() -> Void)?
 
@@ -37,13 +38,14 @@ final class TypingConvertMonitor {
         self.captureSession = captureSession
     }
 
-    /// Listens for `pair`; nil stops.
-    func listen(for pair: TypingConvertPair?) {
-        guard pair != self.pair || (pair != nil) != source.isActive else { return }
+    /// Listens for `pair` pressed `pressCount` times; nil stops.
+    func listen(for pair: TypingConvertPair?, pressCount: Int = 2) {
+        guard pair != self.pair || pressCount != self.pressCount || (pair != nil) != source.isActive else { return }
         source.stop()
         self.pair = pair
+        self.pressCount = pressCount
         guard let pair else { return }
-        gesture = InplaceTranslationGesture(threshold: Self.threshold, chord: .init(pair.families), pressCount: 2)
+        gesture = InplaceTranslationGesture(threshold: Self.threshold, chord: .init(pair.families), pressCount: pressCount)
         source.start { [weak self] event in self?.handle(event) }
     }
 
