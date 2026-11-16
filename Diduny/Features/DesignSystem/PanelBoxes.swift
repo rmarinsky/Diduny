@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Live transcript (design-spec 4.18): `box` fill, radius 8, padding 10, 12.5 `text` at line
-/// height 18.1, paragraphs 6 apart, fixed height. Text starts at the top; once the box is full it
+/// height 18.1, paragraphs 6 apart, fixed height (down to half beside a notice). Text starts at the top; once the box is full it
 /// scrolls so the newest line stays visible.
 struct TranscriptBox<Content: View>: View {
     let height: CGFloat
@@ -17,7 +17,8 @@ struct TranscriptBox<Content: View>: View {
                 .padding(DS.Size.boxPadding)
         }
         .defaultScrollAnchor(.bottom)
-        .frame(height: height)
+        // Shrinks to half when a notice needs the room, so the controls stay inside the fixed panel.
+        .frame(minHeight: height / 2, idealHeight: height, maxHeight: height)
         .background(DS.Palette.box, in: RoundedRectangle(cornerRadius: DS.Radius.box, style: .continuous))
         .accessibilityIdentifier("livePanel.transcript")
     }
@@ -53,7 +54,7 @@ struct CalmBox: View {
         .multilineTextAlignment(.center)
         .padding(DS.Space.lg)
         .frame(maxWidth: .infinity)
-        .frame(height: height)
+        .frame(minHeight: height / 2, idealHeight: height, maxHeight: height)
         .background(DS.Palette.box, in: RoundedRectangle(cornerRadius: DS.Radius.box, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("livePanel.calm")
