@@ -40,10 +40,6 @@ struct AudioSettingsView: View {
             EmptyView()
         } content: {
             VStack(alignment: .leading, spacing: 0) {
-                AudioSettingsGroup(title: "Microphone") {
-                    inputRow
-                    micTestRow
-                }
                 AudioSettingsGroup(title: "Meetings") {
                     sourceRow
                     if AudioSettingsText.showsMicrophoneLevel(audioSource) {
@@ -92,8 +88,7 @@ struct AudioSettingsView: View {
                 caption: statusCaption(systemTester.status),
                 save: { SettingsStorage.shared.meetingSystemGain = $0 }
             ) {
-                // No live system level exists in SystemAudioCaptureService, so no meter here.
-                EmptyView()
+                AudioLevelBar(level: systemTester.isCapturing ? systemTester.level : 0, identifier: "audio.system.level")
             } trailing: {
                 Button(systemTester.isCapturing ? "Stop" : "Test") {
                     Task { await systemTester.toggleCapture() }
@@ -107,46 +102,6 @@ struct AudioSettingsView: View {
                         .accessibilityIdentifier("audio.meeting.play")
                 }
             }
-        }
-    }
-
-    // MARK: - Microphone
-
-    private var inputRow: some View {
-        SettingsLineRow(title: "Input", kind: .popUp) {
-            Picker("Input", selection: inputSelection) {
-                Text("System Default").tag(String?.none)
-                ForEach(deviceManager.availableDevices) { device in
-                    Text(verbatim: device.name).tag(String?.some(device.uid))
-                }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .accessibilityIdentifier("audio.input")
-        }
-    }
-
-    /// A stale preferred device (unplugged) reads as System Default, as today.
-    private var inputSelection: Binding<String?> {
-        Binding(
-            get: { deviceManager.effectiveDeviceUID(preferred: appState.preferredDeviceUID) },
-            set: { appState.preferredDeviceUID = $0 }
-        )
-    }
-
-    private var micTestRow: some View {
-        SettingsLineRow(title: "Test the microphone", caption: statusCaption(micStatus), kind: .button) {
-            AudioLevelBar(level: micRecorder.isRecording ? micRecorder.audioLevel : 0)
-            Button(micRecorder.isRecording ? "Stop Recording" : "Record") {
-                if micRecorder.isRecording { stopMicTest() } else { startMicTest() }
-            }
-            .buttonStyle(.bordered)
-            .disabled(micPlayback.isPlaying)
-            .accessibilityIdentifier("audio.mic.record")
-            Button(micPlayback.isPlaying ? "Stop" : "Play") { toggleMicPlayback() }
-                .buttonStyle(.bordered)
-                .disabled(micClipURL == nil || micRecorder.isRecording)
-                .accessibilityIdentifier("audio.mic.play")
         }
     }
 
@@ -195,6 +150,7 @@ struct AudioSettingsView: View {
             GapSlider(value: value, in: 0 ... 2, step: 0.05) { editing in
                 if !editing { save(value.wrappedValue) }
             }
+            .controlSize(.small)
             .frame(width: 129)
             .accessibilityLabel(Text(title))
             .accessibilityIdentifier(identifier)
@@ -308,6 +264,7 @@ struct AudioSettingsGroup<Content: View>: View {
 /// input level with no easing; empty unless a test recording runs.
 struct AudioLevelBar: View {
     let level: Float
+    var identifier = "audio.mic.level"
 
     var body: some View {
         let fraction = AudioSettingsText.levelFraction(level)
@@ -324,6 +281,6 @@ struct AudioLevelBar: View {
         .accessibilityAddTraits(.isImage)
         .accessibilityLabel(Text("Input level"))
         .accessibilityValue(Text(verbatim: "\(Int((fraction * 100).rounded()))%"))
-        .accessibilityIdentifier("audio.mic.level")
+        .accessibilityIdentifier(identifier)
     }
 }

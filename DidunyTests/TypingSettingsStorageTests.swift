@@ -52,10 +52,22 @@ final class TypingSettingsStorageTests {
         settings.typingConvertPair = .commandShift
         settings.typingConvertPressCount = 3
         settings.typingLearnVocabulary = false
+        settings.typingHistoryRetention = .threeMonths
 
         let written = Set(box.defaults.dictionaryRepresentation().keys).subtracting(before)
         #expect(written == Set(SettingsStorage.TypingKey.allCases.map(\.rawValue)))
         #expect(written.allSatisfy { $0.hasPrefix("typing.") })
+    }
+
+    @Test("the decision log is kept a month until changed, and the engine reads the choice")
+    func historyRetentionReachesTheEngine() {
+        let settings = box.settings
+        #expect(settings.typingHistoryRetention == .oneMonth)
+        #expect(settings.typingSettings.replacementHistoryRetention == "oneMonth")
+
+        settings.typingHistoryRetention = .oneWeek
+
+        #expect(settings.typingSettings.replacementHistoryRetention == "oneWeek")
     }
 
     @Test("a written value reaches the built settings, also after the first read cached them")

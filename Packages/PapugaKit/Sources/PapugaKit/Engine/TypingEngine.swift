@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// The one type a host app uses. It builds the stores, the layout manager, the spell checker and
 /// the controller in Papuga's start order. It draws nothing itself: the host's `hintPresenter`
@@ -11,6 +11,7 @@ public final class TypingEngine {
     let decisionHistory: AutoFixDecisionHistoryStore
     let eventLog: PapugaEventLog
     private let controller: AutoFixController
+    private let hintPresenter: TypingHintPresenting?
     private let layoutManager: LayoutManager
     private let characterMapper = CharacterMapper()
 
@@ -45,6 +46,7 @@ public final class TypingEngine {
         onWordObserved: ((TypingWordObservation) -> Void)? = nil
     ) {
         self.settings = settings
+        self.hintPresenter = hintPresenter
         hostCalls = HostCalls(
             onReplacementRecorded: onReplacementRecorded,
             onReplacementReversed: onReplacementReversed,
@@ -154,6 +156,10 @@ public final class TypingEngine {
         hostCalls.recordReplacement(text: conversion.original)
         layoutManager.switchTo(conversion.targetLayoutID)
         controller.noteExternalEdit()
+        // The same "fixed" hint near the cursor as after an automatic fix; Convert has no undo of its own.
+        if settings().autoFixToastEnabled {
+            hintPresenter?.showFixToast(near: NSEvent.mouseLocation, onClick: nil)
+        }
     }
 
     /// True for a token that may become a Vocabulary word: looks like a word (letters, a vowel, at most

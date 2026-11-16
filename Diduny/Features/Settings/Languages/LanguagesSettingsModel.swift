@@ -121,6 +121,17 @@ final class LanguagesSettingsModel {
         reload()
     }
 
+    /// Puts `code` at `index` of Your languages (drag to reorder). The order is the hint and menu order.
+    func move(_ code: String, to index: Int) {
+        var list = store.yourLanguages
+        guard let from = list.firstIndex(of: code) else { return }
+        list.remove(at: from)
+        list.insert(code, at: min(max(index, 0), list.count))
+        guard list != store.yourLanguages else { return }
+        store.yourLanguages = list
+        reload()
+    }
+
     // MARK: - Translation
 
     /// "Translate into, by default" lists the translatable Your languages.

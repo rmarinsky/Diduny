@@ -20,7 +20,7 @@ struct AccountSignInView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             switch authService.authState {
             case .loggedOut:
                 if authService.showsMigrationNotice {
@@ -28,16 +28,18 @@ struct AccountSignInView: View {
                         "Diduny's account system changed. Sign in again to continue using Diduny.",
                         systemImage: "person.crop.circle.badge.exclamationmark"
                     )
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(DS.Font.meta)
+                    .foregroundStyle(DS.Palette.secondary)
+                    .padding(.vertical, 9)
                 }
 
-                HStack {
+                SettingsLineRow(title: "Sign in with an email code", kind: .button) {
                     TextField("Your email address", text: $email)
                         .textFieldStyle(.roundedBorder)
                         .textContentType(.emailAddress)
                         .focused($focusedField, equals: .email)
                         .onSubmit(sendOtp)
+                        .frame(width: 200)
                         .accessibilityLabel("Email address")
                         .accessibilityIdentifier("account.email")
 
@@ -49,19 +51,18 @@ struct AccountSignInView: View {
                 }
 
             case .otpSent:
-                Text("Enter the code sent to \(authService.pendingOtpEmail ?? email).")
-                    .font(.callout)
-                Text(
-                    "Check your inbox and spam folder. You can paste the code or use a macOS code suggestion when available."
-                )
-                .font(.caption).foregroundStyle(.secondary)
-                HStack {
+                SettingsLineRow(
+                    title: "Enter the code sent to \(authService.pendingOtpEmail ?? email).",
+                    caption: "Check your inbox and spam folder. You can paste the code or use a macOS code suggestion when available.",
+                    kind: .button
+                ) {
                     TextField("Enter 6-digit code", text: $otpCode)
                         .textFieldStyle(.roundedBorder)
                         .textContentType(.oneTimeCode)
                         .focused($focusedField, equals: .otp)
                         .onSubmit(verifyOtp)
                         .autocorrectionDisabled()
+                        .frame(width: 140)
                         .accessibilityLabel("One-time code")
                         .accessibilityIdentifier("account.otp")
 
@@ -80,34 +81,31 @@ struct AccountSignInView: View {
                 }
 
             case .loggedIn:
-                HStack {
-                    Text(authService.userEmail
-                        .map { String(localized: "Logged in as \($0)") } ?? String(localized: "Logged in"))
-                        .foregroundColor(.secondary)
-
-                    Spacer()
-
+                SettingsLineRow(
+                    title: authService.userEmail
+                        .map { "Logged in as \($0)" } ?? "Logged in",
+                    caption: "Credentials are stored in the macOS Keychain.",
+                    kind: .button
+                ) {
                     Button("Sign Out", role: .destructive) {
                         Task { await authService.logout() }
                     }
                     .buttonStyle(.bordered)
                 }
-
-                Label("Credentials are stored in the macOS Keychain.", systemImage: "lock.shield")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
 
             if isLoading {
                 ProgressView()
                     .controlSize(.small)
+                    .padding(.vertical, 9)
                     .accessibilityLabel("Signing in")
             }
 
             if let errorMessage {
                 Text(errorMessage)
-                    .font(.caption)
-                    .foregroundColor(.red)
+                    .font(DS.Font.meta)
+                    .foregroundStyle(DS.Palette.no)
+                    .padding(.vertical, 9)
                     .accessibilityIdentifier("account.error")
             }
         }
@@ -193,37 +191,48 @@ struct AnalyticsSettingsSection: View {
     /// SettingsStorage is not observable; this mirrors the toggle so it redraws.
     @State private var featureUsageOn = true
     var body: some View {
-        Section("Privacy") {
-            Toggle("Share usage statistics", isOn: Binding(get: { analytics.enabled }, set: { value in
-                Task { await analytics.setEnabled(value) }
-            }))
-            .disabled(analytics.isLoading && !analytics.enabled)
-            Text(
-                "Optional on Free and Pro. Shares duration, local/cloud mode, feature category and the transcription engine, plus app launches, unexpected quits and error codes with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days (error codes 90 days). No audio, text or file names. Cloud limits, payments and necessary security records are handled separately."
-            )
-            .font(.caption).foregroundStyle(.secondary)
-            if analytics.enabled, analytics.engineTimeVisible {
-                Text(
-                    "The Diduny team sees how much time this account spends on each transcription engine and model, to help with support. Turn off sharing to stop it."
-                )
-                .font(.caption).foregroundStyle(.secondary)
+        GeneralGroup(heading: "Privacy") {
+            SettingsLineRow(
+                title: "Share usage statistics",
+                caption: "Optional on Free and Pro. Shares duration, local/cloud mode, feature category and the transcription engine, plus app launches, unexpected quits and error codes with the Diduny version, macOS version and Mac chip type (Apple silicon or Intel), linked to your account and kept for 30 days (error codes 90 days). No audio, text or file names. Cloud limits, payments and necessary security records are handled separately.",
+                kind: .toggle
+            ) {
+                SettingsSwitch(title: "Share usage statistics", isOn: Binding(get: { analytics.enabled }, set: { value in
+                    Task { await analytics.setEnabled(value) }
+                }))
+                .disabled(analytics.isLoading && !analytics.enabled)
             }
-            Toggle("Share anonymous feature usage", isOn: Binding(
-                get: { featureUsageOn },
-                set: { value in
-                    settings.shareFeatureUsage = value
-                    if !value { FeatureUsageCounter.shared.discardPending() }
-                    featureUsageOn = value
-                }
-            ))
-            .onAppear { featureUsageOn = settings.shareFeatureUsage }
-            Text(
-                "On by default. Counts which features and shortcuts are used each day, so we know what to improve. Sent once a day while you are signed in, so only Diduny accounts can send counts; the server stores the daily totals without your account, and nothing you say or type."
-            )
-            .font(.caption).foregroundStyle(.secondary)
-            if let error = analytics.errorMessage { Text(error).font(.caption).foregroundStyle(.red) }
-            Button("Refresh sharing preference") { Task { await analytics.refresh() } }
-                .disabled(analytics.isLoading)
+            if analytics.enabled, analytics.engineTimeVisible {
+                note("The Diduny team sees how much time this account spends on each transcription engine and model, to help with support. Turn off sharing to stop it.")
+            }
+            SettingsLineRow(
+                title: "Share anonymous feature usage",
+                caption: "On by default. Counts which features and shortcuts are used each day, so we know what to improve. Sent once a day while you are signed in, so only Diduny accounts can send counts; the server stores the daily totals without your account, and nothing you say or type.",
+                kind: .toggle
+            ) {
+                SettingsSwitch(title: "Share anonymous feature usage", isOn: Binding(
+                    get: { featureUsageOn },
+                    set: { value in
+                        settings.shareFeatureUsage = value
+                        if !value { FeatureUsageCounter.shared.discardPending() }
+                        featureUsageOn = value
+                    }
+                ))
+                .onAppear { featureUsageOn = settings.shareFeatureUsage }
+            }
+            if let error = analytics.errorMessage {
+                Text(error).font(DS.Font.meta).foregroundStyle(DS.Palette.no).padding(.vertical, 9)
+            }
+            SettingsLineRow(title: "Refresh sharing preference", kind: .button, showsHairline: false) {
+                Button("Refresh") { Task { await analytics.refresh() } }
+                    .buttonStyle(.bordered)
+                    .disabled(analytics.isLoading)
+            }
         }
+    }
+
+    private func note(_ text: LocalizedStringKey) -> some View {
+        Text(text).font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 9)
     }
 }

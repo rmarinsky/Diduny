@@ -144,6 +144,13 @@ final class VocabularyStore {
         changed()
     }
 
+    /// A rule made from a row of Decisions. An existing rule for the same word is left alone.
+    func addReplacement(from: String, to: String) {
+        guard !settings.typingCustomReplaceRules.contains(where: { $0.source.caseInsensitiveCompare(from) == .orderedSame }) else { return }
+        settings.typingCustomReplaceRules.insert(CustomAutoReplaceRule(source: from, target: to, createdAt: now()), at: 0)
+        changed()
+    }
+
     func ignore(_ item: VocabularyPendingItem) {
         extras.pending.removeAll { $0.id == item.id }
         if !extras.ignored.contains(item.ignoreKey) { extras.ignored.append(item.ignoreKey) }

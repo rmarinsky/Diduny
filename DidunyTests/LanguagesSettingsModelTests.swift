@@ -35,6 +35,19 @@ final class LanguagesSettingsModelTests {
         #expect(model.speak == ["uk", "en"])
     }
 
+    @Test("Dragging a language moves it in Your languages and the order is saved")
+    func moveReorders() {
+        let (model, store) = model()
+        store.yourLanguages = ["en", "uk", "pl"]
+        model.reload()
+        model.move("pl", to: 0)
+        #expect(store.yourLanguages == ["pl", "en", "uk"])
+        model.move("pl", to: 2)
+        #expect(store.yourLanguages == ["en", "uk", "pl"])
+        model.move("de", to: 0)
+        #expect(model.yourLanguages == ["en", "uk", "pl"])
+    }
+
     @Test("T5-LA-21 ticking Polish adds it to Your languages and its pairs")
     func tickYourLanguage() {
         let (model, store) = model()

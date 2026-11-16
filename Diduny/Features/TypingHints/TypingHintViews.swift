@@ -62,7 +62,8 @@ struct TypingHintView: View {
                     symbol: onClick == nil ? "checkmark" : "arrow.uturn.backward",
                     title: content.title,
                     identifier: "typingHint.undo.action",
-                    onClick: onClick
+                    onClick: onClick,
+                    landsLogo: true
                 )
             case let .recovery(hint, onClick):
                 HintPill(
@@ -92,6 +93,8 @@ struct TypingHintView: View {
 /// The small toast shape the app already uses (in-place translation): material, 16 radius, tint border.
 private struct HintPillSurface: ViewModifier {
     var isHighlighted = false
+    /// False while the fix hint's logo lands on its own, before the pill appears around it.
+    var isShown = true
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -100,8 +103,8 @@ private struct HintPillSurface: ViewModifier {
     func body(content: Content) -> some View {
         content
             .frame(height: 32)
-            .background(.regularMaterial, in: shape)
-            .overlay(shape.strokeBorder(isHighlighted ? DS.Palette.accentText : DS.Palette.tintBorder, lineWidth: isHighlighted ? 1 : 0.5))
+            .background { shape.fill(.regularMaterial).opacity(isShown ? 1 : 0) }
+            .overlay(shape.strokeBorder(isHighlighted ? DS.Palette.accentText : DS.Palette.tintBorder, lineWidth: isHighlighted ? 1 : 0.5).opacity(isShown ? 1 : 0))
             .clipShape(shape)
             .contentShape(shape)
     }
@@ -113,7 +116,12 @@ private struct HintPill: View {
     let title: String
     let identifier: String
     let onClick: (() -> Void)?
+    /// The fix hint: the Diduny logo first lands as after a translation or a paste (pop, ring, check,
+    /// sparks) and turns once, then the pill and its title appear around it and the logo stays.
+    var landsLogo = false
     @State private var isHovered = false
+    @State private var isRevealed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if let onClick {
@@ -131,17 +139,33 @@ private struct HintPill: View {
 
     private var label: some View {
         HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: DS.Size.symbolSmall, weight: .semibold))
-                .foregroundStyle(DS.Palette.secondary)
+            if landsLogo {
+                LogoBadge(phase: .done, discSize: 24, pulsesOnAppear: true, spinsOnAppear: true)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: DS.Size.symbolSmall, weight: .semibold))
+                    .foregroundStyle(DS.Palette.secondary)
+            }
             Text(verbatim: title)
                 .font(DS.Font.calloutStrong)
                 .foregroundStyle(DS.Palette.text)
                 .lineLimit(1)
+                .opacity(isShown ? 1 : 0)
         }
-        .padding(.horizontal, DS.Space.md)
-        .modifier(HintPillSurface(isHighlighted: isHovered))
+        .padding(.horizontal, landsLogo ? DS.Space.xs : DS.Space.md)
+        .padding(.trailing, landsLogo ? DS.Space.md - DS.Space.xs : 0)
+        .modifier(HintPillSurface(isHighlighted: isHovered, isShown: isShown))
+        .task {
+            guard landsLogo, !isRevealed else { return }
+            if !reduceMotion { try? await Task.sleep(for: .seconds(Self.landing)) }
+            withAnimation(DS.Motion.easeOut(0.2)) { isRevealed = true }
+        }
     }
+
+    /// The logo's turn takes 0.6 s; the title follows once it settles.
+    static let landing: TimeInterval = 0.5
+
+    private var isShown: Bool { !landsLogo || isRevealed }
 }
 
 /// A fix the user typed past. It never listens to the keyboard: a click applies it, the cross

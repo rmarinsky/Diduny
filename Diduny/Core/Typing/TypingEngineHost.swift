@@ -11,6 +11,7 @@ protocol TypingEngineControlling: AnyObject {
     func undoLastFix()
     func layoutConversion(of text: String) -> TypingLayoutConversion?
     func finishLayoutConversion(_ conversion: TypingLayoutConversion)
+    func applyHistorySettings()
 }
 
 extension TypingEngine: TypingEngineControlling {}
@@ -133,6 +134,8 @@ final class TypingEngineHost {
             state = .papugaRunning
             return
         }
+        // A running engine takes a changed "Keep the log for" here.
+        engine?.applyHistorySettings()
         guard state != .running else { return }
         let engine = engine ?? makeEngine()
         self.engine = engine

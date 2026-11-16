@@ -1,6 +1,6 @@
 import Foundation
 
-enum ReplacementHistoryRetention: String, CaseIterable {
+public enum ReplacementHistoryRetention: String, CaseIterable, Sendable {
     case oneWeek
     case oneMonth
     case threeMonths

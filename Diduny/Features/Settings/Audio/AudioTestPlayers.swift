@@ -40,6 +40,8 @@ final class SystemAudioTester {
     private(set) var isCapturing = false
     private(set) var clipURL: URL?
     private(set) var status = ""
+    /// Level (0...1) of the captured system audio while a capture runs; 0 otherwise.
+    private(set) var level: Float = 0
     let playback = AudioTestPlayback()
     private var service: SystemAudioCaptureService?
 
@@ -69,6 +71,7 @@ final class SystemAudioTester {
     func cleanUp() {
         if isCapturing, let service { Task { _ = try? await service.stopCapture() } }
         isCapturing = false
+        level = 0
         playback.stop()
         service = nil
         if let clipURL { try? FileManager.default.removeItem(at: clipURL) }
@@ -101,6 +104,9 @@ final class SystemAudioTester {
                 self?.isCapturing = false
             }
         }
+        service.onSystemLevel = { [weak self] level in
+            DispatchQueue.main.async { if self?.isCapturing == true { self?.level = level } }
+        }
         self.service = service
         do {
             try await service.startCapture(to: url)
@@ -119,5 +125,6 @@ final class SystemAudioTester {
             status = String(localized: "Error stopping capture: \(error.localizedDescription)")
         }
         isCapturing = false
+        level = 0
     }
 }

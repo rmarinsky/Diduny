@@ -19,8 +19,8 @@ final class LanguagesUITests: DidunyUITestCase {
 
     func test_T5LA20_pageShowsTheDefaults() {
         _ = openLanguages()
-        waitForElement(element("languages.speak"))
-        waitForElement(element("languages.yours"), toMatch: "value == 'English, Ukrainian'")
+        waitForElement(element("languages.yours.row.en"))
+        waitForElement(element("languages.yours.row.uk"))
         waitForElement(element("languages.defaultTarget"), toMatch: "value == 'English'")
         waitForElement(element("languages.pair"), toMatch: "value == 'Ukrainian ↔ English'")
         waitForElement(element("languages.voice.enabled"))
@@ -45,7 +45,7 @@ final class LanguagesUITests: DidunyUITestCase {
         waitForElement(polish, toMatch: "value == '1'")
         popup.typeKey(.escape, modifierFlags: [])
         waitForDisappearance(popup)
-        waitForElement(element("languages.yours"), toMatch: "value == 'English, Ukrainian, Polish'")
+        waitForElement(element("languages.yours.row.pl"))
     }
 
     func test_T5LA26_voiceCommandPositionsAndSwitch() {
@@ -63,8 +63,8 @@ final class LanguagesUITests: DidunyUITestCase {
 
     func test_T5LA27_popupSearchesAndClosesOnOutsideClick() {
         _ = openLanguages()
-        waitForElement(element("languages.speak.change")).click()
-        let popup = waitForElement(element("popup.change.speak"))
+        waitForElement(element("languages.yours.change")).click()
+        let popup = waitForElement(element("popup.change.yourLanguages"))
         let search = waitForElement(element("popup.search"))
         search.click()
         search.typeText("zzz")

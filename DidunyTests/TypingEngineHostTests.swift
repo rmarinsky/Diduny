@@ -12,6 +12,9 @@ private final class FakeTypingEngine: TypingEngineControlling {
     var stops = 0
     var externalEdits = 0
     var undos = 0
+    var historyApplied = 0
+
+    func applyHistorySettings() { historyApplied += 1 }
 
     func start() -> Bool {
         starts += 1

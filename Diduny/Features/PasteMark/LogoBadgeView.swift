@@ -21,11 +21,15 @@ struct LogoBadge: View {
     /// Each change replays the landing burst (none under Reduce Motion).
     var pulseTrigger = 0
     var pulsesOnAppear = false
+    /// The logo makes one full turn and a small hop on appear (Papuga's flip; the typing fix hint).
+    var spinsOnAppear = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @State private var breathing = false
     @State private var burst = false
+    @State private var spin: Double = 0
+    @State private var hop: CGFloat = 0
 
     private var unit: CGFloat {
         discSize / 28
@@ -50,6 +54,7 @@ struct LogoBadge: View {
                 TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isThinking)) { timeline in
                     thinking(t: timeline.date.timeIntervalSinceReferenceDate)
                 }
+                .rotationEffect(.degrees(spin))
                 ring
                 if phase == .done {
                     Image(systemName: "checkmark.circle.fill")
@@ -62,6 +67,7 @@ struct LogoBadge: View {
             }
             .frame(width: discSize, height: discSize)
         }
+        .offset(y: hop)
         .scaleEffect(scale)
         .opacity(isVisible ? 1 : 0)
         .animation(appearAnimation, value: isVisible)
@@ -69,6 +75,7 @@ struct LogoBadge: View {
         .accessibilityHidden(true)
         .onAppear {
             if pulsesOnAppear { playBurst() }
+            if spinsOnAppear, !reduceMotion { spinAndHop() }
             guard reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { breathing = true }
         }
@@ -134,6 +141,16 @@ struct LogoBadge: View {
     private var appearAnimation: Animation {
         if reduceMotion { return .easeInOut(duration: 0.15) }
         return isVisible ? .bouncy(duration: 0.28, extraBounce: 0.2) : .easeIn(duration: 0.15)
+    }
+
+    /// One turn in 450 ms; at the same time the badge rises 5 units in 150 ms and falls back in 150 ms.
+    private func spinAndHop() {
+        withAnimation(DS.Motion.easeOut(0.45)) { spin = -360 }
+        withAnimation(DS.Motion.easeOut(0.15)) {
+            hop = -5 * unit
+        } completion: {
+            withAnimation(.easeIn(duration: 0.15)) { hop = 0 }
+        }
     }
 
     private func playBurst() {

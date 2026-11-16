@@ -117,8 +117,6 @@ struct MainWindowView: View {
             TypingTestView()
         case .meetings:
             MeetingSettingsView()
-        case .notesSettings:
-            NotesSettingsView()
         case .general:
             GeneralSettingsView()
         case .modes:

@@ -17,16 +17,17 @@ struct AccountSettingsView: View {
     }
 
     var body: some View {
-        PageScaffold(title: "Account", scrolls: false) { formContent }
+        PageScaffold(title: "Account", subtitle: "Sign-in, plan and privacy.") { formContent }
     }
 
     private var formContent: some View {
-        Form {
-            Section("Account") {
+        VStack(alignment: .leading, spacing: 0) {
+            GeneralGroup(heading: nil) {
                 #if DEV_BUILD
-                    HStack {
+                    SettingsLineRow(title: "Proxy URL") {
                         TextField("Proxy URL", text: $proxyBaseURL)
                             .textFieldStyle(.roundedBorder)
+                            .frame(width: 260)
                             .onChange(of: proxyBaseURL) { _, newValue in
                                 SettingsStorage.shared.proxyBaseURL = newValue
                             }
@@ -36,7 +37,11 @@ struct AccountSettingsView: View {
                 AccountSignInView()
 
                 #if DEV_BUILD
-                    HStack(spacing: 8) {
+                    SettingsLineRow(title: "Test Connection", kind: .button) {
+                        if isTestingProxy || isRefreshingConfig {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
                         Button("Test Connection") {
                             testProxyConnection()
                         }
@@ -48,13 +53,6 @@ struct AccountSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(isRefreshingConfig)
-
-                        if isTestingProxy || isRefreshingConfig {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-
-                        Spacer()
                     }
 
                     if let result = proxyTestResult {
@@ -65,12 +63,12 @@ struct AccountSettingsView: View {
 
             BillingSettingsSection(isLoggedIn: authService.isLoggedIn)
 
-            if authService.isLoggedIn { AnalyticsSettingsSection() }
             cloudUsageSection
 
             usageSection
+
+            if authService.isLoggedIn { AnalyticsSettingsSection() }
         }
-        .formStyle(.grouped)
         .task(id: authService.userEmail) {
             if authService.isLoggedIn { await AnalyticsService.shared.refresh() }
             else { AnalyticsService.shared.reset() }
@@ -88,59 +86,48 @@ struct AccountSettingsView: View {
     @ViewBuilder
     private var cloudUsageSection: some View {
         if authService.isLoggedIn {
-            Section("Cloud Usage") {
+            GeneralGroup(heading: "Cloud usage") {
                 let usageService = UsageService.shared
 
                 if let usage = usageService.cachedUsage {
                     if usage.hasUnlimitedAccess {
-                        HStack {
+                        SettingsLineRow(title: "Unlimited cloud access") {
                             Image(systemName: "infinity")
-                                .foregroundColor(.green)
-                            Text("Unlimited cloud access")
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(DS.Palette.ok)
+                                .accessibilityHidden(true)
                         }
                     } else {
-                        VStack(alignment: .leading, spacing: 8) {
+                        SettingsLineRow(
+                            title: LocalizedStringKey(String(
+                                format: String(localized: "%.1fh / %.0fh used this month"),
+                                locale: Locale.current,
+                                usage.usedHours,
+                                usage.limitHours ?? UsageService.freeCloudLimitHours
+                            ))
+                        ) {
                             ProgressView(value: min(usageService.usagePercent, 1.0))
                                 .tint(usageProgressColor(usageService.usagePercent))
-
-                            HStack {
-                                Text(String(
-                                    format: String(localized: "%.1fh / %.0fh used this month"),
-                                    locale: Locale.current,
-                                    usage.usedHours,
-                                    usage.limitHours ?? UsageService.freeCloudLimitHours
-                                ))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-
-                                Spacer()
-
-                                Text(usageService.formattedRemaining)
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(usageProgressColor(usageService.usagePercent))
-                            }
+                                .frame(width: 120)
+                            Text(usageService.formattedRemaining)
+                                .font(DS.Font.meta)
+                                .foregroundStyle(usageProgressColor(usageService.usagePercent))
                         }
                     }
                 } else if usageService.isLoading {
-                    ProgressView()
-                        .controlSize(.small)
+                    SettingsLineRow(title: "Usage data not available", kind: .other) {
+                        ProgressView().controlSize(.small)
+                    }
                 } else {
-                    Text("Usage data not available")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    SettingsLineRow(title: "Usage data not available") {}
                 }
 
-                HStack {
-                    Spacer()
+                SettingsLineRow(title: "Refresh", kind: .button, showsHairline: false) {
                     Button {
                         Task { await UsageService.shared.refresh() }
                     } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.bordered)
-                    .controlSize(.small)
                     .disabled(usageService.isLoading)
                 }
             }
@@ -148,100 +135,43 @@ struct AccountSettingsView: View {
     }
 
     private func usageProgressColor(_ percent: Double) -> Color {
-        if percent < 0.5 { return .green }
-        if percent < 0.8 { return .yellow }
-        return .red
+        if percent < 0.5 { return DS.Palette.ok }
+        if percent < 0.8 { return DS.Palette.warn }
+        return DS.Palette.no
     }
 
     // MARK: - Usage Section
 
     private var usageSection: some View {
-        Section("Usage") {
+        GeneralGroup(heading: "Usage") {
             let statistics = RecordingStatistics(rows: RecordingsLibraryStorage.shared.usageStatRows)
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: "clock.fill")
-                        .foregroundColor(.accentColor)
-                        .accessibilityHidden(true)
-                    Text("Total recording time")
-                    Spacer()
-                    Text(formatDuration(statistics.totalDurationSeconds))
-                        .fontWeight(.semibold)
-                        .monospacedDigit()
-                }
-                .accessibilityElement(children: .combine)
-
-                Divider()
-
-                usageRow(
-                    icon: "mic.fill",
-                    label: "Voice dictation",
-                    duration: statistics.voiceDurationSeconds,
-                    color: Color("BrandAccentDeep")
-                )
-                usageRow(
-                    icon: "globe",
-                    label: "Translation",
-                    duration: statistics.translationDurationSeconds,
-                    color: .green
-                )
-                usageRow(
-                    icon: "person.3.fill",
-                    label: "Meetings",
-                    duration: statistics.meetingDurationSeconds,
-                    color: .orange
-                )
-                usageRow(
-                    icon: "doc.fill",
-                    label: String(localized: "Imported files"),
-                    duration: statistics.importedFileDurationSeconds,
-                    color: .brown
-                )
-                usageRow(
-                    icon: "play.rectangle.fill",
-                    label: String(localized: "YouTube"),
-                    duration: statistics.youtubeDurationSeconds,
-                    color: .red
-                )
-
-                Divider()
-
-                HStack {
-                    Image(systemName: "number")
-                        .foregroundColor(.secondary)
-                        .accessibilityHidden(true)
-                    Text("Total recordings")
-                    Spacer()
-                    Text("\(statistics.recordingCount)")
-                        .fontWeight(.semibold)
-                        .monospacedDigit()
-                }
-                .accessibilityElement(children: .combine)
+            usageRow(label: "Total recording time", duration: statistics.totalDurationSeconds)
+            usageRow(label: "Voice dictation", duration: statistics.voiceDurationSeconds)
+            usageRow(label: "Translation", duration: statistics.translationDurationSeconds)
+            usageRow(label: "Meetings", duration: statistics.meetingDurationSeconds)
+            usageRow(label: "Imported files", duration: statistics.importedFileDurationSeconds)
+            usageRow(label: "YouTube", duration: statistics.youtubeDurationSeconds)
+            SettingsLineRow(
+                title: "Total recordings",
+                caption: "Recording time is tracked locally. This data will be used to show how much time Diduny has saved you.",
+                showsHairline: false
+            ) {
+                Text("\(statistics.recordingCount)")
+                    .font(DS.Font.body)
+                    .foregroundStyle(DS.Palette.secondary)
+                    .monospacedDigit()
             }
-
-            Text(
-                "Recording time is tracked locally. This data will be used to show how much time Diduny has saved you."
-            )
-            .font(.caption)
-            .foregroundColor(.secondary)
         }
     }
 
-    private func usageRow(icon: String, label: String, duration: TimeInterval, color: Color) -> some View {
-        HStack {
-            Image(systemName: icon)
-                .foregroundColor(color)
-                .frame(width: 16)
-                .accessibilityHidden(true)
-            Text(LocalizedStringKey(label))
-                .foregroundColor(.secondary)
-            Spacer()
+    private func usageRow(label: LocalizedStringKey, duration: TimeInterval) -> some View {
+        SettingsLineRow(title: label) {
             Text(formatDuration(duration))
+                .font(DS.Font.body)
+                .foregroundStyle(DS.Palette.secondary)
                 .monospacedDigit()
-                .foregroundColor(.secondary)
         }
-        .accessibilityElement(children: .combine)
     }
 
     private func formatDuration(_ seconds: TimeInterval) -> String {

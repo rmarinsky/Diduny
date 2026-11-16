@@ -35,39 +35,30 @@ struct NotesSettingsView: View {
     }
 
     private var content: some View {
-            VStack(alignment: .leading, spacing: DS.Space.xl) {
-                whoSection
-                switch group {
-                case .local: LocalModelSection()
-                case .subscription: SubscriptionSection()
-                case .cloud, .off: EmptyView()
-                }
-                if group == .local || group == .subscription {
-                    TestSection()
-                    EarlierRecordingsSection()
-                }
-                whenSection
-                contentsSection
-                checkingSection
-                Text("The model only reads the transcript and writes text. Claude Code, Codex and Gemini CLI run with their tools, plugins and file access off, in an empty folder.")
-                    .font(DS.Font.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            whoSection
+            whenSection
+            contentsSection
+            checkingSection
+            Text("The model only reads the transcript and writes text. Claude Code, Codex and Gemini CLI run with their tools, plugins and file access off, in an empty folder.")
+                .font(DS.Font.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, DS.Space.md)
+        }
     }
 
     // MARK: - Who writes the notes
 
     private var whoSection: some View {
-        SettingsGroup(title: "Who writes the notes") {
-            VStack(alignment: .leading, spacing: DS.Space.md) {
-                radio(.local, "A model on this Mac", "The transcript stays on this Mac.")
-                radio(.subscription, "An AI subscription you already have",
-                      "Claude, ChatGPT or Gemini, through their app on this Mac. The transcript is sent to that company under your account.")
-                radio(.cloud, "Diduny cloud", "Not available yet.", disabled: true)
-                radio(.off, "Nobody", "The Notes block is hidden in recordings.")
-            }
-            .padding(DS.Space.lg)
+        AudioSettingsGroup(title: "Who writes the notes") {
+            radio(.local, "A model on this Mac", "The transcript stays on this Mac.")
+            if group == .local { NestedRows { LocalModelRows() } }
+            radio(.subscription, "An AI subscription you already have",
+                  "Claude, ChatGPT or Gemini, through their app on this Mac. The transcript is sent to that company under your account.")
+            if group == .subscription { NestedRows { SubscriptionRows() } }
+            radio(.cloud, "Diduny cloud", "Not available yet.", disabled: true)
+            radio(.off, "Nobody", "The Notes block is hidden in recordings.")
         }
         .onChange(of: group) { _, value in NotesSettings.group = value }
     }
@@ -81,32 +72,31 @@ struct NotesSettingsView: View {
     // MARK: - When
 
     private var whenSection: some View {
-        SettingsGroup(title: "When") {
-            SettingRow(title: "Write notes for a meeting") {
+        AudioSettingsGroup(title: "When") {
+            SettingsLineRow(title: "Write notes for a meeting", kind: .popUp) {
                 Picker("Write notes for a meeting", selection: $meetingTiming) {
                     ForEach(NotesMeetingTiming.allCases) { Text($0.label).tag($0) }
                 }
                 .labelsHidden().fixedSize()
             }
-            RowSeparator()
-            SettingRow(title: "Write notes for a voice note") {
+            SettingsLineRow(title: "Write notes for a voice note", kind: .popUp) {
                 Picker("Write notes for a voice note", selection: $voiceTiming) {
                     ForEach(NotesVoiceTiming.allCases) { Text($0.label).tag($0) }
                 }
                 .labelsHidden().fixedSize()
             }
-            RowSeparator()
-            SettingRow(title: "Wait for the power adapter", subtitle: "On battery, notes wait in the queue.") {
-                Toggle("Wait for the power adapter", isOn: $waitForPower).labelsHidden().toggleStyle(.switch)
+            SettingsLineRow(title: "Wait for the power adapter", caption: "On battery, notes wait in the queue.", kind: .toggle) {
+                SettingsSwitch(title: "Wait for the power adapter", isOn: $waitForPower)
             }
-            RowSeparator()
-            SettingRow(title: "Tell me when the notes are ready") {
-                Toggle("Tell me when the notes are ready", isOn: $notify).labelsHidden().toggleStyle(.switch)
+            SettingsLineRow(title: "Tell me when the notes are ready", kind: .toggle) {
+                SettingsSwitch(title: "Tell me when the notes are ready", isOn: $notify)
             }
-            RowSeparator()
-            Text("Writing always stops while you record, and continues afterwards. Automatic notes cover recordings made after you turn them on.")
-                .font(DS.Font.callout).foregroundStyle(.secondary)
-                .padding(DS.Space.lg)
+            LineRow(showsHairline: false) {
+                Text("Writing always stops while you record, and continues afterwards. Automatic notes cover recordings made after you turn them on.")
+                    .font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .onChange(of: meetingTiming) { _, value in NotesSettings.meetingTiming = value }
         .onChange(of: voiceTiming) { _, value in NotesSettings.voiceTiming = value }
@@ -120,15 +110,14 @@ struct NotesSettingsView: View {
     // MARK: - What the notes contain
 
     private var contentsSection: some View {
-        SettingsGroup(title: "What the notes contain") {
-            SettingRow(title: "Template", subtitle: "For meetings. You can pick another one for a single recording.") {
+        AudioSettingsGroup(title: "What the notes contain") {
+            SettingsLineRow(title: "Template", caption: "For meetings. You can pick another one for a single recording.", kind: .popUp) {
                 Picker("Template", selection: $template) {
                     ForEach([NotesTemplate.meeting, .oneOnOne, .interview]) { Text($0.label).tag($0) }
                 }
                 .labelsHidden().fixedSize()
             }
-            RowSeparator()
-            SettingRow(title: "Sections") {
+            SettingsLineRow(title: "Sections") {
                 HStack(spacing: DS.Space.md) {
                     ForEach(NotesSection.allCases) { section in
                         Toggle(section.label, isOn: Binding(
@@ -139,29 +128,24 @@ struct NotesSettingsView: View {
                     }
                 }
             }
-            RowSeparator()
-            SettingRow(title: "Language of the notes") {
+            SettingsLineRow(title: "Language of the notes", kind: .popUp) {
                 Picker("Language of the notes", selection: $language) {
                     ForEach(NotesLanguage.allCases) { Text($0.label).tag($0) }
                 }
                 .labelsHidden().fixedSize()
             }
-            RowSeparator()
-            SettingRow(title: "Length") {
+            SettingsLineRow(title: "Length", kind: .segmented) {
                 Picker("Length", selection: $length) {
                     ForEach(NotesLength.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
             }
-            RowSeparator()
-            SettingRow(title: "Use names from the calendar event", subtitle: "Attendee names help the model spell people correctly.") {
-                Toggle("Use names from the calendar event", isOn: $useCalendarNames).labelsHidden().toggleStyle(.switch)
+            SettingsLineRow(title: "Use names from the calendar event", caption: "Attendee names help the model spell people correctly.", kind: .toggle) {
+                SettingsSwitch(title: "Use names from the calendar event", isOn: $useCalendarNames)
             }
-            RowSeparator()
-            SettingRow(title: "Names and terms", subtitle: "Words the model must spell this way, separated by commas.") {
+            SettingsLineRow(title: "Names and terms", caption: "Words the model must spell this way, separated by commas.") {
                 TextField("Names and terms", text: $terms).labelsHidden().frame(width: 260)
             }
-            RowSeparator()
             promptEditor
         }
         .onChange(of: template) { _, value in
@@ -176,38 +160,40 @@ struct NotesSettingsView: View {
     }
 
     private var promptEditor: some View {
-        VStack(alignment: .leading, spacing: DS.Space.sm) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Instructions for the model").font(DS.Font.body)
-                    Text(NotesSettings.customPrompt(for: promptTemplate) != nil
-                        ? "Changed by you. Test it on a recording before you rely on it."
-                        : "Default for the \(promptTemplate.label) template. Language, people and terms are filled in from the rows above.")
-                        .font(DS.Font.callout).foregroundStyle(.secondary)
+        LineRow(showsHairline: false) {
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Instructions for the model").font(DS.Font.body)
+                        Text(NotesSettings.customPrompt(for: promptTemplate) != nil
+                            ? "Changed by you. Test it on a recording before you rely on it."
+                            : "Default for the \(promptTemplate.label) template. Language, people and terms are filled in from the rows above.")
+                            .font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+                    }
+                    Spacer()
+                    Picker("Template", selection: $promptTemplate) {
+                        ForEach(NotesTemplate.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden().fixedSize()
                 }
-                Spacer()
-                Picker("Template", selection: $promptTemplate) {
-                    ForEach(NotesTemplate.allCases) { Text($0.label).tag($0) }
+                TextEditor(text: $prompt)
+                    .font(DS.Font.body)
+                    .frame(minHeight: 220)
+                    .scrollContentBackground(.hidden)
+                    .padding(DS.Space.xs)
+                    .background(DS.Palette.cardFill)
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(DS.Palette.cardBorder))
+                HStack {
+                    Button("Restore the default") {
+                        NotesSettings.setCustomPrompt(nil, for: promptTemplate)
+                        prompt = promptTemplate.defaultPrompt
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(NotesSettings.customPrompt(for: promptTemplate) == nil)
+                    Spacer()
                 }
-                .labelsHidden().fixedSize()
-            }
-            TextEditor(text: $prompt)
-                .font(DS.Font.body)
-                .frame(minHeight: 220)
-                .scrollContentBackground(.hidden)
-                .padding(DS.Space.xs)
-                .background(DS.Palette.cardFill)
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(DS.Palette.cardBorder))
-            HStack {
-                Button("Restore the default") {
-                    NotesSettings.setCustomPrompt(nil, for: promptTemplate)
-                    prompt = promptTemplate.defaultPrompt
-                }
-                .disabled(NotesSettings.customPrompt(for: promptTemplate) == nil)
-                Spacer()
             }
         }
-        .padding(DS.Space.lg)
         .onChange(of: promptTemplate) { _, value in prompt = NotesSettings.prompt(for: value) }
         .onChange(of: prompt) { _, value in
             NotesSettings.setCustomPrompt(value == promptTemplate.defaultPrompt ? nil : value, for: promptTemplate)
@@ -217,27 +203,31 @@ struct NotesSettingsView: View {
     // MARK: - Checking the notes
 
     private var checkingSection: some View {
-        SettingsGroup(title: "Checking the notes") {
-            SettingRow(title: "Check decisions and action items against the transcript",
-                       subtitle: "After writing, the model reads each item again with the transcript. Items the transcript does not support are removed and listed under the notes. Takes longer.") {
-                Toggle("Check against the transcript", isOn: $check).labelsHidden().toggleStyle(.switch)
+        AudioSettingsGroup(title: "Checking the notes") {
+            SettingsLineRow(title: "Check decisions and action items against the transcript",
+                            caption: "After writing, the model reads each item again with the transcript. Items the transcript does not support are removed and listed under the notes. Takes longer.",
+                            kind: .toggle) {
+                SettingsSwitch(title: "Check against the transcript", isOn: $check)
             }
-            RowSeparator()
-            SettingRow(title: "Show where each item was said",
-                       subtitle: "A time next to the item plays the recording from that place.") {
-                Toggle("Show where each item was said", isOn: $showTimes).labelsHidden().toggleStyle(.switch)
+            SettingsLineRow(title: "Show where each item was said",
+                            caption: "A time next to the item plays the recording from that place.",
+                            kind: .toggle) {
+                SettingsSwitch(title: "Show where each item was said", isOn: $showTimes)
             }
-            RowSeparator()
-            SettingRow(title: "When nobody was named for a task") {
+            SettingsLineRow(title: "When nobody was named for a task", kind: .popUp) {
                 Picker("When nobody was named for a task", selection: $noOwner) {
                     ForEach(NotesNoOwner.allCases) { Text($0.label).tag($0) }
                 }
                 .labelsHidden().fixedSize()
             }
-            RowSeparator()
-            SettingRow(title: "Mark names that are not in the calendar event or the terms",
-                       subtitle: "They are often misheard words.") {
-                Toggle("Mark unknown names", isOn: $markNames).labelsHidden().toggleStyle(.switch)
+            SettingsLineRow(title: "Mark names that are not in the calendar event or the terms",
+                            caption: "They are often misheard words.",
+                            kind: .toggle, showsHairline: group == .local || group == .subscription) {
+                SettingsSwitch(title: "Mark unknown names", isOn: $markNames)
+            }
+            if group == .local || group == .subscription {
+                TestRows()
+                EarlierRecordingsRows()
             }
         }
         .onChange(of: check) { _, value in NotesSettings.checkAgainstTranscript = value }
@@ -247,7 +237,31 @@ struct NotesSettingsView: View {
     }
 }
 
-/// A radio button with a title and an explanation under it.
+/// A row in the Settings line style (spec 4.10) for content that is not a label and a control:
+/// 9 pt above and below, 1 pt hairline under it.
+private struct LineRow<Content: View>: View {
+    var showsHairline = true
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            content().padding(.vertical, 9)
+            if showsHairline { Rectangle().fill(DS.Palette.line).frame(height: 1) }
+        }
+    }
+}
+
+/// The settings of the chosen writer, indented under its radio row.
+private struct NestedRows<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) { content() }
+            .padding(.leading, DS.Space.xl)
+    }
+}
+
+/// A radio button with a title and an explanation under it, in the Settings line style.
 private struct RadioRow: View {
     let isOn: Bool
     let title: LocalizedStringKey
@@ -255,27 +269,30 @@ private struct RadioRow: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(alignment: .firstTextBaseline, spacing: DS.Space.sm) {
-                Image(systemName: isOn ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(isOn ? DS.Palette.accent : .secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(DS.Font.body)
-                    Text(subtitle).font(DS.Font.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        LineRow {
+            Button(action: action) {
+                HStack(alignment: .center, spacing: DS.Space.md) {
+                    Image(systemName: isOn ? "largecircle.fill.circle" : "circle")
+                        .foregroundStyle(isOn ? DS.Palette.accent : .secondary)
+                        .frame(width: 16)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title).font(DS.Font.body).foregroundStyle(DS.Palette.text)
+                        Text(subtitle).font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(isOn ? [.isSelected] : [])
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isOn ? [.isSelected] : [])
     }
 }
 
 // MARK: - Model on this Mac
 
-private struct LocalModelSection: View {
+private struct LocalModelRows: View {
     @State private var server = NotesSettings.localServer
     @State private var address = ""
     @State private var model = ""
@@ -284,35 +301,34 @@ private struct LocalModelSection: View {
     @State private var checking = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Space.sm) {
-            SettingsGroup(title: "Model on this Mac") {
-                SettingRow(title: "Server") {
-                    Picker("Server", selection: $server) {
-                        ForEach(NotesWriterKind.localServers) { Text($0.label).tag($0) }
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsLineRow(title: "Server", kind: .popUp) {
+                Picker("Server", selection: $server) {
+                    ForEach(NotesWriterKind.localServers) { Text($0.label).tag($0) }
+                }
+                .labelsHidden().fixedSize()
+            }
+            if server == .openAICompatible {
+                SettingsLineRow(title: "Address") {
+                    TextField("Address", text: $address).labelsHidden().frame(width: 240)
+                        .onSubmit { NotesSettings.setAddress(address, for: server); Task { await refresh() } }
+                }
+            }
+            statusRow
+            if running == true, !models.isEmpty {
+                SettingsLineRow(title: "Model", caption: memoryNote, kind: .popUp) {
+                    Picker("Model", selection: $model) {
+                        ForEach(models, id: \.name) { Text(Self.label($0)).tag($0.name) }
                     }
                     .labelsHidden().fixedSize()
                 }
-                if server == .openAICompatible {
-                    RowSeparator()
-                    SettingRow(title: "Address") {
-                        TextField("Address", text: $address).labelsHidden().frame(width: 240)
-                            .onSubmit { NotesSettings.setAddress(address, for: server); Task { await refresh() } }
-                    }
-                }
-                RowSeparator()
-                statusRow
-                if running == true, !models.isEmpty {
-                    RowSeparator()
-                    SettingRow(title: "Model", subtitle: memoryNote) {
-                        Picker("Model", selection: $model) {
-                            ForEach(models, id: \.name) { Text(Self.label($0)).tag($0.name) }
-                        }
-                        .labelsHidden().fixedSize()
-                    }
-                }
             }
-            Text("A long meeting is read in parts, so its length has no limit. Models smaller than 4B often miss names and decisions.")
-                .font(DS.Font.callout).foregroundStyle(.secondary)
+            LineRow {
+                Text("A long meeting is read in parts, so its length has no limit. Models smaller than 4B often miss names and decisions.")
+                    .font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .task(id: server) { await refresh() }
         .onChange(of: server) { _, value in NotesSettings.localServer = value }
@@ -321,7 +337,7 @@ private struct LocalModelSection: View {
 
     @ViewBuilder
     private var statusRow: some View {
-        HStack(alignment: .center, spacing: DS.Space.lg) {
+        LineRow { HStack(alignment: .center, spacing: DS.Space.lg) {
             VStack(alignment: .leading, spacing: 2) {
                 switch running {
                 case nil:
@@ -339,12 +355,10 @@ private struct LocalModelSection: View {
             }
             Spacer(minLength: DS.Space.lg)
             if running == false, let page = server.downloadPage {
-                Button("Open \(page.host ?? "")") { NSWorkspace.shared.open(page) }
+                Button("Open \(page.host ?? "")") { NSWorkspace.shared.open(page) }.buttonStyle(.bordered)
             }
-            Button("Check again") { Task { await refresh() } }.disabled(checking)
-        }
-        .padding(.vertical, DS.Space.md)
-        .padding(.horizontal, DS.Space.lg)
+            Button("Check again") { Task { await refresh() } }.buttonStyle(.bordered).disabled(checking)
+        } }
     }
 
     private var memoryNote: LocalizedStringKey? {
@@ -378,27 +392,25 @@ private struct LocalModelSection: View {
 // MARK: - Your subscription
 
 /// One radio list: the chosen tool's own settings open under it.
-private struct SubscriptionSection: View {
+private struct SubscriptionRows: View {
     @State private var tool = NotesSettings.subscriptionTool
     @State private var refresh = 0
 
     var body: some View {
-        SettingsGroup(title: "Your subscription") {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach([NotesWriterKind.claudeCode, .codex, .gemini], id: \.self) { kind in
                 CLIToolRow(kind: kind, selected: $tool)
-                RowSeparator()
             }
             APIKeyRows(selected: $tool)
-            RowSeparator()
-            HStack(spacing: DS.Space.lg) {
-                Text("Diduny finds these apps on this Mac and never sees your password. It uses one only after you allow it.")
-                    .font(DS.Font.callout).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: DS.Space.lg)
-                Button("Look again") { refresh += 1 }
+            LineRow {
+                HStack(spacing: DS.Space.lg) {
+                    Text("Diduny finds these apps on this Mac and never sees your password. It uses one only after you allow it.")
+                        .font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: DS.Space.lg)
+                    Button("Look again") { refresh += 1 }.buttonStyle(.bordered)
+                }
             }
-            .padding(.vertical, DS.Space.md)
-            .padding(.horizontal, DS.Space.lg)
         }
         .id(refresh)
         .onChange(of: tool) { _, value in NotesSettings.subscriptionTool = value }
@@ -411,8 +423,7 @@ private struct ToolDetail<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.sm) { content() }
-            .padding(.leading, DS.Space.lg + 16 + DS.Space.md)
-            .padding(.trailing, DS.Space.lg)
+            .padding(.leading, 16 + DS.Space.md)
             .padding(.bottom, DS.Space.md)
     }
 }
@@ -474,7 +485,7 @@ private struct CLIToolRow: View {
     private var isSelected: Bool { selected == kind && isApproved }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        LineRow { VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: DS.Space.md) {
                 // A button, so the writer can be chosen with the keyboard and VoiceOver.
                 Button { selected = kind } label: {
@@ -484,8 +495,8 @@ private struct CLIToolRow: View {
                             .opacity(isApproved ? 1 : 0.4)
                             .frame(width: 16)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(kind.label).font(DS.Font.body)
-                            Text(status).font(DS.Font.callout).foregroundStyle(.secondary)
+                            Text(kind.label).font(DS.Font.body).foregroundStyle(DS.Palette.text)
+                            Text(status).font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: DS.Space.lg)
@@ -498,24 +509,24 @@ private struct CLIToolRow: View {
                 if !searched {
                     ProgressView().controlSize(.small)
                 } else if path == nil {
-                    Button("Choose its location...") { chooseLocation() }
+                    Button("Choose its location...") { chooseLocation() }.buttonStyle(.bordered)
                 } else if isApproved {
                     Button("Take back") {
                         NotesSettings.revokeApproval(kind)
                         approvedPath = ""
                     }
+                    .buttonStyle(.bordered)
                 } else {
-                    Button("Allow...") { askingApproval = true }
+                    Button("Allow...") { askingApproval = true }.buttonStyle(.bordered)
                 }
             }
-            .padding(.vertical, DS.Space.md)
-            .padding(.horizontal, DS.Space.lg)
             if isSelected, kind != .gemini {
                 ToolDetail {
                     DetailLine(label: "Model", note: "Counts toward your \(kind.label) plan.") { ModelTierPicker(kind: kind) }
                 }
+                .padding(.top, DS.Space.sm)
             }
-        }
+        } }
         .task { await locate() }
         .alert("Allow \(kind.label) to write notes?", isPresented: $askingApproval) {
             Button("Allow") {
@@ -584,20 +595,18 @@ private struct APIKeyRows: View {
     @State private var model = NotesSettings.model(for: .apiKey)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        LineRow { VStack(alignment: .leading, spacing: 0) {
             Button { selected = .apiKey } label: {
                 HStack(alignment: .center, spacing: DS.Space.md) {
                     Image(systemName: selected == .apiKey ? "largecircle.fill.circle" : "circle")
                         .foregroundStyle(selected == .apiKey ? DS.Palette.accent : .secondary)
                         .frame(width: 16)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("API key").font(DS.Font.body)
-                        Text("Paid per use, not by a plan.").font(DS.Font.callout).foregroundStyle(.secondary)
+                        Text("API key").font(DS.Font.body).foregroundStyle(DS.Palette.text)
+                        Text("Paid per use, not by a plan.").font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
                     }
                     Spacer(minLength: DS.Space.lg)
                 }
-                .padding(.vertical, DS.Space.md)
-                .padding(.horizontal, DS.Space.lg)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -636,8 +645,9 @@ private struct APIKeyRows: View {
                         }
                     }
                 }
+                .padding(.top, DS.Space.sm)
             }
-        }
+        } }
         .onChange(of: provider) { _, value in NotesSettings.apiProvider = value }
         .onChange(of: address) { _, value in NotesSettings.apiAddress = value }
         .onChange(of: model) { _, value in NotesSettings.setModel(value, for: .apiKey) }
@@ -654,7 +664,7 @@ private struct APIKeyRows: View {
 // MARK: - Test
 
 /// Runs the chosen writer on one recording; the notes are saved to that recording.
-private struct TestSection: View {
+private struct TestRows: View {
     @State private var library = RecordingsLibraryStorage.shared
     @State private var service = NotesService.shared
     @State private var recordingID: UUID?
@@ -666,34 +676,35 @@ private struct TestSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Space.sm) {
-            SettingsGroup(title: "Test") {
+        VStack(alignment: .leading, spacing: 0) {
+            LineRow {
                 HStack(alignment: .center, spacing: DS.Space.lg) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Write test notes for one recording").font(DS.Font.body)
+                        Text("Write test notes for one recording").font(DS.Font.body).foregroundStyle(DS.Palette.text)
                         status
                     }
                     Spacer(minLength: DS.Space.lg)
                     if let recordingID, service.isBusy(recordingID) {
-                        Button("Cancel") { service.cancel(recordingID) }
+                        Button("Cancel") { service.cancel(recordingID) }.buttonStyle(.bordered)
                     } else {
                         Button("Write test notes") { if let recordingID { service.write(recordingID, kind: kind) } }
+                            .buttonStyle(.bordered)
                             .disabled(recordingID == nil || kind == .off)
                     }
                 }
-                .padding(.vertical, DS.Space.md)
-                .padding(.horizontal, DS.Space.lg)
-                RowSeparator()
-                SettingRow(title: "Recording") {
-                    Picker("Recording", selection: $recordingID) {
-                        ForEach(candidates) { Text(Self.label($0)).tag(Optional($0.id)) }
-                    }
-                    .labelsHidden()
-                    .frame(maxWidth: 380)
-                }
             }
-            Text("The test saves the notes to that recording, so you can open and read them.")
-                .font(DS.Font.callout).foregroundStyle(.secondary)
+            SettingsLineRow(title: "Recording", kind: .popUp) {
+                Picker("Recording", selection: $recordingID) {
+                    ForEach(candidates) { Text(Self.label($0)).tag(Optional($0.id)) }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 380)
+            }
+            LineRow {
+                Text("The test saves the notes to that recording, so you can open and read them.")
+                    .font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .onAppear { if recordingID == nil { recordingID = candidates.first?.id } }
     }
@@ -740,7 +751,7 @@ private struct TestSection: View {
 
 // MARK: - Earlier recordings
 
-private struct EarlierRecordingsSection: View {
+private struct EarlierRecordingsRows: View {
     enum Range: String, CaseIterable, Identifiable {
         case days30, days90, all
         var id: String { rawValue }
@@ -777,16 +788,17 @@ private struct EarlierRecordingsSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Space.sm) {
-            SettingsGroup(title: "Earlier recordings") {
-                if let state = service.backfill {
-                    progress(state)
-                } else {
-                    setup
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            if let state = service.backfill {
+                progress(state)
+            } else {
+                setup
             }
-            Text("New notes appear in Notes as they are written. Recordings that already have notes are left as they are.")
-                .font(DS.Font.callout).foregroundStyle(.secondary)
+            LineRow {
+                Text("New notes appear in Notes as they are written. Recordings that already have notes are left as they are.")
+                    .font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .alert(confirmTitle, isPresented: $confirming) {
             Button("Start") { service.startBackfill(selection.map(\.id)) }
@@ -800,45 +812,41 @@ private struct EarlierRecordingsSection: View {
     private var setup: some View {
         let meetings = service.recordingsWithoutNotes(meetingsOnly: true, since: nil).count
         let all = service.recordingsWithoutNotes(meetingsOnly: false, since: nil).count
-        SettingRow(title: "\(meetings) meetings and \(all - meetings) voice notes have no notes") { EmptyView() }
-        RowSeparator()
-        SettingRow(title: "Which recordings") {
+        SettingsLineRow(title: "\(meetings) meetings and \(all - meetings) voice notes have no notes") { EmptyView() }
+        SettingsLineRow(title: "Which recordings", kind: .popUp) {
             Picker("Which recordings", selection: $meetingsOnly) {
                 Text("Meetings, \(meetings)").tag(true)
                 Text("Meetings and voice notes, \(all)").tag(false)
             }
             .labelsHidden().fixedSize()
         }
-        RowSeparator()
-        SettingRow(title: "From") {
+        SettingsLineRow(title: "From", kind: .popUp) {
             Picker("From", selection: $range) {
                 ForEach(Range.allCases) { Text($0.label).tag($0) }
             }
             .labelsHidden().fixedSize()
         }
-        RowSeparator()
-        SettingRow(title: "Order") {
+        SettingsLineRow(title: "Order", kind: .popUp) {
             Picker("Order", selection: $oldestFirst) {
                 Text("Newest first").tag(false)
                 Text("Oldest first").tag(true)
             }
             .labelsHidden().fixedSize()
         }
-        RowSeparator()
-        HStack(spacing: DS.Space.lg) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("How long it takes").font(DS.Font.body)
-                Text(estimate).font(DS.Font.callout).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        LineRow {
+            HStack(spacing: DS.Space.lg) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("How long it takes").font(DS.Font.body).foregroundStyle(DS.Palette.text)
+                    Text(estimate).font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: DS.Space.lg)
+                Button("Write notes for \(selection.count) recordings") { confirming = true }
+                    .buttonStyle(.borderedProminent)
+                    .tint(DS.Palette.accent)
+                    .disabled(selection.isEmpty || kind == .off)
             }
-            Spacer(minLength: DS.Space.lg)
-            Button("Write notes for \(selection.count) recordings") { confirming = true }
-                .buttonStyle(.borderedProminent)
-                .tint(DS.Palette.accent)
-                .disabled(selection.isEmpty || kind == .off)
         }
-        .padding(.vertical, DS.Space.md)
-        .padding(.horizontal, DS.Space.lg)
     }
 
     private var totalMinutes: Double {
@@ -850,7 +858,7 @@ private struct EarlierRecordingsSection: View {
             return String(localized: "Run a test first to see an estimate. Writing stops while you record.")
         }
         let seconds = Int(rate * totalMinutes)
-        return String(localized: "About \(TestSection.duration(seconds)), based on your last test. Writing stops while you record.")
+        return String(localized: "About \(TestRows.duration(seconds)), based on your last test. Writing stops while you record.")
     }
 
     private var confirmTitle: String {
@@ -873,7 +881,7 @@ private struct EarlierRecordingsSection: View {
 
     @ViewBuilder
     private func progress(_ state: NotesService.Backfill) -> some View {
-        VStack(alignment: .leading, spacing: DS.Space.sm) {
+        LineRow { VStack(alignment: .leading, spacing: DS.Space.sm) {
             HStack {
                 Text(title(state)).font(DS.Font.body).monospacedDigit()
                 Spacer()
@@ -883,10 +891,8 @@ private struct EarlierRecordingsSection: View {
                 .tint(DS.Palette.accent)
             Text(detail(state)).font(DS.Font.callout).foregroundStyle(state.pauseReason == nil ? Color.secondary : Color.red)
                 .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(DS.Space.lg)
-        RowSeparator()
-        HStack(spacing: DS.Space.sm) {
+        } }
+        LineRow { HStack(spacing: DS.Space.sm) {
             if !state.failed.isEmpty {
                 Text("\(state.failed.count) failed.").font(DS.Font.callout).foregroundStyle(.secondary)
                 Button(showFailed ? "Hide" : "Show") { showFailed.toggle() }.buttonStyle(.link).font(DS.Font.callout)
@@ -901,19 +907,15 @@ private struct EarlierRecordingsSection: View {
                 }
                 Button("Stop") { service.stopBackfill() }
             }
-        }
-        .padding(.vertical, DS.Space.md)
-        .padding(.horizontal, DS.Space.lg)
+        } }
         if showFailed, !state.failed.isEmpty {
-            RowSeparator()
-            VStack(alignment: .leading, spacing: DS.Space.xs) {
+            LineRow { VStack(alignment: .leading, spacing: DS.Space.xs) {
                 ForEach(Array(state.failed.keys), id: \.self) { id in
                     let title = library.recordings.first { $0.id == id }?.displayTitle ?? String(localized: "Deleted recording")
                     Text("\(title): \(state.failed[id] ?? "")").font(DS.Font.callout).foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-            }
-            .padding(DS.Space.lg)
+            } }
         }
     }
 
@@ -928,7 +930,7 @@ private struct EarlierRecordingsSection: View {
         let left = state.total - state.done
         guard !state.paused, state.done > 0 else { return String(localized: "\(left) left") }
         let perItem = Date().timeIntervalSince(state.startedAt) / Double(state.done)
-        return String(localized: "About \(TestSection.duration(Int(perItem * Double(left)))) left")
+        return String(localized: "About \(TestRows.duration(Int(perItem * Double(left)))) left")
     }
 
     private func detail(_ state: NotesService.Backfill) -> String {

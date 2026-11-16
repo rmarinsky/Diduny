@@ -17,7 +17,6 @@ enum MainSection: String, CaseIterable, Hashable {
     /// Label "Audio"; the raw value stays so `section.audioDictation` is stable.
     case audioDictation
     case meetings
-    case notesSettings
     case models
     case providers
     case account
@@ -31,7 +30,7 @@ enum MainSection: String, CaseIterable, Hashable {
     var tabs: [MainSection] {
         switch self {
         case .typing, .typingTest: [.typing, .typingTest]
-        case .meetings, .notesSettings, .audioDictation: [.meetings, .notesSettings, .audioDictation]
+        case .meetings, .audioDictation: [.meetings, .audioDictation]
         case .models, .providers, .benchmark: [.models, .providers, .benchmark]
         default: [self]
         }
@@ -57,7 +56,6 @@ enum MainSection: String, CaseIterable, Hashable {
         case .benchmark: String(localized: "Benchmark")
         case .typingTest: String(localized: "Typing test")
         case .meetings: String(localized: "Calendar & meetings")
-        case .notesSettings: String(localized: "Notes settings")
         case .general: String(localized: "General")
         case .modes: String(localized: "Modes & shortcuts")
         case .languages: String(localized: "Languages")
@@ -80,7 +78,6 @@ enum MainSection: String, CaseIterable, Hashable {
         case .benchmark: "chart.bar.xaxis"
         case .typingTest: "keyboard"
         case .meetings: "calendar"
-        case .notesSettings: "doc.text.magnifyingglass"
         case .general: "gearshape"
         case .modes: "slider.horizontal.3"
         case .languages: "globe"

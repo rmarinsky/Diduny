@@ -25,7 +25,7 @@ struct MainSectionSidebarTests {
 
     @Test func tabsOfEachRowInOrder() {
         #expect(MainSection.typing.tabs.map(\.label) == ["Layout fixes", "Typing test"])
-        #expect(MainSection.meetings.tabs.map(\.label) == ["Calendar & meetings", "Notes settings", "Audio"])
+        #expect(MainSection.meetings.tabs.map(\.label) == ["Calendar & meetings", "Audio"])
         #expect(MainSection.models.tabs.map(\.label) == ["Local models", "Providers", "Benchmark"])
         let single: [MainSection] = [.overview, .recordings, .notes, .clipboard, .general, .modes, .languages, .vocabulary, .account, .about]
         for row in single {
@@ -52,7 +52,7 @@ struct MainSectionSidebarTests {
             .overview: .overview, .recordings: .recordings, .notes: .notes, .clipboard: .clipboard,
             .general: .general, .modes: .modes, .languages: .languages, .vocabulary: .vocabulary,
             .typing: .typing, .typingTest: .typing,
-            .meetings: .meetings, .notesSettings: .meetings, .audioDictation: .meetings,
+            .meetings: .meetings, .audioDictation: .meetings,
             .models: .models, .providers: .models, .benchmark: .models,
             .account: .account, .about: .about,
         ]

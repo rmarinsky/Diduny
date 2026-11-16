@@ -12,6 +12,7 @@ private final class StubTypingEngine: TypingEngineControlling {
     func undoLastFix() {}
     func layoutConversion(of _: String) -> TypingLayoutConversion? { nil }
     func finishLayoutConversion(_: TypingLayoutConversion) {}
+    func applyHistorySettings() {}
 }
 
 /// Settings > Typing > Layout fixes: the status row, the disabled rows and the apps list.

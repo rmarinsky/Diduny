@@ -12,6 +12,24 @@ struct BrowserCalendarSettingsView: View {
     private var browser: InstalledBrowser? { browsers.first { $0.id == browserID } }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsLineRow(
+                title: "Read a calendar from a browser",
+                caption: "For a calendar that is not in macOS Calendar, such as a work Google account",
+                kind: .toggle,
+                showsHairline: connection.enabled
+            ) {
+                SettingsSwitch(title: "Read a calendar from a browser", isOn: Binding(
+                    get: { connection.enabled },
+                    set: { connection.setEnabled($0) }))
+            }
+            if connection.enabled { details }
+        }
+        .task { await discover() }
+        .sheet(isPresented: $consent) { consentSheet }
+    }
+
+    private var details: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Browser reading uses the visible calendar tab. It is not a complete calendar subscription and does not schedule reminders. For reminders and recording links, connect macOS calendars above.")
                 .font(.callout).foregroundStyle(.secondary)
@@ -69,8 +87,9 @@ struct BrowserCalendarSettingsView: View {
                 }
             }
         }.padding(.vertical, 8)
-        .task { await discover() }
-        .sheet(isPresented: $consent) {
+    }
+
+    private var consentSheet: some View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Read this browser calendar").font(.title2.bold())
                 Text("Allow Diduny to read titles, dates, times and meeting links from this window every minute, including after restart, until you disconnect. This includes accounts you switch to in this window. The browser must remain open with the calendar tab selected.")
@@ -86,7 +105,6 @@ struct BrowserCalendarSettingsView: View {
                     }.disabled(!approved).keyboardShortcut(.defaultAction)
                 }
             }.padding(28).frame(width: 540)
-        }
     }
     private func discover() async {
         browsers = await Task.detached { InstalledBrowser.discover() }.value

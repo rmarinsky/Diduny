@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import PapugaKit
 
@@ -90,6 +91,24 @@ final class TypingEngineTests: XCTestCase {
         XCTAssertEqual(recorded, ["ghbdsn"])
     }
 
+    /// Convert shows the same "fixed" hint near the cursor as an automatic fix, without an undo click.
+    func test_convertShowsTheFixedHintUnlessHintsAreOff() {
+        for enabled in [true, false] {
+            let hints = FixToastCounter()
+            var settings = TypingSettings()
+            settings.autoFixToastEnabled = enabled
+            let engine = TypingEngine(
+                storageDirectory: directory, settings: { settings }, logSubsystem: "papugakit.tests", hintPresenter: hints
+            )
+
+            engine.finishLayoutConversion(TypingLayoutConversion(
+                original: "ghbdsn", converted: "привіт", sourceLayoutID: "test.none", targetLayoutID: "test.none"
+            ))
+
+            XCTAssertEqual(hints.clickable, enabled ? [false] : [])
+        }
+    }
+
     func test_stopWritesTheCadenceOnlyAfterAStart() {
         var gaps: [Double] = []
         let engine = TypingEngine(
@@ -108,4 +127,24 @@ final class TypingEngineTests: XCTestCase {
             XCTAssertEqual(gaps.count, 1)
         }
     }
+}
+
+@MainActor
+private final class FixToastCounter: TypingHintPresenting {
+    var clickable: [Bool] = []
+
+    func showFixToast(near _: NSPoint, onClick: (() -> Void)?) { clickable.append(onClick != nil) }
+    func showRecovery(_: TypingRecoveryHint, near _: NSPoint, onClick _: @escaping () -> Void) {}
+    func showDeferredChip(
+        original _: String, candidate _: String, near _: NSPoint, timeToLive _: TimeInterval,
+        onApply _: @escaping () -> Void, onDismiss _: @escaping () -> Void, onExpire _: @escaping () -> Void
+    ) {}
+    func dismissChip() {}
+    func dismissFixToast() {}
+    func isMouseOverToast() -> Bool { false }
+    func isMouseOverChip() -> Bool { false }
+    func showProposal(_: TypingProposalHint, near _: NSPoint, duration _: TimeInterval, actions _: TypingProposalActions) {}
+    func dismissProposal(outcome _: TypingProposalOutcome?) {}
+    func handleProposalKeyboardShortcut(keyCode _: UInt16, flags _: CGEventFlags) -> Bool { false }
+    func isMouseOverProposal() -> Bool { false }
 }

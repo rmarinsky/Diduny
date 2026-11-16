@@ -46,7 +46,7 @@ struct RecordingNotesSection: View {
                     if NotesSettings.writer == .off {
                         Text("Choose who writes the notes in Notes settings.")
                             .font(DS.Font.callout).foregroundStyle(.secondary)
-                        Button("Open Notes settings") { MainWindowController.shared.showWindow(section: .notesSettings) }
+                        Button("Open Notes settings") { MainWindowController.shared.showWindow(section: .meetings) }
                     } else {
                         Button("Write notes") { service.write(recording.id) }
                         TemplateMenu(title: "Template", recordingID: recording.id)
@@ -376,7 +376,7 @@ private struct NotesEmptyState: View {
                 Text("Notes are a short record of a meeting: summary, decisions and who does what. Choose who writes them: a model on this Mac or an AI subscription you already have.")
                     .font(DS.Font.body).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Choose who writes notes") { MainWindowController.shared.showWindow(section: .notesSettings) }
+                Button("Choose who writes notes") { MainWindowController.shared.showWindow(section: .meetings) }
                     .buttonStyle(.borderedProminent).tint(DS.Palette.accent)
                     .padding(.top, DS.Space.xs)
             } else if !waiting.isEmpty {
@@ -384,7 +384,7 @@ private struct NotesEmptyState: View {
                     .font(DS.Font.body).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: DS.Space.sm) {
-                    Button("Write notes for earlier recordings") { MainWindowController.shared.showWindow(section: .notesSettings) }
+                    Button("Write notes for earlier recordings") { MainWindowController.shared.showWindow(section: .meetings) }
                         .buttonStyle(.borderedProminent).tint(DS.Palette.accent)
                     Button("Open a recording") { MainWindowController.shared.showWindow(section: .recordings) }
                 }

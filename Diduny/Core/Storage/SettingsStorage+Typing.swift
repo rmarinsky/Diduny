@@ -22,6 +22,7 @@ extension SettingsStorage {
         case convertPair = "typing.convertPair"
         case convertPressCount = "typing.convertPressCount"
         case learnVocabulary = "typing.learnVocabulary"
+        case historyRetention = "typing.historyRetention"
     }
 
     /// "Fix as I type". Off until the user turns it on.
@@ -59,6 +60,15 @@ extension SettingsStorage {
     var typingLearnVocabulary: Bool {
         get { defaults.object(forKey: TypingKey.learnVocabulary.rawValue) as? Bool ?? true }
         set { setTyping(newValue, .learnVocabulary) }
+    }
+
+    /// How long the decision log is kept. A month until the user changes it (the engine's own default).
+    var typingHistoryRetention: ReplacementHistoryRetention {
+        get {
+            defaults.string(forKey: TypingKey.historyRetention.rawValue)
+                .flatMap(ReplacementHistoryRetention.init(rawValue:)) ?? .oneMonth
+        }
+        set { setTyping(newValue.rawValue, .historyRetention) }
     }
 
     /// "Convert the selection to the other layout": on until the user turns it off.
@@ -143,6 +153,7 @@ extension SettingsStorage {
         var seen = Set<String>()
         settings.autoFixAllowlist = (typingNeverFixWords + speechVocabularyTerms).filter { seen.insert($0.lowercased()).inserted }
         settings.customAutoReplaceRules = typingCustomReplaceRules
+        settings.replacementHistoryRetention = typingHistoryRetention.rawValue
         typingSettingsCache.value = settings
         return settings
     }

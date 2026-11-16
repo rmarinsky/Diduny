@@ -10,6 +10,8 @@ import SwiftUI
     @Published var lastAttempt: Date?
     @Published var successes = 0
     @Published var saved: SavedConnection?
+    /// The "Read a calendar from a browser" switch. Off: no read, connect or open, and no timer work.
+    @Published private(set) var enabled = false
     private let store: ConnectionStore
     private var session = SyncSession()
     private var target: BrowserTarget?
@@ -17,9 +19,11 @@ import SwiftUI
     private var timer: Timer?
     private var observer: NSObjectProtocol?
     private var connectionKey: String?
+    private let settings: SettingsStorage
 
-    init() {
-        let directory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support").appendingPathComponent(Bundle.main.bundleIdentifier ?? "Diduny").appendingPathComponent("CalendarBrowser")
+    init(directory: URL? = nil, settings: SettingsStorage = .shared) {
+        self.settings = settings
+        let directory = directory ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support").appendingPathComponent(Bundle.main.bundleIdentifier ?? "Diduny").appendingPathComponent("CalendarBrowser")
         store = ConnectionStore(directory: directory)
         do {
             saved = try store.load()
@@ -28,6 +32,7 @@ import SwiftUI
                 message = String(localized: "Connection restored. Looking for the approved calendar window…")
             }
         } catch { message = String(localized: "Could not restore the connection. Reading is paused: \(error.localizedDescription)") }
+        enabled = BrowserCalendarSetting.resolve(stored: settings.browserCalendarStored, hasSavedConnection: saved != nil)
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.read() }
         }
@@ -38,7 +43,7 @@ import SwiftUI
     }
 
     func connect(browserID: String, profileName: String) {
-        guard !busy, !connected, !profileName.isEmpty else { return }
+        guard enabled, !busy, !connected, !profileName.isEmpty else { return }
         let key = UUID().uuidString
         connectionKey = key; session.connect(source: key)
         guard let request = session.begin(source: key, now: ProcessInfo.processInfo.systemUptime, force: true) else { return }
@@ -77,7 +82,7 @@ import SwiftUI
         catch { message = String(localized: "Reading stopped, but saved consent could not be removed. It may return after restart. Retry disconnecting: \(error.localizedDescription)") }
     }
     func read(force: Bool = false) {
-        guard connected, let saved, let key = connectionKey,
+        guard enabled, connected, let saved, let key = connectionKey,
               let request = session.begin(source: key, now: ProcessInfo.processInfo.systemUptime, force: force) else { return }
         let bound = target, readAccess = ReadAccess()
         access = readAccess; busy = true; lastAttempt = Date()
@@ -94,7 +99,7 @@ import SwiftUI
         }
     }
     func openCalendar(browser: InstalledBrowser, profileID: String, url: URL) {
-        guard !busy, !connected else { return }
+        guard enabled, !busy, !connected else { return }
         let key = UUID().uuidString
         session.connect(source: key)
         guard let request = session.begin(source: key, now: ProcessInfo.processInfo.systemUptime) else { return }
@@ -116,6 +121,19 @@ import SwiftUI
                 try browser.openCalendar(url, profile: profileID.hasPrefix("menu:") ? "" : profileID)
                 message = String(localized: "Opening the calendar in the selected profile. Connect its window after loading.")
             } catch { message = error.localizedDescription }
+        }
+    }
+    /// Off stops every read and drops the in-memory result. The saved browser and profile stay.
+    func setEnabled(_ on: Bool) {
+        settings.setBrowserCalendarEnabled(on)
+        guard on != enabled else { return }
+        enabled = on
+        if on {
+            if connected, let connectionKey { session.connect(source: connectionKey) }
+            read(force: true)
+        } else {
+            access?.cancel(); access = nil; session.disconnect(); busy = false
+            target = nil; result = nil; lastAttempt = nil; successes = 0
         }
     }
     func stop() {
