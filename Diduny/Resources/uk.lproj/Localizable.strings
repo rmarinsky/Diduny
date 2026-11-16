@@ -2427,6 +2427,7 @@
 
 /* Settings > Typing (layout fixes) */
 "Typing" = "Набір тексту";
+"Typing settings" = "Налаштування набору тексту";
 "Layout fixes" = "Виправлення розкладки";
 "Fixes text typed in the wrong keyboard layout." = "Виправляє текст, набраний не в тій розкладці клавіатури.";
 "Needed to fix what you type. Not allowed yet." = "Потрібно, щоб виправляти те, що ви набираєте. Ще не дозволено.";

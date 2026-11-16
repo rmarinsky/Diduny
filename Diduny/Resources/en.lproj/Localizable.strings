@@ -2427,6 +2427,7 @@
 
 /* Settings > Typing (layout fixes) */
 "Typing" = "Typing";
+"Typing settings" = "Typing settings";
 "Layout fixes" = "Layout fixes";
 "Fixes text typed in the wrong keyboard layout." = "Fixes text typed in the wrong keyboard layout.";
 "Needed to fix what you type. Not allowed yet." = "Needed to fix what you type. Not allowed yet.";
