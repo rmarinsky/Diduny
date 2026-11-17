@@ -19,7 +19,7 @@ struct MainSectionSidebarTests {
         let labels = (MainSection.mainItems + MainSection.settingsItems).map(\.sidebarLabel)
         #expect(labels == [
             "Overview", "Recordings", "Notes", "Clipboard", "Vocabulary",
-            "General", "Modes", "Languages", "Typing", "Meetings", "Engines", "Account", "About",
+            "General", "Modes", "Languages", "Mistyping", "Meetings", "Engines", "Account", "About",
         ])
     }
 

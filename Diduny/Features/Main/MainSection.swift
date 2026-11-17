@@ -12,7 +12,7 @@ enum MainSection: String, CaseIterable, Hashable {
     case modes
     case languages
     case vocabulary
-    /// Label "Layout fixes"; the sidebar row reads "Typing".
+    /// Label "Layout fixes"; the sidebar row reads "Mistyping".
     case typing
     /// Label "Audio"; the raw value stays so `section.audioDictation` is stable.
     case audioDictation
@@ -43,7 +43,7 @@ enum MainSection: String, CaseIterable, Hashable {
     var sidebarLabel: String {
         switch self {
         case .modes: String(localized: "Modes")
-        case .typing: String(localized: "Typing")
+        case .typing: String(localized: "Mistyping")
         case .meetings: String(localized: "Meetings")
         case .models: String(localized: "Engines")
         default: label

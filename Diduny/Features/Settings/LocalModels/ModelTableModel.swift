@@ -137,7 +137,7 @@ enum LocalModelCatalog {
         guard let caps = capabilities(.whisper, registry, whisper: model) else { return nil }
         let posix = Locale(identifier: "en_US_POSIX")
         return LocalModelRow(
-            id: model.name, kind: .whisper(model), name: model.displayName, isRecommended: model.isRecommended,
+            id: model.name, kind: .whisper(model), name: "Whisper \(model.displayName)", isRecommended: model.isRecommended,
             live: live(caps), translation: translation(caps),
             translatesItself: caps.dictationTranslation != .byDiduny,
             languages: model.isEnglishOnly ? .englishOnly : languages(caps.traits.languages),
