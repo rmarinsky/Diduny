@@ -42,10 +42,11 @@ enum MainSection: String, CaseIterable, Hashable {
     /// The sidebar row's label; `label` stays the page and tab label.
     var sidebarLabel: String {
         switch self {
-        case .modes: String(localized: "Modes")
+        case .modes: String(localized: "Modes & shortcuts")
         case .typing: String(localized: "Mistyping")
-        case .meetings: String(localized: "Meetings")
+        case .meetings: String(localized: "Calendar")
         case .models: String(localized: "Engines")
+        case .about: String(localized: "About Diduny")
         default: label
         }
     }
