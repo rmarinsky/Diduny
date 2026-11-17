@@ -22,19 +22,22 @@ enum MainSection: String, CaseIterable, Hashable {
     case account
     case about
 
-    /// Sidebar rows. A row is named by its first page; `tabs` lists the pages it holds.
+    /// Sidebar rows.
     static let mainItems: [MainSection] = [.overview, .recordings, .notes, .clipboard, .vocabulary]
     static let settingsItems: [MainSection] = [.general, .modes, .languages, .typing, .meetings, .models, .account, .about]
 
-    /// The pages that share this page's sidebar row, in tab order. One page: no switch.
-    var tabs: [MainSection] {
+    /// The page a sub-page goes back to; the sidebar shows that row selected. Nil for a sidebar row.
+    var parent: MainSection? {
         switch self {
-        case .typing, .typingTest: [.typing, .typingTest]
-        case .meetings, .audioDictation: [.meetings, .audioDictation]
-        case .models, .providers, .benchmark: [.models, .providers, .benchmark]
-        default: [self]
+        case .typingTest: .typing
+        case .audioDictation: .meetings
+        case .providers, .benchmark: .models
+        default: nil
         }
     }
+
+    /// The sidebar row this page sits under.
+    var row: MainSection { parent ?? self }
 
     /// The sidebar row's label; `label` stays the page and tab label.
     var sidebarLabel: String {

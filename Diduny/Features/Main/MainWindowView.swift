@@ -52,7 +52,7 @@ struct MainWindowView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("section.\(selectedSection.rawValue)")
                 .overlay(alignment: .topLeading) {
-                    if selectedSection.tabs.count > 1 { tabSwitch }
+                    if let parent = selectedSection.parent { backButton(to: parent) }
                 }
         }
         .background(DS.Palette.window)
@@ -85,16 +85,13 @@ struct MainWindowView: View {
         selectedSection = section
     }
 
-    /// The pages of the open sidebar row. Sits above the page title, in the window's title bar zone.
-    private var tabSwitch: some View {
-        Picker(selectedSection.tabs[0].sidebarLabel, selection: Binding(
-            get: { selectedSection },
-            set: { requestSection($0) }
-        )) {
-            ForEach(selectedSection.tabs, id: \.self) { Text($0.label).tag($0) }
+    /// "‹ Engines" on a sub-page. Sits above the page title, in the window's title bar zone.
+    private func backButton(to parent: MainSection) -> some View {
+        Button { requestSection(parent) } label: {
+            Label(parent.sidebarLabel, systemImage: "chevron.left")
         }
-        .pickerStyle(.segmented).labelsHidden().fixedSize()
-        .accessibilityIdentifier("section.tabs")
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier("section.back")
         .padding(.top, DS.Space.md)
         .padding(.leading, DS.Layout.pagePadding)
     }

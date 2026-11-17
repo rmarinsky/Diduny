@@ -23,49 +23,23 @@ struct MainSectionSidebarTests {
         ])
     }
 
-    @Test func tabsOfEachRowInOrder() {
-        #expect(MainSection.typing.tabs.map(\.label) == ["Layout fixes", "Typing test"])
-        #expect(MainSection.meetings.tabs.map(\.label) == ["Calendar & meetings", "Audio"])
-        #expect(MainSection.models.tabs.map(\.label) == ["Local models", "Providers", "Benchmark"])
-        let single: [MainSection] = [.overview, .recordings, .notes, .clipboard, .general, .modes, .languages, .vocabulary, .account, .about]
-        for row in single {
-            #expect(row.tabs == [row])
+    /// No tab bars: a sub-page has a "‹ <row>" button back to its row's page.
+    @Test func subPagesGoBackToTheirRow() {
+        #expect(MainSection.typingTest.parent == .typing)
+        #expect(MainSection.audioDictation.parent == .meetings)
+        #expect(MainSection.providers.parent == .models)
+        #expect(MainSection.benchmark.parent == .models)
+        for row in MainSection.mainItems + MainSection.settingsItems {
+            #expect(row.parent == nil)
         }
     }
 
-    /// Every page sits under exactly one sidebar row, and the pages of a row share one tab list.
+    /// Every page sits under exactly one sidebar row, which the sidebar shows selected.
     @Test func everyPageBelongsToOneRow() {
         let rows = MainSection.mainItems + MainSection.settingsItems
         #expect(Set(rows).count == rows.count)
-        #expect(Set(rows.flatMap(\.tabs)) == Set(MainSection.allCases))
-        #expect(rows.flatMap(\.tabs).count == MainSection.allCases.count)
         for page in MainSection.allCases {
-            #expect(page.tabs.contains(page))
-            #expect(rows.filter { $0 == page.tabs.first }.count == 1)
-            #expect(page.tabs.first?.tabs == page.tabs)
-        }
-    }
-
-    /// The sidebar fills the row `tabs.first`; the switch shows `tabs` with the page itself selected.
-    @Test func openingAPageSelectsItsRowAndTab() {
-        let expected: [MainSection: MainSection] = [
-            .overview: .overview, .recordings: .recordings, .notes: .notes, .clipboard: .clipboard,
-            .general: .general, .modes: .modes, .languages: .languages, .vocabulary: .vocabulary,
-            .typing: .typing, .typingTest: .typing,
-            .meetings: .meetings, .audioDictation: .meetings,
-            .models: .models, .providers: .models, .benchmark: .models,
-            .account: .account, .about: .about,
-        ]
-        #expect(expected.count == MainSection.allCases.count)
-        for (page, row) in expected {
-            #expect(page.tabs.first == row)
-        }
-    }
-
-    /// A sidebar click selects the row, which is its own first tab.
-    @Test func aRowOpensOnItsFirstTab() {
-        for row in MainSection.mainItems + MainSection.settingsItems {
-            #expect(row.tabs.first == row)
+            #expect(rows.contains(page.row))
         }
     }
 

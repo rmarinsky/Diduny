@@ -291,6 +291,9 @@ struct NotesView: View {
                     if tab == .notes { notesList } else { actionItemsList }
                 }
             }
+            // `scrolls: false` gives the content no page margins; Recordings adds the same.
+            .padding(.horizontal, DS.Layout.pagePadding)
+            .padding(.bottom, DS.Layout.pagePadding)
         }
     }
 

@@ -125,13 +125,13 @@ struct SidebarView: View {
         Button {
             selectedSection = section
         } label: {
-            SidebarRow(section: section, isSelected: selectedSection.tabs.first == section)
+            SidebarRow(section: section, isSelected: selectedSection.row == section)
         }
         .buttonStyle(.plain)
         // The window gives the first row keyboard focus on open; its ring read as a second selection.
         .focusEffectDisabled()
         .accessibilityLabel(Text(section.sidebarLabel))
-        .accessibilityValue(Text(selectedSection.tabs.first == section ? "Selected" : ""))
+        .accessibilityValue(Text(selectedSection.row == section ? "Selected" : ""))
         .accessibilityIdentifier("Sidebar \(section.sidebarLabel)")
         .help(section.sidebarLabel)
     }
