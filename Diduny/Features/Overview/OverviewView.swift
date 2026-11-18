@@ -566,7 +566,7 @@ struct OverviewView: View {
                 Button("See all ›") {
                     MainWindowController.shared.showWindow(section: .recordings)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressScale)
                 .font(DS.Font.callout)
                 .foregroundColor(Color("BrandAccentDeep"))
             }
@@ -704,7 +704,7 @@ private struct RecentRow: View {
                         .offset(x: isPlaying ? 0 : 0.5)
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressScale)
 
             Text(rowTitle)
                 .font(.system(size: 13))

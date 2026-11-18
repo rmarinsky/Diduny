@@ -398,7 +398,7 @@ struct RecordingsLibraryView: View {
                             .foregroundColor(.secondary)
                             .font(DS.Font.callout)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressScale)
                 }
             }
             .padding(.horizontal, DS.Space.md)
@@ -553,7 +553,7 @@ struct RecordingsLibraryView: View {
                             ? DS.Palette.tint : Color.clear)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressScale)
                     if index < filteredBatches.count - 1 { Divider().padding(.horizontal, 16) }
                 }
             }

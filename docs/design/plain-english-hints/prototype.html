@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plain English hints</title>
+<style>
+  /* Tokens copied from Diduny Assets.xcassets and DesignTokens.swift (DS). */
+  :root {
+    --accent: #C42A4D;          /* BrandAccentDeep */
+    --tint-soft: #FCEDF1;       /* BrandTintSoft */
+    --text: #1D1D1F;            /* labelColor */
+    --text-2: #6E6E73;          /* secondaryLabelColor */
+    --surface: #F5F5F7;         /* windowBackgroundColor */
+    --card: #FFFFFF;            /* controlBackgroundColor / textBackgroundColor */
+    --panel: #ECECEE;           /* panel material, drawn solid here */
+    --well: #E2E2E5;            /* transcript well in the panel */
+    --button: #DCDCDF;
+    --ok: #28A745;
+    --on-accent: #FFFFFF;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --accent: #E8486B;
+      --tint-soft: #3A2129;
+      --text: #F5F5F7;
+      --text-2: #98989D;
+      --surface: #1E1E1E;
+      --card: #2A2A2C;
+      --panel: #2C2C2E;
+      --well: #222224;
+      --button: #3A3A3C;
+      --ok: #32D74B;
+    }
+  }
+  :root[data-theme="dark"] {
+    --accent: #E8486B;
+    --tint-soft: #3A2129;
+    --text: #F5F5F7;
+    --text-2: #98989D;
+    --surface: #1E1E1E;
+    --card: #2A2A2C;
+    --panel: #2C2C2E;
+    --well: #222224;
+    --button: #3A3A3C;
+    --ok: #32D74B;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--text);
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .lede { color: var(--text-2); margin: 0 0 16px; max-width: 620px; }
+
+  .segmented { display: inline-flex; background: var(--button); border-radius: 7px; padding: 2px; margin-bottom: 24px; flex-wrap: wrap; }
+  .segmented button {
+    font: inherit; color: var(--text); background: transparent; border: 0;
+    padding: 4px 12px; border-radius: 5px; cursor: pointer;
+  }
+  .segmented button[aria-pressed="true"] { background: var(--card); font-weight: 600; }
+  .segmented button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .option { display: none; }
+  .option.active { display: block; }
+
+  .stage { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 24px; }
+  .notes { flex: 1 1 280px; min-width: 0; }
+  .notes h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+  .notes p, .notes ol { margin: 0 0 16px; }
+  .notes ol { padding-left: 20px; }
+  .tradeoff { color: var(--text-2); }
+  pre {
+    margin: 0 0 16px; padding: 12px; background: var(--card); border-radius: 8px;
+    font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; overflow-x: auto; white-space: pre;
+  }
+
+  /* Floating modal: LiveDictationOverlayView, 286 x 326 pt. */
+  .panel {
+    width: 286px; height: 326px; flex: 0 0 286px;
+    background: var(--panel); border-radius: 15px; padding: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  }
+  .p-head { display: flex; align-items: center; gap: 9px; }
+  .p-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); flex: none; display: grid; place-items: center; }
+  .p-icon svg { width: 12px; height: 12px; fill: var(--on-accent); }
+  .p-title { font-size: 13px; font-weight: 600; line-height: 1.2; }
+  .p-status { font-size: 12px; color: var(--ok); line-height: 1.2; }
+  .p-status.hold { color: var(--text-2); }
+  .p-well {
+    flex: 1; min-height: 0; overflow: auto; background: var(--well); border-radius: 10px;
+    padding: 11px; font-size: 12px; line-height: 1.45;
+  }
+  .p-hints { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+  .p-check { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+  .p-check input { margin: 0; accent-color: var(--accent); }
+  .p-controls { display: flex; gap: 8px; }
+  .p-btn {
+    flex: 1; height: 44px; border: 0; border-radius: 8px; font: 600 12px/1 inherit;
+    font-family: inherit; color: var(--text); background: var(--button); cursor: pointer;
+  }
+  .p-btn.primary { background: var(--accent); color: var(--on-accent); }
+  .p-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* The hint mark: dotted underline in the accent. No fill until hover or focus. */
+  mark {
+    background: transparent; color: inherit;
+    text-decoration: underline dotted var(--accent) 1.5px; text-underline-offset: 3px;
+    border-radius: 3px; cursor: default;
+  }
+  mark.on { background: var(--tint-soft); }
+  .hint-row {
+    display: flex; gap: 6px; align-items: baseline; background: transparent; border: 0; padding: 2px 4px;
+    margin: 0 -4px; border-radius: 4px; font: inherit; color: var(--text); text-align: left; cursor: pointer;
+  }
+  .hint-row:hover, .hint-row:focus-visible { background: var(--tint-soft); outline: none; }
+  .hint-row span { color: var(--text-2); }
+
+  /* Notch line, under the camera housing. */
+  .notch {
+    width: 286px; background: #000; color: #F5F5F7; border-radius: 0 0 14px 14px;
+    padding: 8px 12px; font-size: 12px; display: flex; gap: 8px; align-items: center; margin-bottom: 12px;
+  }
+  .notch .dot { width: 10px; height: 10px; border-radius: 50%; background: #32D74B; flex: none; }
+  .notch .more { color: #98989D; margin-left: auto; white-space: nowrap; }
+  .surface-label { color: var(--text-2); margin: 0 0 6px; }
+
+  /* Recordings detail, transcript card (RecordingDetailView.transcriptCard). */
+  .window { flex: 0 1 460px; min-width: 0; background: var(--surface); }
+  .card { background: var(--card); border-radius: 8px; padding: 12px; }
+  .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+  .card-title { font-size: 13px; font-weight: 600; }
+  .card-date { font-size: 12px; color: var(--text-2); }
+  .card-copy { font: 12px/1 inherit; font-family: inherit; color: var(--text); background: var(--button); border: 0; border-radius: 6px; padding: 5px 9px; cursor: pointer; white-space: nowrap; }
+  .card-text { margin: 0 0 12px; }
+  .history-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; background: var(--card); border-radius: 8px; margin-top: 12px; }
+  .history-row .meta { font-size: 12px; color: var(--text-2); }
+
+  @media (max-width: 640px) {
+    .panel, .notch { width: 100%; flex-basis: auto; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Plain English hints</h1>
+  <p class="lede">Same English dictation in each option. The text is already simplified by the server. Hover a hint or a marked sentence to link them. Ukrainian text gets no hints.</p>
+
+  <div class="segmented" role="group" aria-label="Option">
+    <button type="button" aria-pressed="true" data-target="opt1">1. After paste (recommended)</button>
+    <button type="button" aria-pressed="false" data-target="opt2">2. Later, in Recordings</button>
+    <button type="button" aria-pressed="false" data-target="opt3">3. Before paste</button>
+  </div>
+
+  <!-- Option 1 -->
+  <section class="option active" id="opt1" aria-label="Option 1">
+    <div class="stage">
+      <div>
+        <p class="surface-label">Floating modal, after paste</p>
+        <div class="panel">
+          <div class="p-head">
+            <div class="p-icon"><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="4" y="0" width="4" height="8" rx="2"/><rect x="5.25" y="9" width="1.5" height="3"/></svg></div>
+            <div><div class="p-title">Dictation</div><div class="p-status">Complete</div></div>
+          </div>
+          <div class="p-well" data-text></div>
+          <div class="p-hints" data-hints></div>
+          <label class="p-check"><input type="checkbox" checked> Paste and close automatically</label>
+          <div class="p-controls">
+            <button class="p-btn" type="button">Copy</button>
+            <button class="p-btn" type="button">Close</button>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <h2>Surface</h2>
+        <p>Floating modal (LiveDictationOverlayView, phase pasted). With the Dynamic Notch, the success line gets a count only:</p>
+        <div class="notch"><span class="dot" aria-hidden="true"></span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Please send the updated invoice to the client</span><span class="more">2 hints</span></div>
+        <h2>Flow</h2>
+        <ol>
+          <li>User dictates. Diduny pastes as now.</li>
+          <li>The panel shows the pasted text with marked sentences and one line per hint.</li>
+          <li>With auto close on, the panel stays 5 s instead of 0.8 s, and pointer hover keeps it open.</li>
+          <li>User fixes the sentence in the target app, or clicks Close.</li>
+        </ol>
+        <p class="tradeoff">Seen at the right moment with no extra step, but the text is already pasted, so the fix happens in the other app.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Option 2 -->
+  <section class="option" id="opt2" aria-label="Option 2">
+    <div class="stage">
+      <div class="window">
+        <p class="surface-label">Recordings, transcript card</p>
+        <div class="card">
+          <div class="card-head">
+            <div><div class="card-title">Cloud Transcript</div><div class="card-date">Nov 6, 2026 at 10:42</div></div>
+            <button class="card-copy" type="button">Copy Transcript</button>
+          </div>
+          <p class="card-text" data-text></p>
+          <div class="p-hints" data-hints></div>
+        </div>
+        <p class="surface-label" style="margin-top:16px">History palette row</p>
+        <div class="history-row">
+          <span>Please send the updated invoice to the client before Friday. The report was written by...</span>
+          <span class="meta">Dictation  2 min ago  2 hints</span>
+        </div>
+      </div>
+      <div class="notes">
+        <h2>Surface</h2>
+        <p>Main window, Recordings, RecordingDetailView transcript card. History palette shows the count in its meta line.</p>
+        <h2>Flow</h2>
+        <ol>
+          <li>User dictates. Paste, panel and notch do not change.</li>
+          <li>Later the user opens Recordings or the history palette.</li>
+          <li>The transcript card marks the sentences and lists the hints under the text.</li>
+          <li>User edits and resends the text by hand.</li>
+        </ol>
+        <p class="tradeoff">Never interrupts dictation, but most users never open Recordings, and the text was sent long before they see the hint.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Option 3 -->
+  <section class="option" id="opt3" aria-label="Option 3">
+    <div class="stage">
+      <div>
+        <p class="surface-label">Floating modal, paste on hold</p>
+        <div class="panel">
+          <div class="p-head">
+            <div class="p-icon"><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="4" y="0" width="4" height="8" rx="2"/><rect x="5.25" y="9" width="1.5" height="3"/></svg></div>
+            <div><div class="p-title">Dictation</div><div class="p-status hold">Not pasted yet</div></div>
+          </div>
+          <div class="p-well" data-text></div>
+          <div class="p-hints" data-hints></div>
+          <div class="p-controls">
+            <button class="p-btn" type="button">Copy</button>
+            <button class="p-btn primary" type="button">Paste</button>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <h2>Surface</h2>
+        <p>Floating modal in a new hold state. The notch cannot take clicks, so with the notch the hold opens the floating modal.</p>
+        <h2>Flow</h2>
+        <ol>
+          <li>User dictates. The response has hints, so Diduny does not paste.</li>
+          <li>The panel shows the text with marked sentences and the hints.</li>
+          <li>User clicks Paste (Return) to paste anyway, or Copy, or Esc to drop it.</li>
+          <li>Text without hints pastes as now.</li>
+        </ol>
+        <p class="tradeoff">The only option that catches the sentence before it is sent, but it adds a click to each flagged dictation and breaks auto paste and force submit.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="notes">
+    <h2>API, same for all three options</h2>
+    <p>Request adds <code>language</code>. The server returns <code>hints</code> only when <code>simplify</code> is true and the language is English. Offsets are UTF-16 code units into the returned <code>text</code>, so Swift can make an NSRange from them. Option 2 also stores the hints with the transcript version. No option needs a second call. All three need one opt-in setting that turns on <code>simplify</code>.</p>
+    <pre data-api></pre>
+  </div>
+</main>
+
+<script>
+  const text = "Please send the updated invoice to the client before Friday. The report was written by the finance team last week. When you get a chance could you also check whether the March numbers match the bank statement because the totals we sent on Monday looked a little off to me and I want to fix them before the call.";
+
+  const longSentence = "When you get a chance could you also check whether the March numbers match the bank statement because the totals we sent on Monday looked a little off to me and I want to fix them before the call.";
+  const passive = "was written by";
+  const longStart = text.indexOf(longSentence);
+  const passiveStart = text.indexOf(passive);
+  const words = longSentence.split(/\s+/).length;
+
+  const hints = [
+    { kind: "passive", start: passiveStart, end: passiveStart + passive.length },
+    { kind: "long-sentence", start: longStart, end: longStart + longSentence.length, words: words, limit: 20 }
+  ];
+
+  const label = (h) => h.kind === "passive"
+    ? { name: "Passive voice", detail: "\"" + text.slice(h.start, h.end) + "\"", tip: "Say who did it first" }
+    : { name: "Long sentence", detail: h.words + " words", tip: h.words + " words, aim for " + h.limit };
+
+  function renderText(el) {
+    const sorted = hints.map((h, i) => ({ ...h, i })).sort((a, b) => a.start - b.start);
+    let pos = 0;
+    el.textContent = "";
+    for (const h of sorted) {
+      el.append(text.slice(pos, h.start));
+      const m = document.createElement("mark");
+      m.textContent = text.slice(h.start, h.end);
+      m.dataset.hint = h.i;
+      m.title = label(h).tip;
+      el.append(m);
+      pos = h.end;
+    }
+    el.append(text.slice(pos));
+  }
+
+  function renderHints(el) {
+    for (const [i, h] of [...hints.entries()].reverse()) {
+      const l = label(h);
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "hint-row";
+      b.dataset.hint = i;
+      b.append(l.name);
+      const s = document.createElement("span");
+      s.textContent = l.detail;
+      b.append(s);
+      el.append(b);
+    }
+  }
+
+  document.querySelectorAll("[data-text]").forEach(renderText);
+  document.querySelectorAll("[data-hints]").forEach(renderHints);
+
+  function link(scope, i, on) {
+    scope.querySelectorAll('mark[data-hint="' + i + '"]').forEach((m) => m.classList.toggle("on", on));
+  }
+  document.querySelectorAll(".option").forEach((scope) => {
+    scope.querySelectorAll("[data-hint]").forEach((el) => {
+      const i = el.dataset.hint;
+      el.addEventListener("mouseenter", () => link(scope, i, true));
+      el.addEventListener("mouseleave", () => link(scope, i, false));
+      el.addEventListener("focus", () => link(scope, i, true));
+      el.addEventListener("blur", () => link(scope, i, false));
+    });
+  });
+
+  const req = { text: "please send uh the updated invoice ...", fillerWords: ["uh", "um"], simplify: true, language: "en" };
+  const res = { text: text.slice(0, 60) + " ...", applied: true, hints: hints };
+  document.querySelector("[data-api]").textContent =
+    "POST /api/v1/transcriptions/clean\n" + JSON.stringify(req, null, 2) +
+    "\n\n200\n" + JSON.stringify(res, null, 2);
+
+  const buttons = document.querySelectorAll(".segmented button");
+  buttons.forEach((b) => b.addEventListener("click", () => {
+    buttons.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    document.querySelectorAll(".option").forEach((o) => o.classList.toggle("active", o.id === b.dataset.target));
+  }));
+</script>
+</body>
+</html>

@@ -261,7 +261,7 @@ struct TranscriptionBatchInspectorView: View {
                                                 .foregroundStyle(.secondary)
                                         }
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(.pressScale)
 
                                     if let item = inspectorStatusItem(for: recording.id) {
                                         BatchTranscriptionStatusView(
@@ -283,7 +283,7 @@ struct TranscriptionBatchInspectorView: View {
                                 } label: {
                                     Image(systemName: "chevron.right")
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.pressScale)
                                 .accessibilityLabel("Open \(recording.displayTitle)")
                             }
                             .padding(10)
@@ -365,7 +365,7 @@ struct TranscriptionBatchInspectorView: View {
                     } label: {
                         Image(systemName: "xmark")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressScale)
                     .accessibilityLabel("Close YouTube URL editor")
                 }
                 Text("Paste one video URL per line. Duplicates are ignored.")
@@ -444,7 +444,7 @@ struct TranscriptionBatchInspectorView: View {
                     } label: {
                         Image(systemName: "xmark")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressScale)
                     .accessibilityLabel("Close recording picker")
                 }
                 ScrollView {
@@ -596,7 +596,7 @@ struct NewTranscriptionBatchPanel: View {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressScale)
                 .accessibilityLabel("Close batch composer")
             }
             TextField("Batch name (optional)", text: $name)
@@ -743,7 +743,7 @@ struct NewTranscriptionBatchPanel: View {
             Text(title).lineLimit(1)
             Spacer()
             Button(action: onRemove) { Image(systemName: "xmark.circle.fill") }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressScale)
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("Remove \(title)")
         }

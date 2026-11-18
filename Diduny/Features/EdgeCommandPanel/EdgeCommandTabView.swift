@@ -35,7 +35,7 @@ struct EdgeCommandTabView: View {
             .overlay(tabShape.stroke(Color("BrandTintBorder"), lineWidth: 0.5))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
         // Mouse only: it must never take the key view or show a ring.
         .focusable(false)
         .focusEffectDisabled()

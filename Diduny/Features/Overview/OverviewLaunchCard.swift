@@ -146,7 +146,7 @@ struct OverviewLaunchCard: View {
                             .frame(width: 24, height: 24)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressScale)
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Dismiss What’s New for Diduny \(releaseLine)")
                 }

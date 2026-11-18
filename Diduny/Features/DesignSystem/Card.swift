@@ -90,3 +90,7 @@ struct PressScaleButtonStyle: ButtonStyle {
             .animation(DS.Motion.easeOut(0.12), value: configuration.isPressed)
     }
 }
+
+extension ButtonStyle where Self == PressScaleButtonStyle {
+    static var pressScale: PressScaleButtonStyle { PressScaleButtonStyle() }
+}

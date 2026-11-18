@@ -109,7 +109,7 @@ struct SidebarView: View {
             .frame(height: 32)
             .background(DS.Palette.accentFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(PressScaleButtonStyle())
+        .buttonStyle(.pressScale)
         .help("Start recording")
         .accessibilityLabel(Text("Start recording"))
         .accessibilityValue(Text(verbatim: shortcutText ?? ""))
@@ -127,7 +127,7 @@ struct SidebarView: View {
         } label: {
             SidebarRow(section: section, isSelected: selectedSection.row == section)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
         // The window gives the first row keyboard focus on open; its ring read as a second selection.
         .focusEffectDisabled()
         .accessibilityLabel(Text(section.sidebarLabel))

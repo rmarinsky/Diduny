@@ -363,7 +363,7 @@ private struct OnboardingFlowView: View {
         HStack {
             if screen != .ready {
                 Button("Set up later", action: onDismiss)
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressScale)
                     .foregroundStyle(.secondary)
                     .accessibilityHint(String(localized: "Closes setup for this launch without marking it complete"))
                     .accessibilityIdentifier("onboarding.setUpLater")
@@ -553,7 +553,7 @@ struct DidunyPrimaryButton: View {
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
         .disabled(!isEnabled)
     }
 }
@@ -808,7 +808,7 @@ private struct OnboardingCapturePanel: View {
             .padding(10)
             .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
         .disabled(recordingState == .processing)
     }
 }

@@ -337,7 +337,7 @@ private struct StopRecordingButton: View {
                 .frame(width: 20, height: 20)
                 .background(Circle().fill(.red.opacity(0.95)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
         .help("Stop recording")
     }
 }

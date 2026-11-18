@@ -399,7 +399,7 @@ private struct AuthorLinkRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(DS.Palette.cardFill)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
     }
 }
 

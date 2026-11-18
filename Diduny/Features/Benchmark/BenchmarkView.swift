@@ -126,9 +126,9 @@ private struct BenchmarkSetupView: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .contentShape(Rectangle())
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.pressScale)
                                 Button(role: .destructive) { runner.delete(run) } label: { Image(systemName: "trash") }
-                                    .buttonStyle(.plain).foregroundStyle(.red).help("Delete benchmark")
+                                    .buttonStyle(.pressScale).foregroundStyle(.red).help("Delete benchmark")
                             }
                             .padding(.horizontal, DS.Space.lg).padding(.vertical, DS.Space.md)
                         }
@@ -169,7 +169,7 @@ private struct BenchmarkSetupView: View {
             .frame(height: BenchmarkLayout.recordingRowHeight)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
@@ -427,7 +427,7 @@ private var visibleClips: [BenchmarkRun.Clip] {
                 ForEach(run.engines) { engine in
                     let on = run.votes[clip.id] == engine.id
                     Button(engine.name) { runner.vote(clip: clip.id, engine: engine.id) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressScale)
                         .font(.system(size: 11, weight: .medium))
                         .padding(.horizontal, 10).padding(.vertical, 3)
                         .foregroundStyle(on ? .white : .primary)
@@ -556,7 +556,7 @@ private func checkRow(isOn: Bool, action: @escaping () -> Void, @ViewBuilder con
         .padding(.horizontal, DS.Space.lg).padding(.vertical, DS.Space.md)
         .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.pressScale)
     .accessibilityAddTraits(isOn ? .isSelected : [])
 }
 
