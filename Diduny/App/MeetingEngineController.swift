@@ -64,6 +64,8 @@ final class MeetingEngineController {
     /// Live text per span, snapshotted when its session has finished (D4).
     private(set) var liveTexts: [Int: String] = [:]
     private var snapshotLength = 0
+    /// Frame where the running Diduny session started reconnecting; nil while connected.
+    private var reconnectingSince: Int?
     private var lastFinishConfirmed = true
     private var isShutDown = false
     /// The pair a restarting session connects with; read by the session factory.
@@ -112,6 +114,7 @@ final class MeetingEngineController {
 
     func click(_ target: MeetingEngineTarget) {
         guard !isShutDown else { return }
+        if !target.isLive { settleReconnect() }
         pendingPair = nil
         let failure = target.isLive ? env.readiness(target) : nil
         send(.click(target, failure: failure, at: cutPoint()))
@@ -128,6 +131,7 @@ final class MeetingEngineController {
     /// not armed: it would end live text where today the socket continues, and that is Roman's call.
     func quotaExhausted() {
         guard !isShutDown else { return }
+        settleReconnect()
         send(.quotaExhausted(at: cutPoint()))
     }
 
@@ -135,6 +139,7 @@ final class MeetingEngineController {
     @discardableResult
     func shutdown(finalize: Bool) async -> Bool {
         guard !isShutDown else { return lastFinishConfirmed }
+        settleReconnect()
         let endEffects = machine.handle(.end)
         endEffects.forEach(run)
         env.didChange(machine)
@@ -248,6 +253,7 @@ final class MeetingEngineController {
     /// The cut: frame and consumer in one lock section. A stale session disconnects itself.
     private func sessionReady(_ id: UInt64) {
         guard machine.pendingID == id, let session = sessions[id], !isShutDown else { return }
+        settleReconnect()
         let frame = fanOut.setConsumer(session.audioConsumer, readFrame: env.readFrame)
         textOrder.append(id)
         spanOfSession[id] = machine.history.spans.count
@@ -366,8 +372,33 @@ final class MeetingEngineController {
         guard machine.runningID == id, sessions[id] != nil else { return }
         env.applyStatus(status)
         if let terminal = Self.dropSignal(status, engine: machine.running.engine) {
-            send(.dropped(id: id, terminal: terminal, frame: env.readFrame()))
+            let frame = reconnectingSince ?? env.readFrame()
+            reconnectingSince = !terminal && machine.running.engine == .didunyCloud ? frame : nil
+            send(.dropped(id: id, terminal: terminal, frame: frame))
         }
+        if case .connected = status, let from = reconnectingSince {
+            reconnectingSince = nil
+            guard let lost = Self.lostAudio(from: from, to: env.readFrame()) else { return }
+            // The text so far belongs before the gap; what comes from now on, after it.
+            snapshot(session: id)
+            send(.audioLost(id: id, from: lost.lowerBound, to: lost.upperBound))
+            spanOfSession[id] = machine.history.spans.count - 1
+        }
+    }
+
+    /// A cut or Stop while still reconnecting: from where it dropped, nothing was transcribed live.
+    private func settleReconnect() {
+        guard let from = reconnectingSince, let id = machine.runningID else { return }
+        reconnectingSince = nil
+        send(.audioLost(id: id, from: from, to: nil))
+    }
+
+    /// Diduny buffers the last `PreConnectAudioBuffer.defaultMaxBytes` (16 kHz mono s16le) while reconnecting and
+    /// sends it after; anything older is lost. Nil when the buffer covered the whole reconnect.
+    nonisolated static func lostAudio(from: Int, to: Int,
+                                      bufferedFrames: Int = PreConnectAudioBuffer.defaultMaxBytes / 2) -> Range<Int>? {
+        let end = to - bufferedFrames
+        return end > from ? from ..< end : nil
     }
 
     private func receive(_ error: Error, from id: UInt64) {
@@ -378,8 +409,8 @@ final class MeetingEngineController {
 
     // MARK: - Rules
 
-    /// D2: any Diduny reconnect or failure can lose audio, so the span is disrupted. ElevenLabs reconnects as its
-    /// normal rotation (C21), so only a failure counts. Nil: not a drop. The value says whether it is terminal.
+    /// D2: a Diduny reconnect or any failure is a drop. ElevenLabs reconnects as its normal rotation (C21), so only a
+    /// failure counts. Nil: not a drop. The value says whether it is terminal.
     nonisolated static func dropSignal(_ status: RealtimeConnectionStatus, engine: EngineID) -> Bool? {
         switch status {
         case .failed: true

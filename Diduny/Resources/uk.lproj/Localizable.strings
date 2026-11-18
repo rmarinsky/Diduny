@@ -909,6 +909,7 @@
 "Translate: %@ → %@" = "Перекласти: %@ → %@";
 "Translated" = "Перекладено";
 "Translating" = "Переклад";
+"Translating…" = "Перекладаю…";
 "Translating Meeting..." = "Переклад зустрічі…";
 "Translating meeting" = "Переклад зустрічі";
 "Translating..." = "Переклад…";
@@ -1987,6 +1988,7 @@
 "Model" = "Модель";
 "Size" = "Розмір";
 "Recommended" = "Рекомендовано";
+"Speakers" = "Мовці";
 "Itself: English only" = "Сама: лише англійською";
 "Any language" = "Будь-якою мовою";
 "macOS" = "macOS";
@@ -2066,6 +2068,8 @@
 "The engine changed during this meeting, so %@ makes one transcript from the whole recording, in the cloud. It replaces the live text." = "Під час зустрічі рушій змінювався, тому %@ робить один транскрипт з усього запису, у хмарі. Він замінить текст наживо.";
 "The live text was a preview from %@. %@ is making the transcript of the whole meeting, on this Mac. It replaces the live text." = "Текст наживо був чернеткою від %@. %@ робить транскрипт усієї зустрічі, на цьому Mac. Він замінить текст наживо.";
 "The live text was a preview from %@. %@ is making the transcript of the whole meeting, in the cloud. It replaces the live text." = "Текст наживо був чернеткою від %@. %@ робить транскрипт усієї зустрічі, у хмарі. Він замінить текст наживо.";
+"The live text stays. %@ transcribes only the parts without it, on this Mac." = "Текст наживо лишається. %@ розпізнає лише частини без нього, на цьому Mac.";
+"The live text stays. %@ transcribes only the parts without it, in the cloud." = "Текст наживо лишається. %@ розпізнає лише частини без нього, у хмарі.";
 "%@ is making the transcript of the whole meeting, on this Mac." = "%@ робить транскрипт усієї зустрічі, на цьому Mac.";
 "%@ is making the transcript of the whole meeting, in the cloud." = "%@ робить транскрипт усієї зустрічі, у хмарі.";
 
@@ -2133,6 +2137,12 @@
 "Transcribe all again" = "Транскрибувати всі знову";
 "Transcribe %lld without transcript" = "Транскрибувати без транскрипту: %lld";
 "Copy all" = "Копіювати все";
+"Copy new" = "Копіювати нове";
+"Copy new text" = "Копіювати новий текст";
+"Copy text added since the last copy" = "Копіювати текст, доданий після останнього копіювання";
+"Copy the whole transcript" = "Копіювати всю транскрипцію";
+"More copy options" = "Інші варіанти копіювання";
+"Nothing new" = "Нічого нового";
 "Transcript" = "Транскрипт";
 "Not transcribed yet." = "Ще без транскрипту.";
 "The recordings stay as they are. Ungroup at any time; nothing is lost." = "Записи лишаються як є. Розгрупувати можна будь-коли, нічого не втрачається.";
@@ -2450,7 +2460,8 @@
 "Used to count the time saved in Overview." = "За нею рахується заощаджений час в Огляді.";
 
 /* Typing hints at the cursor (undo, proposal, recovery, deferred fix) */
-"Fixed" = "Виправлено";
+"Oops, fixed" = "Ой, виправив";
+"Swapped" = "Поміняв";
 "Undo fix" = "Скасувати заміну";
 "Bring back the hint" = "Повернути підказку";
 "Apply again" = "Застосувати знову";

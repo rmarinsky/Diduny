@@ -91,8 +91,8 @@ final class TypingEngineTests: XCTestCase {
         XCTAssertEqual(recorded, ["ghbdsn"])
     }
 
-    /// Convert shows the same "fixed" hint near the cursor as an automatic fix, without an undo click.
-    func test_convertShowsTheFixedHintUnlessHintsAreOff() {
+    /// Convert shows the swap hint, never the fix hint with its undo click.
+    func test_convertShowsTheSwapHintUnlessHintsAreOff() {
         for enabled in [true, false] {
             let hints = FixToastCounter()
             var settings = TypingSettings()
@@ -105,7 +105,8 @@ final class TypingEngineTests: XCTestCase {
                 original: "ghbdsn", converted: "привіт", sourceLayoutID: "test.none", targetLayoutID: "test.none"
             ))
 
-            XCTAssertEqual(hints.clickable, enabled ? [false] : [])
+            XCTAssertEqual(hints.swaps, enabled ? 1 : 0)
+            XCTAssertEqual(hints.clickable, [])
         }
     }
 
@@ -132,8 +133,10 @@ final class TypingEngineTests: XCTestCase {
 @MainActor
 private final class FixToastCounter: TypingHintPresenting {
     var clickable: [Bool] = []
+    var swaps = 0
 
     func showFixToast(near _: NSPoint, onClick: (() -> Void)?) { clickable.append(onClick != nil) }
+    func showSwapHint(near _: NSPoint) { swaps += 1 }
     func showRecovery(_: TypingRecoveryHint, near _: NSPoint, onClick _: @escaping () -> Void) {}
     func showDeferredChip(
         original _: String, candidate _: String, near _: NSPoint, timeToLive _: TimeInterval,

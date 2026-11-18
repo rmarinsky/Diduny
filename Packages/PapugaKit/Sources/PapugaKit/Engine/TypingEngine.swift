@@ -156,9 +156,9 @@ public final class TypingEngine {
         hostCalls.recordReplacement(text: conversion.original)
         layoutManager.switchTo(conversion.targetLayoutID)
         controller.noteExternalEdit()
-        // The same "fixed" hint near the cursor as after an automatic fix; Convert has no undo of its own.
+        // The hint after a fix, as "swapped"; Convert has no undo of its own.
         if settings().autoFixToastEnabled {
-            hintPresenter?.showFixToast(near: NSEvent.mouseLocation, onClick: nil)
+            hintPresenter?.showSwapHint(near: NSEvent.mouseLocation)
         }
     }
 

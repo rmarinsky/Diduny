@@ -136,11 +136,15 @@ struct DevFeedbackDetailTests {
         #expect(abs(sum - total) < 0.01)
     }
 
-    /// Roman's 1.5x (DEV feedback) still holds: the old 28 pt badge is now the 42 pt logo disc. The stop animation
-    /// replaced the old burst room (44 pt layout) with pulse room, so the panel size is disc plus margins.
-    @MainActor @Test func inPlaceBadgeIsOneAndAHalfTimesBigger() {
+    /// Roman's 1.5x (DEV feedback) still holds for the mark after Stop: the old 28 pt badge is the 42 pt disc.
+    /// In-place translation now uses the typing hints' pill (Roman, 2026-11-18): 40 pt tall plus the margin,
+    /// and it widens for longer words.
+    @MainActor @Test func stopMarkKeepsItsSizeAndTranslationUsesThePill() {
         #expect(PasteMarkPlan.disc == 28 * 1.5)
-        let side = PasteMarkPlan.disc + 2 * PasteMarkPlan.panelMargin
-        #expect(InplaceTranslationFeedbackController.badgeSize == CGSize(width: side, height: side))
+        let short = InplaceTranslationFeedbackController.badgeSize(title: "Translated")
+        let long = InplaceTranslationFeedbackController.badgeSize(title: InplaceTranslationToast.networkFailure.text)
+        #expect(short.height == LogoPill.height + 2 * LogoPill.margin)
+        #expect(long.height == short.height)
+        #expect(long.width > short.width)
     }
 }

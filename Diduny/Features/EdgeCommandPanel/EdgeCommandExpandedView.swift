@@ -32,6 +32,8 @@ struct EdgeCommandExpandedView: View {
     var onCloseOutcome: () -> Void = {}
     var onNewRecording: () -> Void = {}
     var onOpenRecording: (UUID) -> Void = { _ in }
+    /// The meeting panel's Copy new.
+    var onCopyNew: () -> Void = {}
 
     /// Which content the panel shows; a change is an M1 swap, anything else redraws in place (M3).
     enum ContentState: Equatable {
@@ -100,7 +102,8 @@ struct EdgeCommandExpandedView: View {
                     onMinimize: onMinimizeLive,
                     onSelectOutput: onSelectOutput,
                     onDrag: onDrag,
-                    onDragEnd: onDragEnd
+                    onDragEnd: onDragEnd,
+                    onCopyNew: onCopyNew
                 )
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("commandPanel.live")

@@ -33,7 +33,16 @@ final class InplaceBadgeModel: ObservableObject {
     enum State { case translating, success, error }
     @Published var state: State = .translating
     @Published var isVisible = false
-    @Published var pulses = 0
+    /// What the pill says after an error.
+    @Published var errorText = ""
+
+    var title: String {
+        switch state {
+        case .translating: String(localized: "Translating…")
+        case .success: String(localized: "Translated")
+        case .error: errorText
+        }
+    }
 }
 
 @MainActor
@@ -57,13 +66,11 @@ final class InplaceTranslationFeedbackController {
         }
     }
 
-    /// The 42 pt logo disc plus room for the 1.15 pulse (stop animation: one size for every mode).
-    static let badgeSize = CGSize(
-        width: PasteMarkPlan.disc + 2 * PasteMarkPlan.panelMargin,
-        height: PasteMarkPlan.disc + 2 * PasteMarkPlan.panelMargin
-    )
+    /// How long "Translated" stays, like the typing hints' receipts.
+    static let successHold: TimeInterval = 1.2
 
     private var badgePanel: NSPanel?
+    private var badgeSelectionEnd: CGRect?
     private let badgeModel = InplaceBadgeModel()
     private var toastPanel: NSPanel?
     private let toastModel = InplaceToastModel()
@@ -76,11 +83,13 @@ final class InplaceTranslationFeedbackController {
     func showBadge(selectionEnd: CGRect?) {
         toastTask?.cancel()
         closeToast()
-        if badgePanel == nil {
-            badgePanel = makePanel(rootView: InplaceBadgeView(model: badgeModel), size: Self.badgeSize)
-        }
         badgeModel.state = .translating
-        badgePanel?.setFrame(badgeFrame(selectionEnd: selectionEnd), display: false)
+        let size = Self.badgeSize(title: badgeModel.title)
+        if badgePanel == nil {
+            badgePanel = makePanel(rootView: InplaceBadgeView(model: badgeModel), size: size)
+        }
+        badgeSelectionEnd = selectionEnd
+        badgePanel?.setFrame(badgeFrame(size: size, selectionEnd: selectionEnd), display: false)
         badgePanel?.orderFrontRegardless()
         badgeModel.isVisible = true
         announce(String(localized: "Translating"))
@@ -89,7 +98,8 @@ final class InplaceTranslationFeedbackController {
     /// Glides the badge from its provisional (mouse) anchor to the selection end.
     func moveBadge(selectionEnd: CGRect?) {
         guard let panel = badgePanel, isBadgeShown, selectionEnd != nil else { return }
-        let target = badgeFrame(selectionEnd: selectionEnd)
+        badgeSelectionEnd = selectionEnd
+        let target = badgeFrame(size: panel.frame.size, selectionEnd: selectionEnd)
         guard target != panel.frame else { return }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             panel.setFrame(target, display: true)
@@ -106,28 +116,32 @@ final class InplaceTranslationFeedbackController {
         badgePanel?.isVisible == true
     }
 
-    /// Plays the end state alongside the paste. Success: the ring closes, one pulse at 220 ms,
-    /// held until the 680 ms fade (stop animation). Error holds 0.7 s.
-    func finishBadge(success: Bool) async {
-        guard isBadgeShown else { return }
-        badgeModel.state = success ? .success : .error
-        announce(success ? String(localized: "Translated") : String(localized: "Translation failed"))
-        guard success else {
-            try? await Task.sleep(for: .milliseconds(700))
+    /// Plays the end state alongside the paste. Success: the ring closes with a check and sparks, the
+    /// words become "Translated", held 1.2 s. Error (nil `failure` is success): red ring and shake, the
+    /// pill says why, held as long as the old toast.
+    func finishBadge(failure: InplaceTranslationToast?) async {
+        guard isBadgeShown, let panel = badgePanel else { return }
+        guard let failure else {
+            badgeModel.state = .success
+            announce(String(localized: "Translated"))
+            try? await Task.sleep(for: .seconds(Self.successHold))
             return
         }
-        let timeline = PasteMarkPlan.timeline(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-        if timeline.pulse > 0 {
-            try? await Task.sleep(for: .seconds(timeline.pulseStart))
-            badgeModel.pulses += 1
+        // The pill grows to the reason; the panel first, so the words are never clipped.
+        let size = Self.badgeSize(title: failure.text)
+        if size.width > panel.frame.width {
+            panel.setFrame(badgeFrame(size: size, selectionEnd: badgeSelectionEnd), display: true)
         }
-        try? await Task.sleep(for: .seconds(timeline.fadeStart - (timeline.pulse > 0 ? timeline.pulseStart : 0)))
+        badgeModel.errorText = failure.text
+        badgeModel.state = .error
+        announce(failure.text, high: true)
+        try? await Task.sleep(for: .seconds(failure.visibleSeconds))
     }
 
     func dismissBadge() async {
         guard isBadgeShown else { return }
         badgeModel.isVisible = false
-        try? await Task.sleep(for: .seconds(PasteMarkPlan.timeline(reduceMotion: false).fade))
+        try? await Task.sleep(for: .seconds(0.15))
         badgePanel?.orderOut(nil)
     }
 
@@ -169,7 +183,10 @@ final class InplaceTranslationFeedbackController {
             backing: .buffered,
             defer: false
         )
-        panel.contentView = NSHostingView(rootView: rootView)
+        let hosting = NSHostingView(rootView: rootView)
+        // The controller sizes the panel; the hosting view never resizes it.
+        hosting.sizingOptions = []
+        panel.contentView = hosting
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -185,11 +202,17 @@ final class InplaceTranslationFeedbackController {
         panel?.setFrame(frame(size: size, selectionEnd: selectionEnd), display: false)
     }
 
-    /// The disc sits `gap` from the text; the panel adds the pulse margin around it.
-    private func badgeFrame(selectionEnd: CGRect?) -> CGRect {
-        let disc = CGSize(width: PasteMarkPlan.disc, height: PasteMarkPlan.disc)
-        return frame(size: disc, selectionEnd: selectionEnd)
-            .insetBy(dx: -PasteMarkPlan.panelMargin, dy: -PasteMarkPlan.panelMargin)
+    /// The pill and its margin for `title`.
+    static func badgeSize(title: String) -> CGSize {
+        let fitting = NSHostingView(rootView: LogoPill(phase: .done, title: title, isOpen: true, isVisible: true).fixedSize()).fittingSize
+        return CGSize(width: ceil(fitting.width), height: ceil(fitting.height))
+    }
+
+    /// The pill sits `gap` from the text; the panel adds the margin around it.
+    private func badgeFrame(size: CGSize, selectionEnd: CGRect?) -> CGRect {
+        let margin = LogoPill.margin
+        let pill = CGSize(width: size.width - 2 * margin, height: size.height - 2 * margin)
+        return frame(size: pill, selectionEnd: selectionEnd).insetBy(dx: -margin, dy: -margin)
     }
 
     private func frame(size: CGSize, selectionEnd: CGRect?) -> CGRect {
@@ -215,12 +238,13 @@ final class InplaceTranslationFeedbackController {
 
 // MARK: - Views
 
-/// The app logo on its disc (stop animation): the rim arc while translating, then the ring closes
-/// and pulses once. An error keeps the red ring and the shake.
+/// The logo pill: "Translating…" while the logo rocks, then the ring closes and the words become
+/// "Translated". An error turns the ring red, shakes, and the pill says why.
 private struct InplaceBadgeView: View {
     @ObservedObject var model: InplaceBadgeModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shake: CGFloat = 0
+    @State private var isOpen = false
 
     private var phase: LogoBadgePhase {
         switch model.state {
@@ -231,12 +255,19 @@ private struct InplaceBadgeView: View {
     }
 
     var body: some View {
-        LogoBadge(phase: phase, isVisible: model.isVisible, pulseTrigger: model.pulses)
+        LogoPill(phase: phase, title: model.title, isOpen: isOpen, isVisible: model.isVisible)
             .offset(x: shake)
-            .frame(
-                width: InplaceTranslationFeedbackController.badgeSize.width,
-                height: InplaceTranslationFeedbackController.badgeSize.height
-            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .task(id: model.isVisible) {
+                // The logo pops first; the pill opens around it a moment later.
+                guard model.isVisible else {
+                    try? await Task.sleep(for: .seconds(0.2))
+                    isOpen = false
+                    return
+                }
+                if !reduceMotion { try? await Task.sleep(for: .milliseconds(120)) }
+                isOpen = true
+            }
             .task(id: model.state) {
                 guard model.state == .error, !reduceMotion else { return }
                 for offset: CGFloat in [3, -3, 3, -3, 0] {

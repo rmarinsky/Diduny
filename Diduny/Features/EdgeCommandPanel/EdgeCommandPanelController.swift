@@ -620,7 +620,8 @@ final class EdgeCommandPanelController: NSObject {
             onOpenRecording: { [weak self] id in
                 MainWindowController.shared.requestedRecordingID = id
                 self?.appDelegate?.openMainWindow(section: .recordings)
-            }
+            },
+            onCopyNew: { DictationOverlayController.shared.copyCurrentTranscript(onlyNew: true) }
         )
     }
 

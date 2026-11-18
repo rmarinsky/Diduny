@@ -590,8 +590,9 @@ final class DictationOverlayController {
         activeSurface = nil
     }
 
-    func copyCurrentTranscript() {
-        let text = store.displayText
+    /// `onlyNew`: the meeting panel's Copy new.
+    func copyCurrentTranscript(onlyNew: Bool = false) {
+        let text = onlyNew ? store.textSinceCopy : store.displayText
         guard !text.isEmpty else { return }
         ClipboardService.shared.copy(text: text, behavior: .raw)
         store.markCopied()

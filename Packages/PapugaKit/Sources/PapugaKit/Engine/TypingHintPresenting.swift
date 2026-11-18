@@ -82,6 +82,8 @@ public enum TypingProposalKeyGate {
 public protocol TypingHintPresenting: AnyObject {
     /// The hint after a fix. `onClick` undoes the fix; nil means the fix cannot be undone.
     func showFixToast(near point: NSPoint, onClick: (() -> Void)?)
+    /// The hint after Convert swapped a selection to the other layout. No undo of its own.
+    func showSwapHint(near point: NSPoint)
     func showRecovery(_ hint: TypingRecoveryHint, near point: NSPoint, onClick: @escaping () -> Void)
     /// The passive chip a typed-over proposal demotes to. It must not take keyboard input.
     func showDeferredChip(
@@ -108,6 +110,13 @@ public protocol TypingHintPresenting: AnyObject {
     /// Command, Control or Option is held. Returns whether the key was handled.
     func handleProposalKeyboardShortcut(keyCode: UInt16, flags: CGEventFlags) -> Bool
     func isMouseOverProposal() -> Bool
+}
+
+public extension TypingHintPresenting {
+    /// Hosts without a swap hint of their own show the fix hint without an undo.
+    func showSwapHint(near point: NSPoint) {
+        showFixToast(near: point, onClick: nil)
+    }
 }
 
 /// Turns the controller's internal presenter calls into the host's plain-value ones.

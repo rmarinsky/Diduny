@@ -130,17 +130,40 @@ struct MeetingSwitchMachineTests {
         #expect(m.history.spans.count == 1)
     }
 
-    @Test("A drop marks the running span; a stale drop does not")
+    @Test("A recovered drop changes nothing; a terminal one marks the span; a stale one does not")
     func drops() {
         var m = machine()
-        _ = m.handle(.dropped(id: 9, terminal: false, frame: 1))
-        #expect(m.history.spans[0].disrupted == false)
         _ = m.handle(.dropped(id: 1, terminal: false, frame: 1))
-        #expect(m.history.spans[0].disrupted)
-        #expect(m.history.spans[0].failedAtFrame == nil)
+        _ = m.handle(.dropped(id: 9, terminal: true, frame: 1))
+        #expect(m.history.spans == [MeetingEngineSpan(target: Self.cloud, startFrame: 0)])
         _ = m.handle(.dropped(id: 1, terminal: true, frame: 500))
         #expect(m.history.spans[0].failedAtFrame == 500)
         #expect(m.persistentNote == .offline)
+    }
+
+    @Test("Audio a reconnect lost becomes its own after-Stop span; the live engine goes on after it")
+    func audioLost() {
+        var m = machine()
+        _ = m.handle(.audioLost(id: 9, from: 100, to: 200))
+        #expect(m.history.spans.count == 1)
+        _ = m.handle(.audioLost(id: 1, from: 100, to: 200))
+        #expect(m.history.spans.map(\.target) == [Self.cloud, .afterStopOnly(.parakeet), Self.cloud])
+        #expect(m.history.spans.map(\.startFrame) == [0, 100, 200])
+        #expect(m.running == Self.cloud)
+    }
+
+    @Test("A reconnect that never came back: the rest of the span has no live text")
+    func audioLostForGood() {
+        var m = machine()
+        _ = m.handle(.audioLost(id: 1, from: 300, to: nil))
+        #expect(m.history.spans.count == 1)
+        #expect(m.history.spans[0].failedAtFrame == 300)
+    }
+
+    @Test("Only audio past the 15 s buffer is lost")
+    func lostAudioMath() {
+        #expect(MeetingEngineController.lostAudio(from: 1000, to: 1000 + 240_000) == nil)
+        #expect(MeetingEngineController.lostAudio(from: 1000, to: 1000 + 400_000) == 1000 ..< 161_000)
     }
 
     // MARK: Markers
@@ -240,16 +263,59 @@ struct MeetingSwitchMachineTests {
 }
 
 struct MeetingStopPlanTests {
-    private func span(_ target: MeetingEngineTarget, _ frame: Int = 0, disrupted: Bool = false) -> MeetingEngineSpan {
-        MeetingEngineSpan(target: target, startFrame: frame, disrupted: disrupted)
+    private func span(_ target: MeetingEngineTarget, _ frame: Int = 0, failedAt: Int? = nil) -> MeetingEngineSpan {
+        MeetingEngineSpan(target: target, startFrame: frame, failedAtFrame: failedAt)
     }
 
     /// Everything runs, unless listed in `missing`.
     private func plan(_ spans: [MeetingEngineSpan], accepted: Bool = true, hasText: Bool = true,
-                      recordOnly: EngineID = .parakeet, missing: Set<EngineID> = []) -> MeetingStopPlan {
+                      recordOnly: EngineID = .parakeet, missing: Set<EngineID> = [],
+                      audio: MeetingStopPlan.Audio? = nil) -> MeetingStopPlan {
         MeetingStopPlan.plan(history: MeetingEngineHistory(spans: spans), recordOnlyEngine: recordOnly,
                              resolve: { missing.contains($0) ? .none(.unavailable) : .engine($0, modelID: nil) },
-                             liveTextAccepted: accepted, hasLiveText: hasText)
+                             liveTextAccepted: accepted, hasLiveText: hasText, audio: audio)
+    }
+
+    /// 100 s at 16 frames a second keeps the ranges readable.
+    private func audio(_ texts: [Int: String], skipped: Int = 0) -> MeetingStopPlan.Audio {
+        MeetingStopPlan.Audio(liveTexts: texts, totalFrames: 1600, sampleRate: 16, skippedChunks: skipped)
+    }
+
+    private func range(_ start: Double, _ end: Double, _ engine: EngineID) -> TranslatePart {
+        .afterStop(range: AudioTrimRange(startSeconds: start, endSeconds: end), engine: engine)
+    }
+
+    @Test("Local then Cloud: the cloud text stays, the cloud engine does only the Local stretch")
+    func localToCloudParts() {
+        #expect(plan([span(.live(.whisper)), span(.live(.didunyCloud), 160)], audio: audio([0: "local", 1: "cloud"]))
+            == .parts([range(0, 10, .didunyCloud), .live(text: "cloud")], engine: .didunyCloud, modelID: nil))
+    }
+
+    @Test("Ending on Local keeps a cloud stretch in the middle; Local does the rest on this Mac")
+    func cloudInTheMiddle() {
+        let spans = [span(.live(.whisper)), span(.live(.didunyCloud), 160), span(.live(.whisper), 320)]
+        #expect(plan(spans, audio: audio([1: "cloud"]))
+            == .parts([range(0, 10, .whisper), .live(text: "cloud"), range(20, 100, .whisper)], engine: .whisper, modelID: nil))
+    }
+
+    @Test("A lost reconnect gap: only the gap is transcribed, with the Cloud engine")
+    func reconnectGap() {
+        let spans = [span(.live(.didunyCloud)), span(.afterStopOnly(.parakeet), 160), span(.live(.didunyCloud), 320)]
+        #expect(plan(spans, audio: audio([0: "a", 2: "b"]))
+            == .parts([.live(text: "a"), range(10, 20, .didunyCloud), .live(text: "b")], engine: .didunyCloud, modelID: nil))
+    }
+
+    @Test("A terminal failure: the text stays and only the rest goes to the engine")
+    func terminalFailureParts() {
+        #expect(plan([span(.live(.didunyCloud), failedAt: 800)], audio: audio([0: "a"]))
+            == .parts([.live(text: "a"), range(50, 100, .didunyCloud)], engine: .didunyCloud, modelID: nil))
+    }
+
+    @Test("Without cloud text, or with skipped chunks, the whole recording is redone")
+    func noCloudTextIsWhole() {
+        let spans = [span(.live(.whisper)), span(.live(.didunyCloud), 160)]
+        #expect(plan(spans, audio: audio([0: "local"])) == .wholeRecording(.didunyCloud, modelID: nil, reason: .mixed))
+        #expect(plan(spans, audio: audio([1: "cloud"], skipped: 1)) == .wholeRecording(.didunyCloud, modelID: nil, reason: .mixed))
     }
 
     @Test("A single clean cloud span keeps its live text")
@@ -258,7 +324,7 @@ struct MeetingStopPlanTests {
         #expect(plan([span(.live(.elevenLabs))]) == .keepLiveText(.elevenLabs))
     }
 
-    @Test("Local then Cloud: the cloud engine redoes all of it (Roman, 2026-11-09)")
+    @Test("Local then Cloud without offsets: the cloud engine redoes all of it")
     func localToCloud() {
         #expect(plan([span(.live(.whisper)), span(.live(.didunyCloud), 10)]) == .wholeRecording(.didunyCloud, modelID: nil, reason: .mixed))
     }
@@ -289,11 +355,11 @@ struct MeetingStopPlanTests {
             == .wholeRecording(.whisper, modelID: nil, reason: .mixed))
     }
 
-    @Test("A disrupted cloud span is redone by that engine; with nothing to run its text stays")
-    func disruptedCloud() {
-        #expect(plan([span(.live(.didunyCloud), disrupted: true)]) == .wholeRecording(.didunyCloud, modelID: nil, reason: .mixed))
-        #expect(plan([span(.live(.didunyCloud), disrupted: true)], missing: [.didunyCloud]) == .keepLiveText(.didunyCloud))
-        #expect(plan([span(.live(.didunyCloud), disrupted: true)], hasText: false, missing: [.didunyCloud]) == .saveOnly)
+    @Test("A failed cloud span without offsets is redone by that engine; with nothing to run its text stays")
+    func failedCloud() {
+        #expect(plan([span(.live(.didunyCloud), failedAt: 5)]) == .wholeRecording(.didunyCloud, modelID: nil, reason: .mixed))
+        #expect(plan([span(.live(.didunyCloud), failedAt: 5)], missing: [.didunyCloud]) == .keepLiveText(.didunyCloud))
+        #expect(plan([span(.live(.didunyCloud), failedAt: 5)], hasText: false, missing: [.didunyCloud]) == .saveOnly)
     }
 
     @Test("Rejected cloud text: the cloud engine redoes it")
@@ -371,7 +437,7 @@ struct TranslatePlanTests {
 
     @Test("A terminal failure turns the rest of its span into audio on the Record only engine")
     func terminalFailure() {
-        let spans = [MeetingEngineSpan(target: .live(.didunyCloud), startFrame: 0, disrupted: true, failedAtFrame: 800)]
+        let spans = [MeetingEngineSpan(target: .live(.didunyCloud), startFrame: 0, failedAtFrame: 800)]
         #expect(plan(spans, texts: [0: "a"]) == [
             .live(text: "a"),
             .afterStop(range: AudioTrimRange(startSeconds: 50, endSeconds: 100), engine: .parakeet),
@@ -557,6 +623,22 @@ struct MeetingQueueSeamTests {
         #expect(saved.status == .translated)
         #expect(saved.transcriptionText?.contains("kept") == true)
         #expect(saved.transcriptionText?.contains("device text [uk]") == true)
+    }
+
+    @Test("Transcribe parts keep the cloud text, diarize only the ranges, and save as transcribed")
+    func transcribeParts() async throws {
+        let storage = try storage()
+        let id = try #require(storage.saveRecording(audioData: Data("RIFF....WAVEfmt ".utf8), type: .meeting, duration: 42, forceSave: true))
+        let calls = Calls()
+        let queue = RecordingQueueService(storage: storage, localModelIsAvailable: { _ in true }, hasSession: { true }, makeRunner: { _ in runner(calls) })
+        #expect(queue.enqueue([id], action: .transcribeParts([.live(text: "kept"), .afterStop(range: nil, engine: .didunyCloud)])))
+        await waitUntilDone(queue)
+        let saved = try #require(storage.recordings.first { $0.id == id })
+        #expect(saved.status == .transcribed)
+        #expect(saved.transcriptionText?.contains("kept") == true)
+        #expect(saved.transcriptionText?.contains("cloud text") == true)
+        #expect(calls.engines == ["cloud"])
+        #expect(calls.diarize == [true])
     }
 
     @Test("A failed part keeps what is ready, marks it failed, and stops")

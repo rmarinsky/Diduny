@@ -39,6 +39,8 @@ final class LiveDictationOverlayStore {
     var finalText = ""
     var provisionalText = ""
     var copiedAt: Date?
+    /// Copy new (Roman, 2026-11-17): the settled text at the last copy and the unfinished line copied with it.
+    private(set) var copyMark: (settled: String, tail: String)?
     /// Meeting panel segment and engine per segment (WP-31). Seeded from Settings > Modes once WP-13 lands.
     var meetingSegment: MeetingSegment = .cloud
     var meetingEngines: [MeetingSegment: EngineID] = MeetingPanelState.defaultEngines
@@ -235,6 +237,7 @@ final class LiveDictationOverlayStore {
         meetingTranscript.reset()
         applyMeetingDefaults()
         copiedAt = nil
+        copyMark = nil
         nativeOutput = .original
         pickedOutput = .original
         voiceCommand = nil
@@ -354,6 +357,32 @@ final class LiveDictationOverlayStore {
 
     func markCopied() {
         copiedAt = Date()
+        let settled = settledDisplayText
+        copyMark = (settled, Self.text(displayText, after: settled))
+    }
+
+    /// What Copy new copies: the text after the settled text of the last copy, the unfinished line included,
+    /// so a line copied unfinished comes again finished. Everything when the text before it changed.
+    var textSinceCopy: String {
+        guard let copyMark else { return displayText }
+        return Self.text(displayText, after: copyMark.settled)
+    }
+
+    /// False when Copy new would copy nothing, or only the same unfinished line again.
+    var hasNewSinceCopy: Bool {
+        let text = textSinceCopy
+        return !text.isEmpty && text != copyMark?.tail
+    }
+
+    /// `displayText` without its unfinished line.
+    private var settledDisplayText: String {
+        if mode == .meeting, !meetingTranscript.finalTranscriptText.isEmpty { return meetingTranscript.finalTranscriptText }
+        return bestText(includeProvisional: false)
+    }
+
+    private static func text(_ text: String, after settled: String) -> String {
+        guard text.hasPrefix(settled) else { return text }
+        return String(text.dropFirst(settled.count)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func composedText(final: String, provisional: String) -> String {

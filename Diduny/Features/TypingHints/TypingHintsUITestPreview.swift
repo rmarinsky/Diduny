@@ -33,8 +33,10 @@
             var y = parts[1]
             for (index, row) in rows.enumerated() {
                 let presenter = TypingHintPresenter(
-                    toast: TypingHintPanel(), chip: TypingHintPanel(), proposal: TypingHintPanel(),
-                    isUndoHintEnabled: { true }, undoHintDuration: hold, recoveryDuration: hold, setGateArmed: { _ in }
+                    // At the given point, not at the focused text: the rows stay stacked.
+                    toast: TypingHintPanel(textEnd: { nil }), chip: TypingHintPanel(), proposal: TypingHintPanel(),
+                    isUndoHintEnabled: { true }, undoHintDuration: hold, receiptDuration: hold, recoveryDuration: hold,
+                    setGateArmed: { _ in }
                 )
                 presenters.append(presenter)
                 row(presenter, NSPoint(x: parts[0], y: y))

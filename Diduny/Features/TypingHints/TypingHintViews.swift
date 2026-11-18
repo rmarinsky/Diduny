@@ -40,7 +40,7 @@ extension TypingHintContent {
     /// What VoiceOver says when the hint appears.
     var announcement: String {
         switch self {
-        case .undo, .recovery: title
+        case .undo, .swapped, .recovery: title
         case let .chip(original, candidate, _, _, _): "\(title): \(original) → \(candidate)"
         case let .proposal(hint, _, _, _): hint.receiptLabel
         }
@@ -48,7 +48,7 @@ extension TypingHintContent {
 }
 
 /// One hint. The panel gives it its size; the open motion is M6 (scale from `popScale`), and the
-/// panel fades the window. Reduce Motion keeps only the fade.
+/// panel fades the window. Reduce Motion keeps only the fade. The logo hints pop in on their own.
 struct TypingHintView: View {
     let content: TypingHintContent
     let motion: MotionPreference
@@ -58,13 +58,14 @@ struct TypingHintView: View {
         Group {
             switch content {
             case let .undo(onClick):
-                HintPill(
-                    symbol: onClick == nil ? "checkmark" : "arrow.uturn.backward",
-                    title: content.title,
+                LogoHint(
+                    title: String(localized: "Oops, fixed"),
+                    then: onClick == nil ? nil : content.title,
                     identifier: "typingHint.undo.action",
-                    onClick: onClick,
-                    landsLogo: true
+                    onClick: onClick
                 )
+            case .swapped:
+                LogoHint(title: content.title, identifier: "typingHint.swapped.action", onClick: nil)
             case let .recovery(hint, onClick):
                 HintPill(
                     symbol: "arrow.uturn.backward",
@@ -82,7 +83,7 @@ struct TypingHintView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .scaleEffect(isOpen || motion.reduceMotion ? 1 : DS.Motion.popScale)
+        .scaleEffect(isOpen || motion.reduceMotion || content.logoMargin > 0 ? 1 : DS.Motion.popScale)
         .onAppear {
             guard !motion.reduceMotion else { return }
             withAnimation(DS.Motion.easeOut(DS.Motion.m6PopupOpen.duration)) { isOpen = true }
@@ -93,8 +94,6 @@ struct TypingHintView: View {
 /// The small toast shape the app already uses (in-place translation): material, 16 radius, tint border.
 private struct HintPillSurface: ViewModifier {
     var isHighlighted = false
-    /// False while the fix hint's logo lands on its own, before the pill appears around it.
-    var isShown = true
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -103,25 +102,20 @@ private struct HintPillSurface: ViewModifier {
     func body(content: Content) -> some View {
         content
             .frame(height: 32)
-            .background { shape.fill(.regularMaterial).opacity(isShown ? 1 : 0) }
-            .overlay(shape.strokeBorder(isHighlighted ? DS.Palette.accentText : DS.Palette.tintBorder, lineWidth: isHighlighted ? 1 : 0.5).opacity(isShown ? 1 : 0))
+            .background(.regularMaterial, in: shape)
+            .overlay(shape.strokeBorder(isHighlighted ? DS.Palette.accentText : DS.Palette.tintBorder, lineWidth: isHighlighted ? 1 : 0.5))
             .clipShape(shape)
             .contentShape(shape)
     }
 }
 
-/// The undo hint and the recovery hint: a symbol and one line. With `onClick` the whole pill is a button.
+/// The recovery hint: a symbol and one line. With `onClick` the whole pill is a button.
 private struct HintPill: View {
     let symbol: String
     let title: String
     let identifier: String
     let onClick: (() -> Void)?
-    /// The fix hint: the Diduny logo first lands as after a translation or a paste (pop, ring, check,
-    /// sparks) and turns once, then the pill and its title appear around it and the logo stays.
-    var landsLogo = false
     @State private var isHovered = false
-    @State private var isRevealed = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if let onClick {
@@ -139,33 +133,72 @@ private struct HintPill: View {
 
     private var label: some View {
         HStack(spacing: 6) {
-            if landsLogo {
-                LogoBadge(phase: .done, discSize: 24, pulsesOnAppear: true, spinsOnAppear: true)
-            } else {
-                Image(systemName: symbol)
-                    .font(.system(size: DS.Size.symbolSmall, weight: .semibold))
-                    .foregroundStyle(DS.Palette.secondary)
-            }
+            Image(systemName: symbol)
+                .font(.system(size: DS.Size.symbolSmall, weight: .semibold))
+                .foregroundStyle(DS.Palette.secondary)
             Text(verbatim: title)
                 .font(DS.Font.calloutStrong)
                 .foregroundStyle(DS.Palette.text)
                 .lineLimit(1)
-                .opacity(isShown ? 1 : 0)
         }
-        .padding(.horizontal, landsLogo ? DS.Space.xs : DS.Space.md)
-        .padding(.trailing, landsLogo ? DS.Space.md - DS.Space.xs : 0)
-        .modifier(HintPillSurface(isHighlighted: isHovered, isShown: isShown))
-        .task {
-            guard landsLogo, !isRevealed else { return }
-            if !reduceMotion { try? await Task.sleep(for: .seconds(Self.landing)) }
-            withAnimation(DS.Motion.easeOut(0.2)) { isRevealed = true }
+        .padding(.horizontal, DS.Space.md)
+        .modifier(HintPillSurface(isHighlighted: isHovered))
+    }
+}
+
+/// The hint after a layout or typing fix: the logo pops in and flips, then the pill opens with `title`.
+/// With `then`, the words change to it a moment later ("Oops, fixed", then "Undo fix").
+private struct LogoHint: View {
+    let title: String
+    var then: String?
+    let identifier: String
+    let onClick: (() -> Void)?
+    @State private var isVisible = false
+    @State private var isOpen = false
+    @State private var showsThen = false
+    @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The words follow while the logo's 0.45 s flip ends (Roman, 2026-11-17: 0.5 s was too long a pause).
+    static let landing: TimeInterval = 0.2
+    /// How long the first words stay before `then`.
+    static let firstWords: TimeInterval = 0.6
+
+    var body: some View {
+        if let onClick {
+            Button(action: onClick) { pills }
+                .buttonStyle(.plain)
+                .onHover { isHovered = $0 }
+                .accessibilityLabel(Text(verbatim: then ?? title))
+                .accessibilityIdentifier(identifier)
+        } else {
+            pills
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: title))
+                .accessibilityIdentifier(identifier)
         }
     }
 
-    /// The logo's turn takes 0.6 s; the title follows once it settles.
-    static let landing: TimeInterval = 0.5
-
-    private var isShown: Bool { !landsLogo || isRevealed }
+    /// The hidden pills give the panel the width of the longer words, so the change never clips.
+    private var pills: some View {
+        ZStack(alignment: .leading) {
+            ForEach([title, then].compactMap(\.self), id: \.self) { words in
+                LogoPill(phase: .done, title: words, isOpen: true, isVisible: true).hidden()
+            }
+            LogoPill(
+                phase: .done, title: showsThen ? then ?? title : title, isOpen: isOpen, isVisible: isVisible,
+                flipsOnAppear: true, isHighlighted: isHovered
+            )
+        }
+        .task {
+            isVisible = true
+            if !reduceMotion { try? await Task.sleep(for: .seconds(Self.landing)) }
+            isOpen = true
+            guard then != nil else { return }
+            try? await Task.sleep(for: .seconds(Self.firstWords))
+            showsThen = true
+        }
+    }
 }
 
 /// A fix the user typed past. It never listens to the keyboard: a click applies it, the cross

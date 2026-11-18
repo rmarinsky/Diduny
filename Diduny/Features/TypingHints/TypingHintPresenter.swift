@@ -5,6 +5,8 @@ import PapugaKit
 enum TypingHintContent {
     /// The hint after a fix. `onClick` nil: the fix cannot be undone and the panel takes no clicks.
     case undo(onClick: (() -> Void)?)
+    /// The hint after Convert swapped a selection to the other layout.
+    case swapped
     case recovery(TypingRecoveryHint, onClick: () -> Void)
     case chip(original: String, candidate: String, timeToLive: TimeInterval, onApply: () -> Void, onDismiss: () -> Void)
     case proposal(TypingProposalHint, onReplace: () -> Void, onDismiss: () -> Void, onNeverReplace: () -> Void)
@@ -27,6 +29,8 @@ protocol TypingHintSurface: AnyObject {
 final class TypingHintPresenter: TypingHintPresenting {
     /// Papuga's defaults.
     nonisolated static let undoHintDuration: TimeInterval = 2.5
+    /// A hint with nothing to click ("Swapped", a fix that cannot be undone) is a receipt: shorter.
+    nonisolated static let receiptDuration: TimeInterval = 1.2
     nonisolated static let recoveryDuration: TimeInterval = 10
 
     /// The undo hint and the recovery hint share one panel, so quick fixes do not pile up.
@@ -37,6 +41,7 @@ final class TypingHintPresenter: TypingHintPresenting {
     private let proposal: TypingHintSurface
     private let isUndoHintEnabled: () -> Bool
     private let undoHintDuration: TimeInterval
+    private let receiptDuration: TimeInterval
     private let recoveryDuration: TimeInterval
     /// Arms or disarms the key gate of the engine's tap. Sendable, so `deinit` can call it.
     private let setGateArmed: @Sendable (Bool) -> Void
@@ -53,6 +58,7 @@ final class TypingHintPresenter: TypingHintPresenting {
         proposal: TypingHintSurface,
         isUndoHintEnabled: @escaping () -> Bool,
         undoHintDuration: TimeInterval = TypingHintPresenter.undoHintDuration,
+        receiptDuration: TimeInterval = TypingHintPresenter.receiptDuration,
         recoveryDuration: TimeInterval = TypingHintPresenter.recoveryDuration,
         setGateArmed: @escaping @Sendable (Bool) -> Void = { $0 ? TypingProposalKeyGate.arm() : TypingProposalKeyGate.disarm() }
     ) {
@@ -61,6 +67,7 @@ final class TypingHintPresenter: TypingHintPresenting {
         self.proposal = proposal
         self.isUndoHintEnabled = isUndoHintEnabled
         self.undoHintDuration = undoHintDuration
+        self.receiptDuration = receiptDuration
         self.recoveryDuration = recoveryDuration
         self.setGateArmed = setGateArmed
     }
@@ -96,7 +103,15 @@ final class TypingHintPresenter: TypingHintPresenting {
                 action()
             }
         }), near: point)
-        toastTask = after(undoHintDuration) { $0.dismissFixToast() }
+        toastTask = after(onClick == nil ? receiptDuration : undoHintDuration) { $0.dismissFixToast() }
+    }
+
+    func showSwapHint(near point: NSPoint) {
+        guard isUndoHintEnabled() else { return }
+        toastTask?.cancel()
+        toastTakesClicks = false
+        toast.show(.swapped, near: point)
+        toastTask = after(receiptDuration) { $0.dismissFixToast() }
     }
 
     func showRecovery(_ hint: TypingRecoveryHint, near point: NSPoint, onClick: @escaping () -> Void) {

@@ -150,3 +150,53 @@ struct LivePanelStateTests {
         #expect(abs(size.height - 312) <= 1, "got \(size.height)")
     }
 }
+
+
+/// Meeting Copy new (Roman, 2026-11-17): only text since the last copy, the unfinished line again.
+@MainActor
+struct CopyNewTests {
+    private func store() -> LiveDictationOverlayStore {
+        let store = LiveDictationOverlayStore()
+        store.reset(mode: .meeting)
+        return store
+    }
+
+    private func say(_ store: LiveDictationOverlayStore, _ text: String, final: Bool) {
+        store.processTokens([RealtimeToken(text: text, isFinal: final, speaker: "1")])
+    }
+
+    @Test("Before a copy everything is new; after it only the unfinished line, which is not new until it changes")
+    func firstCopy() {
+        let store = store()
+        say(store, "Hello there.", final: true)
+        say(store, " And then", final: false)
+        #expect(store.textSinceCopy == store.displayText)
+        #expect(store.hasNewSinceCopy)
+        store.markCopied()
+        #expect(store.textSinceCopy.hasSuffix("And then"))
+        #expect(!store.textSinceCopy.contains("Hello"))
+        #expect(!store.hasNewSinceCopy)
+    }
+
+    @Test("Copy new brings the unfinished line back finished, plus what came after")
+    func nextCopy() {
+        let store = store()
+        say(store, "Hello there.", final: true)
+        say(store, " And then", final: false)
+        store.markCopied()
+        say(store, " And then we stop.", final: true)
+        #expect(store.hasNewSinceCopy)
+        #expect(store.textSinceCopy.contains("And then we stop."))
+        #expect(!store.textSinceCopy.contains("Hello"))
+    }
+
+    @Test("A new recording forgets the mark")
+    func resetForgets() {
+        let store = store()
+        say(store, "Hello there.", final: true)
+        store.markCopied()
+        store.reset(mode: .meeting)
+        say(store, "Second.", final: true)
+        #expect(store.textSinceCopy == store.displayText)
+    }
+}

@@ -135,7 +135,7 @@ final class InplaceTranslationService {
             history.recordDelivery(translated, origin: .translated, pasted: true)
             // The badge plays on its own; the clipboard restore below must not wait for it.
             Task {
-                await feedback.finishBadge(success: true)
+                await feedback.finishBadge(failure: nil)
                 await feedback.dismissBadge()
             }
 
@@ -146,9 +146,8 @@ final class InplaceTranslationService {
         } catch {
             if NSPasteboard.general.changeCount == lastFlowChangeCount { snapshot.restore() }
             Log.app.error("[InplaceTranslation] Failed: \(String(describing: type(of: error)), privacy: .public)")
-            await feedback.finishBadge(success: false)
+            await feedback.finishBadge(failure: Self.toast(for: error))
             await feedback.dismissBadge()
-            feedback.showToast(Self.toast(for: error), selectionEnd: selectionEnd)
         }
     }
 }

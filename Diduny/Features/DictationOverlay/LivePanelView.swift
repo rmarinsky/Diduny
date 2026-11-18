@@ -48,6 +48,7 @@ struct LivePanelView: View {
     let onDragEnd: () -> Void
     /// Nil reads the store's hints at each render.
     var shortcuts: LivePanelShortcuts?
+    var onCopyNew: () -> Void = {}
 
     @State private var autoPaste = SettingsStorage.shared.autoPaste
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -189,10 +190,15 @@ struct LivePanelView: View {
             LiveProgressRow(line: line)
         } else {
             PanelControlsLayout(weights: [1, 1.6]) {
-                CopyButton(isCopied: store.copiedAt != nil, action: onCopy)
-                    .disabled(!state.isCopyEnabled)
-                    .help("Copy transcript")
-                    .accessibilityIdentifier("livePanel.copy")
+                if store.mode.isMeeting {
+                    CopyNewButton(copiedAt: store.copiedAt, hasNew: store.hasNewSinceCopy, onCopyNew: onCopyNew, onCopyAll: onCopy)
+                        .disabled(!state.isCopyEnabled)
+                } else {
+                    CopyButton(isCopied: store.copiedAt != nil, action: onCopy)
+                        .disabled(!state.isCopyEnabled)
+                        .help("Copy transcript")
+                        .accessibilityIdentifier("livePanel.copy")
+                }
                 if showsCloseButton {
                     PanelButton(title: "Close", action: onDismiss)
                         .accessibilityIdentifier("livePanel.close")

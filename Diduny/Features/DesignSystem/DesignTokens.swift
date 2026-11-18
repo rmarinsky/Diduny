@@ -318,6 +318,8 @@ enum DS {
         static let m16Progress = Token(duration: 0.20, curve: .linear, reducedMotion: .same)
         /// Copy to Copied label.
         static let m17CopyLabel = Token(duration: 0.16, curve: .easeOut, reducedMotion: .instant)
+        /// Seconds "Copied" stays on the meeting Copy button before it reads "Copy new".
+        static let copiedHold: Double = 1.2
         /// Local models row states and key popup states.
         static let m18RowStates = Token(duration: 0, curve: .instant, reducedMotion: .instant)
 

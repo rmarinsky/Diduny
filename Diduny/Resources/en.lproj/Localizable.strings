@@ -909,6 +909,7 @@
 "Translate: %@ → %@" = "Translate: %@ → %@";
 "Translated" = "Translated";
 "Translating" = "Translating";
+"Translating…" = "Translating…";
 "Translating Meeting..." = "Translating Meeting...";
 "Translating meeting" = "Translating meeting";
 "Translating..." = "Translating...";
@@ -1987,6 +1988,7 @@
 "Model" = "Model";
 "Size" = "Size";
 "Recommended" = "Recommended";
+"Speakers" = "Speakers";
 "Itself: English only" = "Itself: English only";
 "Any language" = "Any language";
 "macOS" = "macOS";
@@ -2066,6 +2068,8 @@
 "The engine changed during this meeting, so %@ makes one transcript from the whole recording, in the cloud. It replaces the live text." = "The engine changed during this meeting, so %@ makes one transcript from the whole recording, in the cloud. It replaces the live text.";
 "The live text was a preview from %@. %@ is making the transcript of the whole meeting, on this Mac. It replaces the live text." = "The live text was a preview from %@. %@ is making the transcript of the whole meeting, on this Mac. It replaces the live text.";
 "The live text was a preview from %@. %@ is making the transcript of the whole meeting, in the cloud. It replaces the live text." = "The live text was a preview from %@. %@ is making the transcript of the whole meeting, in the cloud. It replaces the live text.";
+"The live text stays. %@ transcribes only the parts without it, on this Mac." = "The live text stays. %@ transcribes only the parts without it, on this Mac.";
+"The live text stays. %@ transcribes only the parts without it, in the cloud." = "The live text stays. %@ transcribes only the parts without it, in the cloud.";
 "%@ is making the transcript of the whole meeting, on this Mac." = "%@ is making the transcript of the whole meeting, on this Mac.";
 "%@ is making the transcript of the whole meeting, in the cloud." = "%@ is making the transcript of the whole meeting, in the cloud.";
 
@@ -2133,6 +2137,12 @@
 "Transcribe all again" = "Transcribe all again";
 "Transcribe %lld without transcript" = "Transcribe %lld without transcript";
 "Copy all" = "Copy all";
+"Copy new" = "Copy new";
+"Copy new text" = "Copy new text";
+"Copy text added since the last copy" = "Copy text added since the last copy";
+"Copy the whole transcript" = "Copy the whole transcript";
+"More copy options" = "More copy options";
+"Nothing new" = "Nothing new";
 "Transcript" = "Transcript";
 "Not transcribed yet." = "Not transcribed yet.";
 "The recordings stay as they are. Ungroup at any time; nothing is lost." = "The recordings stay as they are. Ungroup at any time; nothing is lost.";
@@ -2450,7 +2460,8 @@
 "Used to count the time saved in Overview." = "Used to count the time saved in Overview.";
 
 /* Typing hints at the cursor (undo, proposal, recovery, deferred fix) */
-"Fixed" = "Fixed";
+"Oops, fixed" = "Oops, fixed";
+"Swapped" = "Swapped";
 "Undo fix" = "Undo fix";
 "Bring back the hint" = "Bring back the hint";
 "Apply again" = "Apply again";

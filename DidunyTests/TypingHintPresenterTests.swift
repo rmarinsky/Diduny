@@ -25,6 +25,7 @@ private final class FakeSurface: TypingHintSurface {
     func click() {
         switch shown.last {
         case let .undo(onClick): onClick?()
+        case .swapped: break
         case let .recovery(_, onClick): onClick()
         case let .chip(_, _, _, onApply, _): onApply()
         case let .proposal(_, onReplace, _, _): onReplace()
@@ -188,6 +189,76 @@ final class TypingHintPresenterTests {
         #expect(!gate.isArmed)
         #expect(!sut.handleProposalKeyboardShortcut(keyCode: 0x35, flags: []))
         #expect(!proposal.isVisible)
+    }
+
+    // MARK: - Logo hints (Roman, 2026-11-18)
+
+    @Test("the swap hint takes no clicks and leaves after the receipt time, while the undo hint stays")
+    func swapHintIsAReceipt() async {
+        let sut = TypingHintPresenter(
+            toast: toast, chip: chip, proposal: proposal, isUndoHintEnabled: { true },
+            undoHintDuration: 60, receiptDuration: 0.02, recoveryDuration: 60, setGateArmed: { _ in }
+        )
+        sut.showSwapHint(near: .zero)
+        guard case .swapped? = toast.shown.last else {
+            Issue.record("the toast surface got no swap hint")
+            return
+        }
+        toast.containsMouse = true
+        #expect(!sut.isMouseOverToast())
+        await waitUntil { !toast.isVisible }
+        #expect(!toast.isVisible)
+
+        sut.showFixToast(near: .zero) {}
+        try? await Task.sleep(for: .milliseconds(80))
+        #expect(toast.isVisible)
+        #expect(sut.isMouseOverToast())
+    }
+
+    @Test("a fix that cannot be undone is a receipt too")
+    func fixWithoutUndoIsAReceipt() async {
+        let sut = TypingHintPresenter(
+            toast: toast, chip: chip, proposal: proposal, isUndoHintEnabled: { true },
+            undoHintDuration: 60, receiptDuration: 0.02, recoveryDuration: 60, setGateArmed: { _ in }
+        )
+        sut.showFixToast(near: .zero, onClick: nil)
+        await waitUntil { !toast.isVisible }
+        #expect(!toast.isVisible)
+    }
+
+    @Test("with hints off there is no swap hint")
+    func swapHintFollowsTheSetting() {
+        undoHintEnabled = false
+        makePresenter().showSwapHint(near: .zero)
+        #expect(toast.shown.isEmpty)
+    }
+
+    @Test("the logo hints say Swapped, Oops fixed or Undo fix and sit at the text; the others at the pointer")
+    func logoHintWordsAndPlace() {
+        #expect(TypingHintContent.swapped.title == String(localized: "Swapped"))
+        #expect(TypingHintContent.undo(onClick: nil).title == String(localized: "Oops, fixed"))
+        #expect(TypingHintContent.undo(onClick: {}).title == String(localized: "Undo fix"))
+        #expect(TypingHintContent.swapped.placesAtText)
+        #expect(TypingHintContent.undo(onClick: nil).placesAtText)
+        #expect(!TypingHintContent.recovery(.applyAgain, onClick: {}).placesAtText)
+        #expect(!TypingHintContent.swapped.takesClicks)
+    }
+
+    @Test("a logo hint's pill sits 6 pt right of the text end, centered on its line; without the text, at the pointer")
+    func logoHintFrame() throws {
+        let screen = try #require(NSScreen.screens.first)
+        let visible = screen.visibleFrame
+        let text = NSRect(x: visible.midX - 100, y: visible.midY, width: 8, height: 18)
+        let size = NSSize(width: 140, height: LogoPill.height + 2 * LogoPill.margin)
+        let pointer = NSPoint(x: visible.midX + 200, y: visible.midY - 200)
+
+        let atText = TypingHintPlacement.frame(for: .swapped, near: pointer, textEnd: text, size: size, visibleFrame: visible)
+        #expect(atText.minX + LogoPill.margin == text.maxX + InplaceTranslationAnchor.gap)
+        #expect(atText.midY == text.midY)
+        #expect(atText.size == size)
+
+        let atPointer = TypingHintPlacement.frame(for: .swapped, near: pointer, textEnd: nil, size: size, visibleFrame: visible)
+        #expect(atPointer.minX + LogoPill.margin == pointer.x + TypingHintPlacement.offsetX)
     }
 
     @Test("by default the presenter drives the gate the engine's tap reads")
