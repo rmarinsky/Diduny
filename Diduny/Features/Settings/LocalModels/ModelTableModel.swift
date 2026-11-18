@@ -51,6 +51,8 @@ struct LocalModelRow: Identifiable, Equatable {
     let isRecommended: Bool
     let live: ModelCellMark
     let translation: [ModelCellMark]
+    /// No local engine labels speakers; Diduny does it on this Mac after Stop.
+    let speakers = ModelCellMark(kind: .byDiduny, subline: String(localized: "After Stop"))
     /// Translates (into English) itself, without Diduny.
     let translatesItself: Bool
     let languages: ModelLanguagesCell
@@ -100,7 +102,7 @@ enum LocalModelCatalog {
         switch caps.dictationTranslation {
         case .itself: return [ModelCellMark(kind: .yes, subline: nil)]
         case .englishOnlyItselfPlusDiduny:
-            return [ModelCellMark(kind: .no, subline: String(localized: "Itself: English only")), byDiduny]
+            return [ModelCellMark(kind: .no, subline: String(localized: "Itself: English only"))]
         case .byDiduny: return [byDiduny]
         }
     }
