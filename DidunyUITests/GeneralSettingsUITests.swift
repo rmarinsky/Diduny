@@ -24,8 +24,7 @@ final class GeneralSettingsUITests: DidunyUITestCase {
         for id in ["general.appLanguage", "general.launchAtLogin", "general.autoPaste", "general.playSound",
                    "general.messageStyle", "general.surface.compactPanel", "general.surface.notch",
                    "general.openPanelOnStart", "general.keepDictation", "general.keepMeetings",
-                   "general.deleteExpired", "general.setupGuide", "general.screenRecording.askAgain",
-                   "general.typingSpeed", "general.typingTest"] {
+                   "general.deleteExpired", "general.setupGuide", "general.screenRecording.askAgain"] {
             let control = waitForElement(element(id), "Missing \(id)")
             // The page is taller than the CI screen: bring each row into view first.
             scrollIntoView(control, in: page)
@@ -68,9 +67,10 @@ final class GeneralSettingsUITests: DidunyUITestCase {
 
     /// T5-GE-13; "40 WPM" is the fresh-install default.
     func test_typingSpeedAndTypingTest() {
-        openGeneral()
-        waitForElement(element("general.typingSpeed"), toMatch: "value == '40 WPM'")
-        element("general.typingTest").click()
+        launchApp(onboardingCompleted: true)
+        waitForElement(mainWindow.buttons["Sidebar Mistyping"]).click()
+        waitForElement(element("typing.typingSpeed"), toMatch: "value == '40 WPM'")
+        element("typing.typingTest").click()
         waitForElement(element("section.typingTest"))
     }
 }

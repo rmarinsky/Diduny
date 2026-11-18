@@ -2557,7 +2557,7 @@
 "Convert (⇧⌥ twice), shortcuts" = "Convert (⇧⌥ двічі), скорочення";
 "Meeting audio" = "Звук зустрічей";
 "System Default microphone did not start. Recording from %@." = "Системний мікрофон не запустився. Запис іде з %@.";
-"%@ did not start. Recording from %@." = "%1$@ не запустився. Запис іде з %2$@.";
+"%@ did not start. Recording from %@." = "%@ не запустився. Запис іде з %@.";
 "Billing" = "Оплата";
 "Cloud usage" = "Використання хмари";
 "Compare plans" = "Порівняти плани";

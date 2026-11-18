@@ -12,8 +12,8 @@ final class ProvidersUITests: DidunyUITestCase {
             arguments: ["--ui-testing-elevenlabs-key=\(key)"],
             environment: ["DIDUNY_UI_TEST_ELEVENLABS_TEST": account]
         )
-        waitForElement(window.buttons["Sidebar Models"]).click()
-        waitForElement(window.descendants(matching: .any)["section.tabs"]).radioButtons["Providers"].click()
+        waitForElement(window.buttons["Sidebar Engines"]).click()
+        waitForElement(window.descendants(matching: .any)["models.compare"]).click()
         waitForElement(window.descendants(matching: .any)["providers.table"])
     }
 

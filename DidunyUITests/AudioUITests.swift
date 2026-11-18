@@ -13,11 +13,8 @@ final class AudioUITests: DidunyUITestCase {
     /// `P-STD` with fake input devices: no microphone or Screen Recording on CI; recording yields
     /// silence at a steady 0.5 level (test-plan 4.8).
     private func openAudio() {
-        launchApp(onboardingCompleted: true, profile: LaunchProfile.standard.adding("--ui-testing-audio-devices=Test Mic A,Test Mic B"))
+        launchApp(onboardingCompleted: true, profile: LaunchProfile.standard.adding("--ui-testing-audio-devices=Test Mic A,Test Mic B"), open: "settings.audioDictation")
         waitForElement(mainWindow)
-        let item = waitForElement(mainWindow.buttons["Sidebar Dictation"])
-        item.click()
-        waitForElement(element("section.tabs")).radioButtons["Audio"].click()
         waitForElement(element("section.audioDictation"))
     }
 

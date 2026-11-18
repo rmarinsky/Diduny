@@ -2557,7 +2557,7 @@
 "Convert (⇧⌥ twice), shortcuts" = "Convert (⇧⌥ twice), shortcuts";
 "Meeting audio" = "Meeting audio";
 "System Default microphone did not start. Recording from %@." = "System Default microphone did not start. Recording from %@.";
-"%@ did not start. Recording from %@." = "%1$@ did not start. Recording from %2$@.";
+"%@ did not start. Recording from %@." = "%@ did not start. Recording from %@.";
 "Billing" = "Billing";
 "Cloud usage" = "Cloud usage";
 "Compare plans" = "Compare plans";

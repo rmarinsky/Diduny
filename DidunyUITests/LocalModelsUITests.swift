@@ -12,7 +12,7 @@ final class LocalModelsUITests: DidunyUITestCase {
     private func openLocalModels() {
         launchApp(onboardingCompleted: true)
         waitForElement(window.descendants(matching: .any)["section.overview"])
-        window.buttons["Sidebar Models"].click()
+        window.buttons["Sidebar Engines"].click()
         waitForElement(element("models.table"))
     }
 
