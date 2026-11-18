@@ -8,9 +8,11 @@ import Testing
 final class TypingSettingsStorageTests {
     private let box = IsolatedSettings("TypingSettingsStorageTests")
 
-    @Test("clean defaults: Typing is off and the engine gets its own defaults")
+    @Test("clean defaults: Typing is on and the engine gets its own defaults")
     func defaults() {
         let settings = box.settings
+        #expect(settings.typingEnabled)
+        settings.typingEnabled = false
         #expect(!settings.typingEnabled)
         #expect(settings.typingSensitivity == .balanced)
         #expect(settings.typingSwitchLayoutAfterFix)

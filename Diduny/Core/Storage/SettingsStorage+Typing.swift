@@ -25,9 +25,9 @@ extension SettingsStorage {
         case historyRetention = "typing.historyRetention"
     }
 
-    /// "Fix as I type". Off until the user turns it on.
+    /// "Fix as I type": on for everyone until the user turns it off (Roman, 2026-11-18). It still waits for Accessibility.
     var typingEnabled: Bool {
-        get { defaults.bool(forKey: TypingKey.enabled.rawValue) }
+        get { defaults.object(forKey: TypingKey.enabled.rawValue) as? Bool ?? true }
         set { setTyping(newValue, .enabled) }
     }
 

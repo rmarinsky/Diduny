@@ -30,6 +30,11 @@ final class TypingSettingsModelTests {
         isPapugaRunning: { [unowned self] in papugaRunning }, makeEngine: { [unowned self] in engine }
     )
 
+    /// These tests start from "Fix as I type" off; a clean install now has it on.
+    init() {
+        box.settings.typingEnabled = false
+    }
+
     private func model() -> TypingSettingsModel {
         TypingSettingsModel(
             store: box.settings, host: host,

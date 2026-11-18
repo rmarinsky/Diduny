@@ -53,6 +53,11 @@ final class TypingEngineHostTests {
         convertMonitor: TypingConvertMonitor(source: convertKeys)
     )
 
+    /// These tests start from "Fix as I type" off; a clean install now has it on.
+    init() {
+        box.settings.typingEnabled = false
+    }
+
     @Test("Convert listens only while the engine runs and its switch is on, for the picked pair")
     func convertFollowsEngineAndSwitch() {
         box.settings.typingEnabled = true
