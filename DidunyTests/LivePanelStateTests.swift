@@ -131,7 +131,7 @@ struct LivePanelStateTests {
         #expect(DictationOutputMenu.rowID(.translation(targetLanguage: "uk")) == "lang.uk")
     }
 
-    @Test("TS-CON-03 dictation panel is 300 x 312 with Original and Diduny Cloud")
+    @Test("TS-CON-03 dictation panel is 364 x 312 with Original and Diduny Cloud")
     func dictationPanelSize() throws {
         let store = LiveDictationOverlayStore()
         store.reset(mode: .voice)
@@ -146,7 +146,7 @@ struct LivePanelStateTests {
         .frame(width: DS.Panel.width)
         .fixedSize(horizontal: false, vertical: true)
         let size = NSHostingView(rootView: view).fittingSize
-        #expect(abs(size.width - 300) <= 1, "got \(size.width)")
+        #expect(abs(size.width - DS.Panel.width) <= 1, "got \(size.width)")
         #expect(abs(size.height - 312) <= 1, "got \(size.height)")
     }
 }

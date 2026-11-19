@@ -39,7 +39,7 @@ struct EdgeCommandPanelModelTests {
             dock: rightDock,
             presentation: .commands(isCloud: true)
         )
-            == NSRect(x: 1140, y: 287, width: 300, height: 326))
+            == NSRect(x: 1076, y: 287, width: 364, height: 326))
         #expect(EdgeCommandPanelPlacement.frame(in: visibleFrame, dock: bottomDock, presentation: .collapsed)
             == NSRect(x: 688, y: 0, width: 64, height: 14))
         #expect(EdgeCommandPanelPlacement.frame(
@@ -47,7 +47,7 @@ struct EdgeCommandPanelModelTests {
             dock: bottomDock,
             presentation: .commands(isCloud: true)
         )
-            == NSRect(x: 570, y: 0, width: 300, height: 326))
+            == NSRect(x: 538, y: 0, width: 364, height: 326))
     }
 
     @Test("Expanded panels keep rounded corners when docked")
@@ -75,11 +75,11 @@ struct EdgeCommandPanelModelTests {
             presentation: .live(.meeting)
         )
 
-        #expect(dictation == NSRect(x: 1140, y: 294, width: 300, height: 312))
-        #expect(meeting == NSRect(x: 1140, y: 241.5, width: 300, height: 417))
+        #expect(dictation == NSRect(x: 1076, y: 294, width: 364, height: 312))
+        #expect(meeting == NSRect(x: 1076, y: 241.5, width: 364, height: 417))
     }
 
-    @Test("Every expanded state is 300 wide and takes the content's fitting height")
+    @Test("Every expanded state is 364 wide and takes the content's fitting height")
     func expandedStatesShareWidthAndFitContent() {
         let visibleFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
         let presentations: [EdgeCommandPanelPresentation] = [
@@ -95,7 +95,7 @@ struct EdgeCommandPanelModelTests {
                 #expect(frame.height == 287)
             }
         }
-        #expect(EdgeCommandPanelPlacement.panelWidth == 300)
+        #expect(EdgeCommandPanelPlacement.panelWidth == 364)
     }
 
     @Test("Height change keeps the docked edge fixed")

@@ -189,7 +189,7 @@ struct LivePanelView: View {
         if let line = state.progressLine {
             LiveProgressRow(line: line)
         } else {
-            PanelControlsLayout(weights: [1, 1.6]) {
+            PanelControlsLayout(weights: [1, 1.2]) {
                 if store.mode.isMeeting {
                     CopyNewButton(copiedAt: store.copiedAt, hasNew: store.hasNewSinceCopy, onCopyNew: onCopyNew, onCopyAll: onCopy)
                         .disabled(!state.isCopyEnabled)
