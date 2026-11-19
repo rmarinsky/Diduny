@@ -21,11 +21,16 @@ struct LogoBadge: View {
     /// Each change replays the landing burst (none under Reduce Motion).
     var pulseTrigger = 0
     var pulsesOnAppear = false
+    /// The logo flips once around its vertical axis, like a coin, with a small hop on appear: a layout fix
+    /// (the letters went to the other side). Translation never flips; it rocks while waiting.
+    var flipsOnAppear = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @State private var breathing = false
     @State private var burst = false
+    @State private var flip: Double = 0
+    @State private var hop: CGFloat = 0
 
     private var unit: CGFloat {
         discSize / 28
@@ -50,6 +55,7 @@ struct LogoBadge: View {
                 TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isThinking)) { timeline in
                     thinking(t: timeline.date.timeIntervalSinceReferenceDate)
                 }
+                .rotation3DEffect(.degrees(flip), axis: (x: 0, y: 1, z: 0), perspective: 0.6)
                 ring
                 if phase == .done {
                     Image(systemName: "checkmark.circle.fill")
@@ -62,6 +68,7 @@ struct LogoBadge: View {
             }
             .frame(width: discSize, height: discSize)
         }
+        .offset(y: hop)
         .scaleEffect(scale)
         .opacity(isVisible ? 1 : 0)
         .animation(appearAnimation, value: isVisible)
@@ -69,6 +76,7 @@ struct LogoBadge: View {
         .accessibilityHidden(true)
         .onAppear {
             if pulsesOnAppear { playBurst() }
+            if flipsOnAppear, !reduceMotion { flipAndHop() }
             guard reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { breathing = true }
         }
@@ -136,11 +144,73 @@ struct LogoBadge: View {
         return isVisible ? .bouncy(duration: 0.28, extraBounce: 0.2) : .easeIn(duration: 0.15)
     }
 
+    /// One flip in 450 ms; at the same time the badge rises 5 units in 150 ms and falls back in 150 ms.
+    private func flipAndHop() {
+        withAnimation(DS.Motion.easeOut(0.45)) { flip = 360 }
+        withAnimation(DS.Motion.easeOut(0.15)) {
+            hop = -5 * unit
+        } completion: {
+            withAnimation(.easeIn(duration: 0.15)) { hop = 0 }
+        }
+    }
+
     private func playBurst() {
         guard !reduceMotion else { return }
         burst = false
         DispatchQueue.main.async {
             withAnimation(.easeOut(duration: 0.35)) { burst = true }
         }
+    }
+}
+
+/// The logo with words in a pill, right of the text it changed: in-place translation and the typing
+/// engine's fix hints (Roman, 2026-11-18: one look for all of them). The logo pops in on its own, then the
+/// pill and the words open around it; new words cross-fade. Hidden, it fades and shrinks a little.
+struct LogoPill: View {
+    var phase: LogoBadgePhase
+    var title: String
+    /// False while only the logo shows.
+    var isOpen: Bool
+    var isVisible: Bool
+    var flipsOnAppear = false
+    var isHighlighted = false
+
+    static let disc: CGFloat = 32
+    static let height: CGFloat = 40
+    /// Room around the pill for the landing sparks, the hop and the 1.15 scale, so nothing is clipped.
+    static let margin: CGFloat = 8
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Self.height / 2, style: .continuous)
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            LogoBadge(phase: phase, discSize: Self.disc, isVisible: isVisible, pulsesOnAppear: phase == .done, flipsOnAppear: flipsOnAppear)
+            Text(verbatim: title)
+                .font(DS.Font.headline)
+                .foregroundStyle(DS.Palette.text)
+                .lineLimit(1)
+                .id(title)
+                .transition(.opacity)
+                .opacity(isOpen ? 1 : 0)
+        }
+        .padding(.leading, DS.Space.xs)
+        .padding(.trailing, DS.Space.md)
+        .frame(height: Self.height)
+        .background { shape.fill(.regularMaterial).opacity(isOpen ? 1 : 0) }
+        .overlay {
+            shape.strokeBorder(isHighlighted ? DS.Palette.accentText : DS.Palette.tintBorder, lineWidth: isHighlighted ? 1 : 0.5)
+                .opacity(isOpen ? 1 : 0)
+        }
+        .contentShape(shape)
+        .opacity(isVisible ? 1 : 0)
+        .scaleEffect(isVisible || reduceMotion ? 1 : 0.95, anchor: .leading)
+        .animation(DS.Motion.easeOut(0.2), value: isOpen)
+        .animation(DS.Motion.easeOut(0.15), value: title)
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .easeIn(duration: 0.15), value: isVisible)
+        .padding(Self.margin)
     }
 }

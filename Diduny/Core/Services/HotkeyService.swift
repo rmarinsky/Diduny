@@ -18,6 +18,8 @@ extension KeyboardShortcuts.Name {
     static let translateSelectedText = Self("translateSelectedText", default: .init(.t, modifiers: [.command, .option]))
     /// Translate in place as a key chord (ADR-0012 D8). No default: unset until the user records one.
     static let inplaceTranslation = Self("inplaceTranslation")
+    /// Undo the last layout fix (Typing). No default: unset until the user records one.
+    static let undoLayoutFix = Self("undoLayoutFix")
 }
 
 // MARK: - Hotkey Service
@@ -44,7 +46,7 @@ final class HotkeyService {
     /// set from the `Name` statics re-entered its own one-time initializer and trapped at launch.
     static let ownedNameValues: Set<String> = [
         "toggleRecording", "toggleTranslation", "toggleMeetingRecording", "toggleMeetingTranslation",
-        "addMeetingChapter", "toggleHistoryPalette", "translateSelectedText"
+        "addMeetingChapter", "toggleHistoryPalette", "translateSelectedText", "undoLayoutFix"
     ]
 
     private let settings: SettingsStorage
@@ -174,6 +176,20 @@ final class HotkeyService {
         unregister(.translateSelectedText)
     }
 
+    /// Registered while the typing engine runs.
+    func registerUndoLayoutFixHotkey(handler: @escaping () -> Void) {
+        register(
+            .undoLayoutFix,
+            pressCount: { [settings] in settings.undoLayoutFixPressCount },
+            isOn: { [settings] in settings.undoLayoutFixHotkeyEnabled },
+            handler: handler
+        )
+    }
+
+    func unregisterUndoLayoutFixHotkey() {
+        unregister(.undoLayoutFix)
+    }
+
     /// Re-applies every switch: off disables the name and keeps its keys; on enables it again.
     func refreshSwitches() {
         bindings.keys.forEach(reapply)
@@ -189,6 +205,7 @@ final class HotkeyService {
         unregisterChapterHotkey()
         unregisterHistoryPaletteHotkey()
         unregisterTranslateSelectedTextHotkey()
+        unregisterUndoLayoutFixHotkey()
     }
 
     // MARK: - Registration

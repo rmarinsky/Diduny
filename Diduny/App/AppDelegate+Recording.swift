@@ -251,16 +251,22 @@ extension AppDelegate {
             Log.app.warning("stopRecording: state changed during processing (now \(processingState)), dropping result")
             return false
         }
-        copy(text)
+        // The clipboard history gets one "Dictated" entry, not a copy made by the user.
+        let history = ClipboardHistoryService.shared
+        history.withoutCapture { copy(text) }
         Log.app.info("stopRecording: Text copied to clipboard")
 
         guard autoPaste else {
+            history.recordDelivery(text, origin: .dictated, pasted: false)
             ForceSubmitService.shared.disarm()
             return true
         }
         Log.app.info("stopRecording: Auto-pasting")
+        var pasted = false
+        defer { history.recordDelivery(text, origin: .dictated, pasted: pasted) }
         do {
             try await paste()
+            pasted = true
             await submitAfterPasteIfRequested(hasText: !text.isEmpty)
         } catch ClipboardError.accessibilityNotGranted {
             ForceSubmitService.shared.disarm()
@@ -747,10 +753,13 @@ extension AppDelegate {
                     let transcript = try await whisperTranscriptionService.transcribeDetailed(audioData: wavData)
                     let text = try requireNonemptyVoiceDictation(ClipboardService.preparedMessageText(transcript.text))
                     Log.app.info("stopRecording: Whisper fallback succeeded (\(text.count) chars)")
-                    clipboardService.copy(text: text)
+                    let history = ClipboardHistoryService.shared
+                    history.withoutCapture { clipboardService.copy(text: text) }
+                    var pasted = false
                     if SettingsStorage.shared.autoPaste {
                         do {
                             try await clipboardService.paste()
+                            pasted = true
                             await submitAfterPasteIfRequested(hasText: !text.isEmpty)
                         } catch ClipboardError.accessibilityNotGranted {
                             Log.app.warning("stopRecording: Accessibility permission needed during Whisper fallback")
@@ -760,6 +769,7 @@ extension AppDelegate {
                                 .error("stopRecording: Whisper fallback paste failed - \(error.localizedDescription)")
                         }
                     }
+                    history.recordDelivery(text, origin: .dictated, pasted: pasted)
                     guard appState.recordingState == .processing else { return }
                     await MainActor.run {
                         appState.lastTranscription = text

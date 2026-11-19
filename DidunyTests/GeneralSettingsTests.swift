@@ -34,7 +34,10 @@ struct GeneralSettingsTests {
     /// Page capture for the designer (same output folder as `ComponentRenderTests`).
     @Test("General page renders to a PNG", arguments: Appearance.allCases)
     func renderPage(_ appearance: Appearance) throws {
-        let page = GeneralSettingsView().frame(width: 757, height: 1100)
+        let page = GeneralSettingsView()
+            .environment(AppState())
+            .environment(AudioDeviceManager())
+            .frame(width: 757, height: 1100)
         let bitmap = try #require(RetinaHost.render(page, appearance: NSAppearance(named: appearance == .light ? .aqua : .darkAqua)))
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
         #expect(!png.isEmpty)

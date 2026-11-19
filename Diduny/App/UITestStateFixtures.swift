@@ -55,6 +55,8 @@
             "languages": std("settings.languages"),
             "audio": std("settings.audioDictation", ["--ui-testing-audio-devices=Test Mic A,Test Mic B"]),
             "shortcuts": std("settings.modes"),
+            "clipboard": std("settings.clipboard", ["--ui-testing-clipboard=sample"]),
+            "clipboard-empty": std("settings.clipboard", ["--ui-testing-clipboard=empty"]),
         ]
     }
 
@@ -66,6 +68,8 @@
         static func didFinishLaunching(_ appDelegate: AppDelegate) {
             if UITestHarness.listensToBridge { UITestBridge.shared.start() }
             if UITestHarness.showsProbe { UITestProbe.shared.show(appState: appDelegate.appState) }
+            TypingHintsUITestPreview.showIfRequested()
+            UpdateStatus.shared.applyUITestingArgument()
             guard let target = UITestHarness.openTarget else { return }
             open(target, appDelegate: appDelegate)
         }

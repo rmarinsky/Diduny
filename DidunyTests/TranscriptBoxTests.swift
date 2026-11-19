@@ -59,3 +59,49 @@ struct TranscriptBoxTests {
         #expect(abs(scroll.documentVisibleRect.maxY - document.frame.height) < 1)
     }
 }
+
+/// A mic notice adds lines to a fixed-height live panel; the box gives up that space so Stop stays inside.
+@MainActor
+@Suite("Transcript box yields to a notice")
+struct TranscriptBoxYieldTests {
+    @Observable @MainActor final class Probe {
+        var controlsMaxY: CGFloat?
+    }
+
+    /// The dictation panel's shape: header and fields, the box, a two-line notice, the controls.
+    private struct Panel: View {
+        let probe: Probe
+        let calm: Bool
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: DS.Panel.blockGap) {
+                Color.clear.frame(height: 90)
+                if calm {
+                    CalmBox(title: "Recording", detail: "Detail", height: DS.Size.transcriptDictation)
+                } else {
+                    TranscriptBox(height: DS.Size.transcriptDictation) { Text(verbatim: "Text") }
+                }
+                Color.clear.frame(height: 34)
+                Color.clear.frame(height: 38).background(GeometryReader { geometry in
+                    Color.clear.onAppear { probe.controlsMaxY = geometry.frame(in: .global).maxY }
+                })
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func controlsStayInsideThePanel(calm: Bool) async throws {
+        let probe = Probe()
+        let host = NSHostingView(rootView: Panel(probe: probe, calm: calm))
+        host.frame = NSRect(x: 0, y: 0, width: 274, height: 300)
+        let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.contentView = host
+        for _ in 0 ..< 10 {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+            await Task.yield()
+        }
+        let maxY = try #require(probe.controlsMaxY)
+        #expect(maxY <= 300.5)
+    }
+}

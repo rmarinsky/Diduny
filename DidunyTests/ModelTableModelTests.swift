@@ -272,8 +272,7 @@ struct ModelTableModelTests {
 
         for name in multilingualNotTurbo {
             let r = try row(model, name)
-            #expect(r.translation == [ModelCellMark(kind: .no, subline: "Itself: English only"),
-                                      ModelCellMark(kind: .byDiduny, subline: "Any language")])
+            #expect(r.translation == [ModelCellMark(kind: .no, subline: "Itself: English only")])
             if case let .list(title, _) = r.languages { #expect(title == "100") } else { Issue.record("\(name) list") }
         }
         for name in englishOnly + [turbo, "ggml-large-v3-turbo-q5_0"] {
@@ -287,6 +286,22 @@ struct ModelTableModelTests {
         #expect(large.accuracyText == "9.7")
         #expect(large.sizeText == "1.5 GB")
         #expect(model.rows.filter(\.isRecommended).map(\.id) == ["parakeet-v3", turbo])
+    }
+
+    @Test("Whisper rows say Whisper in the name; Parakeet and Apple Speech do not")
+    func whisperPrefix() throws {
+        let model = make()
+        #expect(try row(model, turbo).name == "Whisper Large v3 Turbo")
+        #expect(try row(model, "ggml-tiny.en").name == "Whisper Tiny (English)")
+        #expect(try row(model, "parakeet-v3").name == "Parakeet V3")
+        #expect(try row(model, "apple-speech").name == "Apple Speech")
+    }
+
+    @Test("Speakers: no local engine labels them; Diduny does after Stop, on every row")
+    func speakers() {
+        for r in make().rows {
+            #expect(r.speakers == ModelCellMark(kind: .byDiduny, subline: "After Stop"))
+        }
     }
 
     @Test("Size text matches the Size column for every model, independent of the system locale")

@@ -50,57 +50,59 @@ struct BillingSettingsSection: View {
     }
 
     var body: some View {
-        Section("Plans & billing") {
-            VStack(alignment: .leading, spacing: 18) {
-                if isLoggedIn, let state = billing.state {
-                    if state.pendingOrderReference == nil && (state.plan == "pro" || (["support", "cloud"].contains(state.plan) && !showsUpgrade)) {
-                        subscription(state)
-                    }
-                    if state.pendingOrderReference != nil {
+        GeneralGroup(heading: "Plan") {
+            if isLoggedIn, let state = billing.state {
+                if state.pendingOrderReference == nil && (state.plan == "pro" || (["support", "cloud"].contains(state.plan) && !showsUpgrade)) {
+                    subscription(state)
+                }
+                if state.pendingOrderReference != nil {
+                    SettingsLineRow(title: "Change plan", kind: .button) {
                         Button("Change plan") { confirmsPlanChange = true }.buttonStyle(.bordered).disabled(billing.isLoading)
                     }
-                    BillingOfferView(state: state, interval: Binding(get: { navigation.interval }, set: { navigation.interval = $0 }),
-                                         checkoutAvailable: billing.checkoutAvailable,
-                                         isLoading: billing.isLoading, initialSelection: appState.billingSelection, navigation: navigation)
-                        { chosen, mode, product in
-                            Task {
-                                if let url = await billing.checkout(chosen, paymentMode: mode, product: product) {
-                                    NSWorkspace.shared.open(url)
-                                    await billing.refresh()
-                                }
+                }
+                BillingOfferView(state: state, interval: Binding(get: { navigation.interval }, set: { navigation.interval = $0 }),
+                                     checkoutAvailable: billing.checkoutAvailable,
+                                     isLoading: billing.isLoading, initialSelection: appState.billingSelection, navigation: navigation)
+                    { chosen, mode, product in
+                        Task {
+                            if let url = await billing.checkout(chosen, paymentMode: mode, product: product) {
+                                NSWorkspace.shared.open(url)
+                                await billing.refresh()
                             }
                         }
-                } else if isLoggedIn {
-                    Label(billing.isLoading ? "Loading subscription…" : "Subscription could not be loaded",
-                          systemImage: "cloud")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Dictate. Follow meetings. Translate live.").font(.title3.weight(.semibold))
-                    Text("Sign in to view subscription prices and upgrade.").foregroundStyle(.secondary)
-                }
-
-                if let error = billing.errorMessage {
-                    Label(error, systemImage: "exclamationmark.circle")
-                        .font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
-                        .accessibilityIdentifier("billing.error")
-                }
-                Divider()
-                Text(
-                    "Always free: local models with no hourly limit, plus 2 hours of cloud transcription per calendar month."
-                )
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    Button("Terms, refunds & privacy") { showsPolicies = true }
-                        .buttonStyle(.bordered)
-                    Spacer()
-                    if isLoggedIn {
-                        if billing.isLoading { ProgressView().controlSize(.small) }
-                        Button("Check payment status") { Task { await refresh(sync: billing.checkoutAvailable) } }
-                            .buttonStyle(.bordered)
-                            .disabled(billing.isLoading)
                     }
-                }.font(.callout)
-            }.padding(.vertical, 8)
+            } else if isLoggedIn {
+                SettingsLineRow(title: billing.isLoading ? "Loading subscription…" : "Subscription could not be loaded") {
+                    Image(systemName: "cloud").foregroundStyle(DS.Palette.secondary).accessibilityHidden(true)
+                }
+            } else {
+                SettingsLineRow(
+                    title: "Dictate. Follow meetings. Translate live.",
+                    caption: "Sign in to view subscription prices and upgrade."
+                ) {}
+            }
+
+            if let error = billing.errorMessage {
+                Label(error, systemImage: "exclamationmark.circle")
+                    .font(DS.Font.meta).foregroundStyle(DS.Palette.secondary).textSelection(.enabled)
+                    .padding(.vertical, 9)
+                    .accessibilityIdentifier("billing.error")
+            }
+            BillingNote(
+                "Always free: local models with no hourly limit, plus 2 hours of cloud transcription per calendar month."
+            )
+            SettingsLineRow(title: "Terms, refunds & privacy", kind: .button, showsHairline: isLoggedIn) {
+                Button("Terms, refunds & privacy") { showsPolicies = true }
+                    .buttonStyle(.bordered)
+            }
+            if isLoggedIn {
+                SettingsLineRow(title: "Check payment status", kind: .button, showsHairline: false) {
+                    if billing.isLoading { ProgressView().controlSize(.small) }
+                    Button("Check payment status") { Task { await refresh(sync: billing.checkoutAvailable) } }
+                        .buttonStyle(.bordered)
+                        .disabled(billing.isLoading)
+                }
+            }
         }
         .sheet(isPresented: $showsPolicies) { BillingPolicySheet() }
         .onChange(of: billing.state?.pendingBillingInterval) { _, pending in
@@ -137,67 +139,88 @@ struct BillingSettingsSection: View {
     }
 
     @ViewBuilder private func subscription(_ state: BillingState) -> some View {
-        Label(
-            state.status == "past_due" ? "Your renewal needs attention" : state
-                .plan == "support" ? "Thank you for supporting Diduny" : state.plan == "cloud" ? "Diduny Cloud is active" : "Diduny Pro is active",
-            systemImage: state.status == "past_due" ? "exclamationmark.circle" : "checkmark.circle.fill"
-        )
-        .font(.title3.weight(.semibold))
-        .foregroundStyle(state.status == "past_due" ? Color.orange : Color.green)
+        SettingsLineRow(
+            title: state.status == "past_due" ? "Your renewal needs attention" : state
+                .plan == "support" ? "Thank you for supporting Diduny" : state.plan == "cloud" ? "Diduny Cloud is active" : "Diduny Pro is active"
+        ) {
+            Image(systemName: state.status == "past_due" ? "exclamationmark.circle" : "checkmark.circle.fill")
+                .foregroundStyle(state.status == "past_due" ? DS.Palette.warn : DS.Palette.ok)
+                .accessibilityHidden(true)
+        }
         if state.status == "past_due" {
-            Text(
-                "The renewal payment has not been confirmed. Your paid membership remains available during a short grace period. Check payment status below or contact support."
-            )
-            .font(.callout).foregroundStyle(.secondary)
-            Link("Contact support", destination: URL(string: "mailto:roman@rmarinsky.com.ua")!)
+            SettingsLineRow(
+                title: "Contact support",
+                caption: "The renewal payment has not been confirmed. Your paid membership remains available during a short grace period. Check payment status below or contact support.",
+                kind: .button
+            ) {
+                Link("Contact support", destination: URL(string: "mailto:roman@rmarinsky.com.ua")!)
+            }
         }
         if ["support", "cloud"].contains(state.plan) {
-            Text("A higher plan is a separate purchase. Starting checkout stops the current renewal. Your new plan begins after payment confirmation; the previous payment is not credited.")
-                .font(.callout).foregroundStyle(.secondary)
-            Button("Explore Pro plans") { showsUpgrade = true }
-                .buttonStyle(.borderedProminent)
-                .tint(DS.Palette.accent)
+            SettingsLineRow(
+                title: "Explore Pro plans",
+                caption: "A higher plan is a separate purchase. Starting checkout stops the current renewal. Your new plan begins after payment confirmation; the previous payment is not credited.",
+                kind: .button
+            ) {
+                Button("Explore Pro plans") { showsUpgrade = true }
+                    .buttonStyle(.borderedProminent)
+                    .tint(DS.Palette.accent)
+            }
         }
         if state.community?.eligible == true {
             if let url = state.community?.inviteURL {
-                Link("Join the supporter community", destination: url)
+                SettingsLineRow(title: "Join the supporter community", kind: .button) {
+                    Link("Join the supporter community", destination: url)
+                }
             } else {
-                Text("Your community invitation is being prepared.").font(.callout).foregroundStyle(.secondary)
+                BillingNote("Your community invitation is being prepared.")
             }
-            Link(
-                "Suggest a feature",
-                destination: URL(string: "mailto:roman@rmarinsky.com.ua?subject=Diduny%20feature%20suggestion")!
-            )
+            SettingsLineRow(title: "Suggest a feature", kind: .button) {
+                Link(
+                    "Suggest a feature",
+                    destination: URL(string: "mailto:roman@rmarinsky.com.ua?subject=Diduny%20feature%20suggestion")!
+                )
+            }
         }
-        LabeledContent(
-            "Subscription",
-            value: state.billingInterval == .yearly ? String(localized: "Annual") : String(localized: "Monthly")
-        )
-        if let date = displayDate(state.activeUntil) { LabeledContent(
-            state.status == "past_due" ? "Last paid period ended" : "Access until",
-            value: date
-        ) }
+        SettingsLineRow(title: "Billing", kind: .other) {
+            Text(state.billingInterval == .yearly ? String(localized: "Annual") : String(localized: "Monthly"))
+                .font(DS.Font.body).foregroundStyle(DS.Palette.secondary)
+        }
+        if let date = displayDate(state.activeUntil) {
+            SettingsLineRow(title: state.status == "past_due" ? "Last paid period ended" : "Access until") {
+                Text(date).font(DS.Font.body).foregroundStyle(DS.Palette.secondary)
+            }
+        }
         if state.paymentMode == .oneTime {
-            Text("One-time purchase. No automatic renewal or further subscription charges.")
-                .font(.callout).foregroundStyle(.secondary)
+            BillingNote("One-time purchase. No automatic renewal or further subscription charges.")
         } else if state.cancelAtPeriodEnd {
-            Text("Automatic renewal is off. Your paid access stays available until the date above.")
-                .font(.callout).foregroundStyle(.secondary)
-            Button("Resume automatic renewal") {
-                Task {
-                    if let url = await billing.setRenewal(enabled: true) {
-                        NSWorkspace.shared.open(url)
-                        await billing.refresh()
+            SettingsLineRow(
+                title: "Resume automatic renewal",
+                caption: "Automatic renewal is off. Your paid access stays available until the date above.",
+                kind: .button
+            ) {
+                Button("Resume automatic renewal") {
+                    Task {
+                        if let url = await billing.setRenewal(enabled: true) {
+                            NSWorkspace.shared.open(url)
+                            await billing.refresh()
+                        }
                     }
                 }
-            }
-            .buttonStyle(.bordered)
-            .disabled(billing.isLoading)
-        } else {
-            if let date = displayDate(state.renewsAt) { LabeledContent("Next payment", value: date) }
-            Button("Cancel automatic renewal", role: .destructive) { confirmsCancellation = true }
                 .buttonStyle(.bordered)
                 .disabled(billing.isLoading)
+            }
+        } else {
+            if let date = displayDate(state.renewsAt) {
+                SettingsLineRow(title: "Next payment") {
+                    Text(date).font(DS.Font.body).foregroundStyle(DS.Palette.secondary)
+                }
+            }
+            SettingsLineRow(title: "Cancel automatic renewal", kind: .button) {
+                Button("Cancel automatic renewal", role: .destructive) { confirmsCancellation = true }
+                    .buttonStyle(.bordered)
+                    .disabled(billing.isLoading)
+            }
         }
     }
 
@@ -242,19 +265,16 @@ struct BillingOfferView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(pending ? "Finish your payment" : reviewing ? "Review your purchase" :
-                    "Dictate. Follow meetings. Translate live.")
-                    .font(.title2.weight(.semibold))
-                Text(pending ? "Your payment has not been confirmed. Continue the original checkout or check its status below."
-                    : "All local processing is free and unlimited. Pro includes unlimited cloud processing.")
-                    .font(.callout).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsLineRow(
+                title: pending ? "Finish your payment" : reviewing ? "Review your purchase" :
+                    "Dictate. Follow meetings. Translate live.",
+                caption: pending ? "Your payment has not been confirmed. Continue the original checkout or check its status below."
+                    : "All local processing is free and unlimited. Pro includes unlimited cloud processing."
+            ) {}
 
             if !showsPlans, !reviewing, !pending, !["support", "cloud", "pro"].contains(state.plan) {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 0) {
                     benefit(
                         "Words appear as you speak",
                         "Dictate into the app you use and follow the cloud transcript while recording.",
@@ -270,38 +290,42 @@ struct BillingOfferView: View {
                         "Read live voice and meeting translations for languages supported by the cloud model.",
                         icon: "character.bubble"
                     )
-                    Text(
+                    BillingNote(
                         "Local dictation, meetings, audio, video and YouTube transcription have no usage quota. Performance depends on your Mac and model."
                     )
-                    .font(.callout).foregroundStyle(.secondary)
-                    DidunyPrimaryButton(title: "Compare Free, Support, Cloud and Pro", isEnabled: !isLoading) { navigation.comparePlans() }
-                        .accessibilityIdentifier("billing.explore")
+                    SettingsLineRow(title: "Compare plans", caption: "Free, Support, Cloud and Pro", kind: .button) {
+                        Button("Compare Free, Support, Cloud and Pro") { navigation.comparePlans() }
+                            .buttonStyle(.bordered)
+                            .disabled(isLoading)
+                            .accessibilityIdentifier("billing.explore")
+                    }
                 }
             }
             if showsPlans || reviewing || pending || ["support", "cloud", "pro"].contains(state.plan) {
                 if !pending, !["support", "cloud", "pro"].contains(state.plan) {
-                    Button("Back to benefits") { showsPlans = false; reviewing = false }.buttonStyle(.link)
+                    SettingsLineRow(title: "Back to benefits", kind: .button) {
+                        Button("Back to benefits") { showsPlans = false; reviewing = false }.buttonStyle(.bordered)
+                    }
                 }
-                HStack {
+                SettingsLineRow(
+                    title: "Billing",
+                    caption: state.hasTwoMonthsFree && interval == .yearly ? "2 months free" : nil,
+                    kind: .segmented
+                ) {
                     Picker("Payment period", selection: $interval) {
                         Text("Monthly").tag(BillingInterval.monthly)
                         Text("Annual").tag(BillingInterval.yearly)
-                    }.pickerStyle(.segmented)
-
+                    }.pickerStyle(.segmented).labelsHidden()
                 }
-                if state.hasTwoMonthsFree,
-                   interval == .yearly { Text("2 months free").foregroundStyle(Color.accentColor) }
-                planComparison
-                Text("The period selector applies to Pro. Support and Cloud remain monthly.").font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(
+                planComparison.padding(.vertical, 9)
+                BillingNote("The period selector applies to Pro. Support and Cloud remain monthly.")
+                BillingNote(
                     "Free and Support include two shared cloud hours per calendar month for dictation, meeting transcription and speech translation."
                 )
-                .font(.callout).foregroundStyle(.secondary)
                 DisclosureGroup("Compare local and cloud processing") { comparison }
                 if let oneTime = state.oneTimeAnnualPlan {
                     DisclosureGroup("Prefer no automatic renewal?") {
-                        Text("One-time annual Pro. No automatic renewal.").font(.callout)
+                        BillingNote("One-time annual Pro. No automatic renewal.")
                         Button(oneTime.formattedPrice) {
                             product = .pro; interval = .yearly; paymentMode = .oneTime; reviewing = true
                         }.accessibilityIdentifier("billing.plan.one_time").disabled(isLoading)
@@ -311,41 +335,31 @@ struct BillingOfferView: View {
             if reviewing || pending {
                 if let selected {
                     if reviewing || pending {
-                        LabeledContent(
-                            "Plan",
-                            value: effectiveProduct == .support ? String(localized: "Support development") :
-                                effectiveProduct == .cloud ? String(localized: "Diduny Cloud") : String(localized: "Diduny Pro")
-                        )
-                        LabeledContent(
-                            "Payment period",
-                            value: effectiveInterval == .yearly ? String(localized: "12 months") :
-                                String(localized: "1 month")
-                        )
+                        valueRow("Plan", effectiveProduct == .support ? String(localized: "Support development") :
+                            effectiveProduct == .cloud ? String(localized: "Diduny Cloud") : String(localized: "Diduny Pro"))
+                        valueRow("Payment period", effectiveInterval == .yearly ? String(localized: "12 months") :
+                            String(localized: "1 month"))
                         if !pending || state.pendingPlan != nil {
-                            LabeledContent("Total payment", value: selected.formattedPrice).font(.headline)
+                            valueRow("Total payment", selected.formattedPrice)
                         }
                     }
                     if pending, state.pendingPlan == nil {
-                        Text(
+                        BillingNote(
                             "Review the original amount and renewal terms on WayForPay before paying. This checkout keeps its original price."
                         )
-                        .font(.callout).foregroundStyle(.secondary)
                     } else if effectiveMode == .oneTime {
-                        Text(
+                        BillingNote(
                             "\(selected.formattedPrice) paid once for 12 months. No automatic renewal. Bank installment payments, if selected, follow the bank’s schedule and do not renew Pro."
                         )
-                        .font(.callout).foregroundStyle(.secondary)
                     } else {
-                        Text(
+                        BillingNote(
                             "\(selected.formattedPrice) charged \(effectiveInterval == .yearly ? String(localized: "once a year") : String(localized: "each month")). Renews automatically. Cancel renewal at any time in Account; access stays available until the paid period ends."
                         )
-                        .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     if reviewing {
-                        Text(
+                        BillingNote(
                             "By continuing, you accept the terms for this plan and acknowledge the Privacy Policy. Optional usage statistics stay off unless you separately enable them in Account. Payment opens in your browser. Return here after payment to check your access."
                         )
-                        .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     if checkoutAvailable {
                         HStack(spacing: 12) {
@@ -365,12 +379,12 @@ struct BillingOfferView: View {
                             "Payments are temporarily unavailable. You can keep using the free plan and local models.",
                             systemImage: "clock"
                         )
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("billing.unavailable")
                     }
                 } else {
-                    Text("Prices could not be loaded. Check payment status to try again.").foregroundStyle(.secondary)
+                    BillingNote("Prices could not be loaded. Check payment status to try again.")
                 }
             }
         }
@@ -387,10 +401,11 @@ struct BillingOfferView: View {
         VStack(alignment: .leading, spacing: 16) {
             if let contrast = priceContrast {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(contrast.title).font(.headline)
-                    Text(contrast.detail).font(.caption).foregroundStyle(.secondary)
+                    Text(contrast.title).font(.headline).foregroundStyle(DS.Palette.text)
+                    Text(contrast.detail).font(.caption).foregroundStyle(DS.Palette.secondary)
                 }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    .background(DS.Palette.tintSoft, in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous).strokeBorder(DS.Palette.tintBorder))
             }
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 12) {
@@ -452,16 +467,16 @@ struct BillingOfferView: View {
         let unavailable = chosen == .support ? state.supportPlan == nil : chosen == .cloud ? state.cloudPlan == nil : false
         let activeBlocked = state.plan == "pro" || state.plan == chosen?.rawValue || (state.plan == "cloud" && chosen == .support)
         return VStack(alignment: .leading, spacing: 14) {
-            Text(highlighted ? "No hourly limit" : " ").font(.caption).foregroundStyle(.secondary).frame(height: 16)
-            Text(title).font(.headline).frame(height: 38, alignment: .topLeading)
-            Text(price).font(.title2.weight(.semibold))
-            Text(chosen == nil ? " " : "per month").font(.caption).foregroundStyle(.secondary)
-            Text(bill).font(.caption).foregroundStyle(.secondary).frame(height: 48, alignment: .topLeading)
-            Text(detail).font(.callout).foregroundStyle(.secondary).frame(height: 62, alignment: .topLeading)
-            Text(quota).font(.callout.weight(.semibold)).frame(height: 50, alignment: .topLeading)
+            Text(highlighted ? "No hourly limit" : " ").font(.caption).foregroundStyle(DS.Palette.accentText).frame(height: 16)
+            Text(title).font(.headline).foregroundStyle(DS.Palette.text).frame(height: 38, alignment: .topLeading)
+            Text(price).font(.title2.weight(.semibold)).foregroundStyle(DS.Palette.text)
+            Text(chosen == nil ? " " : "per month").font(.caption).foregroundStyle(DS.Palette.secondary)
+            Text(bill).font(.caption).foregroundStyle(DS.Palette.secondary).frame(height: 48, alignment: .topLeading)
+            Text(detail).font(.callout).foregroundStyle(DS.Palette.secondary).frame(height: 62, alignment: .topLeading)
+            Text(quota).font(.callout.weight(.semibold)).foregroundStyle(DS.Palette.text).frame(height: 50, alignment: .topLeading)
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    Text(item).font(.caption).fixedSize(horizontal: false, vertical: true)
+                    Text(item).font(.caption).foregroundStyle(DS.Palette.text).fixedSize(horizontal: false, vertical: true)
                 }
             }.frame(height: 155, alignment: .topLeading)
             if highlighted {
@@ -475,8 +490,10 @@ struct BillingOfferView: View {
                 }.buttonStyle(.bordered).disabled(chosen != nil && (isLoading || pending || activeBlocked || unavailable))
             }
         }.padding(14).frame(width: 160, alignment: .leading)
-            .background(highlighted ? Color.blue.opacity(0.22) : Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(highlighted ? Color.blue.opacity(0.65) : Color.secondary.opacity(0.18)))
+            .background(highlighted ? DS.Palette.tintSoft : DS.Palette.card,
+                        in: RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+                .strokeBorder(highlighted ? DS.Palette.accent : DS.Palette.line, lineWidth: highlighted ? 1.5 : 1))
     }
 
     private var comparison: some View {
@@ -504,13 +521,27 @@ struct BillingOfferView: View {
     }
 
     private func benefit(_ title: LocalizedStringKey, _ detail: LocalizedStringKey, icon: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon).font(.title3).foregroundStyle(Color.accentColor).frame(width: 25)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.headline)
-                Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
+        SettingsLineRow(title: title, caption: detail) {
+            Image(systemName: icon).foregroundStyle(DS.Palette.secondary).accessibilityHidden(true)
         }
+    }
+
+    private func valueRow(_ title: LocalizedStringKey, _ value: String) -> some View {
+        SettingsLineRow(title: title) {
+            Text(value).font(DS.Font.body).foregroundStyle(DS.Palette.secondary)
+        }
+    }
+}
+
+/// A paragraph of secondary text between rows.
+private struct BillingNote: View {
+    let text: LocalizedStringKey
+    init(_ text: LocalizedStringKey) { self.text = text }
+
+    var body: some View {
+        Text(text).font(DS.Font.meta).foregroundStyle(DS.Palette.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 9)
     }
 }
 

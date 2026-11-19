@@ -100,6 +100,9 @@ final class SystemAudioCaptureService: NSObject {
     /// Fired when system audio has been silent for > `silenceTimeout`.
     var onSystemAudioSilent: (() -> Void)?
 
+    /// Level (0...1) of the system audio before gain, at most 10 times a second. Called on the mixer queue.
+    var onSystemLevel: ((Float) -> Void)?
+
     /// Informational runtime status updates (recovery attempts, fallbacks, etc.)
     var onStatusMessage: ((String) -> Void)?
 
@@ -122,6 +125,7 @@ final class SystemAudioCaptureService: NSObject {
     private var lastNonSilentMicTime: Date = .init()
     private var didFireSystemSilent = false
     private var didFireMicSilent = false
+    private var lastSystemLevelTime: TimeInterval = 0
 
     private var rawAudioCallbackCount = 0
     private var systemBufferCount = 0
@@ -837,11 +841,19 @@ extension SystemAudioCaptureService: SCStreamOutput {
             )
         }
 
-        if rms(samples) > silenceRMSThreshold {
+        let systemRMS = rms(samples)
+        if systemRMS > silenceRMSThreshold {
             lastNonSilentSystemTime = Date()
             didFireSystemSilent = false
         } else {
             checkSilence(source: .system)
+        }
+        if let onSystemLevel {
+            let now = ProcessInfo.processInfo.systemUptime
+            if now - lastSystemLevelTime >= 0.1 {
+                lastSystemLevelTime = now
+                onSystemLevel(AudioLevel.normalized(rms: systemRMS))
+            }
         }
 
         if captureMicrophone {

@@ -51,6 +51,9 @@ struct MainWindowView: View {
             detailView
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("section.\(selectedSection.rawValue)")
+                .overlay(alignment: .topLeading) {
+                    if let parent = selectedSection.parent { backButton(to: parent) }
+                }
         }
         .background(DS.Palette.window)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
@@ -82,6 +85,17 @@ struct MainWindowView: View {
         selectedSection = section
     }
 
+    /// "‹ Engines" on a sub-page. Sits above the page title, in the window's title bar zone.
+    private func backButton(to parent: MainSection) -> some View {
+        Button { requestSection(parent) } label: {
+            Label(parent.sidebarLabel, systemImage: "chevron.left")
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier("section.back")
+        .padding(.top, DS.Space.md)
+        .padding(.leading, DS.Layout.pagePadding)
+    }
+
     @ViewBuilder
     private var detailView: some View {
         switch selectedSection {
@@ -92,14 +106,14 @@ struct MainWindowView: View {
                 .environment(audioDeviceManager)
         case .notes:
             NotesView()
+        case .clipboard:
+            ClipboardView()
         case .benchmark:
             BenchmarkView()
         case .typingTest:
             TypingTestView()
         case .meetings:
             MeetingSettingsView()
-        case .notesSettings:
-            NotesSettingsView()
         case .general:
             GeneralSettingsView()
         case .modes:
@@ -108,6 +122,8 @@ struct MainWindowView: View {
             LanguagesSettingsView()
         case .vocabulary:
             VocabularySettingsView()
+        case .typing:
+            TypingSettingsView()
         case .audioDictation:
             AudioSettingsView()
                 .environment(audioDeviceManager)

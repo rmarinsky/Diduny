@@ -41,6 +41,8 @@ final class MeetingEngineController {
         var didCut: (MeetingEngineTarget) -> Void
         /// A new pair is now live.
         var commitPair: (TranslationLanguagePair) -> Void = { _ in }
+        /// A meeting's Translate field changed at a cut; nil is Off.
+        var commitTranslation: (TranslationLanguagePair?) -> Void = { _ in }
         /// Panel state changed.
         var didChange: (MeetingSwitchMachine) -> Void
     }
@@ -64,10 +66,18 @@ final class MeetingEngineController {
     /// Live text per span, snapshotted when its session has finished (D4).
     private(set) var liveTexts: [Int: String] = [:]
     private var snapshotLength = 0
+    /// Frame where the running Diduny session started reconnecting; nil while connected.
+    private var reconnectingSince: Int?
     private var lastFinishConfirmed = true
     private var isShutDown = false
     /// The pair a restarting session connects with; read by the session factory.
     private(set) var pendingPair: TranslationLanguagePair?
+    /// A meeting's Translate pick waiting for its cut; `.some(nil)` turns translation off.
+    private(set) var pendingTranslation: TranslationLanguagePair??
+    /// What the current Diduny Cloud session of a meeting translates; a cut to any other target clears it.
+    private(set) var liveTranslation: TranslationLanguagePair?
+    /// What a session about to connect translates: the pending pick, else the current one.
+    var sessionTranslation: TranslationLanguagePair? { pendingTranslation ?? liveTranslation }
 
     init(start: MeetingEngineTarget, afterStopEngine: EngineID, fanOut: MeetingAudioFanOut = MeetingAudioFanOut(), environment: Environment) {
         machine = MeetingSwitchMachine(start: start, afterStopEngine: afterStopEngine)
@@ -112,7 +122,9 @@ final class MeetingEngineController {
 
     func click(_ target: MeetingEngineTarget) {
         guard !isShutDown else { return }
+        if !target.isLive { settleReconnect() }
         pendingPair = nil
+        pendingTranslation = nil
         let failure = target.isLive ? env.readiness(target) : nil
         send(.click(target, failure: failure, at: cutPoint()))
     }
@@ -124,10 +136,19 @@ final class MeetingEngineController {
         send(.restartLive(label: pair.shortLabel, failure: env.readiness(machine.running)))
     }
 
+    /// A meeting's Translate field: the same restart, counted only from the cut.
+    func restartLive(translation: TranslationLanguagePair?) {
+        guard !isShutDown, machine.running.isLive, !machine.isConnecting else { return }
+        pendingTranslation = .some(translation)
+        let label = translation.map { String(localized: "translating \($0.shortLabel)") } ?? String(localized: "transcribing")
+        send(.restartLive(label: label, failure: env.readiness(machine.running)))
+    }
+
     /// `usageLimitExceeded` on connect or reconnect (D2 trigger 1). The client deadline, trigger 2, is deliberately
     /// not armed: it would end live text where today the socket continues, and that is Roman's call.
     func quotaExhausted() {
         guard !isShutDown else { return }
+        settleReconnect()
         send(.quotaExhausted(at: cutPoint()))
     }
 
@@ -135,6 +156,7 @@ final class MeetingEngineController {
     @discardableResult
     func shutdown(finalize: Bool) async -> Bool {
         guard !isShutDown else { return lastFinishConfirmed }
+        settleReconnect()
         let endEffects = machine.handle(.end)
         endEffects.forEach(run)
         env.didChange(machine)
@@ -188,17 +210,30 @@ final class MeetingEngineController {
                 retire(before)
                 env.applyStatus(.disconnected)
                 env.didCut(machine.running)
+                commitTranslation()
             case .cutTo:
                 retire(before)
                 if let pendingPair { env.commitPair(pendingPair) }
                 env.applyStatus(.connected)
                 env.didCut(machine.running)
+                commitTranslation()
             default:
                 run(effect)
             }
         }
-        if !machine.isConnecting { pendingPair = nil }
+        if !machine.isConnecting {
+            pendingPair = nil
+            pendingTranslation = nil
+        }
         env.didChange(machine)
+    }
+
+    /// At a cut: the pending pick, or what the running session still translates (only Diduny Cloud does).
+    private func commitTranslation() {
+        let translation = pendingTranslation ?? (machine.running == .live(.didunyCloud) ? liveTranslation : nil)
+        guard translation != liveTranslation else { return }
+        liveTranslation = translation
+        env.commitTranslation(translation)
     }
 
     private func run(_ effect: MeetingSwitchMachine.Effect) {
@@ -248,6 +283,7 @@ final class MeetingEngineController {
     /// The cut: frame and consumer in one lock section. A stale session disconnects itself.
     private func sessionReady(_ id: UInt64) {
         guard machine.pendingID == id, let session = sessions[id], !isShutDown else { return }
+        settleReconnect()
         let frame = fanOut.setConsumer(session.audioConsumer, readFrame: env.readFrame)
         textOrder.append(id)
         spanOfSession[id] = machine.history.spans.count
@@ -366,8 +402,33 @@ final class MeetingEngineController {
         guard machine.runningID == id, sessions[id] != nil else { return }
         env.applyStatus(status)
         if let terminal = Self.dropSignal(status, engine: machine.running.engine) {
-            send(.dropped(id: id, terminal: terminal, frame: env.readFrame()))
+            let frame = reconnectingSince ?? env.readFrame()
+            reconnectingSince = !terminal && machine.running.engine == .didunyCloud ? frame : nil
+            send(.dropped(id: id, terminal: terminal, frame: frame))
         }
+        if case .connected = status, let from = reconnectingSince {
+            reconnectingSince = nil
+            guard let lost = Self.lostAudio(from: from, to: env.readFrame()) else { return }
+            // The text so far belongs before the gap; what comes from now on, after it.
+            snapshot(session: id)
+            send(.audioLost(id: id, from: lost.lowerBound, to: lost.upperBound))
+            spanOfSession[id] = machine.history.spans.count - 1
+        }
+    }
+
+    /// A cut or Stop while still reconnecting: from where it dropped, nothing was transcribed live.
+    private func settleReconnect() {
+        guard let from = reconnectingSince, let id = machine.runningID else { return }
+        reconnectingSince = nil
+        send(.audioLost(id: id, from: from, to: nil))
+    }
+
+    /// Diduny buffers the last `PreConnectAudioBuffer.defaultMaxBytes` (16 kHz mono s16le) while reconnecting and
+    /// sends it after; anything older is lost. Nil when the buffer covered the whole reconnect.
+    nonisolated static func lostAudio(from: Int, to: Int,
+                                      bufferedFrames: Int = PreConnectAudioBuffer.defaultMaxBytes / 2) -> Range<Int>? {
+        let end = to - bufferedFrames
+        return end > from ? from ..< end : nil
     }
 
     private func receive(_ error: Error, from id: UInt64) {
@@ -378,8 +439,8 @@ final class MeetingEngineController {
 
     // MARK: - Rules
 
-    /// D2: any Diduny reconnect or failure can lose audio, so the span is disrupted. ElevenLabs reconnects as its
-    /// normal rotation (C21), so only a failure counts. Nil: not a drop. The value says whether it is terminal.
+    /// D2: a Diduny reconnect or any failure is a drop. ElevenLabs reconnects as its normal rotation (C21), so only a
+    /// failure counts. Nil: not a drop. The value says whether it is terminal.
     nonisolated static func dropSignal(_ status: RealtimeConnectionStatus, engine: EngineID) -> Bool? {
         switch status {
         case .failed: true

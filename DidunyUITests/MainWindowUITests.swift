@@ -22,34 +22,43 @@ final class MainWindowUITests: DidunyUITestCase {
         launchApp(onboardingCompleted: true)
         waitForElement(section("overview"))
 
-        // Sidebar label → section id and an element only that section shows.
-        // T5-SB-02: sidebar label → section id and an element only that section shows.
-        let sections: [(label: String, id: String, marker: (XCUIElement) -> XCUIElement)] = [
-            ("General", "general", { $0.staticTexts["After a recording"] }),
-            ("Modes & shortcuts", "modes", { $0.staticTexts["Use one engine for everything"] }),
-            ("Languages", "languages", { $0.staticTexts["Your languages"] }),
-            ("Audio", "audioDictation", { $0.staticTexts["Test the microphone"] }),
-            ("Calendar & meetings", "meetings", { $0.staticTexts["Calendars"] }),
-            ("Local models", "models", { $0.descendants(matching: .any)["models.table"] }),
-            ("Providers", "providers", { $0.staticTexts["In Diduny"] }),
-            ("Account", "account", { $0.textFields["account.email"] }),
-            ("About", "about", { $0.staticTexts["Author"] }),
-            ("Benchmark", "benchmark", { $0.staticTexts["Benchmark"] }),
-            ("Typing test", "typingTest", { $0.staticTexts["Typing Speed Test"] }),
-            ("Recordings", "recordings", { $0.staticTexts["No Recordings Yet"] }),
-            ("Overview", "overview", { $0.staticTexts["Overview"] }),
+        // Sidebar row, then (for a sub-page) the button that opens it → section id and an
+        // element only that section shows.
+        let sections: [(label: String, open: String?, id: String, marker: (XCUIElement) -> XCUIElement)] = [
+            ("General", nil, "general", { $0.staticTexts["After a recording"] }),
+            ("Modes & shortcuts", nil, "modes", { $0.staticTexts["Use one engine for everything"] }),
+            ("Languages", nil, "languages", { $0.staticTexts["Your languages"] }),
+            ("Calendar", nil, "meetings", { $0.staticTexts["Calendars"] }),
+            ("Engines", nil, "models", { $0.descendants(matching: .any)["models.table"] }),
+            ("Engines", "models.compare", "providers", { $0.staticTexts["In Diduny"] }),
+            ("Account", nil, "account", { $0.textFields["account.email"] }),
+            ("About Diduny", nil, "about", { $0.staticTexts["Author"] }),
+            ("Engines", "models.benchmark", "benchmark", { $0.staticTexts["Benchmark"] }),
+            ("Mistyping", nil, "typing", { $0.staticTexts["Apps where fixes are off"] }),
+            ("Mistyping", "typing.typingTest", "typingTest", { $0.staticTexts["Typing Speed Test"] }),
+            ("Clipboard", nil, "clipboard", { $0.descendants(matching: .any)["clipboard.search"] }),
+            ("Recordings", nil, "recordings", { $0.staticTexts["No Recordings Yet"] }),
+            ("Overview", nil, "overview", { $0.staticTexts["Overview"] }),
         ]
+        let subPages: Set = ["providers", "benchmark", "typingTest"]
 
         var previous = (label: "Overview", id: "overview")
         for entry in sections {
             let item = waitForElement(mainWindow.buttons["Sidebar \(entry.label)"])
             item.click()
+            if let open = entry.open {
+                waitForElement(mainWindow.descendants(matching: .any)[open]).click()
+            }
 
             let container = waitForElement(section(entry.id), "\(entry.label) did not show its section")
+            // Only a sub-page shows the back button.
+            XCTAssertEqual(mainWindow.descendants(matching: .any)["section.back"].exists, subPages.contains(entry.id))
             waitForElement(entry.marker(container), "\(entry.label) is missing its content")
             waitForElement(item, toMatch: "value == 'Selected'")
             if previous.id != entry.id {
                 waitForDisappearance(section(previous.id))
+            }
+            if previous.label != entry.label {
                 waitForElement(mainWindow.buttons["Sidebar \(previous.label)"], toMatch: "value != 'Selected'")
             }
             previous = (entry.label, entry.id)

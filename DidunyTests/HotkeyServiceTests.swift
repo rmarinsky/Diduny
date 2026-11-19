@@ -141,7 +141,7 @@ final class HotkeyServiceTests {
     func ownedNameValuesMatchTheNames() {
         let names: [KeyboardShortcuts.Name] = [
             .toggleRecording, .toggleTranslation, .toggleMeetingRecording, .toggleMeetingTranslation,
-            .addMeetingChapter, .toggleHistoryPalette, .translateSelectedText
+            .addMeetingChapter, .toggleHistoryPalette, .translateSelectedText, .undoLayoutFix
         ]
         #expect(HotkeyService.ownedNameValues == Set(names.map(\.rawValue)))
     }
@@ -281,11 +281,43 @@ final class HotkeyServiceTests {
         #expect(toggles == 3)
     }
 
+    @Test("Undo the last layout fix: no keys by default, registered only between register and unregister, count read at press time")
+    func undoLayoutFixCountAndRegistration() {
+        #expect(registrar.getShortcut(for: .undoLayoutFix) == nil)
+        _ = sut
+        registrar.setShortcut(.init(.z, modifiers: [.control, .option]), for: .undoLayoutFix)
+        // Keys recorded while the typing engine is off: the name stays disabled.
+        center.post(
+            name: HotkeyService.packageShortcutDidChange,
+            object: nil,
+            userInfo: ["name": KeyboardShortcuts.Name.undoLayoutFix]
+        )
+        #expect(!registrar.isEnabled(.undoLayoutFix))
+
+        var undos = 0
+        settings.undoLayoutFixPressCount = 2
+        sut.registerUndoLayoutFixHotkey { undos += 1 }
+        #expect(registrar.isEnabled(.undoLayoutFix))
+        registrar.fire(.undoLayoutFix)
+        #expect(undos == 0)
+        clock.advance(by: 0.2)
+        registrar.fire(.undoLayoutFix)
+        #expect(undos == 1)
+
+        sut.unregisterUndoLayoutFixHotkey()
+        #expect(!registrar.isEnabled(.undoLayoutFix))
+        clock.advance(by: 1)
+        registrar.fire(.undoLayoutFix)
+        registrar.fire(.undoLayoutFix)
+        #expect(undos == 1)
+    }
+
     private func register(_ row: ShortcutRow, handler: @escaping () -> Void) {
         switch row {
         case .addMeetingChapter: sut.registerChapterHotkey(handler: handler)
         case .translateSelectedText: sut.registerTranslateSelectedTextHotkey(handler: handler)
         case .historyPalette: sut.registerHistoryPaletteHotkey(handler: handler)
+        case .undoLayoutFix: sut.registerUndoLayoutFixHotkey(handler: handler)
         case .cancelRecording, .forceSubmit, .inplaceTranslation: Issue.record("Not a HotkeyService row")
         }
     }

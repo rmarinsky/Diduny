@@ -109,7 +109,7 @@ struct SidebarView: View {
             .frame(height: 32)
             .background(DS.Palette.accentFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(PressScaleButtonStyle())
+        .buttonStyle(.pressScale)
         .help("Start recording")
         .accessibilityLabel(Text("Start recording"))
         .accessibilityValue(Text(verbatim: shortcutText ?? ""))
@@ -125,15 +125,15 @@ struct SidebarView: View {
         Button {
             selectedSection = section
         } label: {
-            SidebarRow(section: section, isSelected: selectedSection == section)
+            SidebarRow(section: section, isSelected: selectedSection.row == section)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
         // The window gives the first row keyboard focus on open; its ring read as a second selection.
         .focusEffectDisabled()
-        .accessibilityLabel(Text(section.label))
-        .accessibilityValue(Text(selectedSection == section ? "Selected" : ""))
-        .accessibilityIdentifier("Sidebar \(section.label)")
-        .help(section.label)
+        .accessibilityLabel(Text(section.sidebarLabel))
+        .accessibilityValue(Text(selectedSection.row == section ? "Selected" : ""))
+        .accessibilityIdentifier("Sidebar \(section.sidebarLabel)")
+        .help(section.sidebarLabel)
     }
 }
 
@@ -149,7 +149,7 @@ private struct SidebarRow: View {
                 .font(.system(size: 13, weight: .regular))
                 .frame(width: 18)
                 .foregroundColor(iconColor)
-            Text(section.label)
+            Text(section.sidebarLabel)
                 .font(.system(size: 13))
                 .foregroundColor(textColor)
             Spacer()

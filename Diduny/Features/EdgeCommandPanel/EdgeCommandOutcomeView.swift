@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Outcome content after Stop (design-spec 4.16, 7.7; `cmdDone` P:626-638). The panel frame
-/// (width 300, padding 12, fill, border) and the M1 slide come from the command panel shell.
-/// Dictation 300 x 169 with a one-line result, meeting 300 x 117.
+/// (width `DS.Panel.width`, padding 12, fill, border) and the M1 slide come from the command panel shell.
+/// Dictation 169 high with a one-line result, meeting 117.
 struct EdgeCommandOutcomeView: View {
     let outcome: EdgeCommandOutcome
     /// Meetings only; dictation ignores it.
@@ -82,7 +82,7 @@ struct EdgeCommandOutcomeView: View {
         flow: .dictation, durationSeconds: 7, delivery: .pasted,
         resultText: "Yes, by the way, I want to refresh the window view now."
     ))
-    .padding(12).frame(width: 300).background(DS.Palette.panel)
+    .padding(12).frame(width: DS.Panel.width).background(DS.Palette.panel)
 }
 
 #Preview("Meeting") {
@@ -90,5 +90,5 @@ struct EdgeCommandOutcomeView: View {
         outcome: EdgeCommandOutcome(flow: .meetingTranslation(pair: "EN ↔ UK"), durationSeconds: 382, recordingID: UUID()),
         transcript: .making(fraction: 0.4)
     )
-    .padding(12).frame(width: 300).background(DS.Palette.panel)
+    .padding(12).frame(width: DS.Panel.width).background(DS.Palette.panel)
 }

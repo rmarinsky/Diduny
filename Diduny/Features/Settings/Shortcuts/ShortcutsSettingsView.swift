@@ -15,8 +15,10 @@ struct ShortcutsSettingsView: View {
         self.widths = widths
     }
 
-    /// Every item but "Open Settings", which cannot be changed.
-    private static let items = ShortcutsSettingsModel.groups.flatMap(\.items).filter { $0 != .openSettings }
+    /// Every item but "Open Settings" (the stored value stays) and the layout shortcuts, which live on Typing.
+    private static let items = ShortcutsSettingsModel.groups.flatMap(\.items).filter {
+        $0 != .openSettings && $0 != .convertLayout && $0 != .shortcut(.undoLayoutFix)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -55,12 +57,12 @@ struct ShortcutsSettingsView: View {
             } keys: { EmptyView() }
         case .inplacePair:
             gridRow(
-                title: "Translate in place between",
-                caption: "Works in both directions: the direction follows the language of the selected text."
+                title: "Replace between",
+                caption: "Works both ways: the direction follows the language of the selected text."
             ) {
                 pairPicker
             } keys: { EmptyView() }
-        case .openSettings:
+        case .openSettings, .convertLayout:
             EmptyView()
         }
     }
@@ -165,7 +167,7 @@ struct ShortcutsSettingsView: View {
 
     private var pairPicker: some View {
         Picker(
-            "Translate in place between",
+            "Replace between",
             selection: Binding(
                 get: { model.selectedPairID ?? "" },
                 set: { model.selectPair(id: $0) }
@@ -190,8 +192,9 @@ struct ShortcutsSettingsView: View {
         case .forceSubmit: "Stop, paste and send"
         case .addMeetingChapter: "Add a meeting chapter"
         case .translateSelectedText: "Translate selected text"
-        case .inplaceTranslation: "Translate the selection in place"
+        case .inplaceTranslation: "Replace with translation"
         case .historyPalette: "History palette"
+        case .undoLayoutFix: "Undo the last layout fix"
         }
     }
 
@@ -203,7 +206,8 @@ struct ShortcutsSettingsView: View {
         switch row {
         case .forceSubmit: "Stops, pastes, then presses ⌘↩."
         case .translateSelectedText: "Opens the translation window with the selection."
-        case .inplaceTranslation: "Replaces the selected text with its translation."
+        case .inplaceTranslation: "Replaces the selected text with its translation. 1× is off for keys pressed together."
+        case .undoLayoutFix: "Layout fix. No keys by default. Click the field and press the keys you want."
         case .cancelRecording, .addMeetingChapter, .historyPalette: nil
         }
     }
@@ -235,4 +239,7 @@ private final class FakePreviewShortcutsStore: ShortcutsSettingsStore {
     var offeredPairs: [TranslationLanguagePair] { [TranslationLanguagePair(languageA: "en", languageB: "uk")] }
     var currentPair: TranslationLanguagePair? { offeredPairs.first }
     func selectPair(_: TranslationLanguagePair) {}
+    var convertPair: TypingConvertPair = .optionShift
+    var convertEnabled = true
+    var convertPressCount = 2
 }

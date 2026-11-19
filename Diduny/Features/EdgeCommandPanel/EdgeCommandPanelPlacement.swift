@@ -32,7 +32,7 @@ enum EdgeCommandPanelPlacement {
     static let liveControlHitTargetHeight: CGFloat = 38
     static let meetingSuggestionControlHitTargetHeight: CGFloat = 38
     /// Design-spec 3.3: one width in every expanded state.
-    static let panelWidth: CGFloat = 300
+    static let panelWidth: CGFloat = DS.Panel.width
 
     static func nearestDock(to proposedFrame: NSRect, in visibleFrame: NSRect) -> EdgeCommandPanelDock {
         let distances: [(EdgeCommandPanelDockEdge, CGFloat)] = [

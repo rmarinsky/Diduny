@@ -128,26 +128,42 @@ struct StaticComponentMetricsTests {
 
     // MARK: - Panel buttons (4.4, 4.5)
 
-    @Test("Copy and Stop share a 274 pt row as 102 and 164, both 38 high")
+    @Test("Copy and Stop share a 338 pt row as 150 and 180, both 38 high")
     func copyAndStopSizes() {
-        let widths = PanelControlsLayout.widths(available: DS.Panel.contentWidth, weights: [1, 1.6], spacing: DS.Space.sm)
-        expectNear(widths[0], 102, "Copy width")
-        expectNear(widths[1], 164, "Stop width")
+        let widths = PanelControlsLayout.widths(available: DS.Panel.contentWidth, weights: [1, 1.2], spacing: DS.Space.sm)
+        expectNear(widths[0], 150, "Copy width")
+        expectNear(widths[1], 180, "Stop width")
 
         let copy = size(CopyButton(isCopied: false) {}, width: widths[0])
         expectNear(copy.height, DS.Size.panelButton, "Copy height")
         let stop = StopButton(cancelHint: "Cancel: Esc ×3", shortcut: "⌥ ×2", accessibilityHint: "") {}
         expectNear(size(stop, width: widths[1]).height, DS.Size.panelButton, "Stop height")
-        // The Stop content must fit its 164 pt share without squeezing.
+        // The Stop content must fit its share without squeezing.
         #expect(size(stop).width <= widths[1] + Self.tolerance)
     }
 
-    @Test("Two equal panel buttons in a 274 pt row are 133 each")
+    /// Roman, 2026-11-19: "Copy n…" was cut off next to the chevron; the text must fit, in Ukrainian too.
+    @Test("The meeting row fits Copy new with its chevron and Stop, in English and Ukrainian")
+    func meetingRowFitsBothLanguages() {
+        let widths = PanelControlsLayout.widths(available: DS.Panel.contentWidth, weights: [1, 1.2], spacing: DS.Space.sm)
+        // A label part: 10 pt padding each side; then the 1 pt gap and the 24 pt chevron.
+        for label in ["Copy new", "Копіювати нове", "Скопійовано"] {
+            let text = size(Text(verbatim: label).font(DS.Font.headline)).width
+            #expect(text + 20 + 1 + 24 <= widths[0] + Self.tolerance, "\(label): \(text) in \(widths[0])")
+        }
+        for (hint, locale) in [("Cancel: Esc ×3", "en"), ("Скасувати: Esc ×3", "uk")] {
+            let stop = StopButton(cancelHint: hint, shortcut: "⌥⌘M", accessibilityHint: "") {}
+                .environment(\.locale, Locale(identifier: locale))
+            #expect(size(stop).width <= widths[1] + Self.tolerance, "Stop (\(locale)) in \(widths[1])")
+        }
+    }
+
+    @Test("Two equal panel buttons in a 338 pt row are 165 each")
     func equalPanelButtons() {
         let widths = PanelControlsLayout.widths(available: DS.Panel.contentWidth, weights: [1, 1], spacing: DS.Space.sm)
-        expectNear(widths[0], 133, "left")
-        expectNear(widths[1], 133, "right")
-        expectNear(size(PanelButton(title: "New recording", role: .primary) {}, width: 133).height,
+        expectNear(widths[0], 165, "left")
+        expectNear(widths[1], 165, "right")
+        expectNear(size(PanelButton(title: "New recording", role: .primary) {}, width: 165).height,
                    DS.Size.panelButton, "button height")
     }
 

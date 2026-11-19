@@ -11,22 +11,28 @@ struct AboutSettingsView: View {
     }
 
     @State private var latestVersion: String?
+    @State private var updateStatus = UpdateStatus.shared
     @State private var updateState: UpdateState = .checking
     @State private var checkedToday = false
 
     private let currentID: AboutProduct.IDValue = .diduny
 
     var body: some View {
-        PageScaffold(title: "About") {
+        PageScaffold(title: "About Diduny") {
             VStack(alignment: .leading, spacing: DS.Space.lg) {
                 if updateState == .failed {
                     errorBanner
                 }
                 hero
+                AgentsGroup()
                 appGrid
                 diagnosticsCard
                 authorCard
                 Text("Made in Ukraine · © 2024–2026 Roman Marinsky")
+                    .font(DS.Font.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, DS.Space.xs)
+                Text("Word frequency lists: [FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)")
                     .font(DS.Font.callout)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, DS.Space.xs)
@@ -97,7 +103,9 @@ struct AboutSettingsView: View {
 
     private var updateCard: some View {
         VStack(alignment: .leading, spacing: DS.Space.sm) {
-            Text(updateHeadline)
+            Group {
+                if let headline = updateStatus.aboutHeadline { Text(headline) } else { Text(updateHeadline) }
+            }
                 .font(DS.Font.headline)
                 .foregroundStyle(currentProduct.accentDeep)
                 .fixedSize(horizontal: false, vertical: true)
@@ -108,19 +116,33 @@ struct AboutSettingsView: View {
                 versionLine("Checked", value: checkedToday ? String(localized: "today") : "—")
             }
 
-            Button {
-                MainWindowController.shared.checkForUpdates()
-            } label: {
-                Label(
-                    updateState == .available ? "Update now" : "Check for updates",
-                    systemImage: "arrow.triangle.2.circlepath"
-                )
-                .labelStyle(.titleAndIcon)
+            if let title = updateStatus.aboutButtonTitle {
+                Button {
+                    updateStatus.restart()
+                } label: {
+                    Label(title, systemImage: "arrow.triangle.2.circlepath")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(currentProduct.accentDeep)
+                .controlSize(.small)
+                .disabled(!updateStatus.canRestart)
+                .accessibilityIdentifier("about.update.restart")
+            } else {
+                Button {
+                    MainWindowController.shared.checkForUpdates()
+                } label: {
+                    Label(
+                        updateState == .available ? "Update now" : "Check for updates",
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
+                    .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(currentProduct.accentDeep)
+                .controlSize(.small)
+                .disabled(!MainWindowController.shared.canCheckForUpdates)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(currentProduct.accentDeep)
-            .controlSize(.small)
-            .disabled(!MainWindowController.shared.canCheckForUpdates)
         }
         .padding(DS.Space.md)
         .background(
@@ -377,7 +399,7 @@ private struct AuthorLinkRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(DS.Palette.cardFill)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
     }
 }
 
@@ -453,4 +475,77 @@ private struct AboutProduct: Identifiable {
             sourceURL: URL(string: "https://github.com/rmarinsky/AppCat")!
         ),
     ]
+}
+
+/// Agents: the `diduny` command, the skill for Claude Code and Codex, and the settings file.
+struct AgentsGroup: View {
+    @State private var installed = AgentCommandLineTool.isInstalled
+    @State private var installSkill = AgentSkillInstaller.isEnabled
+    @State private var installError: String?
+
+    private var agentNames: String {
+        let names = AgentSkillInstaller.targets.map(\.agent)
+        return names.isEmpty ? String(localized: "none found on this Mac") : names.joined(separator: ", ")
+    }
+
+    var body: some View {
+        GeneralGroup(heading: "Agents") {
+            SettingsLineRow(
+                title: "Command line tool",
+                caption: installed
+                    ? "Installed as \(AgentCommandLineTool.commandName) in ~/.local/bin. Agents such as Claude Code and Codex use it to read your meetings and, when you ask them, to add to notes or tag recordings."
+                    : "Lets Claude Code, Codex and other agents on this Mac read your meetings. When you ask, they can add to notes, tag recordings and transcribe again; they never delete anything.",
+                kind: .button
+            ) {
+                if installed {
+                    Button("Remove") {
+                        AgentCommandLineTool.uninstall()
+                        installed = AgentCommandLineTool.isInstalled
+                        AgentSkillInstaller.sync()
+                    }
+                    .buttonStyle(.bordered)
+                } else {
+                    Button("Install command line tool") {
+                        do {
+                            try AgentCommandLineTool.install()
+                            installError = nil
+                        } catch {
+                            installError = String(localized: "Could not install: \(AgentCommandLineTool.linkURL.path) already exists and is not Diduny's.")
+                        }
+                        installed = AgentCommandLineTool.isInstalled
+                        AgentSkillInstaller.sync()
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("general.agents.installCLI")
+                }
+            }
+            if let installError {
+                Text(installError).font(DS.Font.meta).foregroundStyle(.red)
+            }
+            SettingsLineRow(
+                title: "Teach agents about Diduny",
+                caption: "Adds a short Diduny skill to Claude Code and Codex, so they know how to find and read your meetings. Agents here: \(agentNames).",
+                kind: .toggle
+            ) {
+                SettingsSwitch(title: "Teach agents about Diduny", isOn: $installSkill)
+                    .accessibilityIdentifier("general.agents.skill")
+                    .onChange(of: installSkill) { _, value in
+                        AgentSkillInstaller.isEnabled = value
+                        AgentSkillInstaller.sync()
+                    }
+            }
+            SettingsLineRow(
+                title: "Settings agents can change",
+                caption: "Transcription words, languages, filler words, silence stop and sounds. Addresses, hotkeys, devices and history stay here.",
+                kind: .button,
+                showsHairline: false
+            ) {
+                Button("Show the file") {
+                    NSWorkspace.shared.activateFileViewerSelecting([AgentSettingsSync.shared.fileURL])
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .onAppear { installed = AgentCommandLineTool.isInstalled }
+    }
 }

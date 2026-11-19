@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// "Looks like a meeting started" (design-spec 7.8, 02 section 7): segments preset from Modes, the engine
-/// menu of the live panel, the Keep suggesting switch, Not now / Start recording. 300 x 229.
+/// menu of the live panel, the Keep suggesting switch, Not now / Start recording. `DS.Panel.width` wide.
 struct MeetingSuggestionView: View {
     let model: EdgeCommandPanelModel
     let suggestion: MeetingSuggestion
@@ -76,7 +76,7 @@ struct MeetingSuggestionView: View {
             }
         }
         .padding(DS.Space.md)
-        .frame(width: 300)
+        .frame(width: DS.Panel.width)
         .background(DS.Palette.panel, in: panelShape)
         .overlay(panelShape.stroke(DS.Palette.line, lineWidth: 1))
         .onExitCommand(perform: onDismiss)

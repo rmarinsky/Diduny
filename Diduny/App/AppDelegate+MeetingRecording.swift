@@ -850,7 +850,12 @@ extension AppDelegate {
                 recordOnlyEngine: afterStopEngine,
                 resolve: resolveAfterStopEngine,
                 liveTextAccepted: liveTextAccepted,
-                hasLiveText: !realtimeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                hasLiveText: !realtimeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                audio: MeetingStopPlan.Audio(
+                    liveTexts: engineController?.liveTexts ?? [:],
+                    totalFrames: meetingRecorderService.lastRecordingStats.totalFrames,
+                    skippedChunks: meetingRecorderService.lastRecordingStats.skippedChunks
+                )
             )
             Log.app.notice("Meeting stop plan: \(String(describing: plan), privacy: .public)")
 
@@ -940,6 +945,23 @@ extension AppDelegate {
                         queued = enqueueTranslateMeetingAfterStop(
                             savedRecordingID, target: translateTarget, history: history,
                             liveTexts: engineController?.liveTexts ?? [:], afterStopEngine: afterStopEngine
+                        )
+                    } else if case let .parts(parts, engine, modelID) = plan {
+                        // Only the audio without cloud live text is transcribed; the kept text is cleaned like the
+                        // one-span live text.
+                        let usedDiduny = history?.spans.contains { $0.target == .live(.didunyCloud) } == true
+                        var cleaned: [TranslatePart] = []
+                        for part in parts {
+                            guard case let .live(liveText) = part else { cleaned.append(part); continue }
+                            cleaned.append(.live(text: await TranscriptCleanupService.shared.clean(
+                                liveText, fillerWords: SettingsStorage.shared.fillerWords, serverCleanup: usedDiduny
+                            )))
+                        }
+                        queued = RecordingQueueService.shared.enqueue(
+                            [savedRecordingID],
+                            action: .transcribeParts(cleaned),
+                            whisperModelOverride: engine == .whisper ? modelID : nil,
+                            textIfItFails: liveTextToSave
                         )
                     } else if case let .wholeRecording(engine, modelID, _) = plan {
                         // C16: Diduny out of minutes at Stop retries on this Mac when a model is ready.

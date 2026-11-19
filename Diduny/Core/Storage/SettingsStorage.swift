@@ -93,6 +93,7 @@ final class SettingsStorage {
     }
 
     let defaults: UserDefaults
+    let typingSettingsCache = TypingSettingsCache()
     private static let baseFillerWords = [
         "е-е",
         "ем",

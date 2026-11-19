@@ -16,12 +16,33 @@ struct OfflineModelsSettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 ModelTable(model: model)
                 WhisperOptionsSection()
+                compareAndTest
             }
         }
         .onAppear { ParakeetModelController.shared.refresh() }
         // Escape and leaving the page count as Keep (design-spec 4.12).
         .onExitCommand { model.keep() }
         .onDisappear { model.keep() }
+    }
+
+    /// Opens the Compare engines and Benchmark sub-pages; each has a "‹ Engines" button back.
+    private var compareAndTest: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Compare and test")
+                .font(DS.Font.groupHeading)
+                .foregroundStyle(DS.Palette.text)
+                .accessibilityAddTraits(.isHeader)
+            SettingsLineRow(title: "What each engine does, task by task", kind: .button) {
+                Button("Compare engines…") { MainWindowController.shared.showWindow(section: .providers) }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("models.compare")
+            }
+            SettingsLineRow(title: "Test engines on your own recordings", kind: .button, showsHairline: false) {
+                Button("Benchmark…") { MainWindowController.shared.showWindow(section: .benchmark) }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("models.benchmark")
+            }
+        }
     }
 }
 

@@ -153,7 +153,7 @@ struct RecordingDetailView: View {
                 } label: {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressScale)
                 .keyboardShortcut(.cancelAction)
                 .help("Close (Esc)")
                 .accessibilityIdentifier("Close recording detail")

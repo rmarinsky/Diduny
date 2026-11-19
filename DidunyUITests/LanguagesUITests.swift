@@ -1,7 +1,6 @@
 import XCTest
 
-/// WP-53 Settings > Languages (test-plan T5-LA-20, 21, 26, 27). Needs WP-50's "Sidebar Languages" item and
-/// `section.languages`. T5-LA-22 to 25 and 28 wait for the seed, probe and bridge helpers (test-plan 7.4).
+/// WP-53 Settings > Languages (test-plan T5-LA-20, 21, 26, 27). Needs the "Sidebar Languages" item and `section.languages`. T5-LA-22 to 25 and 28 wait for the seed, probe and bridge helpers (test-plan 7.4).
 final class LanguagesUITests: DidunyUITestCase {
     private var mainWindow: XCUIElement { app.windows["Diduny"] }
 
@@ -11,15 +10,14 @@ final class LanguagesUITests: DidunyUITestCase {
 
     private func openLanguages() -> XCUIElement {
         launchApp(onboardingCompleted: true)
-        let item = waitForElement(mainWindow.buttons["Sidebar Languages"])
-        item.click()
+        waitForElement(mainWindow.buttons["Sidebar Languages"]).click()
         return waitForElement(mainWindow.descendants(matching: .any)["section.languages"])
     }
 
     func test_T5LA20_pageShowsTheDefaults() {
         _ = openLanguages()
-        waitForElement(element("languages.speak"))
-        waitForElement(element("languages.yours"), toMatch: "value == 'English, Ukrainian'")
+        waitForElement(element("languages.yours.row.en"))
+        waitForElement(element("languages.yours.row.uk"))
         waitForElement(element("languages.defaultTarget"), toMatch: "value == 'English'")
         waitForElement(element("languages.pair"), toMatch: "value == 'Ukrainian ↔ English'")
         waitForElement(element("languages.voice.enabled"))
@@ -44,7 +42,7 @@ final class LanguagesUITests: DidunyUITestCase {
         waitForElement(polish, toMatch: "value == '1'")
         popup.typeKey(.escape, modifierFlags: [])
         waitForDisappearance(popup)
-        waitForElement(element("languages.yours"), toMatch: "value == 'English, Ukrainian, Polish'")
+        waitForElement(element("languages.yours.row.pl"))
     }
 
     func test_T5LA26_voiceCommandPositionsAndSwitch() {
@@ -62,13 +60,13 @@ final class LanguagesUITests: DidunyUITestCase {
 
     func test_T5LA27_popupSearchesAndClosesOnOutsideClick() {
         _ = openLanguages()
-        waitForElement(element("languages.speak.change")).click()
-        let popup = waitForElement(element("popup.change.speak"))
+        waitForElement(element("languages.yours.change")).click()
+        let popup = waitForElement(element("popup.change.yourLanguages"))
         let search = waitForElement(element("popup.search"))
         search.click()
         search.typeText("zzz")
         waitForElement(element("popup.empty"))
-        // Outside the popup: the sidebar item of the page already shown, so the click changes nothing else.
+        // Outside the popup: the sidebar row of the page already shown, so the click changes nothing else.
         let outside = mainWindow.buttons["Sidebar Languages"]
         waitForElement(outside, toMatch: "isHittable == true")
         outside.click()

@@ -13,25 +13,8 @@ struct LanguagesSettingsView: View {
     var body: some View {
         PageScaffold(title: "Languages", subtitle: "The languages you speak and the ones you translate into.") {
             VStack(alignment: .leading, spacing: 0) {
-                group("Languages you speak", first: true)
-                SettingsLineRow(
-                    title: LocalizedStringKey(LanguagesSettingsModel.listText(model.speak)),
-                    caption: "Sent to every engine as a hint, in this order. With none chosen the engine detects the language.",
-                    kind: .button,
-                    titleIdentifier: "languages.speak"
-                ) {
-                    ChangeButton(list: .speak, model: model, presenter: presenter)
-                }
-
-                group("Your languages")
-                SettingsLineRow(
-                    title: LocalizedStringKey(LanguagesSettingsModel.listText(model.yourLanguages)),
-                    caption: "Shown first and in crimson in every Translate into menu and language list.",
-                    kind: .button,
-                    titleIdentifier: "languages.yours"
-                ) {
-                    ChangeButton(list: .yourLanguages, model: model, presenter: presenter)
-                }
+                group("Your languages", first: true)
+                yourLanguagesRows
                 targetRow
                 pairRow
 
@@ -50,6 +33,52 @@ struct LanguagesSettingsView: View {
             .padding(.top, first ? 0 : 22)
             .padding(.bottom, 8)
             .accessibilityAddTraits(.isHeader)
+    }
+
+    /// Numbered rows in hint and menu order; drag a row onto another to reorder. The order is saved at once.
+    private var yourLanguagesRows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(["Shown first and in crimson in every Translate into menu and language list.",
+                     "Sent to every engine as a hint, in this order. With none chosen the engine detects the language."],
+                    id: \.self) { caption in
+                Text(LocalizedStringKey(caption))
+                    .font(DS.Font.meta)
+                    .foregroundStyle(DS.Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 4)
+            }
+            ForEach(Array(model.yourLanguages.enumerated()), id: \.element) { index, code in
+                HStack(spacing: DS.Space.md) {
+                    Image(systemName: "line.3.horizontal")
+                        .foregroundStyle(DS.Palette.secondary)
+                        .accessibilityHidden(true)
+                    Text(verbatim: "\(index + 1)")
+                        .font(DS.Font.meta)
+                        .foregroundStyle(DS.Palette.secondary)
+                        .frame(minWidth: 14)
+                    Text(verbatim: LanguagesSettingsModel.name(code))
+                        .font(DS.Font.body)
+                        .foregroundStyle(DS.Palette.text)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 9)
+                .contentShape(Rectangle())
+                .draggable(code)
+                .dropDestination(for: String.self) { items, _ in
+                    guard let dragged = items.first else { return false }
+                    model.move(dragged, to: index)
+                    return true
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("languages.yours.row.\(code)")
+                Rectangle().fill(DS.Palette.line).frame(height: 1)
+            }
+            HStack {
+                ChangeButton(list: .yourLanguages, model: model, presenter: presenter, title: "Add a language")
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 9)
+        }
     }
 
     private var targetRow: some View {
@@ -144,6 +173,7 @@ private struct ChangeButton: View {
     let model: LanguagesSettingsModel
     let presenter: FloatingSurfacePresenter
     var identifier: String?
+    var title: LocalizedStringKey = "Change"
 
     @State private var anchor = FloatingSurfaceAnchor()
 
@@ -152,7 +182,7 @@ private struct ChangeButton: View {
     }
 
     var body: some View {
-        Button("Change") {
+        Button(title) {
             guard let frame = anchor.screenFrame else { return }
             presenter.togglePopup(
                 owner: id, name: list.popupName, anchor: frame, parent: anchor.window, fromKeyboard: false

@@ -119,7 +119,9 @@ final class ShortcutSettingTests {
             == ShortcutSetting(keys: .inplace(.modifierChord(Self.optionCommand)), pressCount: 2, enabled: true))
         #expect(settings.shortcutSetting(for: .historyPalette)
             == ShortcutSetting(keys: .chord(.toggleHistoryPalette), pressCount: 1, enabled: true))
-        #expect(ShortcutRow.allCases.count == 6)
+        #expect(settings.shortcutSetting(for: .undoLayoutFix)
+            == ShortcutSetting(keys: .chord(.undoLayoutFix), pressCount: 1, enabled: true))
+        #expect(ShortcutRow.allCases.count == 7)
     }
 
     @Test("Switch off keeps the keys and the count", arguments: ShortcutRow.allCases)

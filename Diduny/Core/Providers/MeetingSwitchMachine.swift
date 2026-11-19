@@ -32,7 +32,6 @@ enum SwitchFailure: Equatable {
 struct MeetingEngineSpan: Equatable {
     var target: MeetingEngineTarget
     var startFrame: Int
-    var disrupted = false
     /// Frame of a terminal failure inside the span: from here on nothing was transcribed live.
     var failedAtFrame: Int?
 }
@@ -79,6 +78,9 @@ struct MeetingSwitchMachine {
         case sessionReady(id: UInt64, at: MeetingCutPoint)
         case sessionFailed(id: UInt64, SwitchFailure)
         case dropped(id: UInt64, terminal: Bool, frame: Int)
+        /// A reconnect lost `from..<to` (longer than the service's buffer): that audio becomes its own span.
+        /// `to` nil: it never came back, so nothing from `from` on was transcribed live.
+        case audioLost(id: UInt64, from: Int, to: Int?)
         case quotaExhausted(at: MeetingCutPoint)
         case wordsArrived
         /// The old engine's tail landed; the marker moves below it.
@@ -166,13 +168,19 @@ struct MeetingSwitchMachine {
             failedTarget = pending.target
             return []
         case let .dropped(id, terminal, frame):
-            guard id == runningID, !history.spans.isEmpty else { return [] }
-            let last = history.spans.count - 1
-            history.spans[last].disrupted = true
-            if terminal {
-                if history.spans[last].failedAtFrame == nil { history.spans[last].failedAtFrame = frame }
-                persistentNote = .offline
+            guard id == runningID, terminal, let last = history.spans.indices.last else { return [] }
+            if history.spans[last].failedAtFrame == nil { history.spans[last].failedAtFrame = frame }
+            persistentNote = .offline
+            return []
+        case let .audioLost(id, from, to):
+            guard id == runningID, let last = history.spans.indices.last, from >= history.spans[last].startFrame else { return [] }
+            guard let to else {
+                if history.spans[last].failedAtFrame == nil { history.spans[last].failedAtFrame = from }
+                return []
             }
+            guard to > from else { return [] }
+            addSpan(.afterStopOnly(afterStopEngine), frame: from)
+            addSpan(running, frame: to)
             return []
         case let .quotaExhausted(point):
             return quotaExhausted(at: point)

@@ -1,0 +1,171 @@
+# Hand-maintained supplement to frequency_uk.txt, merged at index build time.
+#
+# The base list is OpenSubtitles-derived and structurally misses two things
+# Papuga's users type constantly:
+#
+#   1. Apostrophe forms. The raw 50k list contains ZERO of them, of any
+#      codepoint. macOS knows them, so they are spelled correctly either way —
+#      these entries exist to give them a frequency signal for ranking.
+#   2. Tech/domain vocabulary. papugaTests/Benchmarks/RESULTS.md identified
+#      this as the real source of the false-positive flood, not layout errors.
+#
+# Counts are synthetic and sit near the cleaned base list's median (16), so a
+# supplement entry ranks like an ordinary word rather than dominating. Same
+# "word<space>count" format as the base list.
+#
+# Domain words the user actually types are learned automatically from their
+# own corrected output; this is only the seed.
+
+# --- apostrophe forms ---
+п'ять 16
+дев'ять 16
+дев'яносто 16
+м'ясо 16
+м'який 16
+м'яч 16
+об'єкт 16
+об'єкти 16
+об'єднання 16
+об'єм 16
+сім'я 16
+сім'ї 16
+сім'ю 16
+здоров'я 16
+ім'я 16
+з'їзд 16
+з'явився 16
+з'явилася 16
+з'ясувати 16
+з'єднання 16
+в'їзд 16
+в'язати 16
+комп'ютер 16
+комп'ютери 16
+комп'ютерний 16
+пам'ять 16
+пам'ятати 16
+пам'ятка 16
+прем'єр 16
+прем'єра 16
+інтерв'ю 16
+подвір'я 16
+торф'яний 12
+розв'язати 16
+розв'язок 16
+зв'язок 16
+зв'язати 16
+зв'язки 16
+п'єса 16
+п'є 16
+б'є 16
+в'ється 12
+солов'ї 12
+матір'ю 12
+кров'ю 12
+любов'ю 12
+верф'ю 10
+міжгір'я 10
+
+# --- hyphenated compounds ---
+по-перше 16
+по-друге 16
+по-третє 16
+будь-який 16
+будь-яка 16
+будь-що 16
+хтось-то 10
+все-таки 16
+де-небудь 12
+хто-небудь 12
+що-небудь 12
+так-от 12
+front-end 10
+e-mail 12
+
+# --- tech / domain seed ---
+пофіксити 14
+фікс 14
+фідбек 14
+дедлайн 14
+рефакторинг 14
+рефакторити 12
+деплой 14
+деплоїти 12
+реліз 14
+релізи 12
+мерджити 12
+мердж 12
+комміт 12
+комміти 12
+коміт 12
+бекенд 14
+фронтенд 14
+фулстек 10
+репозиторій 14
+репозиторії 12
+бранч 12
+пулреквест 12
+скріншот 14
+скрін 14
+віджет 14
+віджети 12
+плейрайт 12
+баг 14
+баги 12
+багфікс 12
+фіча 14
+фічі 12
+таска 12
+таски 12
+спринт 14
+стендап 12
+мітинг 14
+мітинги 12
+демка 10
+продакшн 14
+стейджинг 12
+локалка 10
+дебажити 12
+логи 14
+кеш 14
+кешувати 12
+
+# --- reviewed wrong-layout corpus targets ---
+автоматизація 16
+багатоповерховий 16
+взаєморозуміння 16
+генерал-майор 16
+електропостачання 16
+жовто-блакитний 16
+зобов'язання 16
+київ 16
+клавіатура 16
+конкурентоспроможність 16
+користувач 16
+львів 16
+найрізноманітніший 16
+налаштування 16
+науково-технічний 16
+непередбачуваний 16
+одеса 16
+п'ятниця 16
+папка 16
+по-українськи 16
+повідомленнями 16
+працездатність 16
+прес-конференція 16
+програмування 16
+продуктивність 16
+південно-західний 16
+північно-східний 16
+пір'я 16
+роз'яснення 16
+розкладка 16
+самовдосконалення 16
+синьо-жовтий 16
+співробітництво 16
+україна 16
+українська 16
+харків 16
+хтось-таки 16
+інтернет-магазин 16

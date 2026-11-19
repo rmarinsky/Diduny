@@ -50,7 +50,7 @@ struct RecordingRowView: View {
             Button(action: onOpen) {
                 rowContent
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressScale)
 
             if !isSelectionMode {
                 actionButtons
@@ -156,7 +156,7 @@ struct RecordingRowView: View {
             }
             .labelStyle(.iconOnly)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
         // The other build's recordings are read-only here, so they cannot be selected.
         .disabled(isReadOnly)
         .help(isReadOnly ? "Recorded in the other Diduny build. It cannot be selected here."
@@ -192,7 +192,7 @@ struct RecordingRowView: View {
             }
             .labelStyle(.iconOnly)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
         .disabled(!canPlay)
         .help(canPlay ? label : String(localized: "Audio not ready yet"))
         .accessibilityLabel(Text(canPlay ? label : String(localized: "Audio not ready yet")))
@@ -436,7 +436,7 @@ private struct RecordingActionButton: View {
             }
             .labelStyle(.iconOnly)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
         .help(label)
         .accessibilityLabel(Text(label))
         .accessibilityIdentifier(label)

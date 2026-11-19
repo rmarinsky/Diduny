@@ -186,7 +186,8 @@ final class WhisperTranscriptionService: TranscriptionServiceProtocol {
             language,
             ProtectedLexiconPromptBuilder.mergedPrompt(
                 userPrompt: settings.whisperPrompt,
-                language: language
+                language: language,
+                userTerms: settings.speechVocabularyTerms
             )
         )
     }

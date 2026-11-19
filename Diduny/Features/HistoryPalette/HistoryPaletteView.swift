@@ -39,7 +39,7 @@ struct HistoryPaletteView: View {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressScale)
                 }
             }
             .padding(.horizontal, 12)
@@ -93,7 +93,7 @@ struct HistoryPaletteView: View {
                     MainWindowController.shared.showWindow(section: .recordings)
                 }
                 .font(.caption2)
-                .buttonStyle(.plain)
+                .buttonStyle(.pressScale)
                 .foregroundColor(.accentColor)
             }
             .padding(.horizontal, 12)
@@ -104,7 +104,10 @@ struct HistoryPaletteView: View {
 
     private func copyAndClose(_ recording: Recording) {
         guard let text = recording.transcriptionText else { return }
-        ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
+        // A pick is not a new copy for the clipboard history.
+        ClipboardHistoryService.shared.withoutCapture {
+            ClipboardService.shared.copy(text: text, behavior: recording.type.clipboardCopyBehavior)
+        }
         HistoryPaletteWindowController.shared.closeWindow()
     }
 }
@@ -147,7 +150,7 @@ private struct HistoryPaletteRow: View {
             .padding(.vertical, 8)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressScale)
     }
 
     private var preview: String {

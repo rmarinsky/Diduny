@@ -53,19 +53,25 @@ protocol ShortcutsSettingsStore: AnyObject {
     /// "Pair for both directions" (decision 2).
     var currentPair: TranslationLanguagePair? { get }
     func selectPair(_ pair: TranslationLanguagePair)
+    /// "Switch layout of selected text": the pair, how often it is pressed, and its switch.
+    var convertPair: TypingConvertPair { get set }
+    var convertEnabled: Bool { get set }
+    /// 2 or 3: the pair pressed together that many times.
+    var convertPressCount: Int { get set }
 }
 
 /// Page rules for Settings > Shortcuts, free of AppKit so they are unit-tested.
 @MainActor
 @Observable
 final class ShortcutsSettingsModel {
-    enum GroupID: String { case whileRecording, text, app }
+    enum GroupID: String { case whileRecording, text, app, typing }
 
     enum Item: Equatable, Identifiable {
         case shortcut(ShortcutRow)
         case keepAudioWhenCancelled
         case inplacePair
         case openSettings
+        case convertLayout
 
         var id: String {
             switch self {
@@ -73,6 +79,7 @@ final class ShortcutsSettingsModel {
             case .keepAudioWhenCancelled: "escapeCancelSaveAudio"
             case .inplacePair: "inplaceTranslationPair"
             case .openSettings: "openSettings"
+            case .convertLayout: "convertLayout"
             }
         }
     }
@@ -89,6 +96,7 @@ final class ShortcutsSettingsModel {
         ]),
         Group(id: .text, items: [.shortcut(.translateSelectedText), .shortcut(.inplaceTranslation), .inplacePair]),
         Group(id: .app, items: [.shortcut(.historyPalette), .openSettings]),
+        Group(id: .typing, items: [.convertLayout, .shortcut(.undoLayoutFix)]),
     ]
 
     static let pressCounts = 1 ... 3
@@ -168,6 +176,21 @@ final class ShortcutsSettingsModel {
     var selectedPairID: String? {
         _ = revision
         return store.currentPair?.id
+    }
+
+    var convertPair: TypingConvertPair {
+        get { _ = revision; return store.convertPair }
+        set { store.convertPair = newValue; revision += 1 }
+    }
+
+    var convertEnabled: Bool {
+        get { _ = revision; return store.convertEnabled }
+        set { store.convertEnabled = newValue; revision += 1 }
+    }
+
+    var convertPressCount: Int {
+        get { _ = revision; return store.convertPressCount }
+        set { store.convertPressCount = newValue; revision += 1 }
     }
 
     func selectPair(id: String) {

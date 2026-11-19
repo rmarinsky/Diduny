@@ -7,6 +7,7 @@ struct OverviewLaunchCard: View {
     @State private var microphoneGranted = false
     @State private var accessibilityGranted = false
     @State private var screenRecordingGranted = false
+    @State private var inputMonitoringGranted = false
     @State private var permissionsLoaded = false
 
     private var allPermissionsGranted: Bool {
@@ -52,10 +53,32 @@ struct OverviewLaunchCard: View {
                 .accessibilityHint("Opens the setup guide in a separate window")
             }
 
-            HStack(spacing: 18) {
-                status("Microphone", icon: "mic.fill", granted: microphoneGranted)
-                status("Accessibility", icon: "accessibility", granted: accessibilityGranted)
-                status("Screen Recording", icon: "rectangle.on.rectangle", granted: screenRecordingGranted)
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
+                status("Microphone", features: "Dictation, meetings", icon: "mic.fill", granted: microphoneGranted) {
+                    await allow(.microphone)
+                }
+                status(
+                    "Accessibility",
+                    features: accessibilityGranted
+                        ? "Auto-paste, layout fixes, Convert"
+                        : "Auto-paste, layout fixes, Convert. If the switch in System Settings is already on, turn it off and on again.",
+                    icon: "accessibility",
+                    granted: accessibilityGranted
+                ) {
+                    await allow(.accessibility)
+                }
+                // Not part of allPermissionsGranted: Convert's key tap is gated by Accessibility.
+                status("Input Monitoring", features: "Convert (⇧⌥ twice), shortcuts", icon: "keyboard", granted: inputMonitoringGranted) {
+                    if !CGRequestListenEventAccess(),
+                       let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+                    {
+                        NSWorkspace.shared.open(url)
+                    }
+                    await refreshPermissions()
+                }
+                status("Screen Recording", features: "Meeting audio", icon: "rectangle.on.rectangle", granted: screenRecordingGranted) {
+                    await allow(.screenRecording)
+                }
             }
         }
         .padding(DS.Space.lg)
@@ -68,19 +91,42 @@ struct OverviewLaunchCard: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func status(_ title: LocalizedStringKey, icon: String, granted: Bool) -> some View {
-        Label {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.subheadline.weight(.medium))
-                Text(granted ? "Allowed" : "Not allowed")
-                    .font(.caption)
+    private func status(
+        _ title: LocalizedStringKey,
+        features: LocalizedStringKey,
+        icon: String,
+        granted: Bool,
+        allow: @escaping () async -> Void
+    ) -> some View {
+        HStack(alignment: .center, spacing: DS.Space.md) {
+            Label {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.subheadline.weight(.medium))
+                    Text(features)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: granted ? "checkmark.circle.fill" : icon)
                     .foregroundStyle(granted ? .green : .secondary)
             }
-        } icon: {
-            Image(systemName: granted ? "checkmark.circle.fill" : icon)
-                .foregroundStyle(granted ? .green : .secondary)
+            Spacer(minLength: 0)
+            if granted {
+                Text("Allowed")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            } else {
+                Button("Allow") { Task { await allow() } }
+                    .buttonStyle(.borderedProminent)
+            }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func allow(_ type: PermissionType) async {
+        _ = await PermissionManager.shared.ensurePermission(type, context: .general)
+        await refreshPermissions()
     }
 
     private func whatsNewCard(releaseLine: String, highlights: ReleaseHighlights) -> some View {
@@ -100,7 +146,7 @@ struct OverviewLaunchCard: View {
                             .frame(width: 24, height: 24)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressScale)
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Dismiss What’s New for Diduny \(releaseLine)")
                 }
@@ -149,6 +195,7 @@ struct OverviewLaunchCard: View {
         microphoneGranted = PermissionManager.shared.status.microphone
         accessibilityGranted = PermissionManager.shared.status.accessibility
         screenRecordingGranted = PermissionManager.shared.status.screenRecording
+        inputMonitoringGranted = CGPreflightListenEventAccess()
         permissionsLoaded = true
     }
 }

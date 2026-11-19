@@ -47,8 +47,8 @@ struct ChangeLanguagesPopup: View {
 }
 
 /// A 4.2 menu row as a checkbox: 14 pt tick column (`checkmark` 12 `accentText` when chosen), the name; chosen
-/// rows `accentText` semibold.
-private struct ChangeTickRow: View {
+/// rows `accentText` semibold. Also the rows of the Typing apps popup, where `code` is a bundle ID.
+struct ChangeTickRow: View {
     let name: String
     let code: String
     let isChosen: Bool

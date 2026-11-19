@@ -8,13 +8,14 @@ extension DS {
     enum ModelTable {
         static let model: CGFloat = 126
         static let live: CGFloat = 62
-        static let translationMinimum: CGFloat = 182
+        static let translationMinimum: CGFloat = 104
+        static let speakers: CGFloat = 70
         static let languages: CGFloat = 76.5
         static let speed: CGFloat = 53
         static let accuracy: CGFloat = 67
         static let size: CGFloat = 56.5
         static let actions: CGFloat = 90.5
-        static let fixedColumns: CGFloat = model + live + languages + speed + accuracy + size + actions
+        static let fixedColumns: CGFloat = model + live + speakers + languages + speed + accuracy + size + actions
         static func translation(tableWidth: CGFloat) -> CGFloat {
             max(tableWidth - fixedColumns, translationMinimum)
         }
@@ -101,6 +102,7 @@ struct ModelTable: View {
                 header("Model", DS.ModelTable.model)
                 header("Live text", DS.ModelTable.live)
                 header("Translation", translationWidth)
+                header("Speakers", DS.ModelTable.speakers)
                 header("Languages", DS.ModelTable.languages)
                 header("Speed", DS.ModelTable.speed)
                 header("Accuracy", DS.ModelTable.accuracy)
@@ -114,7 +116,7 @@ struct ModelTable: View {
                     .foregroundStyle(DS.Palette.secondary)
                     .padding(.vertical, DS.ModelTable.cellPaddingV)
                     .padding(.horizontal, DS.ModelTable.cellPaddingH)
-                    .gridCellColumns(8)
+                    .gridCellColumns(9)
                     .accessibilityIdentifier("models.empty")
                 hairline
             }
@@ -130,7 +132,7 @@ struct ModelTable: View {
     }
 
     private var hairline: some View {
-        Rectangle().fill(DS.Palette.line).frame(height: 1).gridCellColumns(8)
+        Rectangle().fill(DS.Palette.line).frame(height: 1).gridCellColumns(9)
     }
 
     @ViewBuilder private func modelRow(_ row: LocalModelRow) -> some View {
@@ -153,6 +155,8 @@ struct ModelTable: View {
                 .accessibilityIdentifier(cellID("live"))
             cell(translationWidth) { marks(row.translation, column: "Translation", row: row) }
                 .accessibilityIdentifier(cellID("translation"))
+            cell(DS.ModelTable.speakers) { marks([row.speakers], column: "Speakers", row: row) }
+                .accessibilityIdentifier(cellID("speakers"))
             cell(DS.ModelTable.languages) { ModelLanguagesLink(row: row, yourLanguages: model.yourLanguages) }
             cell(DS.ModelTable.speed) { number(row.speedText) }.accessibilityIdentifier(cellID("speed"))
             cell(DS.ModelTable.accuracy) { number(row.accuracyText) }.accessibilityIdentifier(cellID("accuracy"))

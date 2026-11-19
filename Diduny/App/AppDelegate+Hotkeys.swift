@@ -34,6 +34,10 @@ extension AppDelegate {
         hotkeyService.registerTranslateSelectedTextHotkey {
             FeatureUsageCounter.shared.record(.selectionTranslation, via: .hotkey)
             Task {
+                // The selection lands on the clipboard through Diduny's ⌘C; it is not a copy made by the user.
+                let history = ClipboardHistoryService.shared
+                history.suspend()
+                defer { history.resume() }
                 do {
                     let text = try await ClipboardService.shared.captureSelectedText()
                     await MainActor.run {
@@ -42,6 +46,21 @@ extension AppDelegate {
                 } catch {
                     Log.app.error("[TranslateSelected] Failed to capture text: \(error)")
                 }
+            }
+        }
+
+        // Convert (the pair pressed twice) is never also a push-to-talk tap or hold.
+        for service in [pushToTalkService, translationPushToTalkService] {
+            service.convertPair = { [weak self] in MainActor.assumeIsolated { self?.typingEngineHost.activeConvertPair?.families } }
+        }
+
+        // Registered only while the typing engine runs (set before the host is activated).
+        typingEngineHost.onRunningChanged = { [weak self] isRunning in
+            guard let self else { return }
+            if isRunning {
+                hotkeyService.registerUndoLayoutFixHotkey { [weak self] in self?.typingEngineHost.undoLastFix() }
+            } else {
+                hotkeyService.unregisterUndoLayoutFixHotkey()
             }
         }
 

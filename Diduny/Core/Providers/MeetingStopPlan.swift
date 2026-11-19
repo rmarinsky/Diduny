@@ -6,21 +6,33 @@ enum MeetingStopPlan: Equatable {
 
     case keepLiveText(EngineID)
     case wholeRecording(EngineID, modelID: String?, reason: Reason)
+    /// Cloud live text stays; only the audio without it goes to `engine`, in time order (Roman, 2026-11-17).
+    case parts([TranslatePart], engine: EngineID, modelID: String?)
     case saveOnly
 
-    /// Roman, 2026-11-09: the mode selected at Stop replaces the earlier ones and transcribes the whole recording.
-    /// Cloud keeps its live text only for one clean span; Local never uploads; Record only runs its engine.
+    /// Where the live texts sit in the recording. Unusable offsets (skipped chunks) redo the whole recording.
+    struct Audio: Equatable {
+        var liveTexts: [Int: String]
+        var totalFrames: Int
+        var sampleRate: Double = 16000
+        var skippedChunks = 0
+    }
+
+    /// Roman, 2026-11-17: cloud live text is paid for and kept; the engine of the mode selected at Stop transcribes
+    /// only what has no cloud text (Local and Record only stretches, audio a reconnect lost, the rest after a failure).
+    /// Without cloud text the whole recording goes to that engine, as on 2026-11-09. Ending on Local never uploads.
     /// `resolve` is ADR-0012 D3 at Stop time for one engine.
     static func plan(
         history: MeetingEngineHistory,
         recordOnlyEngine: EngineID,
         resolve: (EngineID) -> EffectiveEngineResolver.Result,
         liveTextAccepted: Bool,
-        hasLiveText: Bool = true
+        hasLiveText: Bool = true,
+        audio: Audio? = nil
     ) -> MeetingStopPlan {
         guard let last = history.spans.last else { return .saveOnly }
         let single = history.spans.count == 1
-        let clean = single && !last.disrupted
+        let clean = single && last.failedAtFrame == nil
         if clean, last.target.isLive, last.target.segment == .cloud, liveTextAccepted {
             return .keepLiveText(last.target.engine)
         }
@@ -54,7 +66,48 @@ enum MeetingStopPlan: Equatable {
             chosen = runnable(engine)
         }
         guard let (engine, model) = chosen else { return .saveOnly }
+        if let audio, let parts = parts(history, audio: audio, lastAccepted: liveTextAccepted, engine: engine) {
+            guard parts.contains(where: { if case .afterStop = $0 { true } else { false } }) else {
+                return .keepLiveText(last.target.engine)
+            }
+            return .parts(parts, engine: engine, modelID: model)
+        }
         return .wholeRecording(engine, modelID: model, reason: reason)
+    }
+
+    /// Cloud live text per span, and `engine` for every stretch without it; adjacent stretches are one part.
+    /// Nil when no cloud text is kept or the offsets are unusable.
+    private static func parts(
+        _ history: MeetingEngineHistory, audio: Audio, lastAccepted: Bool, engine: EngineID
+    ) -> [TranslatePart]? {
+        guard audio.skippedChunks == 0, audio.sampleRate > 0, audio.totalFrames > 0 else { return nil }
+        var parts: [TranslatePart] = []
+        var keptText = false
+        func addAudio(_ start: Int, _ end: Int) {
+            guard end > start else { return }
+            let seconds = { (frame: Int) in Double(frame) / audio.sampleRate }
+            if case let .afterStop(range?, _) = parts.last, range.endSeconds == seconds(start) {
+                parts[parts.count - 1] = .afterStop(range: AudioTrimRange(startSeconds: range.startSeconds, endSeconds: seconds(end)),
+                                                    engine: engine)
+            } else {
+                parts.append(.afterStop(range: AudioTrimRange(startSeconds: seconds(start), endSeconds: seconds(end)), engine: engine))
+            }
+        }
+        for (index, span) in history.spans.enumerated() {
+            let end = index + 1 < history.spans.count ? history.spans[index + 1].startFrame : audio.totalFrames
+            guard end > span.startFrame else { continue }
+            let rejected = index == history.spans.count - 1 && !lastAccepted
+            guard span.target.isLive, span.target.segment == .cloud, !rejected else {
+                addAudio(span.startFrame, end)
+                continue
+            }
+            if let text = audio.liveTexts[index], !text.isEmpty {
+                parts.append(.live(text: text))
+                keptText = true
+            }
+            if let failed = span.failedAtFrame { addAudio(max(failed, span.startFrame), end) }
+        }
+        return keptText ? parts : nil
     }
 }
 
@@ -68,6 +121,11 @@ extension MeetingStopPlan {
         switch self {
         case .keepLiveText, .saveOnly:
             return nil
+        case let .parts(_, engine, _):
+            let name = MeetingPanelState.name(engine)
+            return engine != .didunyCloud && engine != .elevenLabs
+                ? String(localized: "The live text stays. \(name) transcribes only the parts without it, on this Mac.")
+                : String(localized: "The live text stays. \(name) transcribes only the parts without it, in the cloud.")
         case let .wholeRecording(engine, _, reason):
             let name = MeetingPanelState.name(engine)
             let onThisMac = engine != .didunyCloud && engine != .elevenLabs

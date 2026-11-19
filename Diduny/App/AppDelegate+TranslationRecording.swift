@@ -584,13 +584,17 @@ extension AppDelegate {
                 return
             }
 
-            clipboardService.copy(text: text, behavior: .raw)
+            // The clipboard history gets one "Translated" entry, not a copy made by the user.
+            let history = ClipboardHistoryService.shared
+            history.withoutCapture { clipboardService.copy(text: text, behavior: .raw) }
             Log.app.info("stopTranslationRecording: Text copied to clipboard")
+            var pasted = false
 
             if SettingsStorage.shared.autoPaste {
                 Log.app.info("stopTranslationRecording: Auto-pasting")
                 do {
                     try await clipboardService.paste()
+                    pasted = true
                     await submitAfterPasteIfRequested(hasText: !text.isEmpty)
                 } catch ClipboardError.accessibilityNotGranted {
                     ForceSubmitService.shared.disarm()
@@ -603,6 +607,7 @@ extension AppDelegate {
             } else {
                 ForceSubmitService.shared.disarm()
             }
+            history.recordDelivery(text, origin: .translated, pasted: pasted)
 
             await MainActor.run {
                 appState.lastTranscription = text

@@ -338,6 +338,7 @@ struct RecordingsLibraryView: View {
 
     private func headerActions(compact: Bool) -> some View {
         HStack(spacing: DS.Space.sm) {
+            SettingsPageButton(target: .general)
             if listFilter?.showsBatches != true {
                 Button {
                     toggleSelectionMode()
@@ -397,7 +398,7 @@ struct RecordingsLibraryView: View {
                             .foregroundColor(.secondary)
                             .font(DS.Font.callout)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressScale)
                 }
             }
             .padding(.horizontal, DS.Space.md)
@@ -552,7 +553,7 @@ struct RecordingsLibraryView: View {
                             ? DS.Palette.tint : Color.clear)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressScale)
                     if index < filteredBatches.count - 1 { Divider().padding(.horizontal, 16) }
                 }
             }

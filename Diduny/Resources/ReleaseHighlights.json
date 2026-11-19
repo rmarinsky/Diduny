@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Steadier processing you can see, and diagnostics you can send",
+    "headline": "Papuga is now part of Diduny: layout fixes, one logo for fixes and translation, Copy new and translation mid-meeting",
     "highlights": [
-      "Recordings on Diduny Cloud no longer wait behind Whisper on this Mac, Recordings, Notes and the menu show what is being transcribed, and notes start as soon as a meeting is transcribed. Failed automatic notes are tried again later.",
-      "Quitting or a crash no longer loses work in progress: Diduny picks up cloud jobs and queued recordings at the next launch. Agents can now add to notes, tag recordings by project and link people when you ask.",
-      "Something went wrong? Help → Export Diagnostics… saves a file for support, with no audio or text. Diduny now counts which features are used, anonymously (Settings → Account to turn off), and ElevenLabs keys restricted to Speech to Text work."
+      "Settings → Typing fixes text typed in the wrong keyboard layout as you type: \"Oops, fixed\" appears next to the text, then \"Undo fix\". Select text and press Option+Shift twice to swap its layout. In-place translation shows the same logo, with \"Translating…\" and then \"Translated\".",
+      "Words you keep typing join Vocabulary & context by themselves, and nothing from password fields is counted. The new Clipboard page keeps what you copied, screenshots and what Diduny pasted.",
+      "In a live meeting, Copy new copies only what was said since your last copy, and the Translate field next to Engine turns on two-way translation (for example Ukrainian ↔ English) from that moment, in the same recording. The empty Notes page writes notes for earlier meetings in one go, with Pause and Stop, and the local models table shows which models label speakers."
     ]
   },
   "uk": {
-    "headline": "Надійніша обробка, яку видно, і діагностика, яку можна надіслати",
+    "headline": "Papuga тепер у Diduny: виправлення розкладки, одне лого для виправлень і перекладу, «Копіювати нове» і переклад посеред зустрічі",
     "highlights": [
-      "Записи в Diduny Cloud більше не чекають, поки Whisper закінчить на цьому Mac, «Записи», «Нотатки» і меню показують, що зараз транскрибується, а нотатки починаються одразу після транскрипції зустрічі. Невдалі автоматичні нотатки Diduny повторює пізніше.",
-      "Вихід із Diduny чи збій більше не губить роботу: під час наступного запуску Diduny продовжує хмарні завдання і чергу. Агенти на ваше прохання доповнюють нотатки, ставлять проєкт і теги та додають людей до записів.",
-      "Щось пішло не так? Help → «Експортувати діагностику…» зберігає файл для підтримки, без аудіо й тексту. Diduny тепер анонімно рахує, якими функціями користуються (вимкнути: Налаштування → Акаунт), а ключі ElevenLabs, обмежені до Speech to Text, працюють."
+      "Налаштування → Набір тексту виправляє текст, набраний не в тій розкладці, просто під час набору: біля тексту з'являється «Ой, виправив», а потім «Скасувати заміну». Виділіть текст і двічі натисніть Option+Shift, щоб поміняти розкладку. Переклад на місці показує те саме лого: «Перекладаю…», а потім «Перекладено».",
+      "Слова, які ви часто набираєте, самі додаються у «Словник і контекст», а з полів пароля нічого не рахується. Нова сторінка «Буфер обміну» зберігає скопійоване, скриншоти і те, що вставив Diduny.",
+      "На живій зустрічі «Копіювати нове» копіює лише те, що прозвучало після попереднього копіювання, а поле «Перекласти» поруч із «Рушієм» вмикає переклад в обидва боки (наприклад, українська ↔ англійська) з цієї миті, у тому самому записі. Порожня сторінка «Нотатки» пише нотатки до давніших зустрічей одним махом, з паузою і зупинкою, а таблиця локальних моделей показує, які моделі розрізняють мовців."
     ]
   }
 }

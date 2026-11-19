@@ -167,6 +167,8 @@ struct MeetingEngineControllerTests {
         var turns = 0
         var controller: MeetingEngineController!
 
+        var translations: [TranslationLanguagePair?] = []
+
         func make(start: MeetingEngineTarget, commitPair: @escaping (TranslationLanguagePair) -> Void = { _ in }) {
             controller = MeetingEngineController(start: start, afterStopEngine: .parakeet, environment: .init(
                 readFrame: { 100 }, elapsed: { 10 }, turns: { self.turns }, finalText: { self.applied.joined() },
@@ -186,6 +188,7 @@ struct MeetingEngineControllerTests {
                 closeTurn: {},
                 didCut: { _ in },
                 commitPair: commitPair,
+                commitTranslation: { self.translations.append($0) },
                 didChange: { _ in }
             ))
         }
@@ -291,6 +294,83 @@ struct MeetingEngineControllerTests {
         rig.sessions.last?.startGate?.resume()
         await settle()
         #expect(committed == [pair])
+    }
+
+    @Test("A meeting's translation commits at the cut, a newer click drops it, a failure keeps the old one")
+    func translationCommit() async {
+        let pair = TranslationLanguagePair(languageA: "en", languageB: "uk")
+        let rig = Rig()
+        rig.make(start: .live(.didunyCloud))
+        await rig.controller.startInitial(wait: true)
+        rig.holdNext = true
+        rig.controller.restartLive(translation: pair)
+        await settle()
+        #expect(rig.controller.sessionTranslation == pair, "The new session connects translating")
+        #expect(rig.translations.isEmpty)
+        rig.controller.click(.live(.didunyCloud)) // Back: cancels.
+        await settle()
+        #expect(rig.controller.sessionTranslation == nil)
+        rig.controller.restartLive(translation: pair)
+        await settle()
+        rig.sessions.last?.startGate?.resume()
+        await settle()
+        #expect(rig.translations == [pair])
+        #expect(rig.controller.liveTranslation == pair)
+        #expect(rig.controller.machine.markers.last?.kind == .pair("translating EN ↔ UK"))
+
+        rig.holdNext = false
+        rig.nextError = URLError(.notConnectedToInternet)
+        rig.controller.restartLive(translation: nil)
+        await settle()
+        #expect(rig.controller.liveTranslation == pair, "A failed restart keeps translating")
+        #expect(rig.translations == [pair])
+    }
+
+    @Test("A cut to another engine turns translation off; back on Cloud it starts without it")
+    func translationOffOnOtherEngine() async {
+        let pair = TranslationLanguagePair(languageA: "en", languageB: "uk")
+        let rig = Rig()
+        rig.make(start: .live(.didunyCloud))
+        await rig.controller.startInitial(wait: true)
+        rig.controller.restartLive(translation: pair)
+        await settle()
+        #expect(rig.controller.liveTranslation == pair)
+        rig.controller.click(.live(.whisper))
+        await settle()
+        #expect(rig.translations == [pair, nil])
+        rig.controller.click(.live(.didunyCloud))
+        await settle()
+        #expect(rig.controller.sessionTranslation == nil)
+        #expect(rig.translations == [pair, nil])
+    }
+
+    @Test("The Translate field shows only on Cloud with Diduny Cloud, and offers Off only while translating")
+    func translateField() throws {
+        let pair = TranslationLanguagePair(languageA: "en", languageB: "uk")
+        let store = LiveDictationOverlayStore()
+        store.reset(mode: .meeting)
+        store.showRunningMeeting(segment: .cloud, engine: .didunyCloud)
+        #expect(store.meetingTranslateField == nil, "Not before the recording runs")
+        var picks: [TranslationLanguagePair?] = []
+        store.meetingSwitchHandler = MeetingSwitchHandler(click: { _ in }, changeTranslation: { picks.append($0) }, changePair: { _ in true })
+        let off = try #require(store.meetingTranslateField)
+        #expect(off.value == "Off")
+        #expect(!off.menu.groups.flatMap(\.rows).map(\.id).contains(MeetingTranslateField.offRowID))
+
+        store.meetingLiveTranslation = pair
+        let translating = try #require(store.meetingTranslateField)
+        #expect(translating.value == pair.shortLabel)
+        #expect(translating.pick(rowID: MeetingTranslateField.offRowID) == .translation(nil))
+        #expect(translating.pick(rowID: TranslateMeetingPanelModel.RowID.otherLanguages) == .otherLanguages)
+        store.pickMeetingTranslation(nil)
+        #expect(picks == [nil])
+
+        store.showRunningMeeting(segment: .thisMac, engine: .whisper)
+        #expect(store.meetingTranslateField == nil)
+        store.showRunningMeeting(segment: .recordOnly, engine: .whisper)
+        #expect(store.meetingTranslateField == nil)
+        store.reset(mode: .meetingTranslation)
+        #expect(store.meetingTranslateField == nil)
     }
 
     @Test("A cancelled session's status and text are dropped")

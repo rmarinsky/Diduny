@@ -8,33 +8,65 @@ import Testing
 @MainActor
 struct MainSectionSidebarTests {
     @Test func mainItemsInOrder() {
-        #expect(MainSection.mainItems == [.overview, .recordings, .notes, .benchmark, .typingTest])
+        #expect(MainSection.mainItems == [.overview, .recordings, .notes, .clipboard, .vocabulary])
     }
 
     @Test func settingsItemsInOrder() {
-        #expect(MainSection.settingsItems == [
-            .general, .modes, .languages, .vocabulary, .audioDictation, .meetings, .notesSettings,
-            .models, .providers, .account, .about,
+        #expect(MainSection.settingsItems == [.general, .modes, .languages, .typing, .meetings, .models, .account, .about])
+    }
+
+    @Test func sidebarLabels() {
+        let labels = (MainSection.mainItems + MainSection.settingsItems).map(\.sidebarLabel)
+        #expect(labels == [
+            "Overview", "Recordings", "Notes", "Clipboard", "Vocabulary",
+            "General", "Modes & shortcuts", "Languages", "Mistyping", "Calendar", "Engines", "Account", "About Diduny",
         ])
     }
 
-    @Test func labels() {
-        let labels = (MainSection.mainItems + MainSection.settingsItems).map(\.label)
-        #expect(labels == [
-            "Overview", "Recordings", "Notes", "Benchmark", "Typing test",
-            "General", "Modes & shortcuts", "Languages", "Vocabulary & context", "Audio", "Calendar & meetings", "Notes settings",
-            "Local models", "Providers", "Account", "About",
-        ])
+    /// No tab bars: a sub-page has a "‹ <row>" button back to its row's page.
+    @Test func subPagesGoBackToTheirRow() {
+        #expect(MainSection.typingTest.parent == .typing)
+        #expect(MainSection.audioDictation.parent == .meetings)
+        #expect(MainSection.providers.parent == .models)
+        #expect(MainSection.benchmark.parent == .models)
+        for row in MainSection.mainItems + MainSection.settingsItems {
+            #expect(row.parent == nil)
+        }
+    }
+
+    /// Every page sits under exactly one sidebar row, which the sidebar shows selected.
+    @Test func everyPageBelongsToOneRow() {
+        let rows = MainSection.mainItems + MainSection.settingsItems
+        #expect(Set(rows).count == rows.count)
+        for page in MainSection.allCases {
+            #expect(rows.contains(page.row))
+        }
+    }
+
+    @Test func pageLabelsStay() {
+        #expect(MainSection.modes.label == "Modes & shortcuts")
+        #expect(MainSection.meetings.label == "Calendar & meetings")
+        #expect(MainSection.models.label == "Local models")
+        #expect(MainSection.typingTest.label == "Typing test")
     }
 
     @Test func newItemIcons() {
         #expect(MainSection.modes.iconName == "slider.horizontal.3")
         #expect(MainSection.languages.iconName == "globe")
         #expect(MainSection.audioDictation.iconName == "waveform.and.mic")
+        #expect(MainSection.typing.iconName == "keyboard")
+        #expect(MainSection.clipboard.iconName == "doc.on.clipboard")
     }
 
     @Test func audioKeepsItsRawValue() {
         #expect(MainSection.audioDictation.rawValue == "audioDictation")
+    }
+
+    /// `section.typingTest` and `--ui-testing-open=settings.typing` depend on these.
+    @Test func typingRawValues() {
+        #expect(MainSection.typing.rawValue == "typing")
+        #expect(MainSection.typingTest.rawValue == "typingTest")
+        #expect(MainSection.clipboard.rawValue == "clipboard")
     }
 
     @Test func footerShortcutDefault() {

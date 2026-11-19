@@ -11,6 +11,8 @@ final class RecordingQueueService {
         case translate
         /// Translate meeting after a switch (ADR-0013 D4): kept live text and translated ranges, in time order.
         case translateParts([TranslatePart], target: String)
+        /// Meeting after Stop (Roman, 2026-11-17): kept cloud live text and transcribed ranges, in time order.
+        case transcribeParts([TranslatePart])
     }
 
     private(set) var isProcessing = false
@@ -279,14 +281,17 @@ final class RecordingQueueService {
 
     private static func boardKind(_ action: QueueAction) -> ProcessingBoard.Work.Kind {
         switch action {
-        case .transcribe, .transcribeDiarize: .transcription
+        case .transcribe, .transcribeDiarize, .transcribeParts: .transcription
         case .translate, .translateParts: .translation
         }
     }
 
     /// Cloud engines go to the cloud lane; Whisper and on-device engines run on this Mac.
     private func lane(for item: QueueItem) -> Lane {
-        if case .translateParts = item.action { return .onThisMac }
+        switch item.action {
+        case .translateParts, .transcribeParts: return .onThisMac
+        default: break
+        }
         if let recording = storage.recordings.first(where: { $0.id == item.id }) {
             let onDeviceID = item.action == .translate
                 ? onDeviceTranslationEngineID(for: item, recording: recording)
@@ -320,10 +325,15 @@ final class RecordingQueueService {
             return
         }
 
-        if case let .translateParts(parts, target) = item.action {
-            await processTranslateParts(parts, target: target, item: item, recording: recording, audioURL: originalAudioURL,
-                                        runID: runID)
+        switch item.action {
+        case let .translateParts(parts, target):
+            await processParts(parts, target: target, item: item, recording: recording, audioURL: originalAudioURL, runID: runID)
             return
+        case let .transcribeParts(parts):
+            await processParts(parts, target: nil, item: item, recording: recording, audioURL: originalAudioURL, runID: runID)
+            return
+        default:
+            break
         }
 
         do {
@@ -470,7 +480,7 @@ final class RecordingQueueService {
                 translationTargetLanguageCode = targetLanguage
                 historyKind = .translation
                 sourceLanguageCode = pair.languageA
-            case .translateParts:
+            case .translateParts, .transcribeParts:
                 return // Handled above.
             }
 
@@ -550,10 +560,10 @@ final class RecordingQueueService {
         }
     }
 
-    /// Translates only the ranges without live text and joins them with the kept live text. A failed range keeps
-    /// what is ready, with `.failed` and the error; the audio stays, so a whole translation can still run.
-    private func processTranslateParts(
-        _ parts: [TranslatePart], target: String, item: QueueItem, recording: Recording, audioURL: URL, runID: UUID?
+    /// Translates (`target`) or transcribes only the ranges without live text and joins them with the kept live text.
+    /// A failed range keeps what is ready, with `.failed` and the error; the audio stays, so a whole run can still go.
+    private func processParts(
+        _ parts: [TranslatePart], target: String?, item: QueueItem, recording: Recording, audioURL: URL, runID: UUID?
     ) async {
         let whisperModel = item.whisperModelOverride ?? SettingsStorage.shared.selectedWhisperModel
         let result = await QueueEngineRunner.translateParts(parts) { [self] range, engine in
@@ -566,19 +576,36 @@ final class RecordingQueueService {
                 ),
                 audioURL: partURL, recording: recording, itemID: item.id
             )
-            return try await runner.translate(engine, target: target, whisperModel: whisperModel).text
+            if let target {
+                return try await runner.translate(engine, target: target, whisperModel: whisperModel).text
+            }
+            let transcript = try await runner.transcribe(engine, diarize: true, hints: SettingsStorage.shared.speechLanguageHints)
+            let offset = Int(((range?.startSeconds ?? 0) * 1000).rounded())
+            let segments = transcript.segments.map {
+                TimedTranscriptSegment(startMilliseconds: $0.startMilliseconds + offset, endMilliseconds: $0.endMilliseconds.map { $0 + offset },
+                                       speaker: $0.speaker, text: $0.text)
+            }
+            return TimedTranscriptRenderer.render(segments: segments, fallbackText: transcript.text)
         }
         if result.error is CancellationError {
             if mayWriteCancelled(item.id, runID: runID) { storage.updateRecording(id: item.id, status: .unprocessed, error: nil) }
         } else if let error = result.error {
-            storage.updateRecording(id: item.id, status: .failed, text: result.text.isEmpty ? nil : result.text,
+            storage.updateRecording(id: item.id, status: .failed, text: result.text.isEmpty ? item.textIfItFails : result.text,
                                     error: error.localizedDescription)
-            Log.app.error("Queue failed a translate part for recording \(item.id): \(error.localizedDescription)")
-        } else {
+            Log.app.error("Queue failed a part for recording \(item.id): \(error.localizedDescription)")
+        } else if let target {
             storage.completeTranscription(
                 id: item.id, status: .translated,
                 text: ClipboardService.preparedMessageText(result.text, recordingType: recording.type), segments: nil,
                 translationTargetLanguageCode: target, kind: .translation, provider: TranscriptionProvider.cloud.rawValue
+            )
+        } else {
+            let cloud = parts.contains { if case let .afterStop(_, engine) = $0 { engine == .didunyCloud || engine == .elevenLabs } else { false } }
+            storage.completeTranscription(
+                id: item.id, status: .transcribed,
+                text: ClipboardService.preparedMessageText(result.text, recordingType: recording.type), segments: nil,
+                kind: cloud ? .cloud : .local,
+                provider: (cloud ? TranscriptionProvider.cloud : .local).rawValue
             )
         }
     }
@@ -916,7 +943,10 @@ final class RecordingQueueService {
     }
 
     private func preflightError(for item: QueueItem) -> String? {
-        if case .translateParts = item.action { return nil } // Each part reports its own failure.
+        switch item.action {
+        case .translateParts, .transcribeParts: return nil // Each part reports its own failure.
+        default: break
+        }
         // Same rule as processRecording: an on-device engine skips the Whisper/cloud checks.
         if let recording = storage.recordings.first(where: { $0.id == item.id }) {
             let onDeviceID = item.action == .translate
@@ -979,7 +1009,7 @@ extension QueueJournal.Entry.Action {
         case .transcribe: self = .transcribe
         case .transcribeDiarize: self = .transcribeDiarize
         case .translate: self = .translate
-        case .translateParts: return nil
+        case .translateParts, .transcribeParts: return nil
         }
     }
 

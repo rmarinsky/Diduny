@@ -73,6 +73,7 @@ final class SettingsShortcutsStore: ShortcutsSettingsStore {
         let names: [KeyboardShortcuts.Name] = [
             .toggleRecording, .toggleMeetingRecording, .toggleMeetingTranslation, .toggleTranslation,
             .addMeetingChapter, .toggleHistoryPalette, .forceSubmit, .translateSelectedText, .inplaceTranslation,
+            .undoLayoutFix,
         ]
         for name in names where name != row.hotkeyName {
             if let shortcut = KeyboardShortcuts.getShortcut(for: name) { taken[name] = shortcut }
@@ -98,6 +99,21 @@ final class SettingsShortcutsStore: ShortcutsSettingsStore {
             ),
         ])
         return PushToTalkKey.blocksInplaceTranslation(reserved)
+    }
+
+    var convertPair: TypingConvertPair {
+        get { settings.typingConvertPair }
+        set { settings.typingConvertPair = newValue }
+    }
+
+    var convertEnabled: Bool {
+        get { settings.typingConvertEnabled }
+        set { settings.typingConvertEnabled = newValue }
+    }
+
+    var convertPressCount: Int {
+        get { settings.typingConvertPressCount }
+        set { settings.typingConvertPressCount = newValue }
     }
 
     var offeredPairs: [TranslationLanguagePair] { settings.offeredTranslationPairs }

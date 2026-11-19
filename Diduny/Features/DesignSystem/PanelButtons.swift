@@ -36,6 +36,98 @@ struct CopyButton: View {
     }
 }
 
+/// Meeting Copy (Roman, 2026-11-17): "Copy" copies all. After a copy it reads "Copy new" (only text since then,
+/// the unfinished line again) and a chevron slides in with "Copy all". "Copied" stays for `copiedHold`.
+struct CopyNewButton: View {
+    let copiedAt: Date?
+    let hasNew: Bool
+    let onCopyNew: () -> Void
+    let onCopyAll: () -> Void
+    var presenter: FloatingSurfacePresenter = .shared
+
+    static let menuOwner = "livePanel.copyMenu"
+    private static let copyAllRow = "copyAll"
+    private static let chevronWidth: CGFloat = 24
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var showsCopied = false
+    @State private var anchor = FloatingSurfaceAnchor()
+
+    private var hasCopied: Bool { copiedAt != nil }
+
+    var body: some View {
+        HStack(spacing: DS.Panel.borderWidth) {
+            Button(action: hasCopied ? onCopyNew : onCopyAll) {
+                part {
+                    Text(showsCopied ? "Copied" : hasCopied ? "Copy new" : "Copy")
+                        .contentTransition(.opacity)
+                        .animation(reduceMotion ? nil : DS.Motion.easeOut(DS.Motion.m17CopyLabel.duration), value: showsCopied)
+                }
+                .frame(maxWidth: .infinity)
+                .opacity(isEnabled && (!hasCopied || hasNew) ? 1 : 0.5)
+            }
+            .buttonStyle(PressScaleButtonStyle(scale: DS.Motion.pressScale))
+            .disabled(hasCopied && !hasNew)
+            .help(hasCopied ? "Copy text added since the last copy" : "Copy the whole transcript")
+            .accessibilityLabel(hasCopied ? "Copy new text" : "Copy transcript")
+            .accessibilityValue(hasCopied && !hasNew ? Text("Nothing new") : Text(verbatim: ""))
+            .accessibilityIdentifier("livePanel.copy")
+            if hasCopied {
+                Button(action: openMenu) {
+                    part {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: DS.Size.symbolChevron, weight: .semibold))
+                    }
+                    .frame(width: Self.chevronWidth)
+                    .opacity(isEnabled ? 1 : 0.5)
+                }
+                .buttonStyle(PressScaleButtonStyle(scale: DS.Motion.pressScale))
+                .help("More copy options")
+                .accessibilityLabel("More copy options")
+                .accessibilityIdentifier(Self.menuOwner)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.panelButton, style: .continuous))
+        .floatingSurfaceAnchor(anchor)
+        .animation(reduceMotion ? DS.Motion.reduced : DS.Motion.easeInOut(0.22), value: hasCopied)
+        .task(id: copiedAt) {
+            let left = copiedAt.map { DS.Motion.copiedHold - Date().timeIntervalSince($0) } ?? 0
+            showsCopied = left > 0
+            guard left > 0 else { return }
+            try? await Task.sleep(for: .seconds(left))
+            if !Task.isCancelled { showsCopied = false }
+        }
+    }
+
+    /// One half of the split: `chip` fill, square inner edge; the 1 pt gap shows the panel as the divider.
+    private func part(@ViewBuilder _ label: () -> some View) -> some View {
+        label()
+            .font(DS.Font.headline)
+            .lineLimit(1)
+            .foregroundStyle(DS.Palette.text)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: DS.Size.panelButton, maxHeight: DS.Size.panelButton)
+            .background(DS.Palette.chip)
+            .contentShape(Rectangle())
+    }
+
+    private func openMenu() {
+        guard let frame = anchor.screenFrame else { return }
+        let model = PickerMenuModel(
+            groups: [PickerMenuGroup(id: "copy", rows: [PickerMenuRow(id: Self.copyAllRow, title: String(localized: "Copy all"))])],
+            selectedID: nil, search: .never
+        )
+        let onCopyAll = onCopyAll
+        presenter.toggleMenu(
+            owner: Self.menuOwner, model: model, alignment: .leading, anchor: frame, parent: anchor.window,
+            fromKeyboard: NSApp.currentEvent?.type == .keyDown,
+            onPick: { if $0 == Self.copyAllRow { onCopyAll() } }
+        )
+    }
+}
+
 private struct PanelButtonLabel<Label: View>: View {
     let role: PanelButton.Role
     @ViewBuilder let label: () -> Label

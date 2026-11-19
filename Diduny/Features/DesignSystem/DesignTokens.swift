@@ -127,13 +127,14 @@ enum DS {
 
     /// Floating panel metrics (design-spec 3.3). Height is the content's fitting height.
     enum Panel {
-        static let width: CGFloat = 300
+        /// 364 (Roman, 2026-11-19): the meeting row fits "Копіювати нове ⌄" and "Зупинити · Скасувати: Esc ×3 · ⌥⌘M" in full.
+        static let width: CGFloat = 364
         static let padding: CGFloat = 12
         /// Vertical gap between blocks.
         static let blockGap: CGFloat = 10
         /// Drawn inside the shape (`strokeBorder`) in `Palette.line`.
         static let borderWidth: CGFloat = 1
-        /// 300 minus 2 x 12 padding minus 2 x 1 border.
+        /// 364 minus 2 x 12 padding minus 2 x 1 border.
         static let contentWidth: CGFloat = width - padding * 2 - borderWidth * 2
     }
 
@@ -318,6 +319,8 @@ enum DS {
         static let m16Progress = Token(duration: 0.20, curve: .linear, reducedMotion: .same)
         /// Copy to Copied label.
         static let m17CopyLabel = Token(duration: 0.16, curve: .easeOut, reducedMotion: .instant)
+        /// Seconds "Copied" stays on the meeting Copy button before it reads "Copy new".
+        static let copiedHold: Double = 1.2
         /// Local models row states and key popup states.
         static let m18RowStates = Token(duration: 0, curve: .instant, reducedMotion: .instant)
 
