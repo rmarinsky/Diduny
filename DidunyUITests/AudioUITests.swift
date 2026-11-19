@@ -23,15 +23,17 @@ final class AudioUITests: DidunyUITestCase {
         element.click()
     }
 
+    /// The microphone test lives on Meetings (the Sound group), not on Audio.
     func test_microphoneTestTogglesLabels() {
-        openAudio()
+        launchApp(onboardingCompleted: true, profile: LaunchProfile.standard.adding("--ui-testing-audio-devices=Test Mic A,Test Mic B"), open: "settings.meetings")
+        waitForElement(element("section.meetings"))
         let record = waitForElement(element("audio.mic.record"))
-        XCTAssertEqual(record.label, "Record")
+        XCTAssertEqual(record.label, "Test")
         click(record)
-        waitForElement(record, toMatch: "label == 'Stop Recording'")
+        waitForElement(record, toMatch: "label == 'Stop'")
         waitForElement(element("audio.mic.level"), toMatch: "value != '0%'")
         click(record)
-        waitForElement(record, toMatch: "label == 'Record'")
+        waitForElement(record, toMatch: "label == 'Test'")
         let play = element("audio.mic.play")
         waitForElement(play, toMatch: "isEnabled == true")
         click(play)

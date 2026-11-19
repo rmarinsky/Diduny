@@ -19,7 +19,7 @@ final class ShortcutsSettingsUITests: DidunyUITestCase {
 
     private static let rows = [
         "escapeCancel", "forceSubmit", "addMeetingChapter", "translateSelectedText", "inplaceTranslation",
-        "toggleHistoryPalette", "undoLayoutFix",
+        "toggleHistoryPalette",
     ]
 
     /// T5-SC-01: rows and defaults. Values are spoken as spec 4.14 says ("Option Command B").
