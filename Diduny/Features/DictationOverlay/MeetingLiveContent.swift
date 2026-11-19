@@ -194,6 +194,60 @@ struct MeetingPanelState {
     }
 }
 
+// MARK: - Translate field
+
+/// The Translate field next to Engine in a meeting on Diduny Cloud: Off or a pair, switchable while it records.
+struct MeetingTranslateField: Equatable {
+    enum Pick: Equatable {
+        case translation(TranslationLanguagePair?)
+        case otherLanguages
+    }
+
+    static let offRowID = "translateOff"
+
+    let pair: TranslationLanguagePair?
+    /// Pairs made from Your languages, as Between offers them.
+    let offeredPairs: [TranslationLanguagePair]
+    var locale: Locale = EngineLanguages.appLocale
+
+    var value: String { pair?.shortLabel ?? String(localized: "Off") }
+
+    /// Replaces the engine caption while a pair is on.
+    var caption: String? { pair == nil ? nil : String(localized: "Live · both directions · speaker labels") }
+
+    /// Between's pairs, then Off while a pair is on, then "Other languages...".
+    var menu: PickerMenuModel {
+        typealias RowID = TranslateMeetingPanelModel.RowID
+        var other: [PickerMenuRow] = []
+        if pair != nil {
+            other.append(PickerMenuRow(id: Self.offRowID, title: String(localized: "Off"), subline: String(localized: "Transcribe only, from now on")))
+        }
+        other.append(PickerMenuRow(
+            id: RowID.otherLanguages,
+            title: String(localized: "Other languages..."),
+            subline: String(localized: "Add them to Your languages in Settings")
+        ))
+        return PickerMenuModel(
+            groups: [
+                PickerMenuGroup(
+                    id: "pairs",
+                    header: String(localized: "Both directions, between your languages"),
+                    rows: offeredPairs.map { PickerMenuRow(id: RowID.pair($0), title: $0.fullName(locale: locale)) }
+                ),
+                PickerMenuGroup(id: "other", rows: other),
+            ],
+            selectedID: pair.flatMap { pair in offeredPairs.first { $0.hasSameLanguages(as: pair) } }.map(RowID.pair),
+            search: .never
+        )
+    }
+
+    func pick(rowID id: String) -> Pick? {
+        if id == Self.offRowID { return .translation(nil) }
+        if id == TranslateMeetingPanelModel.RowID.otherLanguages { return .otherLanguages }
+        return offeredPairs.first { TranslateMeetingPanelModel.RowID.pair($0) == id }.map { .translation($0) }
+    }
+}
+
 // MARK: - Transcript lines
 
 /// Live meeting transcript as label lines and paragraphs, no timestamps (01 section 2 item 6).
@@ -253,6 +307,10 @@ struct MeetingLiveContent<Waveform: View>: View {
     /// A failure or persistent line under the engine, with its link's action.
     var switchLine: MeetingSwitchText.Line?
     var onFailureAction: () -> Void = {}
+    /// The Translate field next to Engine; nil hides it.
+    var translate: MeetingTranslateField?
+    var onPickTranslation: (TranslationLanguagePair?) -> Void = { _ in }
+    var onOpenLanguages: () -> Void = {}
     /// The 38 pt waveform circle (`LiveWaveformCircle` draws its own frame, tint and identifier).
     @ViewBuilder let waveform: () -> Waveform
     /// A switch can cut live text or open a socket, so arrows only move this; Space or Return commits.
@@ -306,16 +364,26 @@ struct MeetingLiveContent<Waveform: View>: View {
 
     private var engineBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if state.isFieldStatic {
-                PickerField(staticLabel: LocalizedStringKey(state.fieldLabel), value: state.engineName, layout: .stacked, identifier: "livePanel.engine")
+            if let translate {
+                HStack(spacing: 6) {
+                    engineField(layout: .stackedInPair).frame(maxWidth: .infinity)
+                    PickerField(
+                        label: "Translate", value: translate.value, layout: .stackedInPair, menuAlignment: .trailing,
+                        identifier: "livePanel.translate", menu: { translate.menu },
+                        onPick: { id in
+                            switch translate.pick(rowID: id) {
+                            case let .translation(pair): onPickTranslation(pair)
+                            case .otherLanguages: onOpenLanguages()
+                            case nil: break
+                            }
+                        }
+                    )
+                    .frame(maxWidth: .infinity)
+                }
             } else {
-                PickerField(
-                    label: LocalizedStringKey(state.fieldLabel), value: state.engineName, layout: .stacked,
-                    identifier: "livePanel.engine", menu: { state.menu },
-                    onPick: { id in EngineID(rawValue: id).map(onPickEngine) }
-                )
+                engineField(layout: .stacked)
             }
-            Text(verbatim: state.caption)
+            Text(verbatim: translate?.caption ?? state.caption)
                 .font(DS.Font.meta)
                 .foregroundStyle(DS.Palette.secondary)
                 .lineSpacing(DS.Font.LineSpacing.meta)
@@ -340,6 +408,18 @@ struct MeetingLiveContent<Waveform: View>: View {
                     action: onDownloadParakeet, id: "livePanel.parakeetMissing", linkID: "livePanel.downloadParakeet"
                 )
             }
+        }
+    }
+
+    @ViewBuilder private func engineField(layout: PickerField.Layout) -> some View {
+        if state.isFieldStatic {
+            PickerField(staticLabel: LocalizedStringKey(state.fieldLabel), value: state.engineName, layout: layout, identifier: "livePanel.engine")
+        } else {
+            PickerField(
+                label: LocalizedStringKey(state.fieldLabel), value: state.engineName, layout: layout,
+                identifier: "livePanel.engine", menu: { state.menu },
+                onPick: { id in EngineID(rawValue: id).map(onPickEngine) }
+            )
         }
     }
 

@@ -41,6 +41,8 @@ final class MeetingEngineController {
         var didCut: (MeetingEngineTarget) -> Void
         /// A new pair is now live.
         var commitPair: (TranslationLanguagePair) -> Void = { _ in }
+        /// A meeting's Translate field changed at a cut; nil is Off.
+        var commitTranslation: (TranslationLanguagePair?) -> Void = { _ in }
         /// Panel state changed.
         var didChange: (MeetingSwitchMachine) -> Void
     }
@@ -70,6 +72,12 @@ final class MeetingEngineController {
     private var isShutDown = false
     /// The pair a restarting session connects with; read by the session factory.
     private(set) var pendingPair: TranslationLanguagePair?
+    /// A meeting's Translate pick waiting for its cut; `.some(nil)` turns translation off.
+    private(set) var pendingTranslation: TranslationLanguagePair??
+    /// What the current Diduny Cloud session of a meeting translates; a cut to any other target clears it.
+    private(set) var liveTranslation: TranslationLanguagePair?
+    /// What a session about to connect translates: the pending pick, else the current one.
+    var sessionTranslation: TranslationLanguagePair? { pendingTranslation ?? liveTranslation }
 
     init(start: MeetingEngineTarget, afterStopEngine: EngineID, fanOut: MeetingAudioFanOut = MeetingAudioFanOut(), environment: Environment) {
         machine = MeetingSwitchMachine(start: start, afterStopEngine: afterStopEngine)
@@ -116,6 +124,7 @@ final class MeetingEngineController {
         guard !isShutDown else { return }
         if !target.isLive { settleReconnect() }
         pendingPair = nil
+        pendingTranslation = nil
         let failure = target.isLive ? env.readiness(target) : nil
         send(.click(target, failure: failure, at: cutPoint()))
     }
@@ -125,6 +134,14 @@ final class MeetingEngineController {
         guard !isShutDown, machine.running.isLive, !machine.isConnecting else { return }
         pendingPair = pair
         send(.restartLive(label: pair.shortLabel, failure: env.readiness(machine.running)))
+    }
+
+    /// A meeting's Translate field: the same restart, counted only from the cut.
+    func restartLive(translation: TranslationLanguagePair?) {
+        guard !isShutDown, machine.running.isLive, !machine.isConnecting else { return }
+        pendingTranslation = .some(translation)
+        let label = translation.map { String(localized: "translating \($0.shortLabel)") } ?? String(localized: "transcribing")
+        send(.restartLive(label: label, failure: env.readiness(machine.running)))
     }
 
     /// `usageLimitExceeded` on connect or reconnect (D2 trigger 1). The client deadline, trigger 2, is deliberately
@@ -193,17 +210,30 @@ final class MeetingEngineController {
                 retire(before)
                 env.applyStatus(.disconnected)
                 env.didCut(machine.running)
+                commitTranslation()
             case .cutTo:
                 retire(before)
                 if let pendingPair { env.commitPair(pendingPair) }
                 env.applyStatus(.connected)
                 env.didCut(machine.running)
+                commitTranslation()
             default:
                 run(effect)
             }
         }
-        if !machine.isConnecting { pendingPair = nil }
+        if !machine.isConnecting {
+            pendingPair = nil
+            pendingTranslation = nil
+        }
         env.didChange(machine)
+    }
+
+    /// At a cut: the pending pick, or what the running session still translates (only Diduny Cloud does).
+    private func commitTranslation() {
+        let translation = pendingTranslation ?? (machine.running == .live(.didunyCloud) ? liveTranslation : nil)
+        guard translation != liveTranslation else { return }
+        liveTranslation = translation
+        env.commitTranslation(translation)
     }
 
     private func run(_ effect: MeetingSwitchMachine.Effect) {

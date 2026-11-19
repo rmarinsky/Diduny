@@ -197,9 +197,19 @@ extension AppDelegate {
             },
             makeSession: { [weak self] target, callbacks in
                 guard let self else { return nil }
-                let pair = translating ? (meetingEngineController?.pendingPair ?? activeMeetingTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair()) : nil
-                let preprocess: (([RealtimeToken]) -> [RealtimeToken])? = translating
-                    ? { [weak self] tokens in self?.meetingTranslationTimestampBackfill.annotate(tokens) ?? tokens } : nil
+                let pair = translating
+                    ? (meetingEngineController?.pendingPair ?? activeMeetingTranslationLanguagePair ?? SettingsStorage.shared.resolveTranslationLanguagePair())
+                    : meetingEngineController?.sessionTranslation
+                let preprocess: (([RealtimeToken]) -> [RealtimeToken])? = if translating {
+                    { [weak self] tokens in self?.meetingTranslationTimestampBackfill.annotate(tokens) ?? tokens }
+                } else if pair != nil {
+                    // A meeting's Translate field: only the translation reaches the transcript.
+                    { [weak self] tokens in
+                        (self?.meetingTranslationTimestampBackfill.annotate(tokens) ?? tokens).filter(TranslateMeetingTranscript.isTranslated)
+                    }
+                } else {
+                    nil
+                }
                 return makeMeetingEngineSession(target, translationPair: pair, preprocess: preprocess, callbacks: callbacks)
             },
             applyTokens: { [weak self, weak store] events in
@@ -245,6 +255,10 @@ extension AppDelegate {
                 self?.commitMeetingTranslationPair(pair)
                 overlay.store.meetingTranslationPair = pair
             },
+            commitTranslation: { [weak self] pair in
+                self?.meetingTranslationTimestampBackfill.reset()
+                overlay.store.meetingLiveTranslation = pair
+            },
             didChange: { machine in overlay.store.applyMeetingSwitch(machine) }
         ))
     }
@@ -262,6 +276,7 @@ extension AppDelegate {
     func meetingSwitchHandler(for controller: MeetingEngineController) -> MeetingSwitchHandler {
         MeetingSwitchHandler(
             click: { [weak controller] in controller?.click($0) },
+            changeTranslation: { [weak controller] pair in controller?.restartLive(translation: pair) },
             changePair: { [weak self, weak controller] pair in
                 guard let self, let controller else { return false }
                 guard controller.machine.running.isLive else {
