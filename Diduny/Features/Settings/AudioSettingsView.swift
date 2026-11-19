@@ -145,7 +145,8 @@ struct AudioSettingsView: View {
         @ViewBuilder trailing: () -> some View
     ) -> some View {
         let meter = meter(), trailing = trailing()
-        return SettingsLineRow(title: title, caption: caption) {
+        // `.button`: the test buttons keep their own labels ("Test", "Stop") once a caption shows.
+        return SettingsLineRow(title: title, caption: caption, kind: .button) {
             meter
             GapSlider(value: value, in: 0 ... 2, step: 0.05) { editing in
                 if !editing { save(value.wrappedValue) }
