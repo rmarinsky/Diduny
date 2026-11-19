@@ -2417,3 +2417,6 @@
 "On by default. Counts which features and shortcuts are used each day, so we know what to improve. Sent once a day while you are signed in, so only Diduny accounts can send counts; the server stores the daily totals without your account, and nothing you say or type." = "On by default. Counts which features and shortcuts are used each day, so we know what to improve. Sent once a day while you are signed in, so only Diduny accounts can send counts; the server stores the daily totals without your account, and nothing you say or type.";
 "The transcript is not ready yet." = "The transcript is not ready yet.";
 "Key lacks permission: user_read" = "Key lacks permission: user_read";
+"translating %@" = "translating %@";
+"transcribing" = "transcribing";
+"Transcribe only, from now on" = "Transcribe only, from now on";

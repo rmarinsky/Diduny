@@ -2417,3 +2417,6 @@
 "On by default. Counts which features and shortcuts are used each day, so we know what to improve. Sent once a day while you are signed in, so only Diduny accounts can send counts; the server stores the daily totals without your account, and nothing you say or type." = "Увімкнено за замовчуванням. Рахує, якими функціями та шорткатами ви користуєтеся щодня, щоб ми знали, що покращувати. Надсилається раз на день, коли ви ввійшли, щоб лічильники могли надсилати лише акаунти Diduny; сервер зберігає денні суми без вашого акаунта і без того, що ви кажете чи пишете.";
 "The transcript is not ready yet." = "Транскрипт ще не готовий.";
 "Key lacks permission: user_read" = "Ключ не має дозволу: user_read";
+"translating %@" = "переклад %@";
+"transcribing" = "транскрипція";
+"Transcribe only, from now on" = "Лише транскрипція, відтепер";

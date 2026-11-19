@@ -73,6 +73,17 @@ extension LiveDictationOverlayStore {
         meetingTranslationPair = pair
     }
 
+    /// The Translate field: only on Cloud with Diduny Cloud, the one engine that translates a meeting live.
+    var meetingTranslateField: MeetingTranslateField? {
+        guard mode == .meeting, meetingSwitchHandler != nil, meetingPanelState.segment == .cloud,
+              meetingPanelState.engine == .didunyCloud else { return nil }
+        return MeetingTranslateField(pair: meetingLiveTranslation, offeredPairs: settings.offeredTranslationPairs)
+    }
+
+    func pickMeetingTranslation(_ pair: TranslationLanguagePair?) {
+        meetingSwitchHandler?.changeTranslation(pair)
+    }
+
     /// A click on a segment: its engine goes live, or Record only starts now. Text and audio are the handler's job.
     func pickMeetingSegment(_ segment: MeetingSegment) {
         let engine = meetingEngines[segment] ?? MeetingPanelState.defaultEngines[segment] ?? .didunyCloud
@@ -144,6 +155,8 @@ extension LiveDictationOverlayStore {
 /// Where a running panel's clicks go; set while a meeting records.
 struct MeetingSwitchHandler {
     var click: (MeetingEngineTarget) -> Void
+    /// A meeting's Translate field; nil is Off. Shown once the cut commits it.
+    var changeTranslation: (TranslationLanguagePair?) -> Void = { _ in }
     /// False: the pair stays as it was.
     var changePair: (TranslationLanguagePair) -> Bool
 }

@@ -69,6 +69,8 @@ final class LiveDictationOverlayStore {
     var meetingTranslationEngine: EngineID = .didunyCloud
     var meetingTranslation = TranslateMeetingTranscript(pair: TranslationLanguagePair(languageA: "en", languageB: "uk"))
     var meetingTranslationShowsOriginal = false
+    /// A meeting's Translate field: what the live session translates into now; nil is Off.
+    var meetingLiveTranslation: TranslationLanguagePair?
     /// Battery warning on This Mac (WP-16, WP-31).
     @ObservationIgnored private(set) lazy var powerSource = PowerSourceMonitor()
 
@@ -240,6 +242,7 @@ final class LiveDictationOverlayStore {
         convertedPreview = nil
         meetingSwitch = MeetingSwitchDisplay()
         meetingSwitchHandler = nil
+        meetingLiveTranslation = nil
         sessionEngine = nil
     }
 

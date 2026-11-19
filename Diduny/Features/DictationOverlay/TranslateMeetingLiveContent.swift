@@ -38,7 +38,10 @@ struct MeetingLiveSection: View {
             onPickEngine: store.pickMeetingEngine,
             onDownloadParakeet: { ParakeetModelController.shared.download() },
             switchLine: store.meetingSwitchLine,
-            onFailureAction: store.runMeetingFailureAction
+            onFailureAction: store.runMeetingFailureAction,
+            translate: store.meetingTranslateField,
+            onPickTranslation: store.pickMeetingTranslation,
+            onOpenLanguages: { AppDelegate.current?.openSettings(tab: .languages) }
         ) {
             LiveWaveformCircle(store: store)
         }
