@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Papuga is now part of Diduny: layout fixes, one logo for fixes and translation, Copy new in meetings",
+    "headline": "Papuga is now part of Diduny: layout fixes, one logo for fixes and translation, Copy new and translation mid-meeting",
     "highlights": [
       "Settings → Typing fixes text typed in the wrong keyboard layout as you type: \"Oops, fixed\" appears next to the text, then \"Undo fix\". Select text and press Option+Shift twice to swap its layout. In-place translation shows the same logo, with \"Translating…\" and then \"Translated\".",
       "Words you keep typing join Vocabulary & context by themselves, and nothing from password fields is counted. The new Clipboard page keeps what you copied, screenshots and what Diduny pasted.",
-      "In a live meeting, Copy new copies only what was said since your last copy. The empty Notes page writes notes for earlier meetings in one go, with Pause and Stop, and the local models table shows which models label speakers."
+      "In a live meeting, Copy new copies only what was said since your last copy, and the Translate field next to Engine turns on two-way translation (for example Ukrainian ↔ English) from that moment, in the same recording. The empty Notes page writes notes for earlier meetings in one go, with Pause and Stop, and the local models table shows which models label speakers."
     ]
   },
   "uk": {
-    "headline": "Papuga тепер у Diduny: виправлення розкладки, одне лого для виправлень і перекладу, «Копіювати нове» на зустрічах",
+    "headline": "Papuga тепер у Diduny: виправлення розкладки, одне лого для виправлень і перекладу, «Копіювати нове» і переклад посеред зустрічі",
     "highlights": [
       "Налаштування → Набір тексту виправляє текст, набраний не в тій розкладці, просто під час набору: біля тексту з'являється «Ой, виправив», а потім «Скасувати заміну». Виділіть текст і двічі натисніть Option+Shift, щоб поміняти розкладку. Переклад на місці показує те саме лого: «Перекладаю…», а потім «Перекладено».",
       "Слова, які ви часто набираєте, самі додаються у «Словник і контекст», а з полів пароля нічого не рахується. Нова сторінка «Буфер обміну» зберігає скопійоване, скриншоти і те, що вставив Diduny.",
-      "На живій зустрічі «Копіювати нове» копіює лише те, що прозвучало після попереднього копіювання. Порожня сторінка «Нотатки» пише нотатки до давніших зустрічей одним махом, з паузою і зупинкою, а таблиця локальних моделей показує, які моделі розрізняють мовців."
+      "На живій зустрічі «Копіювати нове» копіює лише те, що прозвучало після попереднього копіювання, а поле «Перекласти» поруч із «Рушієм» вмикає переклад в обидва боки (наприклад, українська ↔ англійська) з цієї миті, у тому самому записі. Порожня сторінка «Нотатки» пише нотатки до давніших зустрічей одним махом, з паузою і зупинкою, а таблиця локальних моделей показує, які моделі розрізняють мовців."
     ]
   }
 }
