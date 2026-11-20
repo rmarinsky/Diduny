@@ -2504,6 +2504,12 @@
 "Nothing copied in 1Password, Keychain and similar apps is kept." = "Nothing copied in 1Password, Keychain and similar apps is kept.";
 "Clear the clipboard history" = "Clear the clipboard history";
 "Clear everything" = "Clear everything";
+"Show All %lld Items" = "Show All %lld Items";
+"Nothing copied yet" = "Nothing copied yet";
+"Clipboard history is off" = "Clipboard history is off";
+"%lld files: %@" = "%lld files: %@";
+"Moved or deleted" = "Moved or deleted";
+"Items shown in the menu bar list" = "Items shown in the menu bar list";
 
 /* Vocabulary: words from typing */
 "Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud. Layout fixes never change these words." = "Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud. Layout fixes never change these words.";

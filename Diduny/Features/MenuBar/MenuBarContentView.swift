@@ -132,6 +132,8 @@ private struct StatusItemLabel: View {
     /// Where the recording items' shortcuts are read; tests inject a fake (test-plan T5-HK-40).
     var hotkeys: HotkeyRegistrar = KeyboardShortcutsRegistrar.shared
     var board: ProcessingBoard = .shared
+    var clipboard: ClipboardHistoryService = .shared
+    var settings: SettingsStorage = .shared
 
     func items() -> [NSMenuItem] {
         var items = calendarItems()
@@ -143,6 +145,7 @@ private struct StatusItemLabel: View {
             ActionMenuItem(String(localized: "Open Diduny")) { actions.openMainWindow(.overview) },
             ActionMenuItem(String(localized: "Recordings")) { actions.openMainWindow(.recordings) },
             ActionMenuItem(String(localized: "Notes")) { actions.openMainWindow(.notes) },
+            clipboardItem(),
             batchItem(),
             .separator(),
             ActionMenuItem(String(localized: "Check for Updates…")) { actions.checkForUpdates() },
@@ -266,7 +269,12 @@ private struct StatusItemLabel: View {
 
     private func hosted<Content: View>(size: CGSize, _ content: (_ close: @escaping () -> Void) -> Content) -> NSMenuItem {
         let item = NSMenuItem()
-        let close: () -> Void = { [weak item] in item?.menu?.cancelTracking() }
+        let close: () -> Void = { [weak item] in
+            // A row in a submenu: tracking ends for the menu the status item opened.
+            var root = item?.menu
+            while let parent = root?.supermenu { root = parent }
+            root?.cancelTracking()
+        }
         let view = NSHostingView(rootView: content(close))
         view.frame = NSRect(origin: .zero, size: size)
         item.view = view
@@ -360,6 +368,33 @@ private struct StatusItemLabel: View {
 
     private var translationTargetLabel: String {
         SettingsStorage.shared.effectiveDictationTranslationTargetLanguage.uppercased()
+    }
+
+    // MARK: Clipboard
+
+    /// The history, newest first, in a list that scrolls; clicking a row copies it back, without a new entry.
+    func clipboardItem() -> NSMenuItem {
+        let item = NSMenuItem(title: String(localized: "Clipboard"), action: nil, keyEquivalent: "")
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let store = clipboard.store
+        let entries = store.entries
+        if settings.clipboardRetention == .never { menu.addItem(disabled(String(localized: "Clipboard history is off"))) }
+        if entries.isEmpty {
+            if settings.clipboardRetention != .never { menu.addItem(disabled(String(localized: "Nothing copied yet"))) }
+        } else {
+            let list = hosted(size: ClipboardMenuList.size(count: entries.count, visibleRows: settings.clipboardMenuVisibleRows)) { close in
+                ClipboardMenuList(entries: entries, thumbnailURL: store.thumbnailURL(for:)) { entry in
+                    clipboard.copyToPasteboard(entry)
+                    close()
+                }
+            }
+            menu.addItem(list)
+            menu.addItem(.separator())
+            menu.addItem(ActionMenuItem(String(localized: "Show All \(entries.count) Items")) { actions.openMainWindow(.clipboard) })
+        }
+        item.submenu = menu
+        return item
     }
 
     // MARK: Input, windows, app

@@ -163,6 +163,8 @@ struct GeneralSettingsView: View {
         }
     }
 
+    private static let menuVisibleRowChoices = [5, 10, 15, 20]
+
     /// Moved here from the Clipboard page, which opens this group with its Settings button.
     private var clipboardGroup: some View {
         GeneralGroup(heading: "Clipboard") {
@@ -174,6 +176,15 @@ struct GeneralSettingsView: View {
                 }
                 .pickerStyle(.menu).labelsHidden().fixedSize()
                 .accessibilityIdentifier("clipboard.retention")
+            }
+            SettingsLineRow(title: "Items shown in the menu bar list", kind: .popUp) {
+                Picker("Items shown in the menu bar list", selection: Binding(
+                    get: { clipboard.menuVisibleRows }, set: { clipboard.setMenuVisibleRows($0) }
+                )) {
+                    ForEach(Self.menuVisibleRowChoices, id: \.self) { Text(verbatim: String($0)).tag($0) }
+                }
+                .pickerStyle(.menu).labelsHidden().fixedSize()
+                .accessibilityIdentifier("clipboard.menuVisibleRows")
             }
             SettingsLineRow(title: "Keep screenshots", caption: "Screenshots take more space than text.", kind: .toggle) {
                 SettingsSwitch(title: "Keep screenshots", isOn: Binding(

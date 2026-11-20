@@ -46,6 +46,7 @@ extension SettingsStorage {
         case keepScreenshots = "clipboard.keepScreenshots"
         case keepDidunyPastes = "clipboard.keepDidunyPastes"
         case skipPasswordManagers = "clipboard.skipPasswordManagers"
+        case menuVisibleRows = "clipboard.menuVisibleRows"
     }
 
     var clipboardRetention: ClipboardRetention {
@@ -69,5 +70,11 @@ extension SettingsStorage {
     var clipboardSkipPasswordManagers: Bool {
         get { defaults.object(forKey: ClipboardKey.skipPasswordManagers.rawValue) as? Bool ?? true }
         set { defaults.set(newValue, forKey: ClipboardKey.skipPasswordManagers.rawValue) }
+    }
+
+    /// Rows of the Clipboard list in the menu bar menu that show at once; the rest scrolls.
+    var clipboardMenuVisibleRows: Int {
+        get { defaults.object(forKey: ClipboardKey.menuVisibleRows.rawValue) as? Int ?? 10 }
+        set { defaults.set(newValue, forKey: ClipboardKey.menuVisibleRows.rawValue) }
     }
 }

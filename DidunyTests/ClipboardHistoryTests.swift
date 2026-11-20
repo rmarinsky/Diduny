@@ -9,7 +9,10 @@ private final class FakePasteboard: ClipboardPasteboard {
     var types: [String] = []
     private var text: String?
     private var image: Data?
+    private var files: [URL] = []
 
+    func fileURLs() -> [URL] { files }
+    func write(fileURLs: [URL]) { put(files: fileURLs, types: ["public.file-url"]) }
     func string() -> String? { text }
     func imageData() -> Data? { image }
 
@@ -17,15 +20,17 @@ private final class FakePasteboard: ClipboardPasteboard {
     func write(png: Data) { put(text: nil, image: png, types: ["public.png"]) }
 
     /// A copy made in another app.
-    func put(text: String? = nil, image: Data? = nil, types: [String]) {
+    func put(text: String? = nil, image: Data? = nil, files: [URL] = [], types: [String]) {
         self.text = text
         self.image = image
+        self.files = files
         self.types = types
         changeCount += 1
     }
 
     var currentText: String? { text }
     var currentImage: Data? { image }
+    var currentFiles: [URL] { files }
 }
 
 private func png(width: Int = 40, height: Int = 20, shade: CGFloat = 0.5) -> Data {
@@ -310,15 +315,65 @@ final class ClipboardHistoryTests {
         #expect(store.entries.count == 1)
     }
 
-    @Test("copied files, blank text and empty copies add nothing")
+    @Test("blank text and empty copies add nothing")
     func notKept() {
-        pasteboard.put(text: "report.pdf", types: ["public.file-url", "public.utf8-plain-text"])
-        service.poll()
         pasteboard.put(text: "  \n", types: ["public.utf8-plain-text"])
         service.poll()
         pasteboard.put(types: [])
         service.poll()
         #expect(store.entries.isEmpty)
+    }
+
+    @Test("a file copy is one files entry with paths only, whatever text it carries")
+    func filesCaptured() throws {
+        let urls = [URL(fileURLWithPath: "/tmp/report.pdf"), URL(fileURLWithPath: "/tmp/chart.png")]
+        pasteboard.put(text: "report.pdf", files: urls, types: ["public.file-url", "public.utf8-plain-text"])
+        service.poll()
+        let entry = try #require(store.entries.first)
+        #expect(store.entries.count == 1)
+        #expect(entry.kind == .files)
+        #expect(entry.filePaths == ["/tmp/report.pdf", "/tmp/chart.png"])
+        #expect(entry.fileNames == ["report.pdf", "chart.png"])
+        #expect(entry.text == nil)
+        #expect(entry.appName == "Ghostty")
+
+        // The same files again in a row are one entry; it survives a reload.
+        pasteboard.put(files: urls, types: ["public.file-url"])
+        service.poll()
+        #expect(store.entries.count == 1)
+        #expect(ClipboardHistoryStore(directory: directory).entries == store.entries)
+    }
+
+    @Test("a file copy with no readable file URL, or from a password manager, adds nothing")
+    func filesSkipped() {
+        pasteboard.put(files: [], types: ["public.file-url"])
+        service.poll()
+        frontmost = ClipboardSourceApp(name: "1Password", bundleID: "com.1password.1password")
+        pasteboard.put(files: [URL(fileURLWithPath: "/tmp/a.txt")], types: ["public.file-url"])
+        service.poll()
+        #expect(store.entries.isEmpty)
+    }
+
+    @Test("restoring files puts their URLs back, adds no entry, and skips files that are gone")
+    func filesRestored() throws {
+        let kept = directory.appendingPathComponent("kept.txt")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: kept)
+        let gone = directory.appendingPathComponent("gone.txt")
+        pasteboard.put(files: [kept, gone], types: ["public.file-url"])
+        service.poll()
+        let entry = try #require(store.entries.first)
+
+        pasteboard.put(text: "something else", types: ["public.utf8-plain-text"])
+        service.poll()
+        let before = store.entries
+        #expect(service.copyToPasteboard(entry))
+        service.poll()
+        #expect(pasteboard.currentFiles == [kept])
+        #expect(store.entries == before)
+
+        try FileManager.default.removeItem(at: kept)
+        #expect(!service.copyToPasteboard(entry))
     }
 
     @Test("a service that was not started records nothing")
@@ -576,6 +631,13 @@ final class ClipboardHistoryTests {
 
     // MARK: - Settings
 
+    @Test("the menu list shows ten rows unless the setting says otherwise")
+    func menuVisibleRowsDefault() {
+        #expect(box.settings.clipboardMenuVisibleRows == 10)
+        box.settings.clipboardMenuVisibleRows = 15
+        #expect(box.settings.clipboardMenuVisibleRows == 15)
+    }
+
     @Test("defaults: one week, and the three switches on")
     func settingsDefaults() {
         let settings = box.settings
@@ -594,6 +656,7 @@ final class ClipboardHistoryTests {
         page.setKeepScreenshots(false)
         page.setKeepDidunyPastes(false)
         page.setSkipPasswordManagers(false)
+        page.setMenuVisibleRows(5)
 
         let written = Set(box.defaults.dictionaryRepresentation().keys).subtracting(before)
         #expect(written == Set(SettingsStorage.ClipboardKey.allCases.map(\.rawValue)))
@@ -602,5 +665,76 @@ final class ClipboardHistoryTests {
         #expect(!box.settings.clipboardKeepScreenshots)
         #expect(!box.settings.clipboardKeepDidunyPastes)
         #expect(!box.settings.clipboardSkipPasswordManagers)
+        #expect(box.settings.clipboardMenuVisibleRows == 5)
+    }
+
+    // MARK: - Menu bar list
+
+    private func entry(
+        _ kind: ClipboardEntry.Kind, text: String? = nil, paths: [String]? = nil, app: String? = "Ghostty", date: Date? = nil
+    ) -> ClipboardEntry {
+        ClipboardEntry(id: UUID(), date: date ?? now, kind: kind, appName: app, text: text, filePaths: paths, signature: "")
+    }
+
+    @Test("a menu row is the first line, whitespace collapsed, cut at 50 characters")
+    func menuRowTitle() {
+        #expect(ClipboardMenuRow.title(for: entry(.text, text: "  \n\n  hello \t  big\n world\nsecond line")) == "hello big")
+        #expect(ClipboardMenuRow.title(for: entry(.text, text: "short")) == "short")
+
+        let exact = String(repeating: "a", count: 50)
+        #expect(ClipboardMenuRow.title(for: entry(.text, text: exact)) == exact)
+        let cut = ClipboardMenuRow.title(for: entry(.text, text: exact + "b"))
+        #expect(cut == String(repeating: "a", count: 49) + "…")
+        #expect(cut.count == 50)
+    }
+
+    @Test("a menu row names an image by its size and files by their names")
+    func menuRowTitleOtherKinds() {
+        var image = entry(.image)
+        image.pixelWidth = 1440
+        image.pixelHeight = 900
+        #expect(ClipboardMenuRow.title(for: image) == "Image, 1440 × 900")
+        image.appName = nil
+        #expect(ClipboardMenuRow.title(for: image) == "Screenshot, 1440 × 900")
+
+        #expect(ClipboardMenuRow.title(for: entry(.files, paths: ["/a/report.pdf"])) == "report.pdf")
+        #expect(ClipboardMenuRow.title(for: entry(.files, paths: ["/a/a.pdf", "/b/b.png", "/c/c.txt"])) == "3 files: a.pdf, b.png, c.txt")
+        let many = (1 ... 12).map { "/x/document-\($0).pdf" }
+        let title = ClipboardMenuRow.title(for: entry(.files, paths: many))
+        #expect(title.count == 50)
+        #expect(title.hasPrefix("12 files: document-1.pdf") && title.hasSuffix("…"))
+    }
+
+    @Test("the second line is the source and the time; an earlier day adds the date")
+    func menuRowSubtitle() {
+        let calendar = Calendar(identifier: .gregorian)
+        let today = ClipboardMenuRow(entry(.text, text: "x"), now: now, calendar: calendar)
+        #expect(today.subtitle == "Copied in Ghostty · " + now.formatted(date: .omitted, time: .shortened))
+
+        let old = ClipboardMenuRow(entry(.text, text: "x", date: now.addingTimeInterval(-3 * 86400)), now: now, calendar: calendar)
+        #expect(old.subtitle.hasPrefix("Copied in Ghostty · "))
+        #expect(old.subtitle.contains(now.addingTimeInterval(-3 * 86400).formatted(.dateTime.day().month(.abbreviated))))
+
+        let dictated = entry(.diduny, text: "x", app: nil)
+        #expect(ClipboardMenuRow(dictated, now: now, calendar: calendar).subtitle.hasPrefix("Dictated · "))
+    }
+
+    @Test("a files row is disabled, and says so, only when none of its files exist")
+    func menuRowAvailability() {
+        let files = entry(.files, paths: ["/a/here.txt", "/a/gone.txt"])
+        let someLeft = ClipboardMenuRow(files, fileExists: { $0 == "/a/here.txt" })
+        #expect(someLeft.isAvailable)
+
+        let none = ClipboardMenuRow(files, fileExists: { _ in false })
+        #expect(!none.isAvailable)
+        #expect(none.subtitle == "Moved or deleted")
+
+        #expect(ClipboardMenuRow(entry(.text, text: "x"), fileExists: { _ in false }).isAvailable)
+    }
+
+    @Test("the list is as tall as its rows up to the visible count")
+    func menuListSize() {
+        #expect(ClipboardMenuList.size(count: 3, visibleRows: 10).height == 3 * ClipboardMenuList.rowHeight)
+        #expect(ClipboardMenuList.size(count: 248, visibleRows: 10).height == 10 * ClipboardMenuList.rowHeight)
     }
 }

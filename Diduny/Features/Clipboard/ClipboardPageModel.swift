@@ -59,6 +59,7 @@ final class ClipboardPageModel {
     private(set) var keepScreenshots: Bool
     private(set) var keepDidunyPastes: Bool
     private(set) var skipPasswordManagers: Bool
+    private(set) var menuVisibleRows: Int
 
     init(
         service: ClipboardHistoryService = .shared,
@@ -74,6 +75,7 @@ final class ClipboardPageModel {
         keepScreenshots = settings.clipboardKeepScreenshots
         keepDidunyPastes = settings.clipboardKeepDidunyPastes
         skipPasswordManagers = settings.clipboardSkipPasswordManagers
+        menuVisibleRows = settings.clipboardMenuVisibleRows
     }
 
     // MARK: - List
@@ -131,7 +133,16 @@ final class ClipboardPageModel {
                 ? String(localized: "Screenshot, \(width) × \(height)")
                 : String(localized: "Image, \(width) × \(height)")
         }
+        if entry.kind == .files { return fileSummary(entry) }
         return (entry.text ?? "").prefix(400).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// "a.pdf" for one file, "3 files: a.pdf, b.png, c.txt" for more.
+    static func fileSummary(_ entry: ClipboardEntry) -> String {
+        let names = entry.fileNames
+        guard names.count > 1 else { return names.first ?? "" }
+        let list = names.joined(separator: ", ")
+        return String(localized: "\(names.count) files: \(list)")
     }
 
     /// The source line under the title.
@@ -143,7 +154,7 @@ final class ClipboardPageModel {
         case (.diduny, _, nil): String(localized: "Dictated")
         case let (_, _, name?): String(localized: "Copied in \(name)")
         case (.image, _, nil): String(localized: "Screenshot")
-        case (.text, _, nil): String(localized: "Copied")
+        case (.text, _, nil), (.files, _, nil): String(localized: "Copied")
         }
     }
 
@@ -196,5 +207,10 @@ final class ClipboardPageModel {
     func setSkipPasswordManagers(_ value: Bool) {
         settings.clipboardSkipPasswordManagers = value
         skipPasswordManagers = value
+    }
+
+    func setMenuVisibleRows(_ value: Int) {
+        settings.clipboardMenuVisibleRows = value
+        menuVisibleRows = value
     }
 }

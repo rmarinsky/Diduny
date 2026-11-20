@@ -9,8 +9,11 @@ protocol ClipboardPasteboard: AnyObject {
     func string() -> String?
     /// PNG or TIFF data of a copied image.
     func imageData() -> Data?
+    /// The file URLs of a copy made in Finder or another app.
+    func fileURLs() -> [URL]
     func write(text: String)
     func write(png: Data)
+    func write(fileURLs: [URL])
 }
 
 @MainActor
@@ -28,6 +31,10 @@ final class GeneralClipboardPasteboard: ClipboardPasteboard {
 
     func imageData() -> Data? { pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff) }
 
+    func fileURLs() -> [URL] {
+        pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+    }
+
     func write(text: String) {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
@@ -37,9 +44,14 @@ final class GeneralClipboardPasteboard: ClipboardPasteboard {
         pasteboard.clearContents()
         pasteboard.setData(png, forType: .png)
     }
+
+    func write(fileURLs: [URL]) {
+        pasteboard.clearContents()
+        pasteboard.writeObjects(fileURLs as [NSURL])
+    }
 }
 
-/// Watches the general pasteboard and keeps what was copied (plain text and images) in
+/// Watches the general pasteboard and keeps what was copied (plain text, images and file paths) in
 /// `ClipboardHistoryStore`. Nothing leaves this Mac and entry text is never logged.
 @MainActor
 final class ClipboardHistoryService {
@@ -75,7 +87,7 @@ final class ClipboardHistoryService {
         "com.outercorner.Secrets",
     ]
 
-    /// A file copy is not kept in this version, whatever else it carries.
+    /// A copy that carries this type is a file copy: its paths are kept, whatever else it carries.
     private static let fileURLType = NSPasteboard.PasteboardType.fileURL.rawValue
 
     let store: ClipboardHistoryStore
@@ -182,7 +194,7 @@ final class ClipboardHistoryService {
 
     private func capture() {
         let types = pasteboard.types
-        guard Self.skippedTypes.isDisjoint(with: types), !types.contains(Self.fileURLType) else { return }
+        guard Self.skippedTypes.isDisjoint(with: types) else { return }
         let app = frontmostApp()
         if settings.clipboardSkipPasswordManagers, let bundleID = app.bundleID,
            Self.passwordManagerBundleIDs.contains(bundleID)
@@ -190,7 +202,10 @@ final class ClipboardHistoryService {
             return
         }
         var added: ClipboardEntry?
-        if let text = pasteboard.string(), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if types.contains(Self.fileURLType) {
+            let urls = pasteboard.fileURLs()
+            added = urls.isEmpty ? nil : store.addFiles(urls, app: app, date: now())
+        } else if let text = pasteboard.string(), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             added = store.addCopiedText(text, app: app, date: now())
         } else if settings.clipboardKeepScreenshots, let data = pasteboard.imageData() {
             added = store.addImage(data, app: app, date: now())
@@ -233,11 +248,16 @@ final class ClipboardHistoryService {
 
     // MARK: - Page actions
 
-    /// Puts an entry back on the pasteboard: the full text or the full image. Adds no entry.
+    /// Puts an entry back on the pasteboard: the full text, the full image or the file URLs that still
+    /// exist. Adds no entry.
     @discardableResult
     func copyToPasteboard(_ entry: ClipboardEntry) -> Bool {
         withoutCapture {
-            if entry.kind == .image {
+            if entry.kind == .files {
+                let urls = (entry.filePaths ?? []).filter(FileManager.default.fileExists(atPath:)).map(URL.init(fileURLWithPath:))
+                guard !urls.isEmpty else { return false }
+                pasteboard.write(fileURLs: urls)
+            } else if entry.kind == .image {
                 guard let data = store.imageData(for: entry) else { return false }
                 pasteboard.write(png: data)
             } else {

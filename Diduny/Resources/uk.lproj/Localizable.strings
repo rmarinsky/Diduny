@@ -2504,6 +2504,12 @@
 "Nothing copied in 1Password, Keychain and similar apps is kept." = "Скопійоване в 1Password, Keychain та подібних застосунках не зберігається.";
 "Clear the clipboard history" = "Очистити історію буфера обміну";
 "Clear everything" = "Очистити все";
+"Show All %lld Items" = "Показати всі записи (%lld)";
+"Nothing copied yet" = "Ще нічого не скопійовано";
+"Clipboard history is off" = "Історію буфера обміну вимкнено";
+"%lld files: %@" = "Файлів: %lld: %@";
+"Moved or deleted" = "Переміщено або видалено";
+"Items shown in the menu bar list" = "Записів у списку в рядку меню";
 
 /* Vocabulary: words from typing */
 "Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud. Layout fixes never change these words." = "Diduny Cloud отримує ці слова й опис на початку кожного запису і краще розпізнає імена та терміни. Діє лише для Diduny Cloud. Виправлення розкладки ніколи не змінюють ці слова.";

@@ -53,6 +53,17 @@ final class ClipboardHistoryStore {
         ))
     }
 
+    /// Files copied in an app: their paths only. Nil when it repeats the newest files entry.
+    @discardableResult
+    func addFiles(_ urls: [URL], app: ClipboardSourceApp, date: Date) -> ClipboardEntry? {
+        let paths = urls.map(\.path)
+        let signature = Self.signature(Data(paths.joined(separator: "\n").utf8))
+        guard !paths.isEmpty, !repeatsNewest(kind: .files, signature: signature) else { return nil }
+        return append(ClipboardEntry(
+            id: UUID(), date: date, kind: .files, appName: app.name, bundleID: app.bundleID, filePaths: paths, signature: signature
+        ))
+    }
+
     /// Text that Diduny delivered. Every delivery is its own entry.
     @discardableResult
     func addDidunyText(_ rawText: String, origin: ClipboardEntry.Origin, app: ClipboardSourceApp, date: Date) -> ClipboardEntry? {
