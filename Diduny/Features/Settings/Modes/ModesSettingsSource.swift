@@ -29,6 +29,8 @@ protocol ModesSettingsSource: AnyObject {
     var meetingStartsIn: MeetingSegment { get set }
     func meetingEngine(for segment: MeetingSegment) -> EngineID
     func setMeetingEngine(_ engine: EngineID, for segment: MeetingSegment)
+    /// Calendar meetings; nil = the same as Meeting.
+    var meetingCalendarStart: MeetingCalendarStart? { get set }
 
     /// Translation "Into" (`dictationTranslationTargetLanguage`).
     var dictationTranslationTarget: String { get set }

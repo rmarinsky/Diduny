@@ -199,6 +199,7 @@ if ! command -v create-dmg &> /dev/null; then
 fi
 
 create-dmg \
+    --format ULMO \
     --volname "${DISPLAY_NAME}" \
     --window-pos 200 120 \
     --window-size 600 400 \

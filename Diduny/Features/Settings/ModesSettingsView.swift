@@ -126,9 +126,17 @@ struct ModesSettingsView: View {
             }
         case .meeting:
             ModeRow(job: job, title: String(localized: "Meeting"), symbol: "person.2", widths: widths, model: model, shortcut: .toggleMeetingRecording) {
-                PickerField(label: "Starts in", value: model.startsInValue, identifier: "modes.meeting.startsIn") {
-                    model.startsInMenu()
-                } onPick: { model.pickStartsIn($0) }
+                VStack(alignment: .leading, spacing: 3) {
+                    PickerField(label: "From calendar", value: model.calendarValue, layout: .stacked, identifier: "modes.meeting.calendar") {
+                        model.calendarMenu()
+                    } onPick: { model.pickCalendar($0) }
+                    Text(verbatim: model.calendarCaption)
+                        .font(DS.Font.meta)
+                        .foregroundStyle(DS.Palette.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .accessibilityIdentifier("modes.meeting.calendar.caption")
+                }
             }
         case .meetingTranslation:
             ModeRow(job: job, title: String(localized: "Translate meeting"), symbol: "person.2", widths: widths, model: model, shortcut: .toggleMeetingTranslation) {

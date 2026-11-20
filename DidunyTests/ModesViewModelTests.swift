@@ -11,6 +11,7 @@ struct ModesViewModelTests {
         ]
         var segments: [MeetingSegment: EngineID] = [.thisMac: .whisper, .cloud: .didunyCloud, .recordOnly: .whisper]
         var meetingStartsIn: MeetingSegment = .cloud
+        var meetingCalendarStart: MeetingCalendarStart?
         var dictationTranslationTarget = "en"
         var yourLanguages = ["en", "uk"]
         var pair: TranslationLanguagePair? = .defaultPair
@@ -102,7 +103,7 @@ struct ModesViewModelTests {
         let source = FakeSource()
         let modes = try model(source)
         modes.pickEngine("elevenlabs", job: .meeting)
-        modes.pickStartsIn("thisMac")
+        modes.pickMeeting("thisMac|local-whisper")
         modes.pickEngine("apple-speech", job: .meeting)
         #expect(source.segments == [.cloud: .elevenLabs, .thisMac: .appleSpeech, .recordOnly: .whisper])
         #expect(modes.meetingEngine(for: .cloud) == .elevenLabs)
@@ -158,12 +159,48 @@ struct ModesViewModelTests {
         #expect(modes.uniformEngineMenu().selectedID == nil)
     }
 
+    @Test("Meeting: one menu picks how it starts and its engine, and stays a menu with one engine for everything")
+    func meetingMenuPicksStartAndEngine() throws {
+        let source = FakeSource()
+        let modes = try model(source)
+        modes.pickUniformEngine("diduny-cloud")
+        let menu = modes.meetingMenu()
+        #expect(rows(menu) == [
+            ["cloud|diduny-cloud", "cloud|elevenlabs"],
+            ["thisMac|local-whisper", "thisMac|apple-speech"],
+            ["recordOnly|local-whisper", "recordOnly|parakeet-v3", "recordOnly|apple-speech", "recordOnly|diduny-cloud", "recordOnly|elevenlabs"],
+        ])
+        #expect(menu.groups.map(\.header) == ["Live text in the cloud", "Live text on this Mac", "Record, transcript after Stop"])
+        #expect(menu.selectedID == "cloud|diduny-cloud")
+        modes.pickMeeting("thisMac|apple-speech")
+        #expect(source.meetingStartsIn == .thisMac)
+        #expect(source.segments[.thisMac] == .appleSpeech)
+        #expect(modes.meetingMenu().selectedID == "thisMac|apple-speech")
+    }
+
+    @Test("Calendar meetings: Same as Meeting by default, or their own start that leaves Meeting as it is")
+    func calendarStart() throws {
+        let source = FakeSource()
+        let modes = try model(source)
+        #expect(modes.calendarMenu().selectedID == "same")
+        #expect(rows(modes.calendarMenu()).first == ["same"])
+        modes.pickCalendar("recordOnly|parakeet-v3")
+        #expect(source.meetingCalendarStart == MeetingCalendarStart(segment: .recordOnly, engine: .parakeet))
+        #expect(source.meetingStartsIn == .cloud)
+        #expect(source.segments[.recordOnly] == .whisper)
+        #expect(modes.calendarValue == "Parakeet V3")
+        #expect(modes.calendarMenu().selectedID == "recordOnly|parakeet-v3")
+        modes.pickCalendar("same")
+        #expect(source.meetingCalendarStart == nil)
+    }
+
     @Test("T5-MD-08: fresh defaults read as the prototype")
     func freshDefaults() throws {
         let modes = try model()
         #expect(modes.engine(for: .dictation) == .didunyCloud)
         #expect(modes.intoValue == "English")
-        #expect(modes.startsInValue == "Cloud")
+        #expect(modes.meetingMenu().selectedID == "cloud|diduny-cloud")
+        #expect(modes.calendarValue == "Same as Meeting")
         #expect(modes.betweenValue == "UK ↔ EN")
         #expect(modes.engine(for: .file) == .parakeet)
         #expect(modes.engineName(.whisper) == "Whisper")
@@ -313,6 +350,20 @@ struct LiveModesSettingsSourceTests {
         #expect(source.engine(for: .file) == .parakeet)
         #expect(source.meetingStartsIn == .cloud)
         #expect(source.meetingEngine(for: .recordOnly) == .whisper)
+    }
+
+    @Test("Calendar start is stored apart from Meeting, with the engine's model")
+    func calendarStartStored() throws {
+        let storage = try storage()
+        let source = LiveModesSettingsSource(storage: storage, notifications: NotificationCenter())
+        #expect(source.meetingCalendarStart == nil)
+        source.meetingCalendarStart = MeetingCalendarStart(segment: .cloud, engine: .elevenLabs)
+        #expect(storage.modeDefaults.calendarStart == MeetingCalendarStart(segment: .cloud, engine: .elevenLabs))
+        #expect(storage.modeDefaults.calendarSelection?.modelID == ElevenLabsProvider.realtimeModelID)
+        #expect(source.meetingEngine(for: .cloud) == .didunyCloud)
+        source.meetingCalendarStart = nil
+        #expect(storage.modeDefaults.calendarStart == nil)
+        #expect(storage.modeDefaults.calendarSelection == nil)
     }
 
     @Test("T5-MD-11: Off and 2x write the two push-to-talk keys")

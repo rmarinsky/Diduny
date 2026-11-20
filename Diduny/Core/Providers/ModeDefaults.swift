@@ -1,5 +1,11 @@
 import Foundation
 
+/// How a meeting started from the calendar runs, when it differs from Meeting.
+struct MeetingCalendarStart: Equatable, Sendable {
+    var segment: MeetingSegment
+    var engine: EngineID
+}
+
 /// The default engine of each mode (plan 3.2, ADR-0012 D4). New-install defaults are read-time defaults here;
 /// `ProviderDefaultsStore.selection(for:)` keeps "unset = Diduny Cloud" for the legacy readers until WP-17.
 struct ModeDefaults {
@@ -7,6 +13,8 @@ struct ModeDefaults {
     var knownProviderIDs: Set<String> = ProviderRegistry.shared.providerIDs
 
     static let meetingTranscriptModeKey = "meetingTranscriptMode"
+    static let calendarStartsInKey = "meetingCalendarStartsIn"
+    static let calendarEngineKey = "sttJobDefault.meeting.calendar"
 
     enum Write: Equatable {
         case engine(STTJob, JobProviderSelection)
@@ -65,6 +73,29 @@ struct ModeDefaults {
         EngineID(rawValue: selection(for: segment).providerID) ?? Self.newInstallEngine(for: segment)
     }
 
+    /// Calendar meetings' own start; nil means the same as Meeting.
+    var calendarStart: MeetingCalendarStart? {
+        guard let segment = defaults.string(forKey: Self.calendarStartsInKey).flatMap(MeetingSegment.init(rawValue:)),
+              let engine = calendarSelection.flatMap({ EngineID(rawValue: $0.providerID) })
+        else { return nil }
+        return MeetingCalendarStart(segment: segment, engine: engine)
+    }
+
+    var calendarSelection: JobProviderSelection? {
+        validSelection(forKey: Self.calendarEngineKey)
+    }
+
+    func setCalendarStart(_ start: MeetingCalendarStart?) {
+        guard let start else {
+            defaults.removeObject(forKey: Self.calendarStartsInKey)
+            defaults.removeObject(forKey: Self.calendarEngineKey)
+            return
+        }
+        defaults.set(start.segment.rawValue, forKey: Self.calendarStartsInKey)
+        store.setSelection(ModeEngineRules.selection(engine: start.engine, job: .meeting, segment: start.segment),
+                           forKey: Self.calendarEngineKey)
+    }
+
     /// Sets a mode's engine. For `.meeting` it edits the current "Starts in" segment (T5-MD-05).
     func setSelection(_ selection: JobProviderSelection, for job: STTJob) {
         if job == .meeting {
@@ -97,9 +128,10 @@ struct ModeDefaults {
     func resetModes(using engine: EngineID) -> [String] {
         let keys = [STTJob.dictation, .dictationTranslation, .meetingTranslation, .file]
             .map(ProviderDefaultsStore.storageKey(for:))
-            + MeetingSegment.allCases.map(Self.storageKey(for:))
+            + MeetingSegment.allCases.map(Self.storageKey(for:)) + [Self.calendarEngineKey]
         let affected = keys.filter { store.storedSelection(forKey: $0)?.providerID == engine.rawValue }
         affected.forEach(defaults.removeObject(forKey:))
+        if affected.contains(Self.calendarEngineKey) { defaults.removeObject(forKey: Self.calendarStartsInKey) }
         return affected
     }
 

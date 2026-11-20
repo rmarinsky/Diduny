@@ -119,6 +119,21 @@ def upsert_appcast(arguments):
         "type": "application/octet-stream",
     }
 
+    deltas_tag = f"{{{SPARKLE}}}deltas"
+    for stale in item.findall(deltas_tag):
+        item.remove(stale)
+    if arguments.delta_url:
+        if not arguments.delta_from.isdigit() or not arguments.delta_length.isdigit():
+            raise ValueError("delta source build and length must be positive integers")
+        ET.SubElement(ET.SubElement(item, deltas_tag), "enclosure", {
+            "url": arguments.delta_url,
+            f"{{{SPARKLE}}}version": arguments.build_number,
+            f"{{{SPARKLE}}}deltaFrom": arguments.delta_from,
+            f"{{{SPARKLE}}}edSignature": arguments.delta_signature,
+            "length": arguments.delta_length,
+            "type": "application/octet-stream",
+        })
+
     ensure_release_notes_links(channel)
 
     ET.indent(tree, space="  ")
@@ -147,6 +162,11 @@ def build_parser():
     appcast.add_argument("--length", required=True)
     appcast.add_argument("--release-notes-url", required=True)
     appcast.add_argument("--pub-date")
+    # Optional Sparkle binary delta from the previous release's build.
+    appcast.add_argument("--delta-url")
+    appcast.add_argument("--delta-from", default="")
+    appcast.add_argument("--delta-signature", default="")
+    appcast.add_argument("--delta-length", default="")
     appcast.set_defaults(handler=upsert_appcast)
     return parser
 

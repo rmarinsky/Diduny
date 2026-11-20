@@ -1123,6 +1123,8 @@
 "Check access" = "Check access";
 
 "Refresh browser profiles" = "Refresh browser profiles";
+"macOS is blocking Diduny from reading %@ data. Allow Diduny in System Settings → Privacy & Security → Full Disk Access, then check access again." = "macOS is blocking Diduny from reading %@ data. Allow Diduny in System Settings → Privacy & Security → Full Disk Access, then check access again.";
+"Open Privacy Settings" = "Open Privacy Settings";
 
 "The meeting is open. Sign in to Diduny in Account settings before starting a recording." = "The meeting is open. Sign in to Diduny in Account settings before starting a recording.";
 
@@ -1838,8 +1840,6 @@
 "Transcript for Record only" = "Transcript for Record only";
 "Made after Stop. Engines on this Mac are recommended; speaker labels come with Diduny Cloud." = "Made after Stop. Engines on this Mac are recommended; speaker labels come with Diduny Cloud.";
 "Calendar meetings" = "Calendar meetings";
-"Start the same way" = "Start the same way";
-"A meeting started from the calendar uses \"Starts in\" and these engines." = "A meeting started from the calendar uses \"Starts in\" and these engines.";
 "Only with an engine that returns both texts." = "Only with an engine that returns both texts.";
 
 /* Panels redesign WP-52 */
@@ -2593,3 +2593,10 @@
 "translating %@" = "translating %@";
 "transcribing" = "transcribing";
 "Transcribe only, from now on" = "Transcribe only, from now on";
+"Live text in the cloud" = "Live text in the cloud";
+"Live text on this Mac" = "Live text on this Mac";
+"Record, transcript after Stop" = "Record, transcript after Stop";
+"Same as Meeting" = "Same as Meeting";
+"Starts like the shortcut" = "Starts like the shortcut";
+"From calendar" = "From calendar";
+"Only Diduny Cloud translates meetings live. Needs a subscription." = "Only Diduny Cloud translates meetings live. Needs a subscription.";
