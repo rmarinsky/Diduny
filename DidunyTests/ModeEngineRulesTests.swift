@@ -118,7 +118,11 @@ struct ModeEngineRulesTests {
         let modes = ModeDefaults(defaults: Self.suite())
         modes.apply(ModeEngineRules.useOneEngineForEverything(try EngineCapabilitiesTests.capabilities(.elevenLabs)))
         modes.apply([.segmentEngine(.recordOnly, ModeEngineRules.selection(engine: .elevenLabs, job: .meeting, segment: .recordOnly))])
+        modes.setCalendarStart(MeetingCalendarStart(segment: .recordOnly, engine: .elevenLabs))
         modes.resetModes(using: .elevenLabs)
+        // Calendar meetings go back to "Same as Meeting".
+        #expect(modes.calendarStart == nil)
+        #expect(modes.defaults.object(forKey: ModeDefaults.calendarStartsInKey) == nil)
         #expect(modes.engine(for: .dictation) == .didunyCloud)
         #expect(modes.engine(for: .cloud) == .didunyCloud)
         #expect(modes.engine(for: .recordOnly) == .whisper)

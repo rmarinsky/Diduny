@@ -1840,8 +1840,6 @@
 "Transcript for Record only" = "Транскрипт для «Лише запис»";
 "Made after Stop. Engines on this Mac are recommended; speaker labels come with Diduny Cloud." = "Створюється після зупинки. Радимо рушії на цьому Mac; мітки мовців дає Diduny Cloud.";
 "Calendar meetings" = "Зустрічі з календаря";
-"Start the same way" = "Починаються так само";
-"A meeting started from the calendar uses \"Starts in\" and these engines." = "Зустріч, запущена з календаря, використовує «Починати в» і ці рушії.";
 "Only with an engine that returns both texts." = "Лише з рушієм, що повертає обидва тексти.";
 
 /* Panels redesign WP-52 */
@@ -2595,3 +2593,10 @@
 "translating %@" = "переклад %@";
 "transcribing" = "транскрипція";
 "Transcribe only, from now on" = "Лише транскрипція, відтепер";
+"Live text in the cloud" = "Текст наживо в хмарі";
+"Live text on this Mac" = "Текст наживо на цьому Mac";
+"Record, transcript after Stop" = "Запис, транскрипт після зупинки";
+"Same as Meeting" = "Як у «Зустрічі»";
+"Starts like the shortcut" = "Починається так само, як зі скорочення";
+"From calendar" = "З календаря";
+"Only Diduny Cloud translates meetings live. Needs a subscription." = "Перекладати зустріч наживо вміє лише Diduny Cloud. Потрібна підписка.";
