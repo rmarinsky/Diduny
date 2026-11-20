@@ -1123,6 +1123,8 @@
 "Check access" = "Перевірити доступ";
 
 "Refresh browser profiles" = "Оновити профілі браузерів";
+"macOS is blocking Diduny from reading %@ data. Allow Diduny in System Settings → Privacy & Security → Full Disk Access, then check access again." = "macOS не дає Diduny читати дані %@. Дозвольте Diduny в «Системні параметри» → «Приватність і безпека» → «Повний доступ до диска», тоді перевірте доступ ще раз.";
+"Open Privacy Settings" = "Відкрити налаштування приватності";
 
 "The meeting is open. Sign in to Diduny in Account settings before starting a recording." = "Зустріч відкрита. Щоб почати запис, увійдіть у Diduny в налаштуваннях облікового запису.";
 

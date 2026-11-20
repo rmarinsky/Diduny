@@ -1123,6 +1123,8 @@
 "Check access" = "Check access";
 
 "Refresh browser profiles" = "Refresh browser profiles";
+"macOS is blocking Diduny from reading %@ data. Allow Diduny in System Settings → Privacy & Security → Full Disk Access, then check access again." = "macOS is blocking Diduny from reading %@ data. Allow Diduny in System Settings → Privacy & Security → Full Disk Access, then check access again.";
+"Open Privacy Settings" = "Open Privacy Settings";
 
 "The meeting is open. Sign in to Diduny in Account settings before starting a recording." = "The meeting is open. Sign in to Diduny in Account settings before starting a recording.";
 

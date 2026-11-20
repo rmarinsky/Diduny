@@ -1,4 +1,5 @@
 import AppKit
+import BrowserDataAccess
 import Foundation
 import OSLog
 
@@ -469,6 +470,15 @@ enum BrowserKind: String, Codable, CaseIterable, Hashable {
         case .zen: "zen"
         }
     }
+
+    /// True when macOS privacy protection stops Diduny from reading this browser's profile list.
+    func isDataAccessBlocked(applicationSupportDirectory: URL) -> Bool {
+        guard let path = applicationSupportPath else { return false }
+        let profileList = [.firefox, .zen].contains(self) ? "profiles.ini" : "Local State"
+        let file = applicationSupportDirectory.appendingPathComponent(path, isDirectory: true)
+            .appendingPathComponent(profileList)
+        return BrowserDataAccess.status(of: file) == .blocked
+    }
 }
 
 struct BrowserSession: Codable, Equatable, Hashable, Identifiable {
@@ -741,7 +751,7 @@ protocol RemoteMediaExtracting: AnyObject {
 
 final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
     private let ytDLPURL: URL?
-    private let denoURL: URL?
+    private let jsRuntimeURL: URL?
     private let temporaryDirectory: URL
 
     init(
@@ -750,15 +760,15 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
             withExtension: nil,
             subdirectory: "RemoteMediaRuntime"
         ),
-        denoURL: URL? = Bundle.main.url(
-            forResource: "deno",
+        jsRuntimeURL: URL? = Bundle.main.url(
+            forResource: "qjs",
             withExtension: nil,
             subdirectory: "RemoteMediaRuntime"
         ),
         temporaryDirectory: URL = FileManager.default.temporaryDirectory
     ) {
         self.ytDLPURL = ytDLPURL
-        self.denoURL = denoURL
+        self.jsRuntimeURL = jsRuntimeURL
         self.temporaryDirectory = temporaryDirectory
     }
 
@@ -772,7 +782,7 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
             arguments: Self.metadataArguments(
                 source: source,
                 session: session,
-                denoURL: runtime.deno
+                jsRuntimeURL: runtime.jsRuntime
             )
         )
         return try RemoteMediaMetadata.decodeYTDLPJSON(result.standardOutput, expectedSource: source)
@@ -795,7 +805,7 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let outputTemplate = directory.appendingPathComponent("caption.%(ext)s").path
-        var arguments = Self.commonArguments(session: session, denoURL: runtime.deno)
+        var arguments = Self.commonArguments(session: session, jsRuntimeURL: runtime.jsRuntime)
         arguments += [
             "--skip-download",
             track.kind == .authored ? "--write-subs" : "--write-auto-subs",
@@ -845,7 +855,7 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
                 arguments: Self.downloadArguments(
                     source: source,
                     session: session,
-                    denoURL: runtime.deno,
+                    jsRuntimeURL: runtime.jsRuntime,
                     audioFormatID: metadata.audioFormatID,
                     outputTemplate: outputTemplate
                 ),
@@ -870,9 +880,9 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
     nonisolated static func metadataArguments(
         source: YouTubeRemoteMediaSource,
         session: BrowserSession,
-        denoURL: URL
+        jsRuntimeURL: URL
     ) -> [String] {
-        commonArguments(session: session, denoURL: denoURL) + [
+        commonArguments(session: session, jsRuntimeURL: jsRuntimeURL) + [
             "--skip-download",
             "--dump-single-json",
             source.canonicalURL.absoluteString
@@ -882,11 +892,11 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
     nonisolated static func downloadArguments(
         source: YouTubeRemoteMediaSource,
         session: BrowserSession,
-        denoURL: URL,
+        jsRuntimeURL: URL,
         audioFormatID: String,
         outputTemplate: String
     ) -> [String] {
-        commonArguments(session: session, denoURL: denoURL) + [
+        commonArguments(session: session, jsRuntimeURL: jsRuntimeURL) + [
             "--newline",
             "--progress",
             "--progress-template",
@@ -899,23 +909,23 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
 
     private nonisolated static func commonArguments(
         session: BrowserSession,
-        denoURL: URL
+        jsRuntimeURL: URL
     ) -> [String] {
         [
             "--no-config",
             "--no-playlist",
             "--no-warnings",
-            "--js-runtimes", "deno:\(denoURL.path)",
+            "--js-runtimes", "quickjs:\(jsRuntimeURL.path)",
             "--cookies-from-browser", session.cookieArgument
         ]
     }
 
-    private func runtime() throws -> (ytDLP: URL, deno: URL) {
-        guard let ytDLPURL, let denoURL,
+    private func runtime() throws -> (ytDLP: URL, jsRuntime: URL) {
+        guard let ytDLPURL, let jsRuntimeURL,
               FileManager.default.isExecutableFile(atPath: ytDLPURL.path),
-              FileManager.default.isExecutableFile(atPath: denoURL.path)
+              FileManager.default.isExecutableFile(atPath: jsRuntimeURL.path)
         else { throw RemoteMediaExtractorError.runtimeUnavailable }
-        return (ytDLPURL, denoURL)
+        return (ytDLPURL, jsRuntimeURL)
     }
 
     private func ensureDiskSpace(estimatedBytes: Int64?) throws {
@@ -1038,6 +1048,8 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
             || message.contains("no such table: cookies")
             || message.contains("could not copy chrome cookie database")
             || message.contains("failed to load cookies")
+            // macOS app-data privacy hides the browser folder, so yt-dlp reports no database.
+            || message.contains("could not find") && message.contains("cookies database")
             || message.contains("cookie") && (message.contains("failed to decrypt")
                 || message.contains("permission denied") || message.contains("operation not permitted")
                 || message.contains("database is locked"))
