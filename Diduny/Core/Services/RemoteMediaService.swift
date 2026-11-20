@@ -925,7 +925,29 @@ final class BundledRemoteMediaExtractor: RemoteMediaExtracting {
               FileManager.default.isExecutableFile(atPath: ytDLPURL.path),
               FileManager.default.isExecutableFile(atPath: jsRuntimeURL.path)
         else { throw RemoteMediaExtractorError.runtimeUnavailable }
-        return (ytDLPURL, jsRuntimeURL)
+        let sandboxDirectory = temporaryDirectory.appendingPathComponent("diduny-js-runtime", isDirectory: true)
+        return (ytDLPURL, try Self.sandboxedJSRuntime(for: jsRuntimeURL, in: sandboxDirectory))
+    }
+
+    /// yt-dlp runs YouTube's player code in QuickJS, and that code can reach files and processes through `qjs:std`
+    /// and `qjs:os`. This writes a launcher that runs qjs where it cannot write files, start processes, use the
+    /// network or read anything under /Users or /Volumes.
+    nonisolated static func sandboxedJSRuntime(for runtime: URL, in directory: URL) throws -> URL {
+        let path = runtime.path
+        guard !path.contains("\""), !path.contains("'") else { throw RemoteMediaExtractorError.runtimeUnavailable }
+        let profile = "(version 1)(deny default)(allow process-exec (literal \"\(path)\"))(allow sysctl-read)"
+            + "(allow file-read*)(deny file-read* (subpath \"/Users\") (subpath \"/Volumes\"))"
+            + "(allow file-read* (literal \"\(path)\"))"
+        let script = "#!/bin/sh\nexec /usr/bin/sandbox-exec -p '\(profile)' '\(path)' \"$@\"\n"
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        let launcher = directory.appendingPathComponent("qjs")
+        try Data(script.utf8).write(to: launcher, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: launcher.path)
+        return launcher
     }
 
     private func ensureDiskSpace(estimatedBytes: Int64?) throws {

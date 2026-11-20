@@ -129,6 +129,31 @@ final class YouTubeRemoteMediaSourceTests: XCTestCase {
         )
     }
 
+    /// The YouTube player code runs in QuickJS, which can reach `qjs:std` and `qjs:os`. Here /bin/bash stands in for qjs.
+    func test_jsRuntimeRunsWithoutFileWritesOrChildProcesses() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SandboxedJSRuntime-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let runtime = try BundledRemoteMediaExtractor.sandboxedJSRuntime(
+            for: URL(fileURLWithPath: "/bin/bash"),
+            in: directory
+        )
+        let written = directory.appendingPathComponent("written.txt")
+
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = runtime
+        process.arguments = ["-c", "echo ran; echo x > '\(written.path)'; /bin/echo child"]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+
+        let printed = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        XCTAssertEqual(printed, "ran\n")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: written.path))
+    }
+
     func test_extractorFailureClassificationDistinguishesPrivateVideoFromExpiredSession() {
         XCTAssertEqual(
             BundledRemoteMediaExtractor.classifyFailure(Data("Private video".utf8)),

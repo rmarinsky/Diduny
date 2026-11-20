@@ -127,7 +127,7 @@ struct ModesSettingsView: View {
         case .meeting:
             ModeRow(job: job, title: String(localized: "Meeting"), symbol: "person.2", widths: widths, model: model, shortcut: .toggleMeetingRecording) {
                 VStack(alignment: .leading, spacing: 3) {
-                    PickerField(label: "From calendar", value: model.calendarValue, identifier: "modes.meeting.calendar") {
+                    PickerField(label: "From calendar", value: model.calendarValue, layout: .stacked, identifier: "modes.meeting.calendar") {
                         model.calendarMenu()
                     } onPick: { model.pickCalendar($0) }
                     Text(verbatim: model.calendarCaption)
