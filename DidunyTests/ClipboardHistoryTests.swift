@@ -713,7 +713,13 @@ final class ClipboardHistoryTests {
 
         let old = ClipboardMenuRow(entry(.text, text: "x", date: now.addingTimeInterval(-3 * 86400)), now: now, calendar: calendar)
         #expect(old.subtitle.hasPrefix("Copied in Ghostty · "))
-        #expect(old.subtitle.contains(now.addingTimeInterval(-3 * 86400).formatted(.dateTime.day().month(.abbreviated))))
+        #expect(!old.subtitle.contains(now.addingTimeInterval(-3 * 86400).formatted(.dateTime.month(.abbreviated))))
+
+        var kyiv = Calendar(identifier: .gregorian)
+        kyiv.timeZone = TimeZone(identifier: "Europe/Kyiv")!
+        let evening = kyiv.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 21, minute: 54))!
+        let nextDay = kyiv.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 9))!
+        #expect(ClipboardMenuRow.time(evening, now: nextDay, calendar: kyiv, locale: Locale(identifier: "uk_UA")) == "19.11 21:54")
 
         let dictated = entry(.diduny, text: "x", app: nil)
         #expect(ClipboardMenuRow(dictated, now: now, calendar: calendar).subtitle.hasPrefix("Dictated · "))

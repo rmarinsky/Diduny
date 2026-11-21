@@ -36,11 +36,16 @@ struct ClipboardMenuRow: Equatable {
         return line.count > titleLimit ? String(line.prefix(titleLimit - 1)) + "…" : line
     }
 
-    /// The time today; the date and the time on an earlier day.
-    static func time(_ date: Date, now: Date, calendar: Calendar) -> String {
-        calendar.isDate(date, inSameDayAs: now)
-            ? date.formatted(date: .omitted, time: .shortened)
-            : date.formatted(.dateTime.day().month(.abbreviated).hour().minute())
+    /// The time today; on an earlier day the numeric day and month first, in the system's format ("19.11 21:54").
+    static func time(_ date: Date, now: Date, calendar: Calendar, locale: Locale = .autoupdatingCurrent) -> String {
+        let time = date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: locale, calendar: calendar))
+        guard !calendar.isDate(date, inSameDayAs: now) else { return time }
+        let day = DateFormatter()
+        day.locale = locale
+        day.calendar = calendar
+        day.timeZone = calendar.timeZone
+        day.setLocalizedDateFormatFromTemplate("dMM")
+        return day.string(from: date) + " " + time
     }
 }
 
