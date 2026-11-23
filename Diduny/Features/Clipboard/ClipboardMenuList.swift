@@ -38,7 +38,9 @@ struct ClipboardMenuRow: Equatable {
 
     /// The time today; on an earlier day the numeric day and month first, in the system's format ("19.11 21:54").
     static func time(_ date: Date, now: Date, calendar: Calendar, locale: Locale = .autoupdatingCurrent) -> String {
-        let time = date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: locale, calendar: calendar))
+        let time = date.formatted(Date.FormatStyle(
+            date: .omitted, time: .shortened, locale: locale, calendar: calendar, timeZone: calendar.timeZone
+        ))
         guard !calendar.isDate(date, inSameDayAs: now) else { return time }
         let day = DateFormatter()
         day.locale = locale
