@@ -336,7 +336,7 @@ enum NotesSettings {
     }
 
     /// Meeting notes are on unless the user chose "Only when I ask". Someone who never chose gets
-    /// them from this launch on; earlier meetings still go through Earlier recordings.
+    /// them from the first check with a writer set up; earlier meetings still go through Earlier recordings.
     static func startDefaultMeetingNotes() {
         if meetingTiming != .onRequest, meetingAutoSince == nil { meetingAutoSince = Date() }
     }

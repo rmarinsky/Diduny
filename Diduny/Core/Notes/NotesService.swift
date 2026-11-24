@@ -200,7 +200,6 @@ final class NotesService {
         self.isCapturing = isCapturing
         NotesSettings.migrate()
         NotesSettings.migrateAutoDates()
-        NotesSettings.startDefaultMeetingNotes()
         autoTimer?.invalidate()
         // The minute check retries failed notes and catches transcripts saved outside the queue.
         autoTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
@@ -230,6 +229,8 @@ final class NotesService {
             store.prune(keeping: Set(library.recordings.map(\.id)))
         }
         guard NotesSettings.writer != .off else { return }
+        // Only once a writer is set up, so choosing one never sends meetings recorded before it.
+        NotesSettings.startDefaultMeetingNotes()
         for recording in library.recordings where Self.isReady(recording) && store.note(for: recording.id) == nil {
             if case .failed = states[recording.id], failures.isRetryDue(recording.id) {
                 states[recording.id] = nil
