@@ -40,6 +40,23 @@ struct NotesQueueTests {
         #expect(!NotesService.isCoveredByAutomaticNotes(new, since: nil))
     }
 
+    @Test func meetingNotesAreWrittenRightAfterTheRecordingUnlessTheUserChoseOtherwise() {
+        let defaults = UserDefaults.standard
+        let keys = ["notes.meetingTiming2", "notes.meetingAutoSince"]
+        let saved = keys.map { defaults.object(forKey: $0) }
+        defer { for (key, value) in zip(keys, saved) { defaults.set(value, forKey: key) } }
+
+        keys.forEach(defaults.removeObject)
+        #expect(NotesSettings.meetingTiming == .afterRecording)
+        NotesSettings.startDefaultMeetingNotes()
+        #expect(NotesSettings.meetingAutoSince != nil)
+
+        NotesSettings.meetingTiming = .onRequest
+        NotesSettings.startDefaultMeetingNotes()
+        #expect(NotesSettings.meetingTiming == .onRequest)
+        #expect(NotesSettings.meetingAutoSince == nil)
+    }
+
     // MARK: - Fix 9: only a live capture blocks notes
 
     @Test func liveCaptureBlocksEveryJobAndNothingElseBlocksRequestedOnes() {

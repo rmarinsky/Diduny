@@ -200,6 +200,7 @@ final class NotesService {
         self.isCapturing = isCapturing
         NotesSettings.migrate()
         NotesSettings.migrateAutoDates()
+        NotesSettings.startDefaultMeetingNotes()
         autoTimer?.invalidate()
         // The minute check retries failed notes and catches transcripts saved outside the queue.
         autoTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in

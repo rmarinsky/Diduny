@@ -297,7 +297,7 @@ enum NotesSettings {
     // MARK: - When
 
     static var meetingTiming: NotesMeetingTiming {
-        get { value("meetingTiming2", .onRequest) }
+        get { value("meetingTiming2", .afterRecording) }
         set {
             let wasOn = meetingTiming != .onRequest
             set("meetingTiming2", newValue)
@@ -333,6 +333,12 @@ enum NotesSettings {
         defaults.removeObject(forKey: "notes.autoSince")
         if meetingTiming != .onRequest, meetingAutoSince == nil { meetingAutoSince = Date() }
         if voiceTiming != .onRequest, voiceAutoSince == nil { voiceAutoSince = Date() }
+    }
+
+    /// Meeting notes are on unless the user chose "Only when I ask". Someone who never chose gets
+    /// them from this launch on; earlier meetings still go through Earlier recordings.
+    static func startDefaultMeetingNotes() {
+        if meetingTiming != .onRequest, meetingAutoSince == nil { meetingAutoSince = Date() }
     }
 
     static var waitForPower: Bool {
