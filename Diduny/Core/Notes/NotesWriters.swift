@@ -238,6 +238,41 @@ enum HTTPJSON {
 
 // MARK: - Subscription CLIs
 
+/// A model Claude Code offers: `value` goes to `--model`, `name` is what Claude Code calls it.
+struct ClaudeModel: Equatable {
+    var value: String
+    var name: String
+}
+
+extension CLIWriter {
+    /// The models the installed Claude Code offers this account. It answers the `initialize`
+    /// request of its stream protocol with the list; no prompt is sent. Nil when it does not answer.
+    static func claudeModels(executable: String) async -> [ClaudeModel]? {
+        let request = #"{"type":"control_request","request_id":"models","request":{"subtype":"initialize"}}"# + "\n"
+        let arguments = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                         "--tools", "", "--disable-slash-commands", "--strict-mcp-config",
+                         "--settings", #"{"disableAllHooks":true}"#, "--no-session-persistence"]
+        let run = try? await CLIRunner.run(executable, arguments, stdin: request,
+                                           in: FileManager.default.temporaryDirectory, timeout: 30)
+        return run.flatMap { parseClaudeModels($0.stdout) }
+    }
+
+    static func parseClaudeModels(_ output: String) -> [ClaudeModel]? {
+        for line in output.split(separator: "\n") {
+            guard let json = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any],
+                  json["type"] as? String == "control_response",
+                  let response = (json["response"] as? [String: Any])?["response"] as? [String: Any],
+                  let models = response["models"] as? [[String: Any]] else { continue }
+            let listed = models.compactMap { model -> ClaudeModel? in
+                guard let value = model["value"] as? String, !value.isEmpty else { return nil }
+                return ClaudeModel(value: value, name: model["displayName"] as? String ?? value)
+            }
+            return listed.isEmpty ? nil : listed
+        }
+        return nil
+    }
+}
+
 /// Runs `claude -p`, `codex exec` or `gemini -p` headless. Claude Code and Codex run with tools,
 /// MCP servers, hooks and saved sessions off, following pingdotgg/t3code. Gemini CLI has no
 /// read-only switch without an experimental setting, so it runs in an empty folder with
@@ -246,10 +281,12 @@ struct CLIWriter: NotesWriter {
     let kind: NotesWriterKind
     let executable: String
     let tier: NotesModelTier
+    /// Claude Code's `--model`.
+    var claudeModel = ""
 
     var displayName: String {
         switch kind {
-        case .claudeCode: "Claude Code, \(tier.claudeAlias)"
+        case .claudeCode: "Claude Code, \(claudeModel)"
         case .codex: tier == .standard ? "Codex" : "Codex, \(tier.label.lowercased())"
         default: kind.label
         }
@@ -266,7 +303,7 @@ struct CLIWriter: NotesWriter {
         switch kind {
         case .claudeCode:
             let arguments = ["-p", "--output-format", "json", "--json-schema", JSONSchema.text(schema),
-                             "--model", tier.claudeAlias,
+                             "--model", claudeModel,
                              "--tools", "", "--disable-slash-commands", "--strict-mcp-config",
                              "--permission-mode", "dontAsk", "--settings", #"{"disableAllHooks":true}"#,
                              "--no-session-persistence"]

@@ -488,7 +488,7 @@ final class NotesService {
         case .claudeCode, .codex, .gemini:
             guard let path = await CLIRunner.locate(kind) else { throw NotesError.notFound(kind.label) }
             guard NotesSettings.approvedPath(for: kind) == path else { throw NotesError.notApproved(kind.label) }
-            return CLIWriter(kind: kind, executable: path, tier: NotesSettings.tier(for: kind))
+            return CLIWriter(kind: kind, executable: path, tier: NotesSettings.tier(for: kind), claudeModel: NotesSettings.claudeModel)
         case .apiKey:
             guard let key = NotesSettings.apiKey else {
                 throw NotesError.server(String(localized: "Enter an API key in Notes settings."))
