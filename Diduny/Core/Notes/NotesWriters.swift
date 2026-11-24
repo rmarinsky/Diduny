@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// The fields every writer returns. Writers are asked for JSON with this schema so the
 /// notes have no preamble or cut-off prose.
@@ -402,15 +403,16 @@ enum CLIRunner {
         return env
     }
 
-    private static var cachedPATH: String?
+    /// Read and written from several tasks at once: the settings page looks for three tools together.
+    private static let cachedPATH = OSAllocatedUnfairLock<String?>(initialState: nil)
 
     static func loginShellPATH() async -> String? {
-        if let cachedPATH { return cachedPATH }
+        if let cached = cachedPATH.withLock({ $0 }) { return cached }
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let run = try? await run(shell, ["-ilc", "printf %s \"$PATH\""], stdin: nil, in: nil,
                                  environment: ProcessInfo.processInfo.environment, timeout: 10)
         let path = run?.stdout.split(separator: "\n").last.map(String.init)?.nilIfBlank
-        cachedPATH = path
+        cachedPATH.withLock { $0 = path }
         return path
     }
 

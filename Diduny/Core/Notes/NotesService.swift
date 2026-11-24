@@ -236,15 +236,22 @@ final class NotesService {
             guard states[recording.id] == nil, failures.isRetryDue(recording.id) else { continue }
             if recording.type.isMeetingLike {
                 let timing = NotesSettings.meetingTiming
-                guard timing != .onRequest, let since = NotesSettings.meetingAutoSince, recording.createdAt >= since else { continue }
+                guard timing != .onRequest, Self.isCoveredByAutomaticNotes(recording, since: NotesSettings.meetingAutoSince) else { continue }
                 enqueue(Job(recordingID: recording.id, automatic: true, waitsForIdle: timing == .whenIdle))
             } else if let minimum = NotesSettings.voiceTiming.minimumSeconds,
-                      let since = NotesSettings.voiceAutoSince, recording.createdAt >= since,
+                      Self.isCoveredByAutomaticNotes(recording, since: NotesSettings.voiceAutoSince),
                       recording.effectiveDurationSeconds > minimum {
                 enqueue(Job(recordingID: recording.id, automatic: true, waitsForIdle: false))
             }
         }
         runNext()
+    }
+
+    /// Automatic notes cover a recording whose transcript was finished after they were turned on.
+    /// That includes an earlier recording transcribed again: it gets notes like a new one.
+    nonisolated static func isCoveredByAutomaticNotes(_ recording: Recording, since: Date?) -> Bool {
+        guard let since else { return false }
+        return (recording.processedAt ?? recording.createdAt) >= since
     }
 
     nonisolated static func isReady(_ recording: Recording) -> Bool {

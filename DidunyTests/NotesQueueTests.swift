@@ -6,8 +6,8 @@ import Testing
 @MainActor
 struct NotesQueueTests {
     private func recording(text: String? = "We agreed.", processedAt: Date? = Date(timeIntervalSince1970: 1000),
-                           status: Recording.ProcessingStatus = .transcribed) -> Recording {
-        Recording(id: UUID(), createdAt: Date(), type: .meeting, audioFileName: "a.m4a", durationSeconds: 60,
+                           status: Recording.ProcessingStatus = .transcribed, createdAt: Date = Date()) -> Recording {
+        Recording(id: UUID(), createdAt: createdAt, type: .meeting, audioFileName: "a.m4a", durationSeconds: 60,
                   fileSizeBytes: 10, status: status, transcriptionText: text, processedAt: processedAt, sourceDevice: nil)
     }
 
@@ -22,6 +22,22 @@ struct NotesQueueTests {
         #expect(requested == nil)
         #expect(NotesService.firstRunnable([automatic, requested]) == 1)
         #expect(NotesService.firstRunnable([automatic, automatic]) == nil)
+    }
+
+    // MARK: - An earlier recording transcribed again gets automatic notes
+
+    @Test func automaticNotesCoverARecordingTranscribedAfterTheyWereTurnedOn() {
+        let turnedOn = Date(timeIntervalSince1970: 5000)
+        let earlier = recording(processedAt: turnedOn.addingTimeInterval(-60), createdAt: turnedOn.addingTimeInterval(-3600))
+        #expect(!NotesService.isCoveredByAutomaticNotes(earlier, since: turnedOn))
+
+        var transcribedAgain = earlier
+        transcribedAgain.processedAt = turnedOn.addingTimeInterval(60)
+        #expect(NotesService.isCoveredByAutomaticNotes(transcribedAgain, since: turnedOn))
+
+        let new = recording(processedAt: nil, createdAt: turnedOn.addingTimeInterval(60))
+        #expect(NotesService.isCoveredByAutomaticNotes(new, since: turnedOn))
+        #expect(!NotesService.isCoveredByAutomaticNotes(new, since: nil))
     }
 
     // MARK: - Fix 9: only a live capture blocks notes
