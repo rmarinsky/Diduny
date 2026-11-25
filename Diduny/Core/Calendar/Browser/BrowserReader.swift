@@ -61,8 +61,8 @@ final class BrowserReader {
             guard let selected = element(root, kAXFocusedWindowAttribute) ?? element(root, kAXMainWindowAttribute) else { throw Failure.noPage }
             window = selected
         }
-        if let expected = saved?.profileName ?? profileName {
-            guard NativeProfiles(access: access).profile(in: window, names: [expected]) == expected else { throw NativeProfiles.Failure.mismatch }
+        if let expected = saved?.profileName ?? profileName, !profileAllows(window, expected: expected, required: saved == nil) {
+            throw NativeProfiles.Failure.mismatch
         }
         if let saved {
             try saved.validate()
@@ -106,13 +106,21 @@ final class BrowserReader {
         if nodes.isEmpty, let walkError { throw walkError }
         if !stoppedEarly {
             guard let currentPage = findPage(window), CFEqual(currentPage, page), pageURL(currentPage) == url else { throw Failure.changed }
-            if let expected = saved?.profileName ?? profileName {
-                guard NativeProfiles(access: access).profile(in: window, names: [expected]) == expected else { throw Failure.changed }
+            if let expected = saved?.profileName ?? profileName, !profileAllows(window, expected: expected, required: saved == nil) {
+                throw Failure.changed
             }
             try access.check()
         }
         let snapshot = try CalendarExtraction.read(approved: approved, pageURL: url) { nodes }
         return BrowserReadResult(target: BrowserTarget(window: window, pid: app.processIdentifier, url: url), snapshot: snapshot, inspectedNodes: count, eventCandidates: candidates, incomplete: incomplete || incompleteAttributes)
+    }
+
+    /// A restored window is already named. An unreadable profile control does not make it a different window.
+    /// The first connect still has to see the chosen profile.
+    private func profileAllows(_ window: AXUIElement, expected: String, required: Bool) -> Bool {
+        let seen = NativeProfiles(access: access).profile(in: window, names: [expected])
+        if seen == expected { return true }
+        return seen == nil && !required
     }
 
     private func attribute(_ element: AXUIElement, _ key: String) -> CFTypeRef? {

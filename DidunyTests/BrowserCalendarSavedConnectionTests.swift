@@ -34,7 +34,8 @@ final class SavedConnectionTests: XCTestCase {
         let saved = SavedConnection(browserID: "com.google.Chrome", profileName: "Work", calendarURL: url)
         XCTAssertEqual(saved.matchingCandidate(urls: [url, url], profiles: ["Personal", "Work"], windowTitles: [saved.windowName, saved.windowName]), 1)
         XCTAssertNil(saved.matchingCandidate(urls: [url, url], profiles: ["Work", "Work"], windowTitles: [saved.windowName, saved.windowName]))
-        XCTAssertNil(saved.matchingCandidate(urls: [url], profiles: [nil], windowTitles: [saved.windowName]))
+        XCTAssertEqual(saved.matchingCandidate(urls: [url], profiles: [nil], windowTitles: [saved.windowName]), 0, "A named window with an unreadable profile control is still that window")
+        XCTAssertNil(saved.matchingCandidate(urls: [url, url], profiles: [nil, nil], windowTitles: [saved.windowName, saved.windowName]))
         XCTAssertNil(saved.matchingCandidate(urls: [URL(string: "https://calendar.google.com/calendar/u/1/r")!], profiles: ["Work"], windowTitles: [saved.windowName]))
     }
     func testInvalidOrNewConsentVersionCannotRestore() throws {
@@ -61,6 +62,11 @@ final class SavedConnectionTests: XCTestCase {
         XCTAssertTrue(SavedConnection.sameCalendar(week, workweek))
         XCTAssertTrue(SavedConnection.sameCalendar(week, item))
         XCTAssertEqual(outlook.matchingCandidate(urls: [workweek], profiles: ["Work"], windowTitles: [outlook.windowName]), 0)
+        let named = SavedConnection(browserID: "com.microsoft.edgemac", profileName: "Work", calendarURL: week, windowName: "Diduny Calendar · 9C870DC8-31DA-4DE6-98EB-D5E674F8F8B6")
+        let shortened = "Diduny Calendar · 9C870D…A-4DE6-98EB-D5E674F8F8B6"
+        XCTAssertTrue(SavedConnection.matchesWindowTitle(shortened, name: named.windowName))
+        XCTAssertEqual(named.matchingCandidate(urls: [week], profiles: [nil], windowTitles: [shortened]), 0)
+        XCTAssertNil(named.matchingCandidate(urls: [week], profiles: ["Personal"], windowTitles: [shortened]))
         XCTAssertFalse(SavedConnection.sameCalendar(week, URL(string: "https://outlook.cloud.microsoft/mail/")!))
         XCTAssertFalse(SavedConnection.sameCalendar(week, URL(string: "https://outlook.office.com/calendar/view/week")!))
         XCTAssertTrue(SavedConnection.sameCalendar(url, URL(string: "https://calendar.google.com/calendar/u/0/r/week")!))

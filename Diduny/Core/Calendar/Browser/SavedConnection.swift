@@ -18,12 +18,26 @@ public struct SavedConnection: Codable, Equatable, Sendable {
               windowName.hasPrefix("Diduny Calendar · "), UUID(uuidString: String(windowName.dropFirst("Diduny Calendar · ".count))) != nil else { throw CocoaError(.coderInvalidValue) }
     }
     public static func matchesWindowTitle(_ title: String, name: String) -> Bool {
-        title == name || title.hasPrefix(name + " - ") || title.hasPrefix(name + " – ")
+        if title == name || title.hasPrefix(name + " - ") || title.hasPrefix(name + " – ") { return true }
+        let marker = "Diduny Calendar · "
+        guard title.hasPrefix(marker), name.hasPrefix(marker) else { return false }
+        let live = title.dropFirst(marker.count)
+        let saved = name.dropFirst(marker.count)
+        guard let range = ["…", "..."].compactMap({ live.range(of: $0) }).min(by: { $0.lowerBound < $1.lowerBound }) else { return false }
+        let head = live[..<range.lowerBound]
+        let tail = live[range.upperBound...]
+        return head.count >= 6 && tail.count >= 8 && saved.hasPrefix(head) && saved.hasSuffix(tail) && head.count + tail.count < saved.count
     }
     public func matchingCandidate(urls: [URL], profiles: [String?], windowTitles: [String]) -> Int? {
         guard (try? validate()) != nil, urls.count == profiles.count, urls.count == windowTitles.count else { return nil }
-        let matches = urls.indices.filter { Self.sameCalendar(calendarURL, urls[$0]) && profiles[$0] == profileName && Self.matchesWindowTitle(windowTitles[$0], name: windowName) }
-        return matches.count == 1 ? matches[0] : nil
+        let matches = urls.indices.filter {
+            Self.sameCalendar(calendarURL, urls[$0]) && Self.matchesWindowTitle(windowTitles[$0], name: windowName)
+                && (profiles[$0] == profileName || profiles[$0] == nil)
+        }
+        let confirmed = matches.filter { profiles[$0] == profileName }
+        if confirmed.count == 1 { return confirmed[0] }
+        if confirmed.isEmpty, matches.count == 1, profiles[matches[0]] == nil { return matches[0] }
+        return nil
     }
 
     /// The same calendar after a view change. Outlook week, work week and an open event stay one page.
