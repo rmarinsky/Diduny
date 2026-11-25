@@ -17,10 +17,16 @@ enum MeetingSettingsTab: String, CaseIterable, Identifiable {
     }
 }
 
+extension EnvironmentValues {
+    /// A test watches which Meetings tab is showing. The page does not use this itself.
+    @Entry var meetingsTabProbe: ((MeetingSettingsTab) -> Void)?
+}
+
 /// Calendar, how a meeting is recorded, and notes. One tab at a time; nothing moves to another page.
 struct MeetingSettingsView: View {
     @AppStorage(ModeDefaults.meetingTranscriptModeKey) private var startsInRaw = ModeDefaults.newInstallStartsIn.rawValue
     @State private var tab: MeetingSettingsTab
+    @Environment(\.meetingsTabProbe) private var meetingsTabProbe
 
     /// Opens on the tab a Notes button requested, before the first frame. A later request is applied in `onAppear`.
     init() {
@@ -47,6 +53,9 @@ struct MeetingSettingsView: View {
         .onAppear(perform: applyRequestedTab)
         .onChange(of: MainWindowController.shared.requestedMeetingsTab) { _, _ in
             applyRequestedTab()
+        }
+        .onChange(of: tab, initial: true) { _, newValue in
+            meetingsTabProbe?(newValue)
         }
     }
 

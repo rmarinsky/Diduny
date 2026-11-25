@@ -103,10 +103,14 @@ struct SettingsPageWidthTests {
     @Test func meetings() async { await expectFits(MeetingSettingsView(), limit: Self.pageWidth, "Meetings") }
 
     /// The Notes page sets the request; the Meetings page consumes it and shows that tab.
+    /// The hosting view's accessibility tree stays empty here, so the page reports the tab directly.
     @Test func meetingsOpensOnTheNotesTab() async {
+        final class Seen { var tab: MeetingSettingsTab? }
+        let seen = Seen()
         MainWindowController.shared.requestedMeetingsTab = .notes
         defer { MainWindowController.shared.requestedMeetingsTab = nil }
         let host = NSHostingView(rootView: MeetingSettingsView()
+            .environment(\.meetingsTabProbe) { seen.tab = $0 }
             .environment(AppState())
             .environment(AudioDeviceManager())
             .frame(width: Self.pageWidth, height: 680))
@@ -114,34 +118,14 @@ struct SettingsPageWidthTests {
         let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
-        window.orderFrontRegardless()
         host.layoutSubtreeIfNeeded()
-        var labels: [String] = []
-        for _ in 0 ..< 80 {
-            labels = accessibilityLabels(in: host)
-            if labels.contains("Who writes the notes") { break }
+        for _ in 0 ..< 40 where seen.tab != .notes || MainWindowController.shared.requestedMeetingsTab != nil {
             RunLoop.main.run(until: Date().addingTimeInterval(0.05))
             await Task.yield()
         }
-        #expect(labels.contains("Who writes the notes"), "Notes tab did not show. Labels: \(labels.prefix(20))")
-        #expect(!labels.contains("Calendars"), "Calendar tab was still on screen")
+        #expect(seen.tab == .notes)
         #expect(MainWindowController.shared.requestedMeetingsTab == nil)
         window.contentView = nil
-    }
-
-    /// SwiftUI nodes answer the accessibility getters without conforming to the protocol, and the
-    /// tree is empty until it has been queried once. Read both by key.
-    private func accessibilityLabels(in element: Any) -> [String] {
-        guard let object = element as? NSObject else { return [] }
-        func value(_ key: String) -> Any? {
-            object.responds(to: NSSelectorFromString(key)) ? object.value(forKey: key) : nil
-        }
-        var labels: [String] = []
-        if let label = value("accessibilityLabel") as? String, !label.isEmpty { labels.append(label) }
-        for child in value("accessibilityChildren") as? [Any] ?? [] {
-            labels.append(contentsOf: accessibilityLabels(in: child))
-        }
-        return labels
     }
 
     @Test func account() async { await expectFits(AccountSettingsView(), "Account") }
