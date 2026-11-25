@@ -105,6 +105,7 @@ targets:
       - path: Diduny/Core/Calendar/CalendarConnection.swift
       - path: Diduny/Core/Agents/AgentSettings.swift
       - path: Diduny/Core/Agents/AgentCommandProtocol.swift
+      - path: Diduny/Core/Vocabulary/VocabularyLearning.swift
     settings:
       base:
         PRODUCT_NAME: diduny

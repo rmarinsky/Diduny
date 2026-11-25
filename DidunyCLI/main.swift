@@ -9,7 +9,7 @@ struct Arguments {
     var options: [String: String] = [:]
 
     init(_ raw: [String]) throws {
-        let valued: Set<String> = ["--since", "--type", "--limit", "--library", "--person", "--project", "--tag", "--model"]
+        let valued: Set<String> = ["--since", "--type", "--limit", "--library", "--person", "--project", "--tag", "--model", "--kind"]
         var index = 0
         while index < raw.count {
             let item = raw[index]
@@ -43,6 +43,9 @@ Usage: \(commandName) <command>
   meetings show <id|latest> [--no-transcript] [--json]
   search "<text>" [--since 7d] [--type ...] [--person ...] [--project ...] [--limit N] [--json]
   audio <id|latest>
+  typing list [--since 30d] [--kind hints|replacements|undos|kept] [--limit N] [--json]
+  typing summary [--since 30d] [--json]     The same mistype, counted
+  typing review [--since 30d] [--json]      Pairs plus vocabulary, rules and project names
   notes show <id|latest> [--json]
   status [--json]               What Diduny is transcribing and writing notes for now
 
@@ -53,6 +56,8 @@ Changes (only when the user asked for them in the conversation; Diduny applies t
   project <id> "<name>"         project <id> --clear
   people <id> add|remove "<name>"...
   retranscribe <id> [--model <whisper model>]   Transcribes again with Whisper on this Mac
+  vocabulary accept word "<word>"           Adds a word; Diduny writes it
+  vocabulary accept rule "<from>" "<to>"    Adds a replacement; Diduny writes it
   guide                         Instructions for agents: how to find, read and summarize meetings
   settings list [--json]        Settings agents may change, with current values
   settings get <key>
@@ -130,6 +135,12 @@ func run() throws {
             throw CLIError("The audio file of this recording is not on this Mac (\(url.path)).")
         }
         output(url.path + "\n")
+
+    case "typing":
+        try TypingCommand.run(rest, options: args, library: library)
+
+    case "vocabulary":
+        try VocabularyCommand.run(rest, library: library)
 
     case "settings":
         try SettingsCommand.run(rest, json: args.json, bundleIdentifier: library.bundleIdentifier)

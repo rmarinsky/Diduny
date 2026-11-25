@@ -195,6 +195,56 @@ final class VocabularyLearningTests {
         #expect(prompt.hasPrefix("Use exact spelling for these names when relevant: Newest, Older, "))
     }
 
+    @Test("three layout fixes on two days become a rule; a cut-off row and a project word do not")
+    func typingReviewLabels() {
+        let day = Date(timeIntervalSince1970: 1_800_000_000)
+        let next = day.addingTimeInterval(86_400)
+        func event(_ kind: String, _ from: String, _ to: String, _ at: Date, origin: String = "layout", truncated: Bool = false) -> TypingEvent {
+            TypingEvent(at: at, kind: kind, from: from, to: to, origin: origin, app: nil, truncated: truncated)
+        }
+        let pairs = TypingReview.pairs(from: [
+            event("replaced", "ghbdtn", "привіт", day),
+            event("replaced", "ghbdtn", "привіт", day),
+            event("replaced", "ghbdtn", "привіт", next),
+            event("replaced", "long", "cut", day, truncated: true),
+            event("replaced", "long", "cut", next, truncated: true),
+            event("replaced", "long", "cut", next, truncated: true),
+            event("kept", "Diduny", "", day, origin: "spelling"),
+            event("kept", "Diduny", "", day, origin: "spelling"),
+            event("kept", "Diduny", "", next, origin: "spelling"),
+        ], context: ["Diduny standup"])
+        #expect(pairs.first { $0.from == "ghbdtn" }?.suggestion == "rule")
+        #expect(pairs.first { $0.from == "ghbdtn" }?.days == 2)
+        #expect(pairs.first { $0.from == "long" }?.suggestion == "leave")
+        let word = pairs.first { $0.from == "Diduny" }
+        #expect(word?.suggestion == "vocabulary")
+        #expect(word?.term == "Diduny")
+    }
+
+    @Test("undoing a spelling fix of a known project word keeps that word")
+    func undoneProjectWord() {
+        let day = Date(timeIntervalSince1970: 1_800_000_000)
+        let next = day.addingTimeInterval(86_400)
+        let events = (0 ..< 3).map { index in
+            TypingEvent(at: index == 2 ? next : day, kind: "undone", from: "Saqara", to: "Sakara",
+                        origin: "spelling", app: nil, truncated: false)
+        }
+        let pairs = TypingReview.pairs(from: events, context: ["Project Saqara"], savedTerms: [])
+        #expect(pairs.first?.suggestion == "vocabulary")
+        #expect(pairs.first?.term == "Saqara")
+        let saved = TypingReview.pairs(from: events, context: ["Project Saqara"], savedTerms: ["Saqara"])
+        #expect(saved.first?.suggestion == "saved")
+    }
+
+    @Test("accepting a word writes it once")
+    func acceptWord() {
+        let store = makeStore()
+        #expect(store.acceptWord("Diduny").ok)
+        #expect(box.settings.speechVocabularyTerms == ["Diduny"])
+        #expect(store.acceptWord("Diduny").message.contains("already"))
+        #expect(box.settings.speechVocabularyTerms == ["Diduny"])
+    }
+
     @Test("the date on an automatic line has no year in the current year")
     func shortDate() {
         let calendar = Calendar(identifier: .gregorian)

@@ -491,6 +491,7 @@
 		DB205BBE4E82CE4A826CEDAC /* ProviderDefaultsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1695A067CB9B3F989FD8CA18 /* ProviderDefaultsTests.swift */; };
 		DB3964EFB7C60E392C41A920 /* MenuBarIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B43D2844894F848F20BFDEB /* MenuBarIconView.swift */; };
 		DBA3867F301BD6263D68AD5C /* VocabularyLearning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65ED095E18A66CA48E70A7C6 /* VocabularyLearning.swift */; };
+		7A91C0E24B6D8F1032547698 /* VocabularyLearning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65ED095E18A66CA48E70A7C6 /* VocabularyLearning.swift */; };
 		DC1445338179F12A14662B34 /* AboutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F4203EEA094B3353F01444 /* AboutSettingsView.swift */; };
 		DC78ECFC61327CBD900B7B35 /* ElevenLabsKeyModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79A490E8CA7BC178586383CB /* ElevenLabsKeyModel.swift */; };
 		DCE7DF74A4C4AA7F15E0FD9E /* ProvidersSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50D2C55976D4BEC6F915827F /* ProvidersSettingsView.swift */; };
@@ -2528,6 +2529,7 @@
 			files = (
 				4220BF567D970F324DEE0B8E /* AgentCommandProtocol.swift in Sources */,
 				C9A1B7D5E0E012C1E47C65BD /* AgentSettings.swift in Sources */,
+				7A91C0E24B6D8F1032547698 /* VocabularyLearning.swift in Sources */,
 				7C319286D601BE25C74ABC7C /* AppCommands.swift in Sources */,
 				76798A305432B06B6B2DBC67 /* AudioTrimRange.swift in Sources */,
 				ECCE9A7EE42FF2C213B9E3A9 /* CalendarConnection.swift in Sources */,

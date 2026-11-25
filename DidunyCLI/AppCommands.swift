@@ -143,3 +143,233 @@ enum NotesCommand {
         return header + Render.untrusted("notes", out.joined(separator: "\n")) + "\n"
     }
 }
+
+/// Words and replacements the running Diduny app keeps. The tool only asks; the app writes them.
+enum VocabularyCommand {
+    static func run(_ args: [String], library: Library) throws {
+        guard args.first == "accept", args.count >= 3 else {
+            throw CLIError("Usage: \(commandName) vocabulary accept word \"<word>\" | rule \"<from>\" \"<to>\"")
+        }
+        switch args[1] {
+        case "word":
+            let word = args.dropFirst(2).joined(separator: " ")
+            output(try AppCommands.send(.init(action: .addVocabularyWord, values: [word]), library: library))
+        case "rule":
+            guard args.count >= 4 else {
+                throw CLIError("Usage: \(commandName) vocabulary accept rule \"<from>\" \"<to>\"")
+            }
+            output(try AppCommands.send(.init(action: .addReplacement, values: [args[2], args[3]]), library: library))
+        default:
+            throw CLIError("Usage: \(commandName) vocabulary accept word \"<word>\" | rule \"<from>\" \"<to>\"")
+        }
+    }
+}
+
+/// The typing log on this Mac: what was typed, what it became, and how often.
+enum TypingCommand {
+    static func run(_ args: [String], options: Arguments, library: Library) throws {
+        let sub = args.first ?? "summary"
+        let since = try options.options["--since"].map(parseSince)
+        let events = TypingLog.events(in: library.directory, since: since)
+        switch sub {
+        case "list":
+            let kind = options.options["--kind"]
+            let allowed = kind.map { $0 == "undos" ? "undone" : $0 == "replacements" ? "replaced" : $0 }
+            if let allowed, !["hint", "replaced", "kept", "undone"].contains(allowed) {
+                throw CLIError("--kind takes hints, replacements, undos or kept.")
+            }
+            let limit = Int(options.options["--limit"] ?? "") ?? 200
+            let rows = events.filter { allowed == nil || $0.kind == allowed }.sorted { $0.at > $1.at }.prefix(limit)
+            if options.json {
+                output(Render.json(rows.map(Self.eventJSON)))
+                return
+            }
+            let lines = rows.map { event in
+                "\(Render.date(event.at))  \(event.kind)  \(event.from) → \(event.to)  \(event.origin)"
+                    + (event.app.map { "  \($0)" } ?? "")
+            }
+            output(Render.untrusted("typing", lines.isEmpty ? "No typing rows in this range." : lines.joined(separator: "\n")) + "\n")
+        case "summary", "review":
+            let saved = AppPreferences.vocabulary(bundleIdentifier: library.bundleIdentifier)
+            let extras = AppPreferences.extras(directory: library.directory)
+            let libraryContext = recordingsContext(library)
+            let blobs = libraryContext.blobs + saved.terms
+            let pairs = TypingReview.pairs(from: events, context: blobs, savedTerms: saved.terms, savedRules: saved.rules.map(\.from))
+            let shown = sub == "review" ? pairs.filter { $0.suggestion == "rule" || $0.suggestion == "vocabulary" } : pairs
+            if options.json {
+                var packet: [String: Any] = ["pairs": shown.map(Self.pairJSON)]
+                if sub == "review" {
+                    packet["vocabulary"] = saved.terms
+                    packet["rules"] = saved.rules.map { ["from": $0.from, "to": $0.to] }
+                    packet["projects"] = libraryContext.projects
+                    packet["pending"] = extras.pending.map(Self.pendingJSON)
+                    packet["ignored"] = extras.ignored
+                    packet["removedAuto"] = extras.removedAuto
+                    packet["omitted"] = pairs.count - shown.count
+                }
+                output(Render.json(packet))
+                return
+            }
+            var lines = shown.map { pair in
+                var line = "\(pair.from) → \(pair.to)  \(pair.origin)  \(pair.replacements) replacements, \(pair.hints) hints, \(pair.kept) kept, \(pair.undos) undos, \(pair.days) days, last \(Render.date(pair.last))"
+                if !pair.apps.isEmpty { line += "  " + pair.apps.joined(separator: ", ") }
+                line += "  \(pair.suggestion)"
+                if !pair.term.isEmpty { line += " \"\(pair.term)\"" }
+                return line
+            }
+            if sub == "review" {
+                lines.append("")
+                lines.append("Vocabulary: " + (saved.terms.isEmpty ? "(none)" : saved.terms.joined(separator: ", ")))
+                lines.append("Rules: " + (saved.rules.isEmpty ? "(none)" : saved.rules.map { "\($0.from) → \($0.to)" }.joined(separator: ", ")))
+                lines.append("Projects: " + (libraryContext.projects.isEmpty ? "(none)" : libraryContext.projects.joined(separator: ", ")))
+                let pending = extras.pending.map(Self.pendingText)
+                lines.append("Pending: " + (pending.isEmpty ? "(none)" : pending.joined(separator: "; ")))
+                lines.append("\(pairs.count - shown.count) other pairs are one-offs, often undone, cut off, or already saved.")
+            }
+            let body = lines.isEmpty ? "No typing rows in this range." : lines.joined(separator: "\n")
+            output(Render.untrusted("typing", body) + "\n")
+        default:
+            throw CLIError("Unknown: typing \(sub). Use list, summary or review.")
+        }
+    }
+
+    private static func recordingsContext(_ library: Library) -> (blobs: [String], projects: [String]) {
+        let recordings = (try? library.load()) ?? []
+        var blobs: [String] = []
+        var projects = Set<String>()
+        for recording in recordings {
+            if let project = recording.project, !project.isEmpty {
+                projects.insert(project)
+                blobs.append(project)
+            }
+            blobs.append(contentsOf: recording.tags ?? [])
+            blobs.append(contentsOf: recording.allPeople)
+            blobs.append(recording.displayTitle)
+        }
+        return (blobs, projects.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending })
+    }
+
+    private static func eventJSON(_ event: TypingEvent) -> [String: Any] {
+        var row: [String: Any] = [
+            "at": Render.date(event.at), "kind": event.kind, "from": event.from, "to": event.to, "origin": event.origin
+        ]
+        if let app = event.app { row["app"] = app }
+        if event.truncated { row["truncated"] = true }
+        return row
+    }
+
+    private static func pairJSON(_ pair: TypingPair) -> [String: Any] {
+        var row: [String: Any] = [
+            "from": pair.from, "to": pair.to, "origin": pair.origin,
+            "replacements": pair.replacements, "hints": pair.hints, "kept": pair.kept, "undos": pair.undos,
+            "days": pair.days, "last": Render.date(pair.last), "apps": pair.apps,
+            "suggestion": pair.suggestion
+        ]
+        if !pair.term.isEmpty { row["term"] = pair.term }
+        if pair.truncated { row["truncated"] = true }
+        return row
+    }
+
+    private static func pendingJSON(_ item: VocabularyPendingItem) -> [String: Any] {
+        switch item.kind {
+        case let .word(word):
+            return ["kind": "word", "word": word, "count": item.evidence.count, "days": item.evidence.days]
+        case let .replacement(from, to):
+            return ["kind": "replacement", "from": from, "to": to, "count": item.evidence.count, "days": item.evidence.days]
+        }
+    }
+
+    private static func pendingText(_ item: VocabularyPendingItem) -> String {
+        switch item.kind {
+        case let .word(word): "word \(word)"
+        case let .replacement(from, to): "\(from) → \(to)"
+        }
+    }
+}
+
+/// Reads the typing files and the vocabulary the app already saved. Never writes them.
+enum TypingLog {
+    static func events(in directory: URL, since: Date?) -> [TypingEvent] {
+        let folder = directory.appendingPathComponent("Typing")
+        return read(folder.appendingPathComponent("auto-fix-decisions.jsonl")).compactMap { decision($0, since: since) }
+            + read(folder.appendingPathComponent("replacement-history.jsonl")).compactMap { undo($0, since: since) }
+    }
+
+    private static func read(_ url: URL) -> [[String: Any]] {
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        return text.split(whereSeparator: \.isNewline).compactMap { line in
+            guard let data = String(line).data(using: .utf8) else { return nil }
+            return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        }
+    }
+
+    private static func decision(_ row: [String: Any], since: Date?) -> TypingEvent? {
+        if (row["aggregateOnly"] as? Bool) == true { return nil }
+        guard let at = (row["timestamp"] as? String).flatMap(TypingReview.parseDate),
+              since == nil || at >= since!,
+              let from = row["source"] as? String, !from.isEmpty else { return nil }
+        let to = (row["selectedCandidate"] as? String) ?? ""
+        let kind: String
+        switch row["outcome"] as? String {
+        case "replaced", "ruleApplied":
+            guard !to.isEmpty else { return nil }
+            kind = "replaced"
+        case "proposed":
+            guard !to.isEmpty else { return nil }
+            kind = "hint"
+        case "skipped" where (row["signalKind"] as? String) == "spellingSuggestion":
+            kind = "kept"
+        default:
+            return nil
+        }
+        return TypingEvent(
+            at: at, kind: kind, from: from, to: to, origin: originName(row["candidateOrigin"] as? String),
+            app: row["bundleID"] as? String, truncated: truncated(from) || truncated(to)
+        )
+    }
+
+    private static func undo(_ row: [String: Any], since: Date?) -> TypingEvent? {
+        guard (row["kind"] as? String) == "autoFixUndone",
+              let at = (row["timestamp"] as? String).flatMap(TypingReview.parseDate),
+              since == nil || at >= since!,
+              let from = row["original"] as? String, let to = row["converted"] as? String else { return nil }
+        let marked = (row["originalTruncated"] as? Bool) == true || (row["convertedTruncated"] as? Bool) == true
+        return TypingEvent(
+            at: at, kind: "undone", from: from, to: to, origin: "unknown",
+            app: row["bundleID"] as? String, truncated: marked || truncated(from) || truncated(to)
+        )
+    }
+
+    private static func originName(_ raw: String?) -> String {
+        switch raw {
+        case "keyboardLayout": "layout"
+        case "spelling": "spelling"
+        case "customRule": "rule"
+        default: "unknown"
+        }
+    }
+
+    private static func truncated(_ text: String) -> Bool {
+        text.contains("…") || text.count >= 80
+    }
+}
+
+enum AppPreferences {
+    static func vocabulary(bundleIdentifier: String) -> (terms: [String], rules: [(from: String, to: String)]) {
+        CFPreferencesAppSynchronize(bundleIdentifier as CFString)
+        let terms = CFPreferencesCopyAppValue("speechVocabularyTerms" as CFString, bundleIdentifier as CFString) as? [String] ?? []
+        guard let data = CFPreferencesCopyAppValue("typing.customReplaceRules" as CFString, bundleIdentifier as CFString) as? Data else {
+            return (terms, [])
+        }
+        struct Rule: Decodable { var source: String; var target: String }
+        let rules = ((try? JSONDecoder().decode([Rule].self, from: data)) ?? []).map { (from: $0.source, to: $0.target) }
+        return (terms, rules)
+    }
+
+    static func extras(directory: URL) -> VocabularyExtras {
+        let url = directory.appendingPathComponent("vocabulary_extras.json")
+        guard let data = try? Data(contentsOf: url),
+              let extras = try? JSONDecoder().decode(VocabularyExtras.self, from: data) else { return VocabularyExtras() }
+        return extras
+    }
+}

@@ -19,12 +19,16 @@ enum AgentCommandProtocol {
             case addPeople
             case removePeople
             case retranscribe
+            /// Adds one word to Vocabulary. `values` is the word. No recording.
+            case addVocabularyWord
+            /// Adds one replacement. `values` is the typed text, then what it should become.
+            case addReplacement
         }
 
         var id = UUID()
         var action: Action
-        /// Full recording id.
-        var recordingID: UUID
+        /// Full recording id. Absent for vocabulary changes, which are not about one recording.
+        var recordingID: UUID?
         /// Note text, tags, people or the project name, by action.
         var values: [String] = []
         /// Whisper model for `retranscribe`; nil uses the model chosen in Settings.
