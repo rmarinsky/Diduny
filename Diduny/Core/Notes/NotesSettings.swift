@@ -203,8 +203,7 @@ enum NotesNoOwner: String, CaseIterable, Identifiable {
     }
 }
 
-/// Stored in UserDefaults under `notes.*`. One set of values, shown on the Notes settings
-/// page and, for meetings, again in Calendar & meetings.
+/// Stored in UserDefaults under `notes.*`. Shown on the Notes tab of Meetings.
 enum NotesSettings {
     private static let defaults = UserDefaults.standard
 

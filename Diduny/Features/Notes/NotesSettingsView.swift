@@ -21,7 +21,7 @@ struct NotesSettingsView: View {
     @State private var noOwner = NotesSettings.noOwner
     @State private var markNames = NotesSettings.markUnknownNames
 
-    /// True on the Meetings page, which shows these settings under "After" without page chrome.
+    /// True on the Meetings page Notes tab, which shows these settings without page chrome.
     var embedded = false
 
     var body: some View {

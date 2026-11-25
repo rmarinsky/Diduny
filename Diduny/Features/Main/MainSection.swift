@@ -44,7 +44,6 @@ enum MainSection: String, CaseIterable, Hashable {
         switch self {
         case .modes: String(localized: "Modes & shortcuts")
         case .typing: String(localized: "Mistyping")
-        case .meetings: String(localized: "Calendar")
         case .models: String(localized: "Engines")
         case .about: String(localized: "About Diduny")
         default: label
@@ -59,7 +58,7 @@ enum MainSection: String, CaseIterable, Hashable {
         case .clipboard: String(localized: "Clipboard")
         case .benchmark: String(localized: "Benchmark")
         case .typingTest: String(localized: "Typing test")
-        case .meetings: String(localized: "Calendar & meetings")
+        case .meetings: String(localized: "Meetings")
         case .general: String(localized: "General")
         case .modes: String(localized: "Modes & shortcuts")
         case .languages: String(localized: "Languages")
@@ -99,10 +98,18 @@ enum MainSection: String, CaseIterable, Hashable {
 /// The "Settings" button in a data page's header: opens the settings page that holds that page's options.
 struct SettingsPageButton: View {
     let target: MainSection
+    /// Set from the Notes page so Meetings opens on Notes instead of Calendar.
+    var meetingsTab: MeetingSettingsTab?
 
     var body: some View {
-        Button("Settings") { MainWindowController.shared.showWindow(section: target) }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("page.settings.\(target.rawValue)")
+        Button("Settings") {
+            if let meetingsTab {
+                MainWindowController.shared.showMeetings(tab: meetingsTab)
+            } else {
+                MainWindowController.shared.showWindow(section: target)
+            }
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier("page.settings.\(target.rawValue)")
     }
 }

@@ -28,7 +28,7 @@ final class MainWindowUITests: DidunyUITestCase {
             ("General", nil, "general", { $0.staticTexts["After a recording"] }),
             ("Modes & shortcuts", nil, "modes", { $0.staticTexts["Use one engine for everything"] }),
             ("Languages", nil, "languages", { $0.staticTexts["Your languages"] }),
-            ("Calendar", nil, "meetings", { $0.staticTexts["Calendars"] }),
+            ("Meetings", nil, "meetings", { $0.staticTexts["Calendars"] }),
             ("Engines", nil, "models", { $0.descendants(matching: .any)["models.table"] }),
             ("Engines", "models.compare", "providers", { $0.staticTexts["In Diduny"] }),
             ("Account", nil, "account", { $0.textFields["account.email"] }),
