@@ -477,7 +477,7 @@ private struct AboutProduct: Identifiable {
     ]
 }
 
-/// Agents: the `diduny` command, the skill for Claude Code and Codex, and the settings file.
+/// Agents: the `diduny` command, a short skill in each agent home on this Mac, and the settings file.
 struct AgentsGroup: View {
     @State private var installed = AgentCommandLineTool.isInstalled
     @State private var installSkill = AgentSkillInstaller.isEnabled
@@ -524,7 +524,7 @@ struct AgentsGroup: View {
             }
             SettingsLineRow(
                 title: "Teach agents about Diduny",
-                caption: "Adds a short Diduny skill to Claude Code and Codex, so they know how to find and read your meetings. Agents here: \(agentNames).",
+                caption: "Adds a short skill where an agent on this Mac already keeps skills, and tells it to run diduny guide first. Agents here: \(agentNames).",
                 kind: .toggle
             ) {
                 SettingsSwitch(title: "Teach agents about Diduny", isOn: $installSkill)

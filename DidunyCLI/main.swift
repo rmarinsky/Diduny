@@ -38,6 +38,8 @@ let commandName = (CommandLine.arguments.first.map { ($0 as NSString).lastPathCo
 let usage = """
 Usage: \(commandName) <command>
 
+Agents: run `\(commandName) guide` once and follow what it prints.
+
   meetings list [--since 7d] [--type meetings|voice|translations|files|all] [--limit N] [--json]
                [--person <name>] [--project <name>] [--tag <tag>]
   meetings show <id|latest> [--no-transcript] [--json]
@@ -58,7 +60,8 @@ Changes (only when the user asked for them in the conversation; Diduny applies t
   retranscribe <id> [--model <whisper model>]   Transcribes again with Whisper on this Mac
   vocabulary accept word "<word>"           Adds a word; Diduny writes it
   vocabulary accept rule "<from>" "<to>"    Adds a replacement; Diduny writes it
-  guide                         Instructions for agents: how to find, read and summarize meetings
+  guide                         Full instructions for agents. Run this first
+  help                          This list
   settings list [--json]        Settings agents may change, with current values
   settings get <key>
   settings set <key> <value>
@@ -73,7 +76,8 @@ func output(_ text: String) {
 
 func run() throws {
     let args = try Arguments(Array(CommandLine.arguments.dropFirst()))
-    guard let command = args.positional.first, !args.flags.contains("--help"), !args.flags.contains("-h") else {
+    guard let command = args.positional.first, command != "help",
+          !args.flags.contains("--help"), !args.flags.contains("-h") else {
         output(usage + "\n")
         return
     }

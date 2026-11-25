@@ -2377,6 +2377,7 @@
 "Command line tool" = "Command line tool";
 "Lets Claude Code, Codex and other agents on this Mac read your meetings. When you ask, they can add to notes, tag recordings and transcribe again; they never delete anything." = "Lets Claude Code, Codex and other agents on this Mac read your meetings. When you ask, they can add to notes, tag recordings and transcribe again; they never delete anything.";
 "Teach agents about Diduny" = "Teach agents about Diduny";
+"Adds a short skill where an agent on this Mac already keeps skills, and tells it to run diduny guide first. Agents here: %@" = "Adds a short skill where an agent on this Mac already keeps skills, and tells it to run diduny guide first. Agents here: %@";
 "Settings agents can change" = "Settings agents can change";
 "Transcription words, languages, filler words, silence stop and sounds. Addresses, hotkeys, devices and history stay here." = "Transcription words, languages, filler words, silence stop and sounds. Addresses, hotkeys, devices and history stay here.";
 "Nobody writes notes yet. Choose a model or a subscription tool in Notes settings." = "Nobody writes notes yet. Choose a model or a subscription tool in Notes settings.";

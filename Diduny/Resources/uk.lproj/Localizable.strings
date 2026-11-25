@@ -2377,6 +2377,7 @@
 "Command line tool" = "Інструмент командного рядка";
 "Lets Claude Code, Codex and other agents on this Mac read your meetings. When you ask, they can add to notes, tag recordings and transcribe again; they never delete anything." = "Дає Claude Code, Codex та іншим агентам на цьому Mac читати ваші зустрічі. На ваше прохання вони можуть доповнювати нотатки, ставити теги й транскрибувати ще раз; нічого не видаляють.";
 "Teach agents about Diduny" = "Навчити агентів працювати з Diduny";
+"Adds a short skill where an agent on this Mac already keeps skills, and tells it to run diduny guide first. Agents here: %@" = "Додає короткий скіл туди, де агент на цьому Mac уже зберігає скіли, і каже спершу запустити diduny guide. Агенти тут: %@";
 "Settings agents can change" = "Налаштування, які можуть змінювати агенти";
 "Transcription words, languages, filler words, silence stop and sounds. Addresses, hotkeys, devices and history stay here." = "Слова для транскрипції, мови, слова-паразити, зупинка за тишею і звуки. Адреси, гарячі клавіші, пристрої та історія лишаються тут.";
 "Nobody writes notes yet. Choose a model or a subscription tool in Notes settings." = "Нотатки поки ніхто не пише. Виберіть модель або інструмент підписки в налаштуваннях нотаток.";
