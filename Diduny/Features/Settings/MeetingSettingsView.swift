@@ -20,7 +20,13 @@ enum MeetingSettingsTab: String, CaseIterable, Identifiable {
 /// Calendar, how a meeting is recorded, and notes. One tab at a time; nothing moves to another page.
 struct MeetingSettingsView: View {
     @AppStorage(ModeDefaults.meetingTranscriptModeKey) private var startsInRaw = ModeDefaults.newInstallStartsIn.rawValue
-    @State private var tab = MeetingSettingsTab.calendar
+    @State private var tab: MeetingSettingsTab
+
+    /// Opens on the tab a Notes button requested, before the first frame. A later request is applied in `onAppear`.
+    init() {
+        let initial = MainActor.assumeIsolated { MainWindowController.shared.requestedMeetingsTab ?? .calendar }
+        _tab = State(initialValue: initial)
+    }
 
     var body: some View {
         PageScaffold(

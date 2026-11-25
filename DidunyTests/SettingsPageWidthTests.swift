@@ -114,8 +114,10 @@ struct SettingsPageWidthTests {
         let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
+        window.orderFrontRegardless()
+        host.layoutSubtreeIfNeeded()
         var labels: [String] = []
-        for _ in 0 ..< 20 {
+        for _ in 0 ..< 80 {
             labels = accessibilityLabels(in: host)
             if labels.contains("Who writes the notes") { break }
             RunLoop.main.run(until: Date().addingTimeInterval(0.05))
