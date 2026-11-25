@@ -151,3 +151,21 @@ enum BrowserCalendarMeetings {
         return afternoon ? value + 12 : value
     }
 }
+
+/// Days already read stay when a later read only shows another day.
+struct BrowserEventMemory: Equatable {
+    private var byDay: [Date: [CalendarMeeting]] = [:]
+
+    mutating func replace(_ meetings: [CalendarMeeting], calendar: Calendar = .current) {
+        for (day, rows) in Dictionary(grouping: meetings, by: { calendar.startOfDay(for: $0.start) }) {
+            byDay[day] = rows.sorted { $0.start == $1.start ? $0.title < $1.title : $0.start < $1.start }
+        }
+    }
+
+    func overlapping(from: Date, to: Date) -> [CalendarMeeting] {
+        byDay.values.flatMap { $0 }.filter { $0.start < to && $0.end > from }
+            .sorted { $0.start == $1.start ? $0.title < $1.title : $0.start < $1.start }
+    }
+
+    mutating func clear() { byDay.removeAll() }
+}

@@ -21,6 +21,7 @@ extension AppDelegate {
             Task { @MainActor in await self.calendarRecordingLinker.run(storage: .shared, connection: .shared) }
         }
         connection.onTick = { [weak self] in self?.offerStopIfLinkedMeetingEnded() }
+        connection.refreshBrowserCalendar = { BrowserCalendarConnection.shared.read() }
         connection.start()
         _ = BrowserCalendarConnection.shared
         calendarStoreObserver = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in

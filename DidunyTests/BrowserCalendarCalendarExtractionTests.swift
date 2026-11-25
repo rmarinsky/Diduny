@@ -41,7 +41,7 @@ final class CalendarExtractionTests: XCTestCase {
         XCTAssertEqual(result.meetingLinks.map(\.absoluteString),["https://teams.microsoft.com/meet/123?p=secret"])
     }
 
-    func testBrowserRowsBecomeMeetingsAndAForwardedCopyIsNotListedTwice() {
+    func testBrowserRowsStayBesideAForwardedCopyAtTheSameTime() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         calendar.locale = Locale(identifier: "en_US_POSIX")
@@ -59,7 +59,14 @@ final class CalendarExtractionTests: XCTestCase {
         let mac = CalendarMeeting(id: "mac", calendarID: "work", title: "FW: Velocity Build Showcase",
                                   start: meetings[1].start, end: meetings[1].end)
         let merged = CalendarMeetingMerge.merging([mac], with: meetings)
-        XCTAssertEqual(merged.map(\.title), ["FW: Velocity Build Showcase", "Saqara Sync"])
+        XCTAssertEqual(merged.map(\.title), ["FW: Velocity Build Showcase", "Saqara Sync", "Velocity Build Showcase"])
+        var memory = BrowserEventMemory()
+        memory.replace(meetings, calendar: calendar)
+        let tomorrow = BrowserCalendarMeetings.make(events: [google], windowName: "Diduny Calendar · test",
+                                                    sourceTitle: "Outlook", from: .distantPast, to: .distantFuture, calendar: calendar)
+        memory.replace(tomorrow, calendar: calendar)
+        let kept = memory.overlapping(from: day, to: next)
+        XCTAssertEqual(kept.map(\.title), ["Saqara Sync", "Velocity Build Showcase"])
         let ukrainian = BrowserCalendarMeetings.range(dateText: google.displayedDate, timeText: google.displayedTime, calendar: calendar)
         XCTAssertEqual(calendar.component(.day, from: ukrainian?.start ?? .distantPast), 21)
         XCTAssertEqual(calendar.component(.hour, from: ukrainian?.start ?? .distantPast), 17)

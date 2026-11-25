@@ -19,6 +19,7 @@ import SwiftUI
     private var timer: Timer?
     private var observer: NSObjectProtocol?
     private var connectionKey: String?
+    private var memory = BrowserEventMemory()
     private let settings: SettingsStorage
 
     init(directory: URL? = nil, settings: SettingsStorage = .shared) {
@@ -67,6 +68,7 @@ import SwiftUI
                     try store.save(connection)
                     saved = connection; target = value.target; result = value; connected = true; reveal = true; successes = 1
                     connectionKey = connection.windowName; session.connect(source: connection.windowName)
+                    remember(value)
                     // Start the 60-second interval from this successful connect, without another read.
                     if let token = session.begin(source: connection.windowName, now: ProcessInfo.processInfo.systemUptime) { _ = session.finish(token, now: ProcessInfo.processInfo.systemUptime) }
                     message = String(localized: "Connection saved · refreshes every minute while Diduny is running")
@@ -77,7 +79,7 @@ import SwiftUI
     }
     func disconnect() {
         access?.cancel(); access = nil; session.disconnect(); connected = false; busy = false; connectionKey = nil
-        target = nil; result = nil; lastAttempt = nil; successes = 0
+        target = nil; result = nil; lastAttempt = nil; successes = 0; memory.clear()
         do { try store.clear(); saved = nil; message = String(localized: "Disconnected. Saved consent was removed, reading stopped and in-memory calendar data cleared.") }
         catch { message = String(localized: "Reading stopped, but saved consent could not be removed. It may return after restart. Retry disconnecting: \(error.localizedDescription)") }
     }
@@ -93,7 +95,9 @@ import SwiftUI
             guard session.finish(request, now: ProcessInfo.processInfo.systemUptime) else { return }
             busy = false; access = nil
             switch outcome {
-            case .success(let value): target = value.target; result = value; successes += 1; message = String(localized: "Background reading is active · next check in one minute")
+            case .success(let value):
+                target = value.target; result = value; successes += 1; remember(value)
+                message = String(localized: "Background reading is active · next check in one minute")
             case .failure(let error): target = nil; message = String(localized: "\(error.localizedDescription) Saved consent remains active.")
             }
         }
@@ -133,15 +137,22 @@ import SwiftUI
             read(force: true)
         } else {
             access?.cancel(); access = nil; session.disconnect(); busy = false
-            target = nil; result = nil; lastAttempt = nil; successes = 0
+            target = nil; result = nil; lastAttempt = nil; successes = 0; memory.clear()
         }
     }
-    /// Events from the last successful read whose times overlap the range. Empty until a read succeeds.
-    func meetings(from: Date, to: Date, calendar: Calendar = .current) -> [CalendarMeeting] {
-        guard enabled, let saved, let result else { return [] }
+    /// Events remembered from successful reads whose times overlap the range.
+    /// A later read replaces only the days it actually shows, so yesterday and tomorrow stay.
+    func meetings(from: Date, to: Date, calendar _: Calendar = .current) -> [CalendarMeeting] {
+        guard enabled else { return [] }
+        return memory.overlapping(from: from, to: to)
+    }
+
+    private func remember(_ value: BrowserReadResult) {
+        guard let saved else { return }
         let source = CalendarPage.provider(for: saved.calendarURL) == .google ? "Google Calendar" : "Outlook"
-        return BrowserCalendarMeetings.make(events: result.snapshot.events, windowName: saved.windowName,
-                                            sourceTitle: source, from: from, to: to, calendar: calendar)
+        let parsed = BrowserCalendarMeetings.make(events: value.snapshot.events, windowName: saved.windowName,
+                                                  sourceTitle: source, from: .distantPast, to: .distantFuture)
+        memory.replace(parsed)
     }
 
     func stop() {

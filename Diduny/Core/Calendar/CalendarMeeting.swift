@@ -444,31 +444,12 @@ enum CalendarJoinDecision: Equatable {
     }
 }
 
-/// Keeps the Mac calendar copy when a browser row is the same title in the same time.
+/// Appends browser rows beside the Mac rows. The same clock time can be two meetings,
+/// including a forwarded copy and the original, so titles are not collapsed.
 enum CalendarMeetingMerge {
     static func merging(_ primary: [CalendarMeeting], with extra: [CalendarMeeting]) -> [CalendarMeeting] {
-        primary + extra.filter { event in !primary.contains { sameOccurrence($0, event) } }
-    }
-
-    private static func sameOccurrence(_ primary: CalendarMeeting, _ extra: CalendarMeeting) -> Bool {
-        let left = foldedTitle(primary.title)
-        let right = foldedTitle(extra.title)
-        guard !left.isEmpty, left == right else { return false }
-        return primary.start < extra.end && extra.start < primary.end
-    }
-
-    private static func foldedTitle(_ title: String) -> String {
-        var text = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let prefixes = ["FW:", "Fwd:", "Canceled:", "Cancelled:", "Скасовано:"]
-        var stripped = true
-        while stripped {
-            stripped = false
-            for prefix in prefixes where text.lowercased().hasPrefix(prefix.lowercased()) {
-                text = String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                stripped = true
-            }
-        }
-        return text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let seen = Set(primary.map(\.id))
+        return primary + extra.filter { !seen.contains($0.id) }
     }
 }
 

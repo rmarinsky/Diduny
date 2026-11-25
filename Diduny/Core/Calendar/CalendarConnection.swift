@@ -151,6 +151,8 @@ struct CalendarConfiguration: Codable, Equatable {
     var onTick: (() -> Void)?
     /// Browser-calendar events for a date range. The app wires this; tests leave it empty.
     var browserMeetings: (Date, Date) -> [CalendarMeeting] = { _, _ in [] }
+    /// Same 60-second pass as the Mac calendar refresh. The browser read has its own one-minute gate.
+    var refreshBrowserCalendar: (() -> Void)?
     private var generation = UUID()
     private var polling: Task<Void, Never>?
     private static let key = "calendar.connection.v1"
@@ -339,7 +341,10 @@ struct CalendarConfiguration: Codable, Equatable {
             while !Task.isCancelled {
                 if let self {
                     self.menuClock = Date()
-                    if self.fetchedAt == nil || Date().timeIntervalSince(self.fetchedAt!) >= 60 { await self.refresh() }
+                    if self.fetchedAt == nil || Date().timeIntervalSince(self.fetchedAt!) >= 60 {
+                        await self.refresh()
+                        self.refreshBrowserCalendar?()
+                    }
                     self.deliverReminders()
                     self.onTick?()
                 }
