@@ -304,7 +304,7 @@ struct NotesView: View {
     }
 
     var body: some View {
-        PageScaffold(title: "Notes", scrolls: false, trailing: { SettingsPageButton(target: .meetings, meetingsTab: .notes) }) {
+        PageScaffold(title: "Notes", scrolls: false, columnMaxWidth: .infinity, trailing: { SettingsPageButton(target: .meetings, meetingsTab: .notes) }) {
             VStack(alignment: .leading, spacing: DS.Space.md) {
                 NotesWorkStrip()
                 if store.notes.isEmpty, service.backfill == nil {
@@ -387,6 +387,7 @@ struct NotesView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 

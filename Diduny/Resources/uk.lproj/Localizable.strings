@@ -2151,7 +2151,7 @@
 "%@, %@ in total" = "%@, разом %@";
 "All %lld" = "Усі %lld";
 "Without transcript %lld" = "Без транскрипту %lld";
-"Notes are grouped by clock time. Zoom in on the day for smaller groups. A group of one shows the note itself." = "Нотатки групуються за часом годинника. Збільш день, щоб групи стали меншими. Група з однієї нотатки показує саму нотатку.";
+"Dictations are grouped by clock time. Zoom in on the day for smaller groups. A group of one shows the dictation itself." = "Диктовки групуються за часом. Збільш день, щоб групи стали меншими. Група з однієї диктовки показує саму диктовку.";
 "Make a transcript" = "Зробити транскрипт";
 "In the cloud" = "У хмарі";
 "Imported files and YouTube audio are transcribed on this Mac." = "Імпортовані файли й аудіо YouTube транскрибуються на цьому Mac.";
@@ -2237,7 +2237,8 @@
 "Who was it with? Notes" = "З ким це було? Нотатки";
 "Release to detach from the event" = "Відпусти, щоб відвʼязати від події";
 "Go to today, at the current time (⌘T)" = "До сьогодні, на поточний час (⌘T)";
-"%lld dictation notes" = "Нотатки диктування: %lld";
+"%lld dictations" = "Диктовок: %lld";
+"Dictations" = "Диктовки";
 "%lld more at this time" = "Ще %lld у цей час";
 
 /* Speech hints from Your languages */

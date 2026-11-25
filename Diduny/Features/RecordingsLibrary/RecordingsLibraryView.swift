@@ -750,7 +750,7 @@ extension RecordingsSegment {
         switch self {
         case .all: "All"
         case .meetings: "Meetings"
-        case .notes: "Notes"
+        case .notes: "Dictations"
         case .filesAndLinks: "Files and links"
         }
     }
@@ -761,9 +761,14 @@ enum RecordingsPageLayout {
     /// The day column never gets narrower than this.
     static let minimumColumnWidth: CGFloat = 340
 
-    /// 400 below a 1280 window, 480 above, 560 from 1700. The window never resizes itself.
+    /// Outer width of the day column: the wide reading width plus the page insets. It does not grow past this.
+    static let timelineOuterMax = DS.Layout.wideColumnMaxWidth + DS.Layout.pagePadding * 2
+
+    /// 400 below a 1280 window, 480 above, 560 from 1700. Wider than the day column's cap, the inspector takes the rest.
     static func inspectorWidth(windowWidth: CGFloat) -> CGFloat {
-        windowWidth >= 1700 ? 560 : windowWidth >= 1280 ? 480 : 400
+        let minimum: CGFloat = windowWidth >= 1700 ? 560 : windowWidth >= 1280 ? 480 : 400
+        let remainder = windowWidth - DS.Layout.sidebarWidth - timelineOuterMax - 1
+        return max(minimum, remainder)
     }
 
     /// The page column beside the sidebar and, when open, the inspector and its divider.

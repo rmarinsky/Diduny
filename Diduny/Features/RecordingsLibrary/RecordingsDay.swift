@@ -14,7 +14,7 @@ enum RecordingsSegment: String, CaseIterable, Identifiable {
         switch self {
         case .all: String(localized: "All")
         case .meetings: String(localized: "Meetings")
-        case .notes: String(localized: "Notes")
+        case .notes: String(localized: "Dictations")
         case .filesAndLinks: String(localized: "Files and links")
         }
     }

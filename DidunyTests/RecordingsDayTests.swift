@@ -297,6 +297,9 @@ struct RecordingsDayTests {
         #expect(RecordingsPageLayout.inspectorWidth(windowWidth: 1000) == 400)
         #expect(RecordingsPageLayout.inspectorWidth(windowWidth: 1280) == 480)
         #expect(RecordingsPageLayout.inspectorWidth(windowWidth: 1700) == 560)
+        let wideInspector = 2200 - DS.Layout.sidebarWidth - RecordingsPageLayout.timelineOuterMax - 1
+        #expect(RecordingsPageLayout.inspectorWidth(windowWidth: 2200) == wideInspector)
+        #expect(RecordingsPageLayout.columnWidth(windowWidth: 2200, inspectorOpen: true) == RecordingsPageLayout.timelineOuterMax)
         let column = { RecordingsPageLayout.columnWidth(windowWidth: $0, inspectorOpen: $1) }
         #expect(column(1000, true) == 361)
         #expect(column(1000, true) >= RecordingsPageLayout.minimumColumnWidth, "The day stays usable at 1000")

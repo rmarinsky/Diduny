@@ -16,7 +16,7 @@ struct RecordingsDayActions {
 }
 
 /// Variant B: a week strip, then the day on an hour scale. Events with their recordings inside, unattached
-/// recordings beside them, dictation notes (voice and translation) grouped by the zoom level, files and links listed under the scale.
+/// recordings beside them, dictations (voice and translation) grouped by the zoom level, files and links listed under the scale.
 struct RecordingsDayView<FileRow: View>: View {
     let day: RecordingsDay
     @Binding var selectedDay: Date
@@ -327,7 +327,7 @@ struct RecordingsDayView<FileRow: View>: View {
         switch item {
         case let .event(event, _, _): event.meeting.title
         case let .recording(recording, _, _): "\(recording.createdAt.formatted(date: .omitted, time: .shortened)) \(recording.displayTitle)"
-        case let .notes(group, _, _): String(localized: "\(group.recordings.count) dictation notes")
+        case let .notes(group, _, _): String(localized: "\(group.recordings.count) dictations")
         case let .group(group, _, _): group.name
         }
     }
@@ -495,7 +495,7 @@ struct RecordingsDayView<FileRow: View>: View {
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 4) {
-                        Text("\(group.recordings.count) dictation notes").font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                        Text("\(group.recordings.count) dictations").font(.system(size: 12, weight: .semibold)).lineLimit(1)
                         stateMark(.of(group.recordings), isOn: isOn)
                     }
                     if frame.height >= 40 || expanded {
@@ -538,7 +538,7 @@ struct RecordingsDayView<FileRow: View>: View {
             }
         }
         .accessibilityAction { actions.openNotes(group.key) }
-        .accessibilityLabel(Text("\(group.recordings.count) dictation notes"))
+        .accessibilityLabel(Text("\(group.recordings.count) dictations"))
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .accessibilityIdentifier("recordings.day.notes")
