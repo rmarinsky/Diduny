@@ -22,8 +22,26 @@ public struct SavedConnection: Codable, Equatable, Sendable {
     }
     public func matchingCandidate(urls: [URL], profiles: [String?], windowTitles: [String]) -> Int? {
         guard (try? validate()) != nil, urls.count == profiles.count, urls.count == windowTitles.count else { return nil }
-        let matches = urls.indices.filter { urls[$0] == calendarURL && profiles[$0] == profileName && Self.matchesWindowTitle(windowTitles[$0], name: windowName) }
+        let matches = urls.indices.filter { Self.sameCalendar(calendarURL, urls[$0]) && profiles[$0] == profileName && Self.matchesWindowTitle(windowTitles[$0], name: windowName) }
         return matches.count == 1 ? matches[0] : nil
+    }
+
+    /// The same calendar after a view change. Outlook week, work week and an open event stay one page.
+    /// A different Google account does not.
+    public static func sameCalendar(_ saved: URL, _ live: URL) -> Bool {
+        guard let provider = CalendarPage.provider(for: saved),
+              provider == CalendarPage.provider(for: live),
+              saved.host?.lowercased() == live.host?.lowercased() else { return false }
+        switch provider {
+        case .microsoft: return true
+        case .google: return googleUser(saved) == googleUser(live)
+        }
+    }
+
+    private static func googleUser(_ url: URL) -> String {
+        let parts = url.path.split(separator: "/").map(String.init)
+        if parts.count >= 3, parts[0] == "calendar", parts[1] == "u" { return parts[2] }
+        return "0"
     }
 }
 

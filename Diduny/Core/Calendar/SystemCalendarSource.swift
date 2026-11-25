@@ -122,8 +122,10 @@ actor SystemCalendarSource {
 extension CalendarConnection {
     static let shared: CalendarConnection = {
         let source = SystemCalendarSource()
-        return CalendarConnection(defaults: .standard, authorize: { try await source.authorize() },
-                                  read: { try await source.read(selected: $0) },
-                                  readRange: { try await source.readMeetings(selected: $0, from: $1, to: $2) })
+        let connection = CalendarConnection(defaults: .standard, authorize: { try await source.authorize() },
+                                            read: { try await source.read(selected: $0) },
+                                            readRange: { try await source.readMeetings(selected: $0, from: $1, to: $2) })
+        connection.browserMeetings = { from, to in BrowserCalendarConnection.shared.meetings(from: from, to: to) }
+        return connection
     }()
 }

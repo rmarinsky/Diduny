@@ -226,7 +226,7 @@
 "Connect your calendars" = "Connect your calendars";
 "Connected meetings, clearer choices" = "Connected meetings, clearer choices";
 "Connecting" = "Connecting";
-"Connection restored. Looking for the approved calendar window…" = "Connection restored. Looking for the approved calendar window…";
+"Connection restored. Looking for the named calendar window…" = "Connection restored. Looking for the named calendar window…";
 "Connection saved · refreshes every minute while Diduny is running" = "Connection saved · refreshes every minute while Diduny is running";
 "Connection successful" = "Connection successful";
 "Connection was not created. %@ Select a calendar view with no event details open." = "Connection was not created. %@ Select a calendar view with no event details open.";
@@ -834,7 +834,7 @@
 "The batch and its recordings were left unchanged." = "The batch and its recordings were left unchanged.";
 "The browser did not confirm the window name (%@). No saved connection was created." = "The browser did not confirm the window name (%@). No saved connection was created.";
 "The calendar link could not be removed." = "The calendar link could not be removed.";
-"The calendar window or address changed. Reading stopped. Restore the tab or disconnect and reconnect the source." = "The calendar window or address changed. Reading stopped. Restore the tab or disconnect and reconnect the source.";
+"The named calendar window is not open. Restore that tab, or disconnect and connect the window again." = "The named calendar window is not open. Restore that tab, or disconnect and connect the window again.";
 "The current recording could not be linked. An existing meeting link was kept." = "The current recording could not be linked. An existing meeting link was kept.";
 "The deletion couldn't be completed safely. Review your Meetings library before trying again." = "The deletion couldn't be completed safely. Review your Meetings library before trying again.";
 "The interrupted WAV recording is too large to recover." = "The interrupted WAV recording is too large to recover.";
@@ -971,7 +971,9 @@
 "Voice notes" = "Voice notes";
 "Voice translation target: English" = "Voice translation target: English";
 "Voice → text" = "Voice → text";
-"Waiting for the approved window. %@ Saved consent remains active." = "Waiting for the approved window. %@ Saved consent remains active.";
+"%@ Saved consent remains active." = "%@ Saved consent remains active.";
+"List" = "List";
+"Calendar or list" = "Calendar or list";
 "WayForPay cancel failed" = "WayForPay cancel failed";
 "WebSocket error: %@" = "WebSocket error: %@";
 "Webex" = "Webex";

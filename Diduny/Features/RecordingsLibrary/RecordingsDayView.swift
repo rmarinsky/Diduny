@@ -55,17 +55,22 @@ struct RecordingsDayView<FileRow: View>: View {
                 ScrollViewReader { scroller in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        if day.isEmpty {
+                        if calendar.isDateInToday(selectedDay) || !day.items.isEmpty {
+                            if calendar.isDateInToday(selectedDay) {
+                                TimelineView(.periodic(from: .now, by: 30)) { context in
+                                    rail(width: proxy.size.width, now: context.date)
+                                }
+                            } else {
+                                rail(width: proxy.size.width, now: nil)
+                            }
+                        } else if day.files.isEmpty {
                             Text("No recordings or events on this day.")
                                 .font(DS.Font.callout)
                                 .foregroundStyle(DS.Palette.secondary)
                                 .padding(.vertical, DS.Space.xl)
                                 .padding(.horizontal, DS.Space.sm)
-                        } else {
-                            if !day.items.isEmpty {
-                                rail(width: proxy.size.width)
-                            }
-                            if !day.files.isEmpty {
+                        }
+                        if !day.files.isEmpty {
                                 Text("Files and links added this day")
                                     .font(.system(size: 11, weight: .semibold))
                                     .foregroundStyle(DS.Palette.secondary)
@@ -73,7 +78,6 @@ struct RecordingsDayView<FileRow: View>: View {
                                     .padding(.top, DS.Space.md)
                                     .padding(.bottom, DS.Space.xs)
                                 ForEach(day.files) { fileRow($0) }
-                            }
                         }
                     }
                     .padding(.bottom, DS.Space.sm)
@@ -88,8 +92,9 @@ struct RecordingsDayView<FileRow: View>: View {
                 }
                 }
             }
-            .onAppear { scrollToFirstItem() }
-            .onChange(of: calendar.startOfDay(for: selectedDay)) { scrollToFirstItem() }
+            .onAppear { scrollForDay() }
+            .onChange(of: calendar.startOfDay(for: selectedDay)) { scrollForDay() }
+            .onChange(of: day.items.isEmpty) { _, empty in if !empty { scrollForDay() } }
             .gesture(
                 MagnifyGesture()
                     .onChanged { value in
@@ -106,9 +111,21 @@ struct RecordingsDayView<FileRow: View>: View {
 
     private static var scrollMarkerID: String { "recordings.day.scrollTarget" }
 
-    private func scrollToFirstItem() {
-        guard let minute = RecordingsDayScroll.targetMinute(items: day.items, nowMinute: nil) else { return }
-        scroll(to: max(0, minute - 10), anchor: .top)
+    /// Today opens at the current time. Another day opens at its first block.
+    private func scrollForDay() {
+        let today = calendar.isDateInToday(selectedDay)
+        let now = today ? RecordingsDayScroll.minuteOfDay(Date(), calendar: calendar) : nil
+        guard let minute = RecordingsDayScroll.targetMinute(items: day.items, nowMinute: now) else { return }
+        let anchor: UnitPoint = today ? UnitPoint(x: 0, y: RecordingsDayScroll.nowAnchor) : .top
+        DispatchQueue.main.async { scroll(to: today ? minute : max(0, minute - 10), anchor: anchor) }
+    }
+
+    private func clock(_ minute: Double) -> String {
+        var parts = calendar.dateComponents([.year, .month, .day], from: selectedDay)
+        let total = Int(minute.rounded())
+        parts.hour = min(23, total / 60)
+        parts.minute = total % 60
+        return (calendar.date(from: parts) ?? Date()).formatted(date: .omitted, time: .shortened)
     }
 
     private func scroll(to minute: Double, anchor: UnitPoint) {
@@ -210,9 +227,10 @@ struct RecordingsDayView<FileRow: View>: View {
 
     // MARK: - Hour scale
 
-    private func rail(width: CGFloat) -> some View {
+    private func rail(width: CGFloat, now: Date?) -> some View {
         let railWidth = max(0, width - Self.railInset - 6)
-        let placement = RecordingsDayPlacement.place(day.items, hourHeight: zoom.hourHeight, width: railWidth)
+        let nowMinute = now.map { RecordingsDayScroll.minuteOfDay($0, calendar: calendar) }
+        let placement = RecordingsDayPlacement.place(day.items, hourHeight: zoom.hourHeight, width: railWidth, nowMinute: nowMinute)
         let byID = Dictionary(uniqueKeysWithValues: day.items.map { ($0.id, $0) })
         return ZStack(alignment: .topLeading) {
             ForEach(placement.hours, id: \.hour) { line in
@@ -244,6 +262,25 @@ struct RecordingsDayView<FileRow: View>: View {
                         .zIndex(expanded == nil ? 0 : 1)
                         .shadow(color: expanded == nil ? .clear : .black.opacity(0.18), radius: 8, y: 3)
                 }
+            }
+            if let nowMinute {
+                let y = RecordingsDayPlacement.y(nowMinute, startHour: placement.startHour, hourHeight: placement.hourHeight)
+                Rectangle()
+                    .fill(DS.Palette.accent)
+                    .frame(width: railWidth + Self.railInset, height: 2)
+                    .offset(y: y - 1)
+                    .zIndex(3)
+                    .accessibilityIdentifier("recordings.day.now")
+                    .accessibilityLabel(Text("Now"))
+                Text(clock(nowMinute))
+                    .font(.system(size: 10, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(DS.Palette.accentText)
+                    .padding(.horizontal, 4)
+                    .background(DS.Palette.accentFill, in: Capsule())
+                    .offset(x: 2, y: y - 8)
+                    .zIndex(4)
+                    .accessibilityHidden(true)
             }
             ForEach(placement.overflow, id: \.top) { more in
                 overflowChip(more.ids.compactMap { byID[$0] })

@@ -29,7 +29,7 @@ import SwiftUI
             saved = try store.load()
             if let saved {
                 connected = true; connectionKey = saved.windowName; session.connect(source: saved.windowName)
-                message = String(localized: "Connection restored. Looking for the approved calendar window…")
+                message = String(localized: "Connection restored. Looking for the named calendar window…")
             }
         } catch { message = String(localized: "Could not restore the connection. Reading is paused: \(error.localizedDescription)") }
         enabled = BrowserCalendarSetting.resolve(stored: settings.browserCalendarStored, hasSavedConnection: saved != nil)
@@ -94,7 +94,7 @@ import SwiftUI
             busy = false; access = nil
             switch outcome {
             case .success(let value): target = value.target; result = value; successes += 1; message = String(localized: "Background reading is active · next check in one minute")
-            case .failure(let error): target = nil; message = String(localized: "Waiting for the approved window. \(error.localizedDescription) Saved consent remains active.")
+            case .failure(let error): target = nil; message = String(localized: "\(error.localizedDescription) Saved consent remains active.")
             }
         }
     }
@@ -136,6 +136,14 @@ import SwiftUI
             target = nil; result = nil; lastAttempt = nil; successes = 0
         }
     }
+    /// Events from the last successful read whose times overlap the range. Empty until a read succeeds.
+    func meetings(from: Date, to: Date, calendar: Calendar = .current) -> [CalendarMeeting] {
+        guard enabled, let saved, let result else { return [] }
+        let source = CalendarPage.provider(for: saved.calendarURL) == .google ? "Google Calendar" : "Outlook"
+        return BrowserCalendarMeetings.make(events: result.snapshot.events, windowName: saved.windowName,
+                                            sourceTitle: source, from: from, to: to, calendar: calendar)
+    }
+
     func stop() {
         access?.cancel(); session.disconnect(); timer?.invalidate()
         if let observer { NSWorkspace.shared.notificationCenter.removeObserver(observer) }

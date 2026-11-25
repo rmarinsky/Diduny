@@ -226,7 +226,7 @@
 "Connect your calendars" = "Під’єднати ваші календарі";
 "Connected meetings, clearer choices" = "Зустрічі поруч, вибір зрозумілий";
 "Connecting" = "Підключення";
-"Connection restored. Looking for the approved calendar window…" = "Підключення збережене. Шукаємо погоджене вікно календаря…";
+"Connection restored. Looking for the named calendar window…" = "Підключення збережене. Шукаємо іменоване вікно календаря…";
 "Connection saved · refreshes every minute while Diduny is running" = "Підключення збережено · оновлення щохвилини, поки працює Diduny";
 "Connection successful" = "З’єднання встановлено";
 "Connection was not created. %@ Select a calendar view with no event details open." = "Підключення не створено. %@ Виберіть календарний вигляд без відкритих деталей події.";
@@ -834,7 +834,7 @@
 "The batch and its recordings were left unchanged." = "Пакет і його записи залишено без змін.";
 "The browser did not confirm the window name (%@). No saved connection was created." = "Браузер не підтвердив назву вікна (%@). Збережене підключення не створено.";
 "The calendar link could not be removed." = "Не вдалося видалити посилання на календар.";
-"The calendar window or address changed. Reading stopped. Restore the tab or disconnect and reconnect the source." = "Вікно або адреса календаря змінилися. Читання зупинено. Поверніть вкладку або від’єднайте джерело й підключіть знову.";
+"The named calendar window is not open. Restore that tab, or disconnect and connect the window again." = "Іменоване вікно календаря не відкрите. Поверніть ту вкладку або від’єднайте джерело й підключіть вікно знову.";
 "The current recording could not be linked. An existing meeting link was kept." = "Не вдалося пов’язати поточний запис. Попереднє посилання на зустріч збережено.";
 "The deletion couldn't be completed safely. Review your Meetings library before trying again." = "Не вдалося безпечно завершити видалення. Перевірте бібліотеку зустрічей, перш ніж повторити спробу.";
 "The interrupted WAV recording is too large to recover." = "Перерваний WAV-запис завеликий для відновлення.";
@@ -971,7 +971,9 @@
 "Voice notes" = "Голосові нотатки";
 "Voice translation target: English" = "Мова голосового перекладу: англійська";
 "Voice → text" = "Голос → текст";
-"Waiting for the approved window. %@ Saved consent remains active." = "Чекаємо погоджене вікно. %@ Збережена згода залишається чинною.";
+"%@ Saved consent remains active." = "%@ Збережена згода залишається чинною.";
+"List" = "Список";
+"Calendar or list" = "Календар або список";
 "WayForPay cancel failed" = "Не вдалося скасувати поновлення через WayForPay. Повторіть спробу або зверніться до підтримки.";
 "WebSocket error: %@" = "Помилка WebSocket: %@";
 "Webex" = "Webex";

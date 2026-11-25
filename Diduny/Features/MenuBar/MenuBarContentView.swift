@@ -159,8 +159,8 @@ private struct StatusItemLabel: View {
 
     func calendarItems() -> [NSMenuItem] {
         let configuration = connection.configuration
-        guard configuration.connected else { return [] }
         let meetings = connection.agendaMeetings.filter { configuration.showWithoutLink || $0.meetingURL != nil }
+        guard configuration.connected || !meetings.isEmpty else { return [] }
         let timeline = CalendarTimeline(meetings: meetings, now: now)
         var items = [hosted(size: CalendarTimelineView.size(timeline)) { close in
             CalendarTimelineView(timeline: timeline, hideNames: configuration.hideNames,

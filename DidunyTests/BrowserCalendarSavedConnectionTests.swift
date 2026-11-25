@@ -40,6 +40,16 @@ final class SavedConnectionTests: XCTestCase {
         XCTAssertNil(saved.matchingCandidate(urls: [url], profiles: ["Work"], windowTitles: ["Calendar - Google Chrome – Work"]))
         XCTAssertEqual(saved.matchingCandidate(urls: [url], profiles: ["Work"], windowTitles: [saved.windowName + " - Google Chrome – Work"]), 0)
         XCTAssertNil(saved.matchingCandidate(urls: [url], profiles: ["Work"], windowTitles: ["Other " + saved.windowName]))
+        let week = URL(string: "https://outlook.cloud.microsoft/calendar/view/week")!
+        let outlook = SavedConnection(browserID: "com.microsoft.edgemac", profileName: "Work", calendarURL: week)
+        let workweek = URL(string: "https://outlook.cloud.microsoft/calendar/view/workweek/")!
+        let item = URL(string: "https://outlook.cloud.microsoft/calendar/item/abc")!
+        XCTAssertTrue(SavedConnection.sameCalendar(week, workweek))
+        XCTAssertTrue(SavedConnection.sameCalendar(week, item))
+        XCTAssertEqual(outlook.matchingCandidate(urls: [workweek], profiles: ["Work"], windowTitles: [outlook.windowName]), 0)
+        XCTAssertFalse(SavedConnection.sameCalendar(week, URL(string: "https://outlook.cloud.microsoft/mail/")!))
+        XCTAssertFalse(SavedConnection.sameCalendar(week, URL(string: "https://outlook.office.com/calendar/view/week")!))
+        XCTAssertTrue(SavedConnection.sameCalendar(url, URL(string: "https://calendar.google.com/calendar/u/0/r/week")!))
         XCTAssertThrowsError(try SavedConnection(browserID: "com.google.Chrome", profileName: "Work", calendarURL: URL(string: "https://calendar.google.com/calendar/u/0/r?eid=private")!).validate())
     }
 }

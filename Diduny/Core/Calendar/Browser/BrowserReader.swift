@@ -27,7 +27,7 @@ final class BrowserReader {
             case .permission: return String(localized: "Allow Diduny Accessibility access in System Settings, then retry reading.")
             case .closed: return String(localized: "Open the selected browser and select its calendar tab.")
             case .noPage: return String(localized: "Could not read the active page. Open the calendar in the selected browser.")
-            case .changed: return String(localized: "The calendar window or address changed. Reading stopped. Restore the tab or disconnect and reconnect the source.")
+            case .changed: return String(localized: "The named calendar window is not open. Restore that tab, or disconnect and connect the window again.")
             }
         }
     }
@@ -71,8 +71,8 @@ final class BrowserReader {
         // Discover only the selected window's web area. Do not read text before validating its URL.
         guard let page = findPage(window), let url = pageURL(page) else { throw Failure.noPage }
         guard CalendarPage.provider(for: url) != nil else { throw CalendarReadError.wrongPage }
-        if let target, target.url != url { throw Failure.changed }
-        if let saved, saved.calendarURL != url { throw Failure.changed }
+        if let target, !SavedConnection.sameCalendar(target.url, url) { throw Failure.changed }
+        if let saved, !SavedConnection.sameCalendar(saved.calendarURL, url) { throw Failure.changed }
         var stack: [(AXUIElement, Int)] = [(page, 0)]
         var nodes: [PageNode] = []
         var count = 0, candidates = 0, incomplete = false
