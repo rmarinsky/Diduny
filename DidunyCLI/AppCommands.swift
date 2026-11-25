@@ -202,6 +202,8 @@ enum TypingCommand {
                     packet["vocabulary"] = saved.terms
                     packet["rules"] = saved.rules.map { ["from": $0.from, "to": $0.to] }
                     packet["projects"] = libraryContext.projects
+                    packet["people"] = libraryContext.people
+                    packet["tags"] = libraryContext.tags
                     packet["pending"] = extras.pending.map(Self.pendingJSON)
                     packet["ignored"] = extras.ignored
                     packet["removedAuto"] = extras.removedAuto
@@ -222,6 +224,8 @@ enum TypingCommand {
                 lines.append("Vocabulary: " + (saved.terms.isEmpty ? "(none)" : saved.terms.joined(separator: ", ")))
                 lines.append("Rules: " + (saved.rules.isEmpty ? "(none)" : saved.rules.map { "\($0.from) → \($0.to)" }.joined(separator: ", ")))
                 lines.append("Projects: " + (libraryContext.projects.isEmpty ? "(none)" : libraryContext.projects.joined(separator: ", ")))
+                lines.append("People: " + (libraryContext.people.isEmpty ? "(none)" : libraryContext.people.joined(separator: ", ")))
+                lines.append("Tags: " + (libraryContext.tags.isEmpty ? "(none)" : libraryContext.tags.joined(separator: ", ")))
                 let pending = extras.pending.map(Self.pendingText)
                 lines.append("Pending: " + (pending.isEmpty ? "(none)" : pending.joined(separator: "; ")))
                 lines.append("\(pairs.count - shown.count) other pairs are one-offs, often undone, cut off, or already saved.")
@@ -233,20 +237,25 @@ enum TypingCommand {
         }
     }
 
-    private static func recordingsContext(_ library: Library) -> (blobs: [String], projects: [String]) {
+    private static func recordingsContext(_ library: Library) -> (blobs: [String], projects: [String], people: [String], tags: [String]) {
         let recordings = (try? library.load()) ?? []
         var blobs: [String] = []
         var projects = Set<String>()
+        var people = Set<String>()
+        var tags = Set<String>()
         for recording in recordings {
             if let project = recording.project, !project.isEmpty {
                 projects.insert(project)
                 blobs.append(project)
             }
+            for tag in recording.tags ?? [] where !tag.isEmpty { tags.insert(tag) }
+            for person in recording.allPeople where !person.isEmpty { people.insert(person) }
             blobs.append(contentsOf: recording.tags ?? [])
             blobs.append(contentsOf: recording.allPeople)
             blobs.append(recording.displayTitle)
         }
-        return (blobs, projects.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending })
+        let sort: (String, String) -> Bool = { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        return (blobs, projects.sorted(by: sort), people.sorted(by: sort), tags.sorted(by: sort))
     }
 
     private static func eventJSON(_ event: TypingEvent) -> [String: Any] {

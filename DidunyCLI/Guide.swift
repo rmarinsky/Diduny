@@ -98,7 +98,7 @@ enum Guide {
 
         - `\(command) typing review --since 30d --json` is the packet. It has each mistype pair
           (what was typed, what it became, counts, days, undos, which app), the current vocabulary,
-          the saved replacements, project names, and the pending list. It does not include transcripts.
+          the saved replacements, project names, people, tags, and the pending list. It does not include transcripts.
         - `\(command) typing list` is the raw rows. `\(command) typing summary` is the pairs alone.
         - Give each pair one label: a layout rule, a vocabulary word, or leave it. `suggestion` is a
           starting label, not the decision. `rule` is a stable fix that was not undone. `vocabulary`
