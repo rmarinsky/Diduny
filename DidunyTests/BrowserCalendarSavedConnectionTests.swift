@@ -16,6 +16,20 @@ final class SavedConnectionTests: XCTestCase {
         try store.clear()
         XCTAssertNil(try ConnectionStore(directory: dir).load())
     }
+    func testLastReadMeetingsSurviveANewStoreAndDisconnectRemovesThem() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ConnectionStore(directory: dir)
+        let meeting = CalendarMeeting(id: "browser:window:1:Saqara", calendarID: "browser:window", title: "Saqara",
+                                      start: Date(timeIntervalSince1970: 1_000), end: Date(timeIntervalSince1970: 2_000))
+        XCTAssertEqual(try store.loadMeetings(), [])
+        try store.saveMeetings([meeting])
+        XCTAssertEqual(try ConnectionStore(directory: dir).loadMeetings(), [meeting])
+        XCTAssertEqual((try FileManager.default.attributesOfItem(atPath: store.meetingsFile.path)[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+        try store.clear()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.meetingsFile.path))
+        XCTAssertEqual(try store.loadMeetings(), [])
+    }
     func testOnlyOneExactCalendarAndProfileMayResume() {
         let saved = SavedConnection(browserID: "com.google.Chrome", profileName: "Work", calendarURL: url)
         XCTAssertEqual(saved.matchingCandidate(urls: [url, url], profiles: ["Personal", "Work"], windowTitles: [saved.windowName, saved.windowName]), 1)

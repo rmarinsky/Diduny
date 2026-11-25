@@ -47,7 +47,11 @@ public struct SavedConnection: Codable, Equatable, Sendable {
 
 public struct ConnectionStore {
     public let file: URL
-    public init(directory: URL) { file = directory.appendingPathComponent("connection.json") }
+    public let meetingsFile: URL
+    public init(directory: URL) {
+        file = directory.appendingPathComponent("connection.json")
+        meetingsFile = directory.appendingPathComponent("meetings.json")
+    }
     public func load() throws -> SavedConnection? {
         guard FileManager.default.fileExists(atPath: file.path) else { return nil }
         let saved = try JSONDecoder().decode(SavedConnection.self, from: Data(contentsOf: file))
@@ -60,7 +64,18 @@ public struct ConnectionStore {
         try JSONEncoder().encode(connection).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
     }
+    /// The last browser meetings. Empty when this connection has not had a successful read.
+    func loadMeetings() throws -> [CalendarMeeting] {
+        guard FileManager.default.fileExists(atPath: meetingsFile.path) else { return [] }
+        return try JSONDecoder().decode([CalendarMeeting].self, from: Data(contentsOf: meetingsFile))
+    }
+    func saveMeetings(_ meetings: [CalendarMeeting]) throws {
+        try FileManager.default.createDirectory(at: meetingsFile.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try JSONEncoder().encode(meetings).write(to: meetingsFile, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: meetingsFile.path)
+    }
     public func clear() throws {
         if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+        if FileManager.default.fileExists(atPath: meetingsFile.path) { try FileManager.default.removeItem(at: meetingsFile) }
     }
 }

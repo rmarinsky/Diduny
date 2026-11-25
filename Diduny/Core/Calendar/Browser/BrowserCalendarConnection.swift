@@ -20,7 +20,10 @@ import SwiftUI
     private var observer: NSObjectProtocol?
     private var connectionKey: String?
     private var memory = BrowserEventMemory()
+    private var launchRetries = 0
     private let settings: SettingsStorage
+    /// A cold accessibility walk of a week view outlasts the 12-second budget used to name a window.
+    private static let pageReadSeconds = 45
 
     init(directory: URL? = nil, settings: SettingsStorage = .shared) {
         self.settings = settings
@@ -30,6 +33,7 @@ import SwiftUI
             saved = try store.load()
             if let saved {
                 connected = true; connectionKey = saved.windowName; session.connect(source: saved.windowName)
+                if let stored = try? store.loadMeetings() { memory.restore(stored) }
                 message = String(localized: "Connection restored. Looking for the named calendar window…")
             }
         } catch { message = String(localized: "Could not restore the connection. Reading is paused: \(error.localizedDescription)") }
@@ -48,7 +52,7 @@ import SwiftUI
         let key = UUID().uuidString
         connectionKey = key; session.connect(source: key)
         guard let request = session.begin(source: key, now: ProcessInfo.processInfo.systemUptime, force: true) else { return }
-        let readAccess = ReadAccess(); access = readAccess; busy = true; lastAttempt = Date()
+        let readAccess = ReadAccess(seconds: Self.pageReadSeconds); access = readAccess; busy = true; lastAttempt = Date()
         message = String(localized: "Checking the profile and naming the calendar window…")
         Task {
             let outcome = await Task.detached(priority: .userInitiated) {
@@ -56,7 +60,7 @@ import SwiftUI
                     let value = try BrowserReader(access: readAccess).read(bundleID: browserID, approved: true, profileName: profileName)
                     let connection = SavedConnection(browserID: browserID, profileName: profileName, calendarURL: value.target.url)
                     try connection.validate()
-                    try NativeProfiles(access: readAccess).nameWindow(bundleID: browserID, window: value.target.window, name: connection.windowName)
+                    try NativeProfiles(access: ReadAccess()).nameWindow(bundleID: browserID, window: value.target.window, name: connection.windowName)
                     return (value, connection)
                 }
             }.value
@@ -86,7 +90,7 @@ import SwiftUI
     func read(force: Bool = false) {
         guard enabled, connected, let saved, let key = connectionKey,
               let request = session.begin(source: key, now: ProcessInfo.processInfo.systemUptime, force: force) else { return }
-        let bound = target, readAccess = ReadAccess()
+        let bound = target, readAccess = ReadAccess(seconds: Self.pageReadSeconds)
         access = readAccess; busy = true; lastAttempt = Date()
         Task {
             let outcome = await Task.detached(priority: .utility) {
@@ -98,7 +102,11 @@ import SwiftUI
             case .success(let value):
                 target = value.target; result = value; successes += 1; remember(value)
                 message = String(localized: "Background reading is active · next check in one minute")
-            case .failure(let error): target = nil; message = String(localized: "\(error.localizedDescription) Saved consent remains active.")
+            case .failure(let error):
+                target = nil
+                message = String(localized: "\(error.localizedDescription) Saved consent remains active.")
+                // The named Edge window is still the session. Try again on the next timer tick instead of waiting a minute.
+                if successes == 0, launchRetries < 15 { launchRetries += 1; session.reopenInterval() }
             }
         }
     }
@@ -134,6 +142,8 @@ import SwiftUI
         enabled = on
         if on {
             if connected, let connectionKey { session.connect(source: connectionKey) }
+            if let stored = try? store.loadMeetings() { memory.restore(stored) }
+            launchRetries = 0
             read(force: true)
         } else {
             access?.cancel(); access = nil; session.disconnect(); busy = false
@@ -152,7 +162,8 @@ import SwiftUI
         let source = CalendarPage.provider(for: saved.calendarURL) == .google ? "Google Calendar" : "Outlook"
         let parsed = BrowserCalendarMeetings.make(events: value.snapshot.events, windowName: saved.windowName,
                                                   sourceTitle: source, from: .distantPast, to: .distantFuture)
-        memory.replace(parsed)
+        if value.incomplete { memory.add(parsed) } else { memory.replace(parsed) }
+        try? store.saveMeetings(memory.stored())
     }
 
     func stop() {

@@ -14,6 +14,15 @@ final class SyncSessionTests: XCTestCase {
         XCTAssertNil(session.begin(source: "window-a", now: 59))
         XCTAssertNotNil(session.begin(source: "window-a", now: 61))
     }
+    func testAMissedWindowCanBeReadAgainBeforeTheMinuteElapses() {
+        var session = SyncSession()
+        session.connect(source: "window-a")
+        let first = session.begin(source: "window-a", now: 0)!
+        XCTAssertTrue(session.finish(first, now: 1))
+        XCTAssertNil(session.begin(source: "window-a", now: 10))
+        session.reopenInterval()
+        XCTAssertNotNil(session.begin(source: "window-a", now: 10))
+    }
     func testDisconnectRejectsLateResultsAndReconnectDoesNotReuseOldRead() {
         var session = SyncSession()
         session.connect(source: "window-a")

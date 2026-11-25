@@ -76,16 +76,24 @@ final class BrowserReader {
         var stack: [(AXUIElement, Int)] = [(page, 0)]
         var nodes: [PageNode] = []
         var count = 0, candidates = 0, incomplete = false
+        var walkError: Error?
+        var stoppedEarly = false
         while let (node, depth) = stack.popLast() {
-            try access.check()
+            do { try access.check() } catch is CancellationError { throw CancellationError() } catch {
+                walkError = error
+                incomplete = true
+                stoppedEarly = true
+                break
+            }
             guard count < 12000 else { incomplete = true; break }
             count += 1
             let role = string(node, kAXRoleAttribute) ?? ""
             // Embedded documents are excluded: their contents are not the approved top-level page.
             if role == "AXWebArea", !CFEqual(node, page) { continue }
             if role == kAXButtonRole || role == "AXLink" {
-                guard pageURL(page) == url else { throw Failure.changed }
-
+                // A missing URL here is the read budget running out, not a navigation. Keep the rows already collected.
+                guard let live = pageURL(page) else { incomplete = true; stoppedEarly = true; break }
+                guard live == url else { throw Failure.changed }
                 let label = string(node, kAXDescriptionAttribute) ?? string(node, kAXTitleAttribute) ?? ""
                 if role == kAXButtonRole, label.contains(":") { candidates += 1 }
                 nodes.append(PageNode(role: role, label: label, url: role == "AXLink" ? pageURL(node) : nil))
@@ -95,11 +103,14 @@ final class BrowserReader {
                 stack.append(contentsOf: children.reversed().map { ($0, depth + 1) })
             }
         }
-        guard let currentPage = findPage(window), CFEqual(currentPage, page), pageURL(currentPage) == url else { throw Failure.changed }
-        if let expected = saved?.profileName ?? profileName {
-            guard NativeProfiles(access: access).profile(in: window, names: [expected]) == expected else { throw Failure.changed }
+        if nodes.isEmpty, let walkError { throw walkError }
+        if !stoppedEarly {
+            guard let currentPage = findPage(window), CFEqual(currentPage, page), pageURL(currentPage) == url else { throw Failure.changed }
+            if let expected = saved?.profileName ?? profileName {
+                guard NativeProfiles(access: access).profile(in: window, names: [expected]) == expected else { throw Failure.changed }
+            }
+            try access.check()
         }
-        try access.check()
         let snapshot = try CalendarExtraction.read(approved: approved, pageURL: url) { nodes }
         return BrowserReadResult(target: BrowserTarget(window: window, pid: app.processIdentifier, url: url), snapshot: snapshot, inspectedNodes: count, eventCandidates: candidates, incomplete: incomplete || incompleteAttributes)
     }

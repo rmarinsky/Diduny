@@ -639,7 +639,7 @@
 "Read now" = "Прочитати зараз";
 "Read this browser calendar" = "Читати календар цього браузера";
 "Reading stopped, but saved consent could not be removed. It may return after restart. Retry disconnecting: %@" = "Читання зупинено, але збережену згоду не вдалося видалити. Після перезапуску вона може відновитися. Повторіть від’єднання: %@";
-"Reading took more than 12 seconds. Retry when the page has loaded." = "Читання зайняло понад 12 секунд. Спробуйте ще раз, коли сторінка завантажиться.";
+"Reading took more than %lld seconds. Retry when the page has loaded." = "Читання зайняло понад %lld секунд. Спробуйте ще раз, коли сторінка завантажиться.";
 "Real-time connection failed: %@" = "Не вдалося встановити з’єднання наживо: %@";
 "Recent recordings" = "Останні записи";
 "Reconnecting" = "Повторне підключення";

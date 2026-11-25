@@ -162,6 +162,23 @@ struct BrowserEventMemory: Equatable {
         }
     }
 
+    /// A read that ran out of time adds the rows it reached and leaves the rest in place.
+    mutating func add(_ meetings: [CalendarMeeting], calendar: Calendar = .current) {
+        for (day, rows) in Dictionary(grouping: meetings, by: { calendar.startOfDay(for: $0.start) }) {
+            var existing = byDay[day] ?? []
+            let seen = Set(existing.map(\.id))
+            existing.append(contentsOf: rows.filter { !seen.contains($0.id) })
+            byDay[day] = existing.sorted { $0.start == $1.start ? $0.title < $1.title : $0.start < $1.start }
+        }
+    }
+
+    mutating func restore(_ meetings: [CalendarMeeting], calendar: Calendar = .current) {
+        byDay.removeAll()
+        replace(meetings, calendar: calendar)
+    }
+
+    func stored() -> [CalendarMeeting] { overlapping(from: .distantPast, to: .distantFuture) }
+
     func overlapping(from: Date, to: Date) -> [CalendarMeeting] {
         byDay.values.flatMap { $0 }.filter { $0.start < to && $0.end > from }
             .sorted { $0.start == $1.start ? $0.title < $1.title : $0.start < $1.start }

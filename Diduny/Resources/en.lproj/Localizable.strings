@@ -639,7 +639,7 @@
 "Read now" = "Read now";
 "Read this browser calendar" = "Read this browser calendar";
 "Reading stopped, but saved consent could not be removed. It may return after restart. Retry disconnecting: %@" = "Reading stopped, but saved consent could not be removed. It may return after restart. Retry disconnecting: %@";
-"Reading took more than 12 seconds. Retry when the page has loaded." = "Reading took more than 12 seconds. Retry when the page has loaded.";
+"Reading took more than %lld seconds. Retry when the page has loaded." = "Reading took more than %lld seconds. Retry when the page has loaded.";
 "Real-time connection failed: %@" = "Real-time connection failed: %@";
 "Recent recordings" = "Recent recordings";
 "Reconnecting" = "Reconnecting";
