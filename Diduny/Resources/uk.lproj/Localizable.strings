@@ -571,6 +571,8 @@
 "Open meeting link" = "Відкрити посилання зустрічі";
 "Open the selected browser and select its calendar tab." = "Відкрийте вибраний браузер і зробіть вкладку календаря активною.";
 "Opening the calendar in the selected profile. Connect its window after loading." = "Календар відкривається у вибраному профілі. Підключіть його вікно після завантаження.";
+"Opening the saved calendar page." = "Відкриваю збережену сторінку календаря.";
+"The saved browser profile is no longer on this Mac. Saved consent remains active." = "Збереженого профілю браузера вже немає на цьому Mac. Збережена згода лишається чинною.";
 "Opens the setup guide in a separate window" = "Відкриває початкове налаштування в окремому вікні";
 "Or use Menu → Transcribe Meeting" = "Або виберіть у меню «Транскрибувати зустріч»";
 "Original %@" = "Оригінал %@";

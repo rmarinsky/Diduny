@@ -21,6 +21,9 @@ import SwiftUI
     private var connectionKey: String?
     private var memory = BrowserEventMemory()
     private var launchRetries = 0
+    private var reopening = false
+    private var didReopen = false
+    private var adoptRetries = 0
     private let settings: SettingsStorage
     /// A cold accessibility walk of a week view outlasts the 12-second budget used to name a window.
     private static let pageReadSeconds = 45
@@ -88,26 +91,93 @@ import SwiftUI
         catch { message = String(localized: "Reading stopped, but saved consent could not be removed. It may return after restart. Retry disconnecting: \(error.localizedDescription)") }
     }
     func read(force: Bool = false) {
+        guard !reopening else { return }
+        if force { didReopen = false }
+        performRead(force: force, adoptUnnamed: false)
+    }
+    private func performRead(force: Bool, adoptUnnamed: Bool) {
         guard enabled, connected, let saved, let key = connectionKey,
               let request = session.begin(source: key, now: ProcessInfo.processInfo.systemUptime, force: force) else { return }
         let bound = target, readAccess = ReadAccess(seconds: Self.pageReadSeconds)
         access = readAccess; busy = true; lastAttempt = Date()
         Task {
             let outcome = await Task.detached(priority: .utility) {
-                Result { try BrowserReader(access: readAccess).read(bundleID: saved.browserID, approved: true, target: bound, saved: saved) }
+                Result { () -> BrowserReadResult in
+                    let value = try BrowserReader(access: readAccess).read(bundleID: saved.browserID, approved: true, target: bound, saved: saved, adoptUnnamed: adoptUnnamed)
+                    if adoptUnnamed {
+                        try? NativeProfiles(access: ReadAccess()).nameWindow(bundleID: saved.browserID, window: value.target.window, name: saved.windowName)
+                    }
+                    return value
+                }
             }.value
             guard session.finish(request, now: ProcessInfo.processInfo.systemUptime) else { return }
             busy = false; access = nil
             switch outcome {
             case .success(let value):
+                didReopen = false
+                adoptRetries = 0
                 target = value.target; result = value; successes += 1; remember(value)
                 message = String(localized: "Background reading is active · next check in one minute")
             case .failure(let error):
                 target = nil
+                if adoptUnnamed, adoptRetries < 6 {
+                    adoptRetries += 1
+                    message = String(localized: "Opening the saved calendar page.")
+                    Task {
+                        try? await Task.sleep(for: .seconds(2))
+                        performRead(force: true, adoptUnnamed: true)
+                    }
+                    return
+                }
+                if !adoptUnnamed, !didReopen, Self.missingWindow(error) {
+                    didReopen = true
+                    reopenSavedCalendar()
+                    return
+                }
                 message = String(localized: "\(error.localizedDescription) Saved consent remains active.")
                 // The named Edge window is still the session. Try again on the next timer tick instead of waiting a minute.
                 if successes == 0, launchRetries < 15 { launchRetries += 1; session.reopenInterval() }
             }
+        }
+    }
+    /// The named window is gone after a restart or an update. Open the saved profile and calendar, then read that page.
+    private func reopenSavedCalendar() {
+        guard enabled, connected, let saved, !reopening else { return }
+        reopening = true
+        adoptRetries = 0
+        message = String(localized: "Opening the saved calendar page.")
+        Task {
+            let browsers = InstalledBrowser.discover()
+            guard let browser = browsers.first(where: { $0.id == saved.browserID }),
+                  let profile = BrowserProfile.named(saved.profileName, in: browser.profiles) else {
+                reopening = false
+                message = String(localized: "The saved browser profile is no longer on this Mac. Saved consent remains active.")
+                return
+            }
+            let opened = await Task.detached { () -> Bool in
+                let access = ReadAccess()
+                if profile.id.hasPrefix("menu:") {
+                    try? NativeProfiles(access: access).select(bundleID: browser.id, profile: String(profile.id.dropFirst(5)))
+                }
+                return (try? await MainActor.run {
+                    try browser.openCalendar(saved.calendarURL, profile: profile.id.hasPrefix("menu:") ? "" : profile.id)
+                }) != nil
+            }.value
+            guard opened else {
+                reopening = false
+                message = String(localized: "The saved browser profile is no longer on this Mac. Saved consent remains active.")
+                return
+            }
+            try? await Task.sleep(for: .seconds(3))
+            performRead(force: true, adoptUnnamed: true)
+            reopening = false
+        }
+    }
+    private static func missingWindow(_ error: Error) -> Bool {
+        guard let failure = error as? BrowserReader.Failure else { return false }
+        switch failure {
+        case .changed, .closed: return true
+        case .permission, .noPage: return false
         }
     }
     func openCalendar(browser: InstalledBrowser, profileID: String, url: URL) {

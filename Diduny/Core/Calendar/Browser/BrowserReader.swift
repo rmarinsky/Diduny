@@ -32,7 +32,7 @@ final class BrowserReader {
         }
     }
 
-    func read(bundleID: String, approved: Bool, target: BrowserTarget? = nil, profileName: String? = nil, saved: SavedConnection? = nil) throws -> BrowserReadResult {
+    func read(bundleID: String, approved: Bool, target: BrowserTarget? = nil, profileName: String? = nil, saved: SavedConnection? = nil, adoptUnnamed: Bool = false) throws -> BrowserReadResult {
         guard approved else { throw CalendarReadError.consentRequired }
         try access.check()
         guard AXIsProcessTrusted() else { throw Failure.permission }
@@ -40,6 +40,7 @@ final class BrowserReader {
         let root = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(root, 1)
         let window: AXUIElement
+        var adoptedUnnamed = false
         if let target {
             guard target.pid == app.processIdentifier,
                   let windows = attribute(root, kAXWindowsAttribute) as? [AXUIElement],
@@ -55,8 +56,14 @@ final class BrowserReader {
                       let page = findPage(candidate), let url = pageURL(page) else { continue }
                 candidates.append((candidate, url, chrome.profile(in: candidate, names: [saved.profileName]), title))
             }
-            guard let index = saved.matchingCandidate(urls: candidates.map { $0.1 }, profiles: candidates.map { $0.2 }, windowTitles: candidates.map { $0.3 }) else { throw Failure.changed }
-            window = candidates[index].0
+            if let index = saved.matchingCandidate(urls: candidates.map { $0.1 }, profiles: candidates.map { $0.2 }, windowTitles: candidates.map { $0.3 }) {
+                window = candidates[index].0
+            } else if adoptUnnamed, let adopted = unnamedCalendar(windows, saved: saved, chrome: chrome) {
+                window = adopted
+                adoptedUnnamed = true
+            } else {
+                throw Failure.changed
+            }
         } else {
             guard let selected = element(root, kAXFocusedWindowAttribute) ?? element(root, kAXMainWindowAttribute) else { throw Failure.noPage }
             window = selected
@@ -64,7 +71,7 @@ final class BrowserReader {
         if let expected = saved?.profileName ?? profileName, !profileAllows(window, expected: expected, required: saved == nil) {
             throw NativeProfiles.Failure.mismatch
         }
-        if let saved {
+        if let saved, !adoptedUnnamed {
             try saved.validate()
             guard SavedConnection.matchesWindowTitle(string(window, kAXTitleAttribute) ?? "", name: saved.windowName) else { throw Failure.changed }
         }
@@ -113,6 +120,18 @@ final class BrowserReader {
         }
         let snapshot = try CalendarExtraction.read(approved: approved, pageURL: url) { nodes }
         return BrowserReadResult(target: BrowserTarget(window: window, pid: app.processIdentifier, url: url), snapshot: snapshot, inspectedNodes: count, eventCandidates: candidates, incomplete: incomplete || incompleteAttributes)
+    }
+
+    /// The calendar page we just opened does not have the saved window name yet. Use it only when it is the only match.
+    private func unnamedCalendar(_ windows: [AXUIElement], saved: SavedConnection, chrome: NativeProfiles) -> AXUIElement? {
+        var matches: [AXUIElement] = []
+        for candidate in windows {
+            guard let page = findPage(candidate), let url = pageURL(page), SavedConnection.sameCalendar(saved.calendarURL, url) else { continue }
+            let profile = chrome.profile(in: candidate, names: [saved.profileName])
+            guard profile == nil || profile == saved.profileName else { continue }
+            matches.append(candidate)
+        }
+        return matches.count == 1 ? matches[0] : nil
     }
 
     /// A restored window is already named. An unreadable profile control does not make it a different window.
