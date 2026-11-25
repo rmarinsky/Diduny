@@ -40,4 +40,38 @@ final class CalendarExtractionTests: XCTestCase {
         XCTAssertEqual(result.events.first?.cancelled,true)
         XCTAssertEqual(result.meetingLinks.map(\.absoluteString),["https://teams.microsoft.com/meet/123?p=secret"])
     }
+
+    func testBrowserRowsStayBesideAForwardedCopyAtTheSameTime() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        let outlook = VisibleEvent(title: "Saqara Sync", displayedTime: "11:30 to 11:45", displayedDate: "Friday, October 16, 2026", cancelled: false)
+        let forwarded = VisibleEvent(title: "Velocity Build Showcase", displayedTime: "1:30 PM to 2:00 PM", displayedDate: "Friday, October 16, 2026", cancelled: false)
+        let google = VisibleEvent(title: "Planning, part 2", displayedTime: "17:00 – 18:30", displayedDate: "21 жовтня 2026", cancelled: false)
+        let day = calendar.date(from: DateComponents(year: 2026, month: 10, day: 16))!
+        let next = calendar.date(byAdding: .day, value: 1, to: day)!
+        let meetings = BrowserCalendarMeetings.make(events: [outlook, forwarded, google], windowName: "Diduny Calendar · test",
+                                                    sourceTitle: "Outlook", from: day, to: next, calendar: calendar)
+        XCTAssertEqual(meetings.map(\.title), ["Saqara Sync", "Velocity Build Showcase"])
+        XCTAssertEqual(calendar.component(.hour, from: meetings[0].start), 11)
+        XCTAssertEqual(calendar.component(.minute, from: meetings[0].end), 45)
+        XCTAssertEqual(calendar.component(.hour, from: meetings[1].start), 13)
+        let mac = CalendarMeeting(id: "mac", calendarID: "work", title: "FW: Velocity Build Showcase",
+                                  start: meetings[1].start, end: meetings[1].end)
+        let merged = CalendarMeetingMerge.merging([mac], with: meetings)
+        XCTAssertEqual(merged.map(\.title), ["FW: Velocity Build Showcase", "Saqara Sync", "Velocity Build Showcase"])
+        var memory = BrowserEventMemory()
+        memory.replace(meetings, calendar: calendar)
+        let tomorrow = BrowserCalendarMeetings.make(events: [google], windowName: "Diduny Calendar · test",
+                                                    sourceTitle: "Outlook", from: .distantPast, to: .distantFuture, calendar: calendar)
+        memory.replace(tomorrow, calendar: calendar)
+        let kept = memory.overlapping(from: day, to: next)
+        XCTAssertEqual(kept.map(\.title), ["Saqara Sync", "Velocity Build Showcase"])
+        let before = memory.stored().map(\.title)
+        memory.add([meetings[0]], calendar: calendar)
+        XCTAssertEqual(memory.stored().map(\.title), before)
+        let ukrainian = BrowserCalendarMeetings.range(dateText: google.displayedDate, timeText: google.displayedTime, calendar: calendar)
+        XCTAssertEqual(calendar.component(.day, from: ukrainian?.start ?? .distantPast), 21)
+        XCTAssertEqual(calendar.component(.hour, from: ukrainian?.start ?? .distantPast), 17)
+    }
 }

@@ -16,6 +16,10 @@ public struct BrowserProfile: Identifiable, Equatable, Sendable {
 }
 
 extension BrowserProfile {
+    public static func named(_ name: String, in profiles: [BrowserProfile]) -> BrowserProfile? {
+        let matches = profiles.filter { $0.name == name }
+        return matches.count == 1 ? matches[0] : nil
+    }
     public static func nativeMenu(items: [(String, String)]) -> [BrowserProfile] {
         let names = items.filter { $0.1 == "switchToProfileFromMenu:" && !$0.0.isEmpty }.map { $0.0 }
         return names.filter { name in names.filter { $0 == name }.count == 1 }.map { BrowserProfile(id: "menu:" + $0, name: $0) }

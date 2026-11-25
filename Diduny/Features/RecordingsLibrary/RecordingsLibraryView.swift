@@ -34,6 +34,21 @@ enum RecordingsInspectorSelection: Equatable {
     }
 }
 
+/// Calendar is the day scale. List is the same recording rows search already shows, across days.
+enum RecordingsPresentation: String, CaseIterable, Identifiable, Hashable {
+    case calendar
+    case list
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .calendar: String(localized: "Calendar")
+        case .list: String(localized: "List")
+        }
+    }
+}
+
 struct RecordingsLibraryView: View {
     @State var storage = RecordingsLibraryStorage.shared
     @State var batchStorage = TranscriptionBatchStorage.shared
@@ -42,6 +57,8 @@ struct RecordingsLibraryView: View {
     @State private var searchText = ""
     @State private var searchIndex: [UUID: String] = [:]
     @State var segment: RecordingsSegment = .all
+    @State var presentation: RecordingsPresentation = .calendar
+    @ObservedObject private var browserCalendar = BrowserCalendarConnection.shared
     /// Has Translation, YouTube and Batches, kept in the filter menu.
     @State var listFilter: RecordingTypeFilter?
     @State private var selectedCalendarIDs: Set<String> = []
@@ -120,9 +137,9 @@ struct RecordingsLibraryView: View {
         }
     }
 
-    /// Search and the menu filters list every matching recording, across days; otherwise the day is shown.
+    /// Search, the menu filters, and the list switch show every matching recording, across days.
     private var showsList: Bool {
-        !searchText.isEmpty || listFilter != nil
+        presentation == .list || !searchText.isEmpty || listFilter != nil
     }
 
     var recordingGroups: [RecordingsDayGroupInput] {
@@ -212,7 +229,7 @@ struct RecordingsLibraryView: View {
         .onChange(of: listFilter) { refreshDay() }
         .onChange(of: selectedCalendarIDs) { refreshDay() }
         .onChange(of: batchStorage.batches) { refreshDay() }
-        .task(id: Calendar.current.startOfDay(for: selectedDay)) { await loadDayEvents() }
+        .task(id: dayLoadID) { await loadDayEvents() }
         .onChange(of: MainWindowController.shared.requestedRecordingID) {
             openRequestedRecordingIfAvailable()
         }
@@ -327,6 +344,11 @@ struct RecordingsLibraryView: View {
         )
     }
 
+    private var dayLoadID: String {
+        let day = Calendar.current.startOfDay(for: selectedDay).timeIntervalSince1970
+        return "\(day)-\(browserCalendar.successes)"
+    }
+
     private func loadDayEvents() async {
         let start = Calendar.current.startOfDay(for: selectedDay)
         guard let end = Calendar.current.date(byAdding: .day, value: 1, to: start) else { return }
@@ -405,6 +427,18 @@ struct RecordingsLibraryView: View {
             .frame(height: 28)
             .frame(maxWidth: .infinity)
             .background(DS.Palette.box, in: RoundedRectangle(cornerRadius: DS.Radius.field, style: .continuous))
+
+            if listFilter?.showsBatches != true {
+                Picker("Calendar or list", selection: $presentation) {
+                    ForEach(RecordingsPresentation.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityIdentifier("recordings.presentation")
+            }
 
             if listFilter?.showsBatches != true, compact {
                 // Narrow column: the four segments become one picker, so nothing is cut off.
@@ -750,7 +784,7 @@ extension RecordingsSegment {
         switch self {
         case .all: "All"
         case .meetings: "Meetings"
-        case .notes: "Notes"
+        case .notes: "Dictations"
         case .filesAndLinks: "Files and links"
         }
     }
@@ -761,9 +795,14 @@ enum RecordingsPageLayout {
     /// The day column never gets narrower than this.
     static let minimumColumnWidth: CGFloat = 340
 
-    /// 400 below a 1280 window, 480 above, 560 from 1700. The window never resizes itself.
+    /// Outer width of the day column: the wide reading width plus the page insets. It does not grow past this.
+    static let timelineOuterMax = DS.Layout.wideColumnMaxWidth + DS.Layout.pagePadding * 2
+
+    /// 400 below a 1280 window, 480 above, 560 from 1700. Wider than the day column's cap, the inspector takes the rest.
     static func inspectorWidth(windowWidth: CGFloat) -> CGFloat {
-        windowWidth >= 1700 ? 560 : windowWidth >= 1280 ? 480 : 400
+        let minimum: CGFloat = windowWidth >= 1700 ? 560 : windowWidth >= 1280 ? 480 : 400
+        let remainder = windowWidth - DS.Layout.sidebarWidth - timelineOuterMax - 1
+        return max(minimum, remainder)
     }
 
     /// The page column beside the sidebar and, when open, the inspector and its divider.

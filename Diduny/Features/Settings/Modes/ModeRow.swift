@@ -59,6 +59,13 @@ struct ModeRow<Second: View>: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .accessibilityIdentifier("\(id).engine.caption")
+                if job == .meetingTranslation {
+                    Text("Only Diduny Cloud translates meetings live. Needs a subscription.")
+                        .font(DS.Font.meta)
+                        .foregroundStyle(DS.Palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("\(id).engine.note")
+                }
             }
             .frame(width: widths.engine, alignment: .leading)
 
@@ -91,7 +98,11 @@ struct ModeRow<Second: View>: View {
     @ViewBuilder private var engineField: some View {
         let segment = job == .meeting ? model.startsIn : nil
         let value = model.engineName(model.engine(for: job))
-        if model.isStatic(job: job, segment: segment) {
+        if job == .meeting {
+            PickerField(label: nil, value: value, identifier: "\(id).engine") {
+                model.meetingMenu()
+            } onPick: { model.pickMeeting($0) }
+        } else if model.isStatic(job: job, segment: segment) {
             PickerField(staticLabel: nil, value: value, identifier: "\(id).engine")
         } else {
             PickerField(label: nil, value: value, identifier: "\(id).engine") {

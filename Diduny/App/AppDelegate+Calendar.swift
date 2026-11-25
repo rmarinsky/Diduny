@@ -21,6 +21,7 @@ extension AppDelegate {
             Task { @MainActor in await self.calendarRecordingLinker.run(storage: .shared, connection: .shared) }
         }
         connection.onTick = { [weak self] in self?.offerStopIfLinkedMeetingEnded() }
+        connection.refreshBrowserCalendar = { BrowserCalendarConnection.shared.read() }
         connection.start()
         _ = BrowserCalendarConnection.shared
         calendarStoreObserver = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
@@ -105,9 +106,11 @@ extension AppDelegate {
         }
     }
 
-    /// Settings › Modes › Meeting "Starts in" and its engine (8A), unless the reminder picked one.
+    /// Settings › Modes › Meeting "From calendar", else Meeting's start (8A), unless the reminder picked one.
     func calendarStartRoute(localOverride: Bool?) -> MeetingStartRoute {
-        let startsIn = meetingStartRoute()
+        let modes = SettingsStorage.shared.modeDefaults
+        let startsIn = modes.calendarStart.map { meetingStartRoute(segment: $0.segment, override: modes.calendarSelection) }
+            ?? meetingStartRoute()
         let segment = RunTimeRouting.calendarSegment(localOverride: localOverride, startsIn: startsIn.segment,
                                                      showsThisMac: RunTimeRouting.calendarShowsThisMac(startsIn))
         return segment == startsIn.segment ? startsIn : meetingStartRoute(segment: segment)

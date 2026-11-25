@@ -46,7 +46,7 @@ struct RecordingNotesSection: View {
                     if NotesSettings.writer == .off {
                         Text("Choose who writes the notes in Notes settings.")
                             .font(DS.Font.callout).foregroundStyle(.secondary)
-                        Button("Open Notes settings") { MainWindowController.shared.showWindow(section: .meetings) }
+                        Button("Open Notes settings") { MainWindowController.shared.showMeetings(tab: .notes) }
                     } else {
                         Button("Write notes") { service.write(recording.id) }
                         TemplateMenu(title: "Template", recordingID: recording.id)
@@ -304,7 +304,7 @@ struct NotesView: View {
     }
 
     var body: some View {
-        PageScaffold(title: "Notes", scrolls: false, trailing: { SettingsPageButton(target: .meetings) }) {
+        PageScaffold(title: "Notes", scrolls: false, columnMaxWidth: .infinity, trailing: { SettingsPageButton(target: .meetings, meetingsTab: .notes) }) {
             VStack(alignment: .leading, spacing: DS.Space.md) {
                 NotesWorkStrip()
                 if store.notes.isEmpty, service.backfill == nil {
@@ -387,6 +387,7 @@ struct NotesView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 
@@ -450,7 +451,7 @@ private struct NotesEmptyState: View {
                 Text("Notes are a short record of a meeting: summary, decisions and who does what. Choose who writes them: a model on this Mac or an AI subscription you already have.")
                     .font(DS.Font.body).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Choose who writes notes") { MainWindowController.shared.showWindow(section: .meetings) }
+                Button("Choose who writes notes") { MainWindowController.shared.showMeetings(tab: .notes) }
                     .buttonStyle(.borderedProminent).tint(DS.Palette.accent)
                     .padding(.top, DS.Space.xs)
             } else if !waiting.isEmpty {

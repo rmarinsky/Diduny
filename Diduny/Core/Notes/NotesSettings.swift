@@ -203,8 +203,7 @@ enum NotesNoOwner: String, CaseIterable, Identifiable {
     }
 }
 
-/// Stored in UserDefaults under `notes.*`. One set of values, shown on the Notes settings
-/// page and, for meetings, again in Calendar & meetings.
+/// Stored in UserDefaults under `notes.*`. Shown on the Notes tab of Meetings.
 enum NotesSettings {
     private static let defaults = UserDefaults.standard
 
@@ -263,6 +262,15 @@ enum NotesSettings {
         defaults.set(value, forKey: "notes.model.\(kind.rawValue)")
     }
 
+    /// Names Claude Code resolves to its latest model of that family; shown until it lists its own.
+    static let claudeAliases = ["sonnet", "haiku", "opus", "fable"]
+
+    /// Claude Code's `--model`, one of the models it lists. Until the user
+    /// picks one, the alias of the tier chosen in earlier versions.
+    static var claudeModel: String {
+        model(for: .claudeCode).nilIfBlank ?? tier(for: .claudeCode).claudeAlias
+    }
+
     static func tier(for kind: NotesWriterKind) -> NotesModelTier {
         value("tier.\(kind.rawValue)", .standard)
     }
@@ -297,7 +305,7 @@ enum NotesSettings {
     // MARK: - When
 
     static var meetingTiming: NotesMeetingTiming {
-        get { value("meetingTiming2", .onRequest) }
+        get { value("meetingTiming2", .afterRecording) }
         set {
             let wasOn = meetingTiming != .onRequest
             set("meetingTiming2", newValue)
@@ -333,6 +341,12 @@ enum NotesSettings {
         defaults.removeObject(forKey: "notes.autoSince")
         if meetingTiming != .onRequest, meetingAutoSince == nil { meetingAutoSince = Date() }
         if voiceTiming != .onRequest, voiceAutoSince == nil { voiceAutoSince = Date() }
+    }
+
+    /// Meeting notes are on unless the user chose "Only when I ask". Someone who never chose gets
+    /// them from the first check with a writer set up; earlier meetings still go through Earlier recordings.
+    static func startDefaultMeetingNotes() {
+        if meetingTiming != .onRequest, meetingAutoSince == nil { meetingAutoSince = Date() }
     }
 
     static var waitForPower: Bool {

@@ -6,8 +6,8 @@ import Testing
 @MainActor
 struct NotesQueueTests {
     private func recording(text: String? = "We agreed.", processedAt: Date? = Date(timeIntervalSince1970: 1000),
-                           status: Recording.ProcessingStatus = .transcribed) -> Recording {
-        Recording(id: UUID(), createdAt: Date(), type: .meeting, audioFileName: "a.m4a", durationSeconds: 60,
+                           status: Recording.ProcessingStatus = .transcribed, createdAt: Date = Date()) -> Recording {
+        Recording(id: UUID(), createdAt: createdAt, type: .meeting, audioFileName: "a.m4a", durationSeconds: 60,
                   fileSizeBytes: 10, status: status, transcriptionText: text, processedAt: processedAt, sourceDevice: nil)
     }
 
@@ -22,6 +22,70 @@ struct NotesQueueTests {
         #expect(requested == nil)
         #expect(NotesService.firstRunnable([automatic, requested]) == 1)
         #expect(NotesService.firstRunnable([automatic, automatic]) == nil)
+    }
+
+    // MARK: - An earlier recording transcribed again gets automatic notes
+
+    @Test func automaticNotesCoverARecordingTranscribedAfterTheyWereTurnedOn() {
+        let turnedOn = Date(timeIntervalSince1970: 5000)
+        let earlier = recording(processedAt: turnedOn.addingTimeInterval(-60), createdAt: turnedOn.addingTimeInterval(-3600))
+        #expect(!NotesService.isCoveredByAutomaticNotes(earlier, since: turnedOn))
+
+        var transcribedAgain = earlier
+        transcribedAgain.processedAt = turnedOn.addingTimeInterval(60)
+        #expect(NotesService.isCoveredByAutomaticNotes(transcribedAgain, since: turnedOn))
+
+        let new = recording(processedAt: nil, createdAt: turnedOn.addingTimeInterval(60))
+        #expect(NotesService.isCoveredByAutomaticNotes(new, since: turnedOn))
+        #expect(!NotesService.isCoveredByAutomaticNotes(new, since: nil))
+    }
+
+    @Test func meetingNotesAreWrittenRightAfterTheRecordingUnlessTheUserChoseOtherwise() {
+        let defaults = UserDefaults.standard
+        let keys = ["notes.meetingTiming2", "notes.meetingAutoSince"]
+        let saved = keys.map { defaults.object(forKey: $0) }
+        defer { for (key, value) in zip(keys, saved) { defaults.set(value, forKey: key) } }
+
+        keys.forEach(defaults.removeObject)
+        #expect(NotesSettings.meetingTiming == .afterRecording)
+        NotesSettings.startDefaultMeetingNotes()
+        #expect(NotesSettings.meetingAutoSince != nil)
+
+        NotesSettings.meetingTiming = .onRequest
+        NotesSettings.startDefaultMeetingNotes()
+        #expect(NotesSettings.meetingTiming == .onRequest)
+        #expect(NotesSettings.meetingAutoSince == nil)
+    }
+
+    @Test func claudeCodeUsesTheChosenModelAndFallsBackToTheEarlierTier() {
+        let defaults = UserDefaults.standard
+        let keys = ["notes.model.claudeCode", "notes.tier.claudeCode"]
+        let saved = keys.map { defaults.object(forKey: $0) }
+        defer { for (key, value) in zip(keys, saved) { defaults.set(value, forKey: key) } }
+
+        keys.forEach(defaults.removeObject)
+        #expect(NotesSettings.claudeModel == "sonnet")
+        NotesSettings.setTier(.capable, for: .claudeCode)
+        #expect(NotesSettings.claudeModel == "opus")
+        NotesSettings.setModel("fable", for: .claudeCode)
+        #expect(NotesSettings.claudeModel == "fable")
+        NotesSettings.setModel("claude-opus-5-5", for: .claudeCode)
+        #expect(NotesSettings.claudeModel == "claude-opus-5-5")
+        #expect(CLIWriter(kind: .claudeCode, executable: "", tier: .standard, claudeModel: "fable").displayName == "Claude Code, fable")
+    }
+
+    @Test func claudeCodeModelListIsReadFromItsInitializeAnswer() {
+        let output = #"""
+        {"type":"system","subtype":"hook_started"}
+        {"type":"control_response","response":{"subtype":"success","request_id":"models","response":{"commands":[],"models":[{"value":"default","displayName":"Default (recommended)"},{"value":"fable","displayName":"Fable 5.2"},{"value":"claude-opus-4-8"},{"displayName":"No value"}]}}}
+        """#
+        #expect(CLIWriter.parseClaudeModels(output) == [
+            ClaudeModel(value: "default", name: "Default (recommended)"),
+            ClaudeModel(value: "fable", name: "Fable 5.2"),
+            ClaudeModel(value: "claude-opus-4-8", name: "claude-opus-4-8"),
+        ])
+        #expect(CLIWriter.parseClaudeModels(#"{"type":"result","is_error":true}"#) == nil)
+        #expect(CLIWriter.parseClaudeModels("not json") == nil)
     }
 
     // MARK: - Fix 9: only a live capture blocks notes

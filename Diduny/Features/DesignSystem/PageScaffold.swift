@@ -14,6 +14,10 @@ struct PageScaffold<Trailing: View, Content: View>: View {
     var scrolls = true
     /// Inner column cap: reading width for text pages, `DS.Layout.wideColumnMaxWidth` for table pages.
     var columnMaxWidth: CGFloat = DS.Layout.columnMaxWidth
+    /// Changing this recreates the scroller, so a new tab starts at the top.
+    var scrollIdentity: AnyHashable? = nil
+    /// Sits under the title and stays put while the page scrolls. Empty on every page except Meetings.
+    var pinned: AnyView = AnyView(EmptyView())
     @ViewBuilder var trailing: () -> Trailing
     @ViewBuilder var content: () -> Content
 
@@ -50,6 +54,7 @@ struct PageScaffold<Trailing: View, Content: View>: View {
                     let isScrolled = offset < -1
                     if isScrolled != scrolled { scrolled = isScrolled }
                 }
+                .modifier(PageScrollIdentity(id: scrollIdentity))
             } else {
                 fittedContent
                     .frame(minWidth: 0, maxWidth: outerColumnMaxWidth, maxHeight: .infinity, alignment: .topLeading)
@@ -66,22 +71,25 @@ struct PageScaffold<Trailing: View, Content: View>: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: DS.Space.lg) {
-            VStack(alignment: .leading, spacing: DS.Space.xs) {
-                Text(title)
-                    .font(DS.Font.settingsTitle)
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(DS.Font.body)
-                        .lineSpacing(DS.Font.LineSpacing.lead)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: DS.Space.lg) {
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                    Text(title)
+                        .font(DS.Font.settingsTitle)
+                        .lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(DS.Font.body)
+                            .lineSpacing(DS.Font.LineSpacing.lead)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                 }
+                Spacer(minLength: DS.Space.lg)
+                trailing()
             }
-            Spacer(minLength: DS.Space.lg)
-            trailing()
+            pinned
         }
         .padding(.horizontal, DS.Layout.pagePadding)
         // The window draws under its 34 pt title bar (full-size content), so the title starts at 50
@@ -115,12 +123,28 @@ extension PageScaffold where Trailing == EmptyView {
         subtitle: LocalizedStringKey? = nil,
         scrolls: Bool = true,
         columnMaxWidth: CGFloat = DS.Layout.columnMaxWidth,
+        scrollIdentity: AnyHashable? = nil,
+        pinned: AnyView = AnyView(EmptyView()),
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.init(
             title: title, subtitle: subtitle, scrolls: scrolls, columnMaxWidth: columnMaxWidth,
+            scrollIdentity: scrollIdentity, pinned: pinned,
             trailing: { EmptyView() }, content: content
         )
+    }
+}
+
+/// Recreates the scroller when `id` changes. No identity when it is nil, so other pages keep their offset.
+private struct PageScrollIdentity: ViewModifier {
+    let id: AnyHashable?
+
+    func body(content: Content) -> some View {
+        if let id {
+            content.id(id)
+        } else {
+            content
+        }
     }
 }
 

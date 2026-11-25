@@ -52,4 +52,11 @@ struct AgentSettingsTests {
         #expect(text.contains(AgentSkillInstaller.marker))
         #expect(text.contains(" guide"))
     }
+
+    @Test func aSkillIsOfferedWhereverAnAgentKeepsSkills() {
+        let names = AgentSkillInstaller.candidates.map(\.agent)
+        for name in ["Claude Code", "Codex", "Cursor", "Agents", "Gemini", "Grok", "Continue"] {
+            #expect(names.contains(name))
+        }
+    }
 }

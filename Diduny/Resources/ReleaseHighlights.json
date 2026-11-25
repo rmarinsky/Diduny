@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
   "en": {
-    "headline": "Papuga is now part of Diduny: layout fixes, one logo for fixes and translation, Copy new and translation mid-meeting",
+    "headline": "A calendar from the browser, both meetings at once, and a smaller Diduny",
     "highlights": [
-      "Settings → Typing fixes text typed in the wrong keyboard layout as you type: \"Oops, fixed\" appears next to the text, then \"Undo fix\". Select text and press Option+Shift twice to swap its layout. In-place translation shows the same logo, with \"Translating…\" and then \"Translated\".",
-      "Words you keep typing join Vocabulary & context by themselves, and nothing from password fields is counted. The new Clipboard page keeps what you copied, screenshots and what Diduny pasted.",
-      "In a live meeting, Copy new copies only what was said since your last copy, and the Translate field next to Engine turns on two-way translation (for example Ukrainian ↔ English) from that moment, in the same recording. The empty Notes page writes notes for earlier meetings in one go, with Pause and Stop, and the local models table shows which models label speakers."
+      "Meetings → Calendar can read an Outlook or Google page in the browser, including a work profile. Diduny checks that page about once a minute and keeps the last read after a restart. If that window is gone, it opens the saved page and reads it. Two events at the same time, including a forwarded copy, both stay on the day and in the menu.",
+      "Meetings settings are three tabs: Calendar, Recording and Notes. Today's timeline stays on the current time, and time-grouped voice clips are called dictations.",
+      "The app is about a third of the previous size. diduny help tells an agent on this Mac to read diduny guide first, and a short skill is added wherever that agent already keeps skills. When you ask, the agent can review recent mistypes and add a word or a replacement through Diduny."
     ]
   },
   "uk": {
-    "headline": "Papuga тепер у Diduny: виправлення розкладки, одне лого для виправлень і перекладу, «Копіювати нове» і переклад посеред зустрічі",
+    "headline": "Календар із браузера, обидві зустрічі в один час і менший Diduny",
     "highlights": [
-      "Налаштування → Набір тексту виправляє текст, набраний не в тій розкладці, просто під час набору: біля тексту з'являється «Ой, виправив», а потім «Скасувати заміну». Виділіть текст і двічі натисніть Option+Shift, щоб поміняти розкладку. Переклад на місці показує те саме лого: «Перекладаю…», а потім «Перекладено».",
-      "Слова, які ви часто набираєте, самі додаються у «Словник і контекст», а з полів пароля нічого не рахується. Нова сторінка «Буфер обміну» зберігає скопійоване, скриншоти і те, що вставив Diduny.",
-      "На живій зустрічі «Копіювати нове» копіює лише те, що прозвучало після попереднього копіювання, а поле «Перекласти» поруч із «Рушієм» вмикає переклад в обидва боки (наприклад, українська ↔ англійська) з цієї миті, у тому самому записі. Порожня сторінка «Нотатки» пише нотатки до давніших зустрічей одним махом, з паузою і зупинкою, а таблиця локальних моделей показує, які моделі розрізняють мовців."
+      "Зустрічі → Календар читає сторінку Outlook або Google у браузері, включно з робочим профілем. Diduny перевіряє її приблизно раз на хвилину і пам'ятає останнє зчитане після перезапуску. Якщо того вікна немає, відкриває збережену сторінку і зчитує її. Дві події в один час, включно з пересланою копією, обидві лишаються на дні і в меню.",
+      "Налаштування зустрічей тепер три вкладки: Календар, Запис і Нотатки. Стрічка сьогодні лишається на поточному часі, а голосові записи, зібрані за часом, називаються диктовками.",
+      "Застосунок приблизно втричі менший. diduny help каже агенту на цьому Mac спершу прочитати diduny guide, а короткий скіл з'являється там, де цей агент уже зберігає скіли. На ваше прохання агент може переглянути недавні міс-тайпінги і додати слово або заміну через Diduny."
     ]
   }
 }

@@ -317,6 +317,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let isFreshInstall = OnboardingManager.shared.prepareForLaunch(
             hasExistingInstallState: hasExistingInstallState
         )
+        // Shortcuts, calendar reminders and layout fixes work only while Diduny runs, so a new install starts at login.
+        if isFreshInstall, ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            LaunchAtLogin.isEnabled = true
+        }
         if let currentVersion = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleShortVersionString"
         ) as? String {

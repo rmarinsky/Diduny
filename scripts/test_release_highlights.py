@@ -78,6 +78,45 @@ class ReleaseHighlightsPipelineTests(unittest.TestCase):
                 "https://github.com/example/Diduny/releases/tag/v2.1.0",
             )
 
+    def test_appcast_upsert_publishes_sparkle_delta_from_previous_build(self):
+        with tempfile.TemporaryDirectory() as directory:
+            appcast = Path(directory) / "appcast.xml"
+            appcast.write_text(
+                '<?xml version="1.0" encoding="utf-8"?>\n'
+                f'<rss version="2.0" xmlns:sparkle="{SPARKLE}"><channel><title>Diduny Updates</title>'
+                "</channel></rss>\n",
+                encoding="utf-8",
+            )
+            arguments = (
+                "upsert-appcast",
+                str(appcast),
+                "--version", "2.2.0",
+                "--build-number", "102",
+                "--download-url", "https://example.com/Diduny-2.2.0.dmg",
+                "--signature", "signature",
+                "--length", "123",
+                "--release-notes-url", "https://example.com/release-notes/2.2.0.md",
+                "--delta-url", "https://example.com/Diduny-2.2.0-101.delta",
+                "--delta-from", "101",
+                "--delta-signature", "delta-signature",
+                "--delta-length", "45",
+            )
+            self.run_script(*arguments)
+            self.run_script(*arguments)
+
+            item = ET.parse(appcast).getroot().find("channel/item")
+            deltas = item.findall(f"{{{SPARKLE}}}deltas/enclosure")
+            self.assertEqual(len(deltas), 1)
+            self.assertEqual(deltas[0].attrib, {
+                "url": "https://example.com/Diduny-2.2.0-101.delta",
+                f"{{{SPARKLE}}}version": "102",
+                f"{{{SPARKLE}}}deltaFrom": "101",
+                f"{{{SPARKLE}}}edSignature": "delta-signature",
+                "length": "45",
+                "type": "application/octet-stream",
+            })
+            self.assertEqual(item.find("enclosure").get("url"), "https://example.com/Diduny-2.2.0.dmg")
+
     def test_validate_rejects_malformed_curated_payload(self):
         with tempfile.TemporaryDirectory() as directory:
             payload = Path(directory) / "ReleaseHighlights.json"

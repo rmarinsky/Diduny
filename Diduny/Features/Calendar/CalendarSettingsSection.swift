@@ -6,6 +6,7 @@ struct CalendarSettingsSection: View {
     @State private var showConsent = false
     /// Re-renders the "Starts in" line when it changes anywhere.
     @AppStorage(ModeDefaults.meetingTranscriptModeKey) private var startsInRaw = ModeDefaults.newInstallStartsIn.rawValue
+    @AppStorage(ModeDefaults.calendarStartsInKey) private var calendarStartsInRaw: String?
     @State private var approved = false
     @State private var showCalendars = false
     @State private var browsers = InstalledBrowser.discover()
@@ -147,7 +148,7 @@ struct CalendarSettingsSection: View {
         SettingsLineRow(title: "Record when I choose Join", kind: .toggle) {
             SettingsSwitch(title: "Record when I choose Join", isOn: preference(\.recordOnJoin))
         }
-        // 8A: calendar meetings follow Settings › Modes › Meeting "Starts in"; shown, not edited, here.
+        // Calendar meetings follow Settings › Modes › Meeting "From calendar"; shown, not edited, here.
         SettingsLineRow(
             title: "Transcribe calendar recordings",
             caption: "Calendar meetings follow Settings › Modes › Meeting.",
@@ -263,7 +264,7 @@ struct CalendarSettingsSection: View {
     }
 
     private var startsInTitle: String {
-        switch MeetingSegment(rawValue: startsInRaw) ?? ModeDefaults.newInstallStartsIn {
+        switch MeetingSegment(rawValue: calendarStartsInRaw ?? startsInRaw) ?? ModeDefaults.newInstallStartsIn {
         case .thisMac: String(localized: "Local")
         case .cloud: String(localized: "Cloud")
         case .recordOnly: String(localized: "Record only")

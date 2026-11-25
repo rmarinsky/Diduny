@@ -65,6 +65,12 @@ for (const s of window.SCENARIO.scenes) {
   if (s.end) {
     const end = view.appendChild(el('div', 'end', `<div class="logo">🎙</div><div class="t">${window.SCENARIO.title}</div>`));
     at(end, [{ opacity: 0, transform: 'scale(0.96)' }, { opacity: 1, transform: 'none' }], t0, 500);
+  } else if (s.card) {
+    const shot = view.appendChild(el('div', 'shot'));
+    const card = shot.appendChild(el('div', 'end', `<div class="t">${s.card}</div>`));
+    at(shot, [{ opacity: 0 }, { opacity: 1 }], t0, 280);
+    at(card, [{ opacity: 0, transform: 'scale(0.96)' }, { opacity: 1, transform: 'none' }], t0, 500);
+    at(shot, [{ opacity: 1 }, { opacity: 0 }], t1 + 280, 1, 'linear', 'forwards');
   } else {
     const shot = view.appendChild(el('div', 'shot'));
     const c = shot.appendChild(el('div', 'cam', `<img src="frames/${s.frame}.png">`));

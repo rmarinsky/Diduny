@@ -226,7 +226,7 @@
 "Connect your calendars" = "Connect your calendars";
 "Connected meetings, clearer choices" = "Connected meetings, clearer choices";
 "Connecting" = "Connecting";
-"Connection restored. Looking for the approved calendar window…" = "Connection restored. Looking for the approved calendar window…";
+"Connection restored. Looking for the named calendar window…" = "Connection restored. Looking for the named calendar window…";
 "Connection saved · refreshes every minute while Diduny is running" = "Connection saved · refreshes every minute while Diduny is running";
 "Connection successful" = "Connection successful";
 "Connection was not created. %@ Select a calendar view with no event details open." = "Connection was not created. %@ Select a calendar view with no event details open.";
@@ -639,7 +639,7 @@
 "Read now" = "Read now";
 "Read this browser calendar" = "Read this browser calendar";
 "Reading stopped, but saved consent could not be removed. It may return after restart. Retry disconnecting: %@" = "Reading stopped, but saved consent could not be removed. It may return after restart. Retry disconnecting: %@";
-"Reading took more than 12 seconds. Retry when the page has loaded." = "Reading took more than 12 seconds. Retry when the page has loaded.";
+"Reading took more than %lld seconds. Retry when the page has loaded." = "Reading took more than %lld seconds. Retry when the page has loaded.";
 "Real-time connection failed: %@" = "Real-time connection failed: %@";
 "Recent recordings" = "Recent recordings";
 "Reconnecting" = "Reconnecting";
@@ -834,7 +834,7 @@
 "The batch and its recordings were left unchanged." = "The batch and its recordings were left unchanged.";
 "The browser did not confirm the window name (%@). No saved connection was created." = "The browser did not confirm the window name (%@). No saved connection was created.";
 "The calendar link could not be removed." = "The calendar link could not be removed.";
-"The calendar window or address changed. Reading stopped. Restore the tab or disconnect and reconnect the source." = "The calendar window or address changed. Reading stopped. Restore the tab or disconnect and reconnect the source.";
+"The named calendar window is not open. Restore that tab, or disconnect and connect the window again." = "The named calendar window is not open. Restore that tab, or disconnect and connect the window again.";
 "The current recording could not be linked. An existing meeting link was kept." = "The current recording could not be linked. An existing meeting link was kept.";
 "The deletion couldn't be completed safely. Review your Meetings library before trying again." = "The deletion couldn't be completed safely. Review your Meetings library before trying again.";
 "The interrupted WAV recording is too large to recover." = "The interrupted WAV recording is too large to recover.";
@@ -971,7 +971,9 @@
 "Voice notes" = "Voice notes";
 "Voice translation target: English" = "Voice translation target: English";
 "Voice → text" = "Voice → text";
-"Waiting for the approved window. %@ Saved consent remains active." = "Waiting for the approved window. %@ Saved consent remains active.";
+"%@ Saved consent remains active." = "%@ Saved consent remains active.";
+"List" = "List";
+"Calendar or list" = "Calendar or list";
 "WayForPay cancel failed" = "WayForPay cancel failed";
 "WebSocket error: %@" = "WebSocket error: %@";
 "Webex" = "Webex";
@@ -1123,6 +1125,8 @@
 "Check access" = "Check access";
 
 "Refresh browser profiles" = "Refresh browser profiles";
+"macOS is blocking Diduny from reading %@ data. Allow Diduny in System Settings → Privacy & Security → Full Disk Access, then check access again." = "macOS is blocking Diduny from reading %@ data. Allow Diduny in System Settings → Privacy & Security → Full Disk Access, then check access again.";
+"Open Privacy Settings" = "Open Privacy Settings";
 
 "The meeting is open. Sign in to Diduny in Account settings before starting a recording." = "The meeting is open. Sign in to Diduny in Account settings before starting a recording.";
 
@@ -1688,6 +1692,7 @@
 "GitHub" = "GitHub";
 "Typing test" = "Typing test";
 "Calendar & meetings" = "Calendar & meetings";
+"Calendar, recording and notes for a meeting." = "Calendar, recording and notes for a meeting.";
 "Audio & dictation" = "Audio & dictation";
 "Action hotkeys" = "Action hotkeys";
 "Modifier key recording" = "Modifier key recording";
@@ -1838,8 +1843,6 @@
 "Transcript for Record only" = "Transcript for Record only";
 "Made after Stop. Engines on this Mac are recommended; speaker labels come with Diduny Cloud." = "Made after Stop. Engines on this Mac are recommended; speaker labels come with Diduny Cloud.";
 "Calendar meetings" = "Calendar meetings";
-"Start the same way" = "Start the same way";
-"A meeting started from the calendar uses \"Starts in\" and these engines." = "A meeting started from the calendar uses \"Starts in\" and these engines.";
 "Only with an engine that returns both texts." = "Only with an engine that returns both texts.";
 
 /* Panels redesign WP-52 */
@@ -2150,7 +2153,7 @@
 "%@, %@ in total" = "%@, %@ in total";
 "All %lld" = "All %lld";
 "Without transcript %lld" = "Without transcript %lld";
-"Notes are grouped by clock time. Zoom in on the day for smaller groups. A group of one shows the note itself." = "Notes are grouped by clock time. Zoom in on the day for smaller groups. A group of one shows the note itself.";
+"Dictations are grouped by clock time. Zoom in on the day for smaller groups. A group of one shows the dictation itself." = "Dictations are grouped by clock time. Zoom in on the day for smaller groups. A group of one shows the dictation itself.";
 "Make a transcript" = "Make a transcript";
 "In the cloud" = "In the cloud";
 "Imported files and YouTube audio are transcribed on this Mac." = "Imported files and YouTube audio are transcribed on this Mac.";
@@ -2236,7 +2239,8 @@
 "Who was it with? Notes" = "Who was it with? Notes";
 "Release to detach from the event" = "Release to detach from the event";
 "Go to today, at the current time (⌘T)" = "Go to today, at the current time (⌘T)";
-"%lld dictation notes" = "%lld dictation notes";
+"%lld dictations" = "%lld dictations";
+"Dictations" = "Dictations";
 "%lld more at this time" = "%lld more at this time";
 
 /* Speech hints from Your languages */
@@ -2371,6 +2375,7 @@
 "Command line tool" = "Command line tool";
 "Lets Claude Code, Codex and other agents on this Mac read your meetings. When you ask, they can add to notes, tag recordings and transcribe again; they never delete anything." = "Lets Claude Code, Codex and other agents on this Mac read your meetings. When you ask, they can add to notes, tag recordings and transcribe again; they never delete anything.";
 "Teach agents about Diduny" = "Teach agents about Diduny";
+"Adds a short skill where an agent on this Mac already keeps skills, and tells it to run diduny guide first. Agents here: %@" = "Adds a short skill where an agent on this Mac already keeps skills, and tells it to run diduny guide first. Agents here: %@";
 "Settings agents can change" = "Settings agents can change";
 "Transcription words, languages, filler words, silence stop and sounds. Addresses, hotkeys, devices and history stay here." = "Transcription words, languages, filler words, silence stop and sounds. Addresses, hotkeys, devices and history stay here.";
 "Nobody writes notes yet. Choose a model or a subscription tool in Notes settings." = "Nobody writes notes yet. Choose a model or a subscription tool in Notes settings.";
@@ -2504,6 +2509,12 @@
 "Nothing copied in 1Password, Keychain and similar apps is kept." = "Nothing copied in 1Password, Keychain and similar apps is kept.";
 "Clear the clipboard history" = "Clear the clipboard history";
 "Clear everything" = "Clear everything";
+"Show All %lld Items" = "Show All %lld Items";
+"Nothing copied yet" = "Nothing copied yet";
+"Clipboard history is off" = "Clipboard history is off";
+"%lld files: %@" = "%lld files: %@";
+"Moved or deleted" = "Moved or deleted";
+"Items shown in the menu bar list" = "Items shown in the menu bar list";
 
 /* Vocabulary: words from typing */
 "Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud. Layout fixes never change these words." = "Diduny Cloud receives these words and description at the start of each recording to recognize names and terms better. Applies only to Diduny Cloud. Layout fixes never change these words.";
@@ -2593,3 +2604,10 @@
 "translating %@" = "translating %@";
 "transcribing" = "transcribing";
 "Transcribe only, from now on" = "Transcribe only, from now on";
+"Live text in the cloud" = "Live text in the cloud";
+"Live text on this Mac" = "Live text on this Mac";
+"Record, transcript after Stop" = "Record, transcript after Stop";
+"Same as Meeting" = "Same as Meeting";
+"Starts like the shortcut" = "Starts like the shortcut";
+"From calendar" = "From calendar";
+"Only Diduny Cloud translates meetings live. Needs a subscription." = "Only Diduny Cloud translates meetings live. Needs a subscription.";

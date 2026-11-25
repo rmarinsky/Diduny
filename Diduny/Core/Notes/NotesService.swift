@@ -229,6 +229,8 @@ final class NotesService {
             store.prune(keeping: Set(library.recordings.map(\.id)))
         }
         guard NotesSettings.writer != .off else { return }
+        // Only once a writer is set up, so choosing one never sends meetings recorded before it.
+        NotesSettings.startDefaultMeetingNotes()
         for recording in library.recordings where Self.isReady(recording) && store.note(for: recording.id) == nil {
             if case .failed = states[recording.id], failures.isRetryDue(recording.id) {
                 states[recording.id] = nil
@@ -236,15 +238,22 @@ final class NotesService {
             guard states[recording.id] == nil, failures.isRetryDue(recording.id) else { continue }
             if recording.type.isMeetingLike {
                 let timing = NotesSettings.meetingTiming
-                guard timing != .onRequest, let since = NotesSettings.meetingAutoSince, recording.createdAt >= since else { continue }
+                guard timing != .onRequest, Self.isCoveredByAutomaticNotes(recording, since: NotesSettings.meetingAutoSince) else { continue }
                 enqueue(Job(recordingID: recording.id, automatic: true, waitsForIdle: timing == .whenIdle))
             } else if let minimum = NotesSettings.voiceTiming.minimumSeconds,
-                      let since = NotesSettings.voiceAutoSince, recording.createdAt >= since,
+                      Self.isCoveredByAutomaticNotes(recording, since: NotesSettings.voiceAutoSince),
                       recording.effectiveDurationSeconds > minimum {
                 enqueue(Job(recordingID: recording.id, automatic: true, waitsForIdle: false))
             }
         }
         runNext()
+    }
+
+    /// Automatic notes cover a recording whose transcript was finished after they were turned on.
+    /// That includes an earlier recording transcribed again: it gets notes like a new one.
+    nonisolated static func isCoveredByAutomaticNotes(_ recording: Recording, since: Date?) -> Bool {
+        guard let since else { return false }
+        return (recording.processedAt ?? recording.createdAt) >= since
     }
 
     nonisolated static func isReady(_ recording: Recording) -> Bool {
@@ -479,7 +488,7 @@ final class NotesService {
         case .claudeCode, .codex, .gemini:
             guard let path = await CLIRunner.locate(kind) else { throw NotesError.notFound(kind.label) }
             guard NotesSettings.approvedPath(for: kind) == path else { throw NotesError.notApproved(kind.label) }
-            return CLIWriter(kind: kind, executable: path, tier: NotesSettings.tier(for: kind))
+            return CLIWriter(kind: kind, executable: path, tier: NotesSettings.tier(for: kind), claudeModel: NotesSettings.claudeModel)
         case .apiKey:
             guard let key = NotesSettings.apiKey else {
                 throw NotesError.server(String(localized: "Enter an API key in Notes settings."))

@@ -1,35 +1,91 @@
 import SwiftUI
 
-/// One page in the order a meeting happens: before (calendar, browser, reminders), during (engine,
-/// sound, speaker labels), after (notes). Composes the existing sections; nothing is collapsed.
+/// The three parts of Meetings settings. Calendar is the page you land on from the sidebar.
+enum MeetingSettingsTab: String, CaseIterable, Identifiable {
+    case calendar
+    case recording
+    case notes
+
+    var id: String { rawValue }
+
+    var label: LocalizedStringKey {
+        switch self {
+        case .calendar: "Calendar"
+        case .recording: "Recording"
+        case .notes: "Notes"
+        }
+    }
+}
+
+extension EnvironmentValues {
+    /// A test watches which Meetings tab is showing. The page does not use this itself.
+    @Entry var meetingsTabProbe: ((MeetingSettingsTab) -> Void)?
+}
+
+/// Calendar, how a meeting is recorded, and notes. One tab at a time; nothing moves to another page.
 struct MeetingSettingsView: View {
     @AppStorage(ModeDefaults.meetingTranscriptModeKey) private var startsInRaw = ModeDefaults.newInstallStartsIn.rawValue
+    @State private var tab: MeetingSettingsTab
+    @Environment(\.meetingsTabProbe) private var meetingsTabProbe
+
+    /// Opens on the tab a Notes button requested, before the first frame. A later request is applied in `onAppear`.
+    init() {
+        let initial = MainActor.assumeIsolated { MainWindowController.shared.requestedMeetingsTab ?? .calendar }
+        _tab = State(initialValue: initial)
+    }
 
     var body: some View {
-        PageScaffold(title: "Meetings", subtitle: "Before, during and after a meeting, in the order it happens.") {
-            VStack(alignment: .leading, spacing: 0) {
-                phase("Before", "Calendar, browser and reminders", first: true)
+        PageScaffold(
+            title: "Meetings",
+            subtitle: "Calendar, recording and notes for a meeting.",
+            scrollIdentity: tab,
+            pinned: AnyView(tabs)
+        ) {
+            switch tab {
+            case .calendar:
                 CalendarSettingsSection()
-
-                phase("During", "Engine and sound")
-                AudioSettingsGroup(title: "Engine") { engineRow }
-                AudioSettingsView(embedded: true)
-                SpeakerLabelsGroup()
-
-                phase("After", "Notes")
+            case .recording:
+                recording
+            case .notes:
                 NotesSettingsView(embedded: true)
             }
         }
+        .onAppear(perform: applyRequestedTab)
+        .onChange(of: MainWindowController.shared.requestedMeetingsTab) { _, _ in
+            applyRequestedTab()
+        }
+        .onChange(of: tab, initial: true) { _, newValue in
+            meetingsTabProbe?(newValue)
+        }
     }
 
-    private func phase(_ title: LocalizedStringKey, _ detail: LocalizedStringKey, first: Bool = false) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: DS.Space.sm) {
-            Text(title).font(DS.Font.settingsTitle)
-            Text(detail).font(DS.Font.body).foregroundStyle(DS.Palette.secondary)
+    /// Stays under the title while the tab scrolls. `fixedSize` keeps it to the width of the three labels.
+    private var tabs: some View {
+        Picker("Meetings", selection: $tab) {
+            ForEach(MeetingSettingsTab.allCases) { item in
+                Text(item.label).tag(item)
+            }
         }
-        .padding(.top, first ? 0 : 36)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .padding(.top, DS.Space.md)
+        .accessibilityIdentifier("meetings.tabs")
+    }
+
+    private var recording: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            AudioSettingsGroup(title: "Engine") { engineRow }
+            AudioSettingsView(embedded: true)
+            SpeakerLabelsGroup()
+        }
+    }
+
+    /// Notes settings, and the buttons that open them, set this before the page appears.
+    private func applyRequestedTab() {
+        guard let requested = MainWindowController.shared.requestedMeetingsTab else { return }
+        tab = requested
+        MainWindowController.shared.requestedMeetingsTab = nil
     }
 
     /// Decision 12: the meeting engine lives in Modes > Meeting; this row shows it and opens it.

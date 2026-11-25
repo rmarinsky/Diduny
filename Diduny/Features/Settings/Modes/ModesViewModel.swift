@@ -146,10 +146,10 @@ final class ModesViewModel {
         return PickerMenuModel(groups: groups, selectedID: selected.rawValue, search: .never)
     }
 
-    private func menuRow(_ caps: EngineCapabilities, subline: (EngineReadiness) -> String) -> PickerMenuRow {
+    private func menuRow(_ caps: EngineCapabilities, id: String? = nil, subline: (EngineReadiness) -> String) -> PickerMenuRow {
         let state = readinessSource.readiness(of: caps.id)
         let pickable = if case .notDownloaded = state { true } else { state != .unavailable }
-        return PickerMenuRow(id: caps.id.rawValue, title: engineName(caps.id), subline: subline(state), isEnabled: pickable)
+        return PickerMenuRow(id: id ?? caps.id.rawValue, title: engineName(caps.id), subline: subline(state), isEnabled: pickable)
     }
 
     /// A pick in a row's engine field; Meeting edits the given segment (the row passes "Starts in").
@@ -207,26 +207,83 @@ final class ModesViewModel {
         }
     }
 
-    // MARK: Starts in
+    // MARK: Meeting start and calendar meetings
 
     var startsIn: MeetingSegment {
         _ = revision
         return source.meetingStartsIn
     }
 
-    var startsInValue: String { EngineCaptions.startsIn(startsIn).title }
-
-    func startsInMenu() -> PickerMenuModel {
-        let rows = MeetingSegment.allCases.map { segment in
-            let text = EngineCaptions.startsIn(segment)
-            return PickerMenuRow(id: segment.rawValue, title: text.title, subline: text.subline)
-        }
-        return PickerMenuModel(groups: [PickerMenuGroup(id: "startsIn", rows: rows)], selectedID: startsIn.rawValue, search: .never)
+    private static func meetingRowID(_ segment: MeetingSegment, _ engine: EngineID) -> String {
+        "\(segment.rawValue)|\(engine.rawValue)"
     }
 
-    func pickStartsIn(_ rowID: String) {
-        guard let segment = MeetingSegment(rawValue: rowID) else { return }
-        write { source.meetingStartsIn = segment }
+    private static func meetingRow(_ rowID: String) -> MeetingCalendarStart? {
+        let parts = rowID.split(separator: "|").map(String.init)
+        guard parts.count == 2, let segment = MeetingSegment(rawValue: parts[0]), let engine = EngineID(rawValue: parts[1])
+        else { return nil }
+        return MeetingCalendarStart(segment: segment, engine: engine)
+    }
+
+    /// One group per way to start; an engine's row picks both the start and the engine.
+    private func meetingGroups() -> [PickerMenuGroup] {
+        let starts: [(MeetingSegment, String)] = [
+            (.cloud, String(localized: "Live text in the cloud")),
+            (.thisMac, String(localized: "Live text on this Mac")),
+            (.recordOnly, String(localized: "Record, transcript after Stop")),
+        ]
+        return starts.compactMap { segment, header in
+            let offered = offeredEngines(job: .meeting, segment: segment)
+            let ordered = offered.filter { $0.traits.runsOn == .thisMac } + offered.filter { $0.traits.runsOn == .cloud }
+            let rows = ordered.map { caps in
+                menuRow(caps, id: Self.meetingRowID(segment, caps.id)) {
+                    EngineCaptions.menuSubline(job: .meeting, segment: segment, caps: caps, readiness: $0)
+                }
+            }
+            return rows.isEmpty ? nil : PickerMenuGroup(id: segment.rawValue, header: header, rows: rows)
+        }
+    }
+
+    func meetingMenu() -> PickerMenuModel {
+        PickerMenuModel(groups: meetingGroups(), selectedID: Self.meetingRowID(startsIn, meetingEngine(for: startsIn)), search: .never)
+    }
+
+    func pickMeeting(_ rowID: String) {
+        guard let pick = Self.meetingRow(rowID) else { return }
+        write {
+            source.meetingStartsIn = pick.segment
+            source.setMeetingEngine(pick.engine, for: pick.segment)
+        }
+    }
+
+    private static let sameAsMeetingRowID = "same"
+
+    var calendarStart: MeetingCalendarStart? {
+        _ = revision
+        return source.meetingCalendarStart
+    }
+
+    var calendarValue: String {
+        calendarStart.map { engineName($0.engine) } ?? String(localized: "Same as Meeting")
+    }
+
+    var calendarCaption: String {
+        guard let start = calendarStart else { return String(localized: "Starts like the shortcut") }
+        return caption(job: .meeting, segment: start.segment, engine: start.engine)
+    }
+
+    func calendarMenu() -> PickerMenuModel {
+        let same = PickerMenuRow(id: Self.sameAsMeetingRowID, title: String(localized: "Same as Meeting"),
+                                 subline: String(localized: "Starts like the shortcut"))
+        let selected = calendarStart.map { Self.meetingRowID($0.segment, $0.engine) } ?? Self.sameAsMeetingRowID
+        return PickerMenuModel(groups: [PickerMenuGroup(id: "same", rows: [same])] + meetingGroups(),
+                               selectedID: selected, search: .never)
+    }
+
+    func pickCalendar(_ rowID: String) {
+        if rowID == Self.sameAsMeetingRowID { return write { source.meetingCalendarStart = nil } }
+        guard let pick = Self.meetingRow(rowID) else { return }
+        write { source.meetingCalendarStart = pick }
     }
 
     // MARK: Into and Between

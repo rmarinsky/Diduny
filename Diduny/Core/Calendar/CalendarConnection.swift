@@ -149,6 +149,10 @@ struct CalendarConfiguration: Codable, Equatable {
     var onRefresh: (() -> Void)?
     /// Called every 15 seconds while the connection runs.
     var onTick: (() -> Void)?
+    /// Browser-calendar events for a date range. The app wires this; tests leave it empty.
+    var browserMeetings: (Date, Date) -> [CalendarMeeting] = { _, _ in [] }
+    /// Same 60-second pass as the Mac calendar refresh. The browser read has its own one-minute gate.
+    var refreshBrowserCalendar: (() -> Void)?
     private var generation = UUID()
     private var polling: Task<Void, Never>?
     private static let key = "calendar.connection.v1"
@@ -239,9 +243,10 @@ struct CalendarConfiguration: Codable, Equatable {
     }
 
     /// Meetings of the selected calendars in any date range, e.g. to link past recordings.
+    /// A browser calendar read is added beside them.
     func readMeetings(from: Date, to: Date) async throws -> [CalendarMeeting] {
-        guard configuration.connected else { return [] }
-        return try await readRange(configuration.selected, from, to).map(allowedDetails)
+        let eventKit = configuration.connected ? try await readRange(configuration.selected, from, to).map(allowedDetails) : []
+        return CalendarMeetingMerge.merging(eventKit, with: browserMeetings(from, to))
     }
 
     func setEventDetails(_ enabled: Bool) async {
@@ -262,9 +267,14 @@ struct CalendarConfiguration: Codable, Equatable {
     }
 
     /// Unlike `currentMeetings`, keeps ended meetings so the menu can show the whole day.
+    /// Browser events for today and tomorrow are included even when the Mac calendar snapshot is stale.
     var agendaMeetings: [CalendarMeeting] {
-        guard hasFreshSnapshot else { return [] }
-        return meetings.filter { configuration.selected.contains($0.calendarID) && $0.canRemind }
+        let eventKit = hasFreshSnapshot
+            ? meetings.filter { configuration.selected.contains($0.calendarID) && $0.canRemind }
+            : []
+        let today = Calendar.current.startOfDay(for: Date())
+        let end = Calendar.current.date(byAdding: .day, value: 2, to: today) ?? today
+        return CalendarMeetingMerge.merging(eventKit, with: browserMeetings(today, end).filter(\.canRemind))
     }
 
     /// `local` overrides the calendar default for this meeting only.
@@ -331,7 +341,10 @@ struct CalendarConfiguration: Codable, Equatable {
             while !Task.isCancelled {
                 if let self {
                     self.menuClock = Date()
-                    if self.fetchedAt == nil || Date().timeIntervalSince(self.fetchedAt!) >= 60 { await self.refresh() }
+                    if self.fetchedAt == nil || Date().timeIntervalSince(self.fetchedAt!) >= 60 {
+                        await self.refresh()
+                        self.refreshBrowserCalendar?()
+                    }
                     self.deliverReminders()
                     self.onTick?()
                 }

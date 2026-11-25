@@ -14,7 +14,7 @@ enum RecordingsSegment: String, CaseIterable, Identifiable {
         switch self {
         case .all: String(localized: "All")
         case .meetings: String(localized: "Meetings")
-        case .notes: String(localized: "Notes")
+        case .notes: String(localized: "Dictations")
         case .filesAndLinks: String(localized: "Files and links")
         }
     }
@@ -392,14 +392,18 @@ struct RecordingsDayPlacement: Equatable {
         return (visible, overflow)
     }
 
+    /// `nowMinute` is the current minute of today. The scale then runs at least from that hour through the
+    /// current time, so the day does not stop at the last block.
     static func place(_ items: [RecordingsDay.Item], hourHeight: Double,
                       minimumHeight: Double = minimumHeight, width: Double = .infinity,
-                      minimumLaneWidth: Double = minimumLaneWidth) -> RecordingsDayPlacement
+                      minimumLaneWidth: Double = minimumLaneWidth, nowMinute: Double? = nil) -> RecordingsDayPlacement
     {
-        guard let first = items.map(\.startMinute).min() else {
+        let earliestItem = items.map(\.startMinute).min()
+        guard let anchor = earliestItem ?? nowMinute else {
             return RecordingsDayPlacement(startHour: 0, hourHeight: hourHeight, frames: [], hours: [], height: 0)
         }
-        let startHour = Int((first / 60).rounded(.down))
+        let earliest = min(anchor, nowMinute ?? anchor)
+        let startHour = min(23, max(0, Int((earliest / 60).rounded(.down))))
         var drawn: [String: (top: Double, height: Double, true: Double)] = [:]
         for item in items {
             let top = y(item.startMinute, startHour: startHour, hourHeight: hourHeight)
@@ -420,8 +424,9 @@ struct RecordingsDayPlacement: Equatable {
                          column: lane.lane, columns: lane.lanes)
         }
         let (frames, overflow) = fit(all, maxLanes: maxLanes(width: width, minimumLaneWidth: minimumLaneWidth))
-        let lastMinute = items.map(\.endMinute).max() ?? first
-        let endHour = max(startHour + 1, Int((lastMinute / 60).rounded(.up)))
+        let lastMinute = items.map(\.endMinute).max() ?? anchor
+        let latest = max(lastMinute, nowMinute ?? lastMinute)
+        let endHour = min(24, max(startHour + 1, Int((latest / 60).rounded(.up))))
         let hours = (startHour ... endHour).map { HourLine(hour: $0, y: y(Double($0 * 60), startHour: startHour, hourHeight: hourHeight)) }
         let height = max(hours.last?.y ?? 0, frames.map { $0.top + $0.height }.max() ?? 0) + 8
         return RecordingsDayPlacement(startHour: startHour, hourHeight: hourHeight, frames: frames, overflow: overflow,
@@ -597,7 +602,7 @@ enum RecordingsDrop: Equatable {
     }
 }
 
-/// Where the hour scale scrolls: "Now" puts the current time about a third from the top; opening a day shows
+/// Where the hour scale scrolls: today puts the current time about a third from the top; another day shows
 /// its first item.
 enum RecordingsDayScroll {
     static let nowAnchor = 1.0 / 3

@@ -107,6 +107,10 @@ private struct ClipboardEntryRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: DS.Space.md) {
                         if entry.kind == .image { ClipboardThumbnail(url: thumbnailURL) }
+                        if entry.kind == .files {
+                            Image(nsImage: NSWorkspace.shared.icon(forFile: entry.filePaths?.first ?? ""))
+                                .resizable().frame(width: 20, height: 20).accessibilityHidden(true)
+                        }
                         Text(verbatim: ClipboardPageModel.title(for: entry))
                             .font(DS.Font.body)
                             .foregroundStyle(DS.Palette.text)

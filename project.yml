@@ -18,9 +18,10 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     exactVersion: 2.9.0
-  FluidAudio:
-    url: https://github.com/FluidInference/FluidAudio
-    exactVersion: 0.17.7
+  FluidAudioLite:
+    path: Packages/FluidAudioLite
+  BrowserDataAccess:
+    path: Packages/BrowserDataAccess
   PapugaKit:
     path: Packages/PapugaKit
 
@@ -104,6 +105,7 @@ targets:
       - path: Diduny/Core/Calendar/CalendarConnection.swift
       - path: Diduny/Core/Agents/AgentSettings.swift
       - path: Diduny/Core/Agents/AgentCommandProtocol.swift
+      - path: Diduny/Core/Vocabulary/VocabularyLearning.swift
     settings:
       base:
         PRODUCT_NAME: diduny
@@ -126,7 +128,8 @@ targets:
       - package: DynamicNotchKit
       - package: LaunchAtLogin
       - package: Sparkle
-      - package: FluidAudio
+      - package: FluidAudioLite
+      - package: BrowserDataAccess
       - package: PapugaKit
       - framework: Frameworks/whisper.xcframework
         embed: false
@@ -152,6 +155,7 @@ targets:
         SWIFT_OBJC_BRIDGING_HEADER: Diduny/Core/Whisper/WhisperBridge.h
         OTHER_LDFLAGS:
           - "-lc++"
+        DEAD_CODE_STRIPPING: YES
       configs:
         Debug:
           # dev_install.sh can set DEV_APP_NAME and DEV_BUNDLE_ID to install a second DEV app next to "Diduny DEV".
@@ -163,8 +167,11 @@ targets:
           PRODUCT_BUNDLE_IDENTIFIER: ua.com.rmarinsky.diduny.test
           SKIP_REMOTE_MEDIA_RUNTIME: YES
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: TEST_BUILD
+          # App code only: packages (FluidAudio DSP) keep -O.
+          SWIFT_OPTIMIZATION_LEVEL: "-Osize"
         Release:
           PRODUCT_NAME: "Diduny"
+          SWIFT_OPTIMIZATION_LEVEL: "-Osize"
           PRODUCT_BUNDLE_IDENTIFIER: ua.com.rmarinsky.diduny
     entitlements:
       path: Diduny/Resources/Diduny.entitlements
@@ -180,10 +187,10 @@ targets:
           - "$(SRCROOT)/scripts/prepare-remote-media-runtime.sh"
         outputFiles:
           - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/RemoteMediaRuntime/yt-dlp_macos"
-          - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/RemoteMediaRuntime/deno"
+          - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/RemoteMediaRuntime/qjs"
           - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/RemoteMediaRuntime/yt-dlp-LICENSE.txt"
           - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/RemoteMediaRuntime/yt-dlp-THIRD-PARTY-LICENSES.txt"
-          - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/RemoteMediaRuntime/deno-LICENSE.md"
+          - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/RemoteMediaRuntime/qjs-LICENSE.txt"
 
 schemes:
   Diduny DEV:

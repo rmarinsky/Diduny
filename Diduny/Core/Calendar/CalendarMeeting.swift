@@ -444,6 +444,15 @@ enum CalendarJoinDecision: Equatable {
     }
 }
 
+/// Appends browser rows beside the Mac rows. The same clock time can be two meetings,
+/// including a forwarded copy and the original, so titles are not collapsed.
+enum CalendarMeetingMerge {
+    static func merging(_ primary: [CalendarMeeting], with extra: [CalendarMeeting]) -> [CalendarMeeting] {
+        let seen = Set(primary.map(\.id))
+        return primary + extra.filter { !seen.contains($0.id) }
+    }
+}
+
 extension CalendarMeeting {
     static func pendingReminders(existing: [Self], incoming: [Self], current: [Self]) -> [Self] {
         let keys = Set((existing + incoming).map(\.reminderKey))

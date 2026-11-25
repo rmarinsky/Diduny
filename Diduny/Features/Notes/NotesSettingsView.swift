@@ -21,7 +21,7 @@ struct NotesSettingsView: View {
     @State private var noOwner = NotesSettings.noOwner
     @State private var markNames = NotesSettings.markUnknownNames
 
-    /// True on the Meetings page, which shows these settings under "After" without page chrome.
+    /// True on the Meetings page Notes tab, which shows these settings without page chrome.
     var embedded = false
 
     var body: some View {
@@ -472,6 +472,25 @@ private struct ModelTierPicker: View {
     }
 }
 
+/// The models Claude Code itself lists for the user's account.
+private struct ClaudeModelPicker: View {
+    let executable: String?
+    @State private var models = NotesSettings.claudeAliases.map { ClaudeModel(value: $0, name: $0.capitalized) }
+    @State private var choice = NotesSettings.claudeModel
+
+    var body: some View {
+        Picker("Model", selection: $choice) {
+            ForEach(models, id: \.value) { Text(verbatim: $0.name).tag($0.value) }
+            if !models.contains(where: { $0.value == choice }) { Text(verbatim: choice).tag(choice) }
+        }
+        .labelsHidden().fixedSize()
+        .task(id: executable) {
+            if let executable, let listed = await CLIWriter.claudeModels(executable: executable) { models = listed }
+        }
+        .onChange(of: choice) { _, value in NotesSettings.setModel(value, for: .claudeCode) }
+    }
+}
+
 private struct CLIToolRow: View {
     let kind: NotesWriterKind
     @Binding var selected: NotesWriterKind
@@ -522,7 +541,9 @@ private struct CLIToolRow: View {
             }
             if isSelected, kind != .gemini {
                 ToolDetail {
-                    DetailLine(label: "Model", note: "Counts toward your \(kind.label) plan.") { ModelTierPicker(kind: kind) }
+                    DetailLine(label: "Model", note: "Counts toward your \(kind.label) plan.") {
+                        if kind == .claudeCode { ClaudeModelPicker(executable: path) } else { ModelTierPicker(kind: kind) }
+                    }
                 }
                 .padding(.top, DS.Space.sm)
             }

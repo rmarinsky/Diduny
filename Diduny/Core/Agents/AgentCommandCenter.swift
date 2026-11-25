@@ -18,6 +18,8 @@ final class AgentCommandCenter {
     private let retranscribe: (UUID, String?) -> Bool
     /// Whether this Whisper model (nil: the one chosen in Settings) is downloaded.
     private let whisperModelReady: (String?) -> Bool
+    private let acceptWord: (String) -> (ok: Bool, message: String)
+    private let acceptReplacement: (String, String) -> (ok: Bool, message: String)
     private let now: () -> Date
     private var source: DispatchSourceFileSystemObject?
     private var statusTimer: Timer?
@@ -29,6 +31,8 @@ final class AgentCommandCenter {
         writeNotes: ((UUID) -> Void)? = nil,
         retranscribe: ((UUID, String?) -> Bool)? = nil,
         whisperModelReady: ((String?) -> Bool)? = nil,
+        acceptWord: ((String) -> (ok: Bool, message: String))? = nil,
+        acceptReplacement: ((String, String) -> (ok: Bool, message: String))? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.storage = storage ?? .shared
@@ -44,6 +48,8 @@ final class AgentCommandCenter {
             let model = name.map { name in WhisperModelManager.availableModels.first { $0.name == name } } ?? manager.selectedModel()
             return model.map(manager.isModelDownloaded) ?? false
         }
+        self.acceptWord = acceptWord ?? { VocabularyStore.shared.acceptWord($0) }
+        self.acceptReplacement = acceptReplacement ?? { VocabularyStore.shared.acceptReplacement(from: $0, to: $1) }
         self.now = now
     }
 
@@ -90,15 +96,30 @@ final class AgentCommandCenter {
         func done(_ message: String) -> AgentCommandProtocol.Result { .init(commandID: command.id, ok: true, message: message) }
         func refused(_ message: String) -> AgentCommandProtocol.Result { .init(commandID: command.id, ok: false, message: message) }
 
-        guard let recording = storage.recordings.first(where: { $0.id == command.recordingID }) else {
-            return refused("No recording with id \(command.recordingID.uuidString) in this library.")
-        }
         let values = command.values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        switch command.action {
+        case .addVocabularyWord:
+            guard let word = values.first else { return refused("Give a word.") }
+            let answer = acceptWord(word)
+            return answer.ok ? done(answer.message) : refused(answer.message)
+        case .addReplacement:
+            guard values.count >= 2 else { return refused("Give the typed text and what it should become.") }
+            let answer = acceptReplacement(values[0], values[1])
+            return answer.ok ? done(answer.message) : refused(answer.message)
+        default:
+            break
+        }
+
+        guard let recording = storage.recordings.first(where: { $0.id == command.recordingID }) else {
+            return refused("No recording with id \(command.recordingID?.uuidString ?? "") in this library.")
+        }
         func organize(_ change: (inout Recording) -> Void, _ message: String) -> AgentCommandProtocol.Result {
             storage.updateOrganization(id: recording.id, change) ? done(message) : refused("Diduny could not save the change.")
         }
 
         switch command.action {
+        case .addVocabularyWord, .addReplacement:
+            return refused("Handled above.")
         case .addToNotes:
             guard let text = values.first else { return refused("Give the text to add.") }
             guard notes.note(for: recording.id) != nil else {

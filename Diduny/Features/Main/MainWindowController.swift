@@ -11,7 +11,9 @@ final class MainWindowController {
     var requestedSection: MainSection?
     var requestedRecordingID: UUID?
     var requestedBatchComposer = false
-    /// Modes opens with this expander open (Calendar & meetings link, WP-51).
+    /// Meetings opens on this tab. The Notes page sets `.notes`; the sidebar leaves it nil and the page stays on Calendar.
+    var requestedMeetingsTab: MeetingSettingsTab?
+    /// Modes opens with this expander open (Meetings link, WP-51).
     var requestedModesExpander: STTJob?
 
     private var window: NSWindow?
@@ -26,6 +28,12 @@ final class MainWindowController {
 
     func configure(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
+    }
+
+    /// Opens Meetings on one tab. Used by the Notes page, which has no calendar of its own.
+    func showMeetings(tab: MeetingSettingsTab) {
+        requestedMeetingsTab = tab
+        showWindow(section: .meetings)
     }
 
     func showWindow(section: MainSection? = nil) {

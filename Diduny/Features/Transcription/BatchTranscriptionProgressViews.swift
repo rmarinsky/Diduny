@@ -1,3 +1,4 @@
+import BrowserDataAccess
 import SwiftUI
 
 struct BatchTranscriptionStatusView: View {
@@ -8,6 +9,7 @@ struct BatchTranscriptionStatusView: View {
     @State private var selectedSessionID: String
     @State private var browserOpenError: String?
     @State private var isOpeningBrowser = false
+    @State private var blockedBrowser: BrowserKind?
 
     init(item: BatchTranscriptionItem, service: FileTranscriptionBatchService,
          browserSessions: [BrowserSession]? = nil, onRetry: @escaping (UUID) -> Void) {
@@ -86,8 +88,17 @@ struct BatchTranscriptionStatusView: View {
                 .onChange(of: selectedSessionID) { _, value in
                     SettingsStorage.shared.selectedBrowserSessionID = value
                     browserOpenError = nil
+                    checkBrowserDataAccess()
                 }
                 .disabled(service.isProcessing)
+            }
+            if let blockedBrowser {
+                Text("macOS is blocking Diduny from reading \(blockedBrowser.displayName) data. Allow Diduny in System Settings → Privacy & Security → Full Disk Access, then check access again.")
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Open Privacy Settings") {
+                    NSWorkspace.shared.open(BrowserDataAccess.privacySettingsURL)
+                }
+                .controlSize(.small)
             }
             ViewThatFits(in: .horizontal) {
                 HStack { recoveryActions }.fixedSize(horizontal: true, vertical: false)
@@ -101,7 +112,7 @@ struct BatchTranscriptionStatusView: View {
         }
         .font(.caption)
         .onAppear {
-            if browserSessions.isEmpty { refreshBrowserSessions() }
+            if browserSessions.isEmpty { refreshBrowserSessions() } else { checkBrowserDataAccess() }
         }
     }
 
@@ -147,6 +158,13 @@ struct BatchTranscriptionStatusView: View {
                 legacyChromeProfileID: SettingsStorage.shared.selectedChromeProfileID
             )?.selectionID ?? ""
         }
+        checkBrowserDataAccess()
+    }
+
+    private func checkBrowserDataAccess() {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let browser = selectedSession?.browser
+        blockedBrowser = browser?.isDataAccessBlocked(applicationSupportDirectory: support) == true ? browser : nil
     }
 
     private var visibleErrorMessage: String? {

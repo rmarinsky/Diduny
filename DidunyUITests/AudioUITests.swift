@@ -27,6 +27,9 @@ final class AudioUITests: DidunyUITestCase {
     func test_microphoneTestTogglesLabels() {
         launchApp(onboardingCompleted: true, profile: LaunchProfile.standard.adding("--ui-testing-audio-devices=Test Mic A,Test Mic B"), open: "settings.meetings")
         waitForElement(element("section.meetings"))
+        let tabs = element("meetings.tabs")
+        let recording = tabs.radioButtons["Recording"]
+        click(recording.exists ? recording : tabs.buttons["Recording"])
         let record = waitForElement(element("audio.mic.record"))
         XCTAssertEqual(record.label, "Test")
         click(record)

@@ -145,3 +145,148 @@ enum VocabularyRules {
         return .propose(VocabularyEvidence(signal: .manualSwitch, count: counter.count, days: counter.days.count))
     }
 }
+
+/// One row of the typing log, reduced to what a review needs. `kind` is hint, replaced, kept or undone.
+struct TypingEvent: Equatable {
+    var at: Date
+    var kind: String
+    var from: String
+    var to: String
+    var origin: String
+    var app: String?
+    var truncated: Bool
+}
+
+/// One typed text and what it became, counted across the log.
+struct TypingPair: Equatable {
+    var from: String
+    var to: String
+    var origin: String
+    var replacements: Int
+    var hints: Int
+    var kept: Int
+    var undos: Int
+    var days: Int
+    var last: Date
+    var apps: [String]
+    var truncated: Bool
+    /// rule, vocabulary, leave or saved. A starting label for a person or an agent.
+    var suggestion: String
+    /// The word to add when `suggestion` is vocabulary. Empty otherwise.
+    var term: String
+}
+
+/// Collapses the typing log into pairs and a starting label for each.
+/// A label needs the same bar as an automatic vocabulary word: 3 times on 2 days.
+/// A word the system flags is a vocabulary word only when the person's own notes already use it.
+enum TypingReview {
+    static func parseDate(_ text: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: text) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: text)
+    }
+
+    static func pairs(
+        from events: [TypingEvent],
+        context: [String] = [],
+        savedTerms: [String] = [],
+        savedRules: [String] = [],
+        calendar: Calendar = .current
+    ) -> [TypingPair] {
+        struct Bucket {
+            var from: String
+            var to: String
+            var origins: [String: Int] = [:]
+            var replacements = 0
+            var hints = 0
+            var kept = 0
+            var undos = 0
+            var days = Set<Date>()
+            var last: Date
+            var apps = Set<String>()
+            var truncated = false
+        }
+
+        var buckets: [String: Bucket] = [:]
+        for event in events {
+            let key = event.from.lowercased() + "\u{1F}" + event.to.lowercased()
+            var bucket = buckets[key] ?? Bucket(from: event.from, to: event.to, last: event.at)
+            if event.at >= bucket.last {
+                bucket.last = event.at
+                bucket.from = event.from
+                bucket.to = event.to
+            }
+            bucket.days.insert(calendar.startOfDay(for: event.at))
+            if event.truncated { bucket.truncated = true }
+            if let app = event.app, !app.isEmpty { bucket.apps.insert(app) }
+            if event.origin != "unknown" { bucket.origins[event.origin, default: 0] += 1 }
+            switch event.kind {
+            case "replaced": bucket.replacements += 1
+            case "hint": bucket.hints += 1
+            case "kept": bucket.kept += 1
+            case "undone": bucket.undos += 1
+            default: break
+            }
+            buckets[key] = bucket
+        }
+
+        let terms = Set(savedTerms.map { $0.lowercased() })
+        let rules = Set(savedRules.map { $0.lowercased() })
+        return buckets.values.map { bucket in
+            let origin = bucket.origins.max { $0.value < $1.value }?.key ?? "unknown"
+            let (suggestion, term) = label(
+                from: bucket.from, to: bucket.to, origin: origin,
+                replacements: bucket.replacements, kept: bucket.kept, undos: bucket.undos, days: bucket.days.count,
+                truncated: bucket.truncated, context: context, terms: terms, rules: rules
+            )
+            return TypingPair(
+                from: bucket.from, to: bucket.to, origin: origin,
+                replacements: bucket.replacements, hints: bucket.hints, kept: bucket.kept, undos: bucket.undos,
+                days: bucket.days.count, last: bucket.last, apps: bucket.apps.sorted(),
+                truncated: bucket.truncated, suggestion: suggestion, term: term
+            )
+        }
+        .sorted { $0.last > $1.last }
+    }
+
+    /// True when `term` is a whole word inside something the person already wrote: a project, a name, a tag.
+    static func mentions(_ term: String, in context: [String]) -> Bool {
+        let needle = term.lowercased()
+        guard needle.count >= 2 else { return false }
+        return context.contains { blob in
+            blob.lowercased().split { !$0.isLetter && !$0.isNumber }.contains { String($0) == needle }
+        }
+    }
+
+    private static func label(
+        from: String, to: String, origin: String,
+        replacements: Int, kept: Int, undos: Int, days: Int,
+        truncated: Bool, context: [String], terms: Set<String>, rules: Set<String>
+    ) -> (String, String) {
+        if truncated { return ("leave", "") }
+        let repeated = days >= VocabularyRules.strongDays
+        if undos >= VocabularyRules.strongCount, repeated, undos > replacements, origin != "layout",
+           mentions(from, in: context) {
+            return terms.contains(from.lowercased()) ? ("saved", "") : ("vocabulary", from)
+        }
+        if replacements >= VocabularyRules.strongCount, repeated, undos == 0 {
+            if rules.contains(from.lowercased()) { return ("saved", "") }
+            if origin == "layout" { return ("rule", "") }
+            if origin == "spelling" {
+                if mentions(to, in: context) {
+                    return terms.contains(to.lowercased()) ? ("saved", "") : ("vocabulary", to)
+                }
+                if mentions(from, in: context) {
+                    return terms.contains(from.lowercased()) ? ("saved", "") : ("vocabulary", from)
+                }
+                return ("rule", "")
+            }
+        }
+        if kept >= VocabularyRules.strongCount, repeated, mentions(from, in: context) {
+            return terms.contains(from.lowercased()) ? ("saved", "") : ("vocabulary", from)
+        }
+        return ("leave", "")
+    }
+}

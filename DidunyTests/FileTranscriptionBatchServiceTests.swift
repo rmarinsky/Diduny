@@ -4,6 +4,21 @@ import SwiftUI
 import XCTest
 
 final class YouTubeRemoteMediaSourceTests: XCTestCase {
+    func test_browserDataIsBlockedWhenMacOSDeniesReadingItsLocalState() throws {
+        let support = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BrowserDataBlocked-\(UUID().uuidString)", isDirectory: true)
+        let chrome = support.appendingPathComponent("Google/Chrome", isDirectory: true)
+        try FileManager.default.createDirectory(at: chrome, withIntermediateDirectories: true)
+        let localState = chrome.appendingPathComponent("Local State")
+        try Data("{}".utf8).write(to: localState)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: localState.path)
+        defer { try? FileManager.default.removeItem(at: support) }
+
+        XCTAssertTrue(BrowserKind.chrome.isDataAccessBlocked(applicationSupportDirectory: support))
+        XCTAssertFalse(BrowserKind.firefox.isDataAccessBlocked(applicationSupportDirectory: support))
+        XCTAssertFalse(BrowserKind.safari.isDataAccessBlocked(applicationSupportDirectory: support))
+    }
+
     func test_normalize_acceptsWatchShareShortsAndParameterizedURLs() throws {
         let urls = [
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
@@ -112,6 +127,31 @@ final class YouTubeRemoteMediaSourceTests: XCTestCase {
                 originalLanguageCode: nil
             )
         )
+    }
+
+    /// The YouTube player code runs in QuickJS, which can reach `qjs:std` and `qjs:os`. Here /bin/bash stands in for qjs.
+    func test_jsRuntimeRunsWithoutFileWritesOrChildProcesses() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SandboxedJSRuntime-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let runtime = try BundledRemoteMediaExtractor.sandboxedJSRuntime(
+            for: URL(fileURLWithPath: "/bin/bash"),
+            in: directory
+        )
+        let written = directory.appendingPathComponent("written.txt")
+
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = runtime
+        process.arguments = ["-c", "echo ran; echo x > '\(written.path)'; /bin/echo child"]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+
+        let printed = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        XCTAssertEqual(printed, "ran\n")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: written.path))
     }
 
     func test_extractorFailureClassificationDistinguishesPrivateVideoFromExpiredSession() {
@@ -342,23 +382,23 @@ final class YouTubeRemoteMediaSourceTests: XCTestCase {
     func test_runtimeArguments_useSelectedBrowserSessionBundledDenoAndExactAudioFormat() throws {
         let source = try YouTubeRemoteMediaSource.normalize("https://youtu.be/dQw4w9WgXcQ")
         let session = BrowserSession(browser: .edge, profileID: "Profile 2", profileName: "Work")
-        let denoURL = URL(fileURLWithPath: "/Applications/Diduny.app/Contents/Resources/deno")
+        let jsRuntimeURL = URL(fileURLWithPath: "/Applications/Diduny.app/Contents/Resources/qjs")
 
         let metadata = BundledRemoteMediaExtractor.metadataArguments(
             source: source,
             session: session,
-            denoURL: denoURL
+            jsRuntimeURL: jsRuntimeURL
         )
         let download = BundledRemoteMediaExtractor.downloadArguments(
             source: source,
             session: session,
-            denoURL: denoURL,
+            jsRuntimeURL: jsRuntimeURL,
             audioFormatID: "audio-best",
             outputTemplate: "/tmp/source.%(ext)s"
         )
 
         XCTAssertTrue(metadata.contains("edge:Profile 2"))
-        XCTAssertTrue(metadata.contains("deno:\(denoURL.path)"))
+        XCTAssertTrue(metadata.contains("quickjs:\(jsRuntimeURL.path)"))
         XCTAssertTrue(metadata.contains("--dump-single-json"))
         XCTAssertTrue(download.contains("audio-best"))
         XCTAssertTrue(download.contains("--no-playlist"))
@@ -386,7 +426,7 @@ final class YouTubeRemoteMediaSourceTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
         let extractor = BundledRemoteMediaExtractor(
             ytDLPURL: executable,
-            denoURL: executable,
+            jsRuntimeURL: executable,
             temporaryDirectory: root
         )
         let source = try YouTubeRemoteMediaSource.normalize("https://youtu.be/dQw4w9WgXcQ")
@@ -398,6 +438,38 @@ final class YouTubeRemoteMediaSourceTests: XCTestCase {
 
         XCTAssertEqual(metadata.source.title, "Public video")
         XCTAssertEqual(metadata.audioFormatID, "audio")
+    }
+
+    // macOS app-data privacy can hide the browser folder; yt-dlp then reports a missing database.
+    @MainActor
+    func test_metadataFallsBackToPublicAccessWhenBrowserCookieDatabaseIsHidden() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DidunyRemoteHiddenCookies-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let executable = root.appendingPathComponent("fake-yt-dlp")
+        let script = """
+        #!/bin/sh
+        case " $* " in
+          *" --cookies-from-browser "*)
+            echo 'ERROR: could not find chrome cookies database in "/Users/me/Library/Application Support/Google/Chrome"' >&2
+            exit 1
+            ;;
+        esac
+        printf '%s\\n' '{"id":"dQw4w9WgXcQ","title":"Public video","duration":1,"formats":[{"format_id":"audio","ext":"m4a","acodec":"mp4a.40.2","vcodec":"none"}]}'
+        """
+        try Data(script.utf8).write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        let extractor = BundledRemoteMediaExtractor(
+            ytDLPURL: executable,
+            jsRuntimeURL: executable,
+            temporaryDirectory: root
+        )
+        let source = try YouTubeRemoteMediaSource.normalize("https://youtu.be/dQw4w9WgXcQ")
+
+        let metadata = try await extractor.metadata(for: source, session: BrowserSession(browser: .chrome))
+
+        XCTAssertEqual(metadata.source.title, "Public video")
     }
 
     func test_remoteDuplicateMatcher_prefersProviderIdentityAndSupportsLegacyTitleDurationFallback() throws {
@@ -695,7 +767,7 @@ final class FileTranscriptionBatchServiceTests: XCTestCase {
         """
         try Data(script.utf8).write(to: executable)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
-        let extractor = BundledRemoteMediaExtractor(ytDLPURL: executable, denoURL: executable, temporaryDirectory: root)
+        let extractor = BundledRemoteMediaExtractor(ytDLPURL: executable, jsRuntimeURL: executable, temporaryDirectory: root)
         var session = BrowserSession(browser: .chrome, profileID: "Default", profileName: "Personal")
         let service = FileTranscriptionBatchService(
             preparer: BatchTestPreparer(), transcriber: BatchTestTranscriber(), recordingStore: BatchTestRecordingStore(),

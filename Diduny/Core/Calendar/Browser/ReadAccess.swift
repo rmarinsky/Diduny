@@ -4,15 +4,21 @@ import Foundation
 public final class ReadAccess: @unchecked Sendable {
     private let lock = NSLock()
     private var revoked = false
+    private let seconds: Int
     private let deadline: Date
-    public init(now: Date = Date()) { deadline = now.addingTimeInterval(12) }
+    /// Twelve seconds covers naming a window. A calendar page walk gets longer: a cold Edge tree can outlast the short budget.
+    public init(now: Date = Date(), seconds: Int = 12) {
+        self.seconds = seconds
+        deadline = now.addingTimeInterval(TimeInterval(seconds))
+    }
     public func check(now: Date = Date()) throws {
         lock.lock(); defer { lock.unlock() }
         if revoked { throw CancellationError() }
-        if now >= deadline { throw ReadTimeout() }
+        if now >= deadline { throw ReadTimeout(seconds: seconds) }
     }
     public func cancel() { lock.lock(); revoked = true; lock.unlock() }
 }
 private struct ReadTimeout: LocalizedError {
-    var errorDescription: String? { String(localized: "Reading took more than 12 seconds. Retry when the page has loaded.") }
+    let seconds: Int
+    var errorDescription: String? { String(localized: "Reading took more than \(seconds) seconds. Retry when the page has loaded.") }
 }

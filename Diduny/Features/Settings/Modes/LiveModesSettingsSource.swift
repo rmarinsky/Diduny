@@ -41,6 +41,11 @@ final class LiveModesSettingsSource: ModesSettingsSource {
         modes.apply([.segmentEngine(segment, ModeEngineRules.selection(engine: engine, job: .meeting, segment: segment))])
     }
 
+    var meetingCalendarStart: MeetingCalendarStart? {
+        get { modes.calendarStart }
+        set { modes.setCalendarStart(newValue) }
+    }
+
     // MARK: Languages
 
     var dictationTranslationTarget: String {

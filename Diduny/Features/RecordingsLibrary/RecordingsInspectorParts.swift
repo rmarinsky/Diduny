@@ -102,7 +102,7 @@ struct RecordingsNotesInspector: View {
         let missing = notes.filter(\.needsTranscript)
         let total = notes.reduce(0) { $0 + $1.durationSeconds }
         RecordingsInspectorShell(
-            title: String(localized: "\(notes.count) dictation notes"),
+            title: String(localized: "\(notes.count) dictations"),
             subtitle: String(localized: "\(range), \(Duration.seconds(total).formatted(.time(pattern: .minuteSecond))) in total"),
             onClose: onClose
         ) {
@@ -145,7 +145,7 @@ struct RecordingsNotesInspector: View {
                 }
             }
             .accessibilityIdentifier("recordings.notes.list")
-            Text("Notes are grouped by clock time. Zoom in on the day for smaller groups. A group of one shows the note itself.")
+            Text("Dictations are grouped by clock time. Zoom in on the day for smaller groups. A group of one shows the dictation itself.")
                 .font(DS.Font.caption).foregroundStyle(DS.Palette.secondary).padding(.top, DS.Space.md)
         }
     }

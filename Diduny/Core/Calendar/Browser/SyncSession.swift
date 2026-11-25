@@ -23,4 +23,9 @@ public struct SyncSession {
         active = nil
         return true
     }
+    /// The saved window was not readable yet. The next attempt does not wait out the minute.
+    public mutating func reopenInterval() {
+        guard active == nil else { return }
+        lastStart = nil
+    }
 }

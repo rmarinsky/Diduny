@@ -10,6 +10,8 @@ final class BrowserProfileTests: XCTestCase {
 
 extension BrowserProfileTests {
     func testNativeProfileMenuExcludesCommandsAndAmbiguousNames() {
+        XCTAssertEqual(BrowserProfile.named("Work", in: [BrowserProfile(id: "Profile 1", name: "Work")]), BrowserProfile(id: "Profile 1", name: "Work"))
+        XCTAssertNil(BrowserProfile.named("Work", in: [BrowserProfile(id: "Profile 1", name: "Work"), BrowserProfile(id: "Profile 2", name: "Work")]))
         XCTAssertEqual(BrowserProfile.nativeMenu(items: [("Work", "switchToProfileFromMenu:"), ("Edit…", "editProfile:"), ("Personal", "switchToProfileFromMenu:")]), [BrowserProfile(id: "menu:Work", name: "Work"), BrowserProfile(id: "menu:Personal", name: "Personal")])
         XCTAssertEqual(BrowserProfile.nativeMenu(items: [("Work", "switchToProfileFromMenu:"), ("Work", "switchToProfileFromMenu:")]), [])
         XCTAssertEqual(BrowserProfile.observed(in: ["Back", "Roma", "Menu"], names: ["Roma", "Work"]), "Roma")

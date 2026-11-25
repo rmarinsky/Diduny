@@ -105,12 +105,6 @@ struct ModeExpander: View {
             caption: "Made after Stop. Engines on this Mac are recommended; speaker labels come with Diduny Cloud.",
             suffix: "recordOnly"
         )
-        SettingsLineRow(title: "Calendar meetings", caption: "A meeting started from the calendar uses \"Starts in\" and these engines.") {
-            Text("Start the same way")
-                .font(DS.Font.callout)
-                .foregroundStyle(DS.Palette.secondary)
-                .accessibilityIdentifier("\(id).calendar")
-        }
         SettingsLineRow(title: "Suggest recording when a meeting starts", kind: .toggle) {
             SettingsSwitch(title: "Suggest recording when a meeting starts", isOn: $model.meetingSuggestionsEnabled)
                 .accessibilityIdentifier("\(id).suggest")

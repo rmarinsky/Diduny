@@ -10,6 +10,8 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         case image
         /// Text that Diduny itself delivered.
         case diduny
+        /// Files copied in Finder or another app. Only their paths are kept, never their content.
+        case files
     }
 
     /// What Diduny did with the text of a `.diduny` entry.
@@ -27,14 +29,18 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
     var bundleID: String?
     /// The full plain text, up to `ClipboardHistoryStore.textCharacterCap` characters.
     var text: String?
+    /// Absolute paths of a `.files` entry, in copy order.
+    var filePaths: [String]?
     var imageFile: String?
     var thumbnailFile: String?
     var pixelWidth: Int?
     var pixelHeight: Int?
     /// Size of the image file, for the size cap.
     var imageBytes: Int?
-    /// SHA-256 of the copied text or image data; finds a repeated copy.
+    /// SHA-256 of the copied text, image data or file paths; finds a repeated copy.
     var signature: String
+
+    var fileNames: [String] { (filePaths ?? []).map { URL(fileURLWithPath: $0).lastPathComponent } }
 }
 
 /// The frontmost app when something was copied or pasted.

@@ -195,6 +195,19 @@ struct RecordingsDayTests {
         #expect(placement.hours.first { $0.hour == 12 }?.y == 192, "Hour lines are never shifted")
     }
 
+    @Test func todayKeepsTheScaleOpenThroughTheCurrentTime() {
+        let morning = RecordingsDayPlacement.place(build([recording(.meeting, 11, 0, minutes: 30)]).items,
+                                                   hourHeight: 96, nowMinute: 18 * 60 + 30)
+        #expect(morning.startHour == 11)
+        #expect(morning.hours.last?.hour == 19, "18:30 still has an hour line after it")
+        let before = RecordingsDayPlacement.place(build([recording(.meeting, 15, 0, minutes: 20)]).items,
+                                                  hourHeight: 96, nowMinute: 8 * 60 + 10)
+        #expect(before.startHour == 8, "A morning now is on the scale even when the first block is later")
+        let empty = RecordingsDayPlacement.place([], hourHeight: 96, nowMinute: 18 * 60 + 5)
+        #expect(empty.startHour == 18 && empty.hours.map(\.hour) == [18, 19])
+        #expect(empty.height > 0)
+    }
+
     @Test func overlappingBlocksGoIntoLanes() {
         let review = event("r", 16, 30, minutes: 60), office = event("o", 16, 30, minutes: 60, title: "Office")
         let later = recording(.meeting, 18, 0, minutes: 30)
@@ -297,6 +310,9 @@ struct RecordingsDayTests {
         #expect(RecordingsPageLayout.inspectorWidth(windowWidth: 1000) == 400)
         #expect(RecordingsPageLayout.inspectorWidth(windowWidth: 1280) == 480)
         #expect(RecordingsPageLayout.inspectorWidth(windowWidth: 1700) == 560)
+        let wideInspector = 2200 - DS.Layout.sidebarWidth - RecordingsPageLayout.timelineOuterMax - 1
+        #expect(RecordingsPageLayout.inspectorWidth(windowWidth: 2200) == wideInspector)
+        #expect(RecordingsPageLayout.columnWidth(windowWidth: 2200, inspectorOpen: true) == RecordingsPageLayout.timelineOuterMax)
         let column = { RecordingsPageLayout.columnWidth(windowWidth: $0, inspectorOpen: $1) }
         #expect(column(1000, true) == 361)
         #expect(column(1000, true) >= RecordingsPageLayout.minimumColumnWidth, "The day stays usable at 1000")

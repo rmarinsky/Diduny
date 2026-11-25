@@ -92,6 +92,26 @@ enum Guide {
         - `\(command) retranscribe <id> [--model large-v3-turbo]` transcribes again with Whisper on
           this Mac. The current transcript stays in the recording's history.
 
+        ## Typing and vocabulary
+
+        Once a week, read the last 30 days and propose only what is not already saved:
+
+        - `\(command) typing review --since 30d --json` is the packet. It has each mistype pair
+          (what was typed, what it became, counts, days, undos, which app), the current vocabulary,
+          the saved replacements, project names, people, tags, and the pending list. It does not include transcripts.
+        - `\(command) typing list` is the raw rows. `\(command) typing summary` is the pairs alone.
+        - Give each pair one label: a layout rule, a vocabulary word, or leave it. `suggestion` is a
+          starting label, not the decision. `rule` is a stable fix that was not undone. `vocabulary`
+          is a word the system treats as an error but that already appears in a project, a name, a
+          tag or the current vocabulary. `leave` is a one-off, a pair that is often undone, a cut-off
+          row, or something that looks like code. `saved` is already in Diduny.
+        - A word that appears in only one project stays that project's word. Do not make it a
+          replacement for every app. The `apps` field shows where the mistype happened.
+        - Do not invent a word that is not in the packet. If one word is doubtful, check it with
+          `\(command) search "<word>" --project "<name>"` and still do not paste the transcript back.
+        - Apply a row only when the user asks: `\(command) vocabulary accept word "<word>"` or
+          `\(command) vocabulary accept rule "<from>" "<to>"`. Diduny writes it. This tool does not.
+
         ## Diduny settings
 
         Some settings can be changed by agents: `\(command) settings list` shows them with their

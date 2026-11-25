@@ -144,6 +144,48 @@ final class VocabularyStore {
         changed()
     }
 
+    /// A word an agent accepted. Same list as the Add field on the page.
+    func acceptWord(_ raw: String) -> (ok: Bool, message: String) {
+        let word = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty else { return (false, "Give a word.") }
+        guard TypingEngine.isVocabularyCandidate(word) else {
+            return (false, "That does not look like a word Diduny can keep.")
+        }
+        let terms = settings.speechVocabularyTerms
+        if terms.contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }) {
+            return (true, "\"\(word)\" is already in the vocabulary.")
+        }
+        guard terms.count < SpeechUserContext.termsLimit else {
+            return (false, "The vocabulary list is full (\(SpeechUserContext.termsLimit) words).")
+        }
+        settings.speechVocabularyTerms = terms + [word]
+        extras.meta[word.lowercased()] = .init(source: .fromTyping, addedAt: now(), evidence: nil)
+        extras.pending.removeAll {
+            if case let .word(pending) = $0.kind { return pending.caseInsensitiveCompare(word) == .orderedSame }
+            return false
+        }
+        changed()
+        return (true, "Added \"\(word)\" to the vocabulary.")
+    }
+
+    /// A replacement an agent accepted. An existing rule for the same typed text is left alone.
+    func acceptReplacement(from rawFrom: String, to rawTo: String) -> (ok: Bool, message: String) {
+        let from = rawFrom.trimmingCharacters(in: .whitespacesAndNewlines)
+        let to = rawTo.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !from.isEmpty, !to.isEmpty else { return (false, "Give the typed text and what it should become.") }
+        guard from.caseInsensitiveCompare(to) != .orderedSame else { return (false, "The two sides are the same.") }
+        if settings.typingCustomReplaceRules.contains(where: { $0.source.caseInsensitiveCompare(from) == .orderedSame }) {
+            return (true, "A replacement for \"\(from)\" already exists.")
+        }
+        settings.typingCustomReplaceRules.insert(CustomAutoReplaceRule(source: from, target: to, createdAt: now()), at: 0)
+        extras.pending.removeAll {
+            if case let .replacement(pendingFrom, _) = $0.kind { return pendingFrom.caseInsensitiveCompare(from) == .orderedSame }
+            return false
+        }
+        changed()
+        return (true, "Saved the replacement \"\(from)\" → \"\(to)\".")
+    }
+
     /// A rule made from a row of Decisions. An existing rule for the same word is left alone.
     func addReplacement(from: String, to: String) {
         guard !settings.typingCustomReplaceRules.contains(where: { $0.source.caseInsensitiveCompare(from) == .orderedSame }) else { return }

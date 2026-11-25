@@ -176,7 +176,9 @@ jobs:
           mkdir -p "$STAGE_DIR"
           cp -R "$EXPORT_DIR/$APP_BUNDLE_NAME" "$STAGE_DIR/"
 
+          # ULMO (LZMA) is ~20% smaller than the default UDZO; macOS 10.15+ mounts it.
           create-dmg \
+            --format ULMO \
             --volname "$DISPLAY_NAME" \
             --window-pos 200 120 \
             --window-size 600 400 \
@@ -211,17 +213,57 @@ jobs:
             echo 'SPARKLE_EOF'
           } >> "$GITHUB_ENV"
 
+      # Updates download only the changed bytes. Best effort: without a delta,
+      # Sparkle downloads the full DMG as before.
+      - name: Build Sparkle delta from previous release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          PREV_TAG=$(gh release list --exclude-drafts --exclude-pre-releases --limit 20 --json tagName -q '.[].tagName' \
+            | grep -vx "$GITHUB_REF_NAME" | head -1)
+          [ -n "$PREV_TAG" ] || { echo "No previous release; skipping delta"; exit 0; }
+
+          mkdir -p build/prev
+          gh release download "$PREV_TAG" --pattern "${DISPLAY_NAME}-*.dmg" --dir build/prev
+          PREV_DMG=$(ls build/prev/*.dmg | head -1)
+          MOUNT_POINT=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT_POINT" "$PREV_DMG"
+          ditto "$MOUNT_POINT/$APP_BUNDLE_NAME" "build/prev/$APP_BUNDLE_NAME"
+          hdiutil detach "$MOUNT_POINT"
+
+          # sparkle:deltaFrom must equal the installed app's CFBundleVersion.
+          PREV_BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "build/prev/$APP_BUNDLE_NAME/Contents/Info.plist")
+          DELTA_PATH="build/${DISPLAY_NAME}-${VERSION}-from-${PREV_BUILD}.delta"
+          sparkle_tools/bin/BinaryDelta create --verbose \
+            "build/prev/$APP_BUNDLE_NAME" "$EXPORT_DIR/$APP_BUNDLE_NAME" "$DELTA_PATH"
+          ls -lh "$PREV_DMG" "$DELTA_PATH"
+
+          DELTA_SIGN_OUTPUT=$(echo "$SPARKLE_EDDSA_PRIVATE_KEY" | sparkle_tools/bin/sign_update "$DELTA_PATH" -f -)
+          {
+            echo "DELTA_PATH=$DELTA_PATH"
+            echo "DELTA_FROM=$PREV_BUILD"
+            echo 'DELTA_SIGN_OUTPUT<<SPARKLE_EOF'
+            echo "$DELTA_SIGN_OUTPUT"
+            echo 'SPARKLE_EOF'
+          } >> "$GITHUB_ENV"
+
       - name: Create or update GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=${GITHUB_REF_NAME#v}
+          DELTA_ASSETS=()
+          if [ -n "${DELTA_PATH:-}" ]; then DELTA_ASSETS=("$DELTA_PATH"); fi
 
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release upload "${GITHUB_REF_NAME}" \
               "build/${DISPLAY_NAME}-${VERSION}.dmg" \
               "build/${DISPLAY_NAME}-${VERSION}.sha256" \
               build/whats-new.gif \
+              "${DELTA_ASSETS[@]}" \
               --clobber
             gh release edit "${GITHUB_REF_NAME}" \
               --title "${APP_NAME} ${VERSION}" \
@@ -231,6 +273,7 @@ jobs:
               "build/${DISPLAY_NAME}-${VERSION}.dmg" \
               "build/${DISPLAY_NAME}-${VERSION}.sha256" \
               build/whats-new.gif \
+              "${DELTA_ASSETS[@]}" \
               --title "${APP_NAME} ${VERSION}" \
               --notes-file build/release-notes.md
           fi
@@ -247,6 +290,15 @@ jobs:
           RELEASE_NOTES_URL="https://rmarinsky.github.io/Diduny/release-notes/${VERSION}.md"
           ED_SIGNATURE=$(echo "$SPARKLE_SIGN_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
           ED_LENGTH=$(echo "$SPARKLE_SIGN_OUTPUT" | sed -n 's/.*length="\([^"]*\)".*/\1/p')
+          DELTA_ARGS=()
+          if [ -n "${DELTA_PATH:-}" ]; then
+            DELTA_ARGS=(
+              --delta-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$(basename "$DELTA_PATH")"
+              --delta-from "$DELTA_FROM"
+              --delta-signature "$(echo "$DELTA_SIGN_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
+              --delta-length "$(stat -f%z "$DELTA_PATH")"
+            )
+          fi
 
           # The Sparkle feed lives on the dedicated, unprotected gh-pages
           # branch — never on main. A worktree isolates it from the tag checkout.
@@ -263,7 +315,8 @@ jobs:
             --download-url "$DOWNLOAD_URL" \
             --signature "$ED_SIGNATURE" \
             --length "${ED_LENGTH:-$DMG_SIZE}" \
-            --release-notes-url "$RELEASE_NOTES_URL"
+            --release-notes-url "$RELEASE_NOTES_URL" \
+            "${DELTA_ARGS[@]}"
 
           cd /tmp/ghpages
           if [ -z "$(git status --porcelain -- appcast.xml "release-notes/${VERSION}.md")" ]; then

@@ -27,7 +27,7 @@ final class BrowserReader {
             case .permission: return String(localized: "Allow Diduny Accessibility access in System Settings, then retry reading.")
             case .closed: return String(localized: "Open the selected browser and select its calendar tab.")
             case .noPage: return String(localized: "Could not read the active page. Open the calendar in the selected browser.")
-            case .changed: return String(localized: "The calendar window or address changed. Reading stopped. Restore the tab or disconnect and reconnect the source.")
+            case .changed: return String(localized: "The named calendar window is not open. Restore that tab, or disconnect and connect the window again.")
             }
         }
     }
@@ -55,14 +55,17 @@ final class BrowserReader {
                       let page = findPage(candidate), let url = pageURL(page) else { continue }
                 candidates.append((candidate, url, chrome.profile(in: candidate, names: [saved.profileName]), title))
             }
-            guard let index = saved.matchingCandidate(urls: candidates.map { $0.1 }, profiles: candidates.map { $0.2 }, windowTitles: candidates.map { $0.3 }) else { throw Failure.changed }
-            window = candidates[index].0
+            if let index = saved.matchingCandidate(urls: candidates.map { $0.1 }, profiles: candidates.map { $0.2 }, windowTitles: candidates.map { $0.3 }) {
+                window = candidates[index].0
+            } else {
+                throw Failure.changed
+            }
         } else {
             guard let selected = element(root, kAXFocusedWindowAttribute) ?? element(root, kAXMainWindowAttribute) else { throw Failure.noPage }
             window = selected
         }
-        if let expected = saved?.profileName ?? profileName {
-            guard NativeProfiles(access: access).profile(in: window, names: [expected]) == expected else { throw NativeProfiles.Failure.mismatch }
+        if let expected = saved?.profileName ?? profileName, !profileAllows(window, expected: expected, required: saved == nil) {
+            throw NativeProfiles.Failure.mismatch
         }
         if let saved {
             try saved.validate()
@@ -71,21 +74,29 @@ final class BrowserReader {
         // Discover only the selected window's web area. Do not read text before validating its URL.
         guard let page = findPage(window), let url = pageURL(page) else { throw Failure.noPage }
         guard CalendarPage.provider(for: url) != nil else { throw CalendarReadError.wrongPage }
-        if let target, target.url != url { throw Failure.changed }
-        if let saved, saved.calendarURL != url { throw Failure.changed }
+        if let target, !SavedConnection.sameCalendar(target.url, url) { throw Failure.changed }
+        if let saved, !SavedConnection.sameCalendar(saved.calendarURL, url) { throw Failure.changed }
         var stack: [(AXUIElement, Int)] = [(page, 0)]
         var nodes: [PageNode] = []
         var count = 0, candidates = 0, incomplete = false
+        var walkError: Error?
+        var stoppedEarly = false
         while let (node, depth) = stack.popLast() {
-            try access.check()
+            do { try access.check() } catch is CancellationError { throw CancellationError() } catch {
+                walkError = error
+                incomplete = true
+                stoppedEarly = true
+                break
+            }
             guard count < 12000 else { incomplete = true; break }
             count += 1
             let role = string(node, kAXRoleAttribute) ?? ""
             // Embedded documents are excluded: their contents are not the approved top-level page.
             if role == "AXWebArea", !CFEqual(node, page) { continue }
             if role == kAXButtonRole || role == "AXLink" {
-                guard pageURL(page) == url else { throw Failure.changed }
-
+                // A missing URL here is the read budget running out, not a navigation. Keep the rows already collected.
+                guard let live = pageURL(page) else { incomplete = true; stoppedEarly = true; break }
+                guard live == url else { throw Failure.changed }
                 let label = string(node, kAXDescriptionAttribute) ?? string(node, kAXTitleAttribute) ?? ""
                 if role == kAXButtonRole, label.contains(":") { candidates += 1 }
                 nodes.append(PageNode(role: role, label: label, url: role == "AXLink" ? pageURL(node) : nil))
@@ -95,13 +106,24 @@ final class BrowserReader {
                 stack.append(contentsOf: children.reversed().map { ($0, depth + 1) })
             }
         }
-        guard let currentPage = findPage(window), CFEqual(currentPage, page), pageURL(currentPage) == url else { throw Failure.changed }
-        if let expected = saved?.profileName ?? profileName {
-            guard NativeProfiles(access: access).profile(in: window, names: [expected]) == expected else { throw Failure.changed }
+        if nodes.isEmpty, let walkError { throw walkError }
+        if !stoppedEarly {
+            guard let currentPage = findPage(window), CFEqual(currentPage, page), pageURL(currentPage) == url else { throw Failure.changed }
+            if let expected = saved?.profileName ?? profileName, !profileAllows(window, expected: expected, required: saved == nil) {
+                throw Failure.changed
+            }
+            try access.check()
         }
-        try access.check()
         let snapshot = try CalendarExtraction.read(approved: approved, pageURL: url) { nodes }
         return BrowserReadResult(target: BrowserTarget(window: window, pid: app.processIdentifier, url: url), snapshot: snapshot, inspectedNodes: count, eventCandidates: candidates, incomplete: incomplete || incompleteAttributes)
+    }
+
+    /// A restored window is already named. An unreadable profile control does not make it a different window.
+    /// The first connect still has to see the chosen profile.
+    private func profileAllows(_ window: AXUIElement, expected: String, required: Bool) -> Bool {
+        let seen = NativeProfiles(access: access).profile(in: window, names: [expected])
+        if seen == expected { return true }
+        return seen == nil && !required
     }
 
     private func attribute(_ element: AXUIElement, _ key: String) -> CFTypeRef? {

@@ -27,7 +27,7 @@ final class ModesSettingsUITests: DidunyUITestCase {
             waitForElement(element("modes.\(job).shortcut"))
         }
         waitForElement(element("modes.dictationTranslation.into"))
-        waitForElement(element("modes.meeting.startsIn"))
+        waitForElement(element("modes.meeting.calendar"))
         waitForElement(element("modes.meetingTranslation.between"))
         for job in ["dictation", "dictationTranslation", "meeting", "meetingTranslation", "file"] {
             XCTAssertFalse(element("modes.\(job).pressCount").exists)

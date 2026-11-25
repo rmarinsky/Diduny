@@ -196,4 +196,16 @@ struct AgentCommandsTests {
         center.processInbox()
         #expect(f.storage.recordings.first { $0.id == f.id }?.tags == nil)
     }
+
+    @Test func aVocabularyWordDoesNotNeedARecording() throws {
+        let f = try fixture()
+        var words: [String] = []
+        let result = AgentCommandCenter(
+            storage: f.storage, notes: f.notes, writeNotes: { _ in }, retranscribe: { _, _ in true },
+            whisperModelReady: { _ in true },
+            acceptWord: { words.append($0); return (ok: true, message: "Added \($0).") }
+        ).apply(.init(action: .addVocabularyWord, values: ["Diduny"]))
+        #expect(result.ok)
+        #expect(words == ["Diduny"])
+    }
 }

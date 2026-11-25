@@ -19,7 +19,7 @@ struct MainSectionSidebarTests {
         let labels = (MainSection.mainItems + MainSection.settingsItems).map(\.sidebarLabel)
         #expect(labels == [
             "Overview", "Recordings", "Notes", "Clipboard", "Vocabulary",
-            "General", "Modes & shortcuts", "Languages", "Mistyping", "Calendar", "Engines", "Account", "About Diduny",
+            "General", "Modes & shortcuts", "Languages", "Mistyping", "Meetings", "Engines", "Account", "About Diduny",
         ])
     }
 
@@ -45,7 +45,8 @@ struct MainSectionSidebarTests {
 
     @Test func pageLabelsStay() {
         #expect(MainSection.modes.label == "Modes & shortcuts")
-        #expect(MainSection.meetings.label == "Calendar & meetings")
+        #expect(MainSection.meetings.label == "Meetings")
+        #expect(MainSection.meetings.sidebarLabel == "Meetings")
         #expect(MainSection.models.label == "Local models")
         #expect(MainSection.typingTest.label == "Typing test")
     }

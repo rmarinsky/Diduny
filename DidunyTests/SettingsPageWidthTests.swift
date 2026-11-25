@@ -100,7 +100,34 @@ struct SettingsPageWidthTests {
     @Test func general() async { await expectFits(GeneralSettingsView(), "General") }
     @Test func languages() async { await expectFits(LanguagesSettingsView(), "Languages") }
     @Test func audio() async { await expectFits(AudioSettingsView(), "Audio") }
-    @Test func meetings() async { await expectFits(MeetingSettingsView(), limit: Self.pageWidth, "Calendar & meetings") }
+    @Test func meetings() async { await expectFits(MeetingSettingsView(), limit: Self.pageWidth, "Meetings") }
+
+    /// The Notes page sets the request; the Meetings page consumes it and shows that tab.
+    /// The hosting view's accessibility tree stays empty here, so the page reports the tab directly.
+    @Test func meetingsOpensOnTheNotesTab() async {
+        final class Seen { var tab: MeetingSettingsTab? }
+        let seen = Seen()
+        MainWindowController.shared.requestedMeetingsTab = .notes
+        defer { MainWindowController.shared.requestedMeetingsTab = nil }
+        let host = NSHostingView(rootView: MeetingSettingsView()
+            .environment(\.meetingsTabProbe) { seen.tab = $0 }
+            .environment(AppState())
+            .environment(AudioDeviceManager())
+            .frame(width: Self.pageWidth, height: 680))
+        host.frame = NSRect(x: 0, y: 0, width: Self.pageWidth, height: 680)
+        let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        for _ in 0 ..< 40 where seen.tab != .notes || MainWindowController.shared.requestedMeetingsTab != nil {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            await Task.yield()
+        }
+        #expect(seen.tab == .notes)
+        #expect(MainWindowController.shared.requestedMeetingsTab == nil)
+        window.contentView = nil
+    }
+
     @Test func account() async { await expectFits(AccountSettingsView(), "Account") }
     @Test func about() async { await expectFits(AboutSettingsView(), "About") }
 
